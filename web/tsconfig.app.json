@@ -11,9 +11,10 @@
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
-    "moduleDetection": "force",
+    "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
+    "types": ["node", "vite/client"],
 
     /* Linting */
     "noUnusedLocals": true,
