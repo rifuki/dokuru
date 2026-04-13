@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { Toaster } from 'sonner'
 import './index.css'
 
 // Import the generated route tree
@@ -27,6 +28,15 @@ if (!rootElement.innerHTML) {
     <StrictMode>
       <QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
+        <Toaster
+          richColors
+          theme="dark"
+          position="top-right"
+          toastOptions={{
+            className: 'dokuru-toast',
+            descriptionClassName: 'dokuru-toast-description',
+          }}
+        />
       </QueryClientProvider>
     </StrictMode>,
   )

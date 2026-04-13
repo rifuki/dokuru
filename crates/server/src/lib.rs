@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use bollard::Docker;
+use bollard::{API_DEFAULT_VERSION, Docker};
 use tracing::info;
 use tracing_subscriber::util::SubscriberInitExt;
 
@@ -15,7 +15,7 @@ pub async fn serve() -> eyre::Result<()> {
     subscriber.init();
 
     let config = infrastructure::config::Config::load()?;
-    let docker = Docker::connect_with_local_defaults()?;
+    let docker = Docker::connect_with_unix(&config.docker_socket, 120, API_DEFAULT_VERSION)?;
     
     let state = state::AppState::new(Arc::new(config.clone()), docker);
     let cors = infrastructure::web::cors::build_cors_layer(&config);
@@ -24,8 +24,13 @@ pub async fn serve() -> eyre::Result<()> {
         .layer(axum::middleware::from_fn(infrastructure::web::middleware::http_trace_middleware))
         .layer(cors);
 
-    let listener = infrastructure::server::create_listener(config.port).await?;
-    info!("Dokuru agent API listening on port {}", config.port);
+    let listener = infrastructure::server::create_listener(config.server_addr()?).await?;
+    info!(
+        host = %config.host,
+        port = config.port,
+        docker_socket = %config.docker_socket,
+        "Dokuru agent API listening"
+    );
 
     axum::serve(
         listener, 

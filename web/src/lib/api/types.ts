@@ -7,12 +7,19 @@
 
 export interface ApiSuccess<T = unknown> {
   success: true;
+  code: number;
   data: T;
+  message: string;
+  timestamp: number;
 }
 
 export interface ApiError {
   success: false;
+  code: number;
+  error_code?: string | null;
   message: string;
+  details?: string | null;
+  timestamp?: number;
 }
 
 export type ApiResponse<T = unknown> = ApiSuccess<T> | ApiError;

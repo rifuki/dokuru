@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
-import { getAudit, type AuditReport } from '../api/get-audit';
+import { getAudit } from '../api/get-audit';
+import type { AuditReport } from '@/types/dokuru';
 
 export function useAudit(enabled: boolean = true) {
   return useQuery<AuditReport, Error>({

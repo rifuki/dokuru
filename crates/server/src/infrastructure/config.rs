@@ -1,6 +1,5 @@
-use std::net::SocketAddr;
-use std::time::Duration;
 use eyre::{Result, WrapErr};
+use std::net::SocketAddr;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -18,17 +17,17 @@ impl Config {
             .unwrap_or_else(|_| "3939".to_string())
             .parse()
             .wrap_err("PORT must be a valid port number")?;
-            
+
         let host = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
-        
+
         let cors_origins: Vec<String> = std::env::var("CORS_ORIGINS")
             .unwrap_or_else(|_| "*".to_string())
             .split(',')
             .map(|s| s.trim().to_string())
             .collect();
-            
-        let docker_socket = std::env::var("DOCKER_SOCKET")
-            .unwrap_or_else(|_| "/var/run/docker.sock".to_string());
+
+        let docker_socket =
+            std::env::var("DOCKER_SOCKET").unwrap_or_else(|_| "/var/run/docker.sock".to_string());
 
         Ok(Self {
             port,

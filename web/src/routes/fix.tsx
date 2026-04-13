@@ -1,87 +1,208 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { motion } from 'framer-motion'
+import { AlertTriangle, CheckCircle2, Shield, Wrench } from 'lucide-react'
+import { useMemo, useState } from 'react'
+
+import { FixActionDialog } from '@/components/remediation/FixActionDialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Wrench, CheckCircle2 } from 'lucide-react'
 import { useAudit } from '@/features/audit/hooks/use-audit'
 import { useApplyFix } from '@/features/fix/hooks/use-apply-fix'
-import { useState } from 'react'
+import type { CheckResult, FixOutcome } from '@/types/dokuru'
 
 export const Route = createFileRoute('/fix')({
   component: FixPage,
 })
 
 function FixPage() {
-  const { data: report } = useAudit(false);
-  const { mutateAsync: applyFix } = useApplyFix();
-  const [fixingId, setFixingId] = useState<string | null>(null);
+  const { data: report } = useAudit()
+  const { mutateAsync: applyFix, isPending } = useApplyFix()
+  const [selectedRule, setSelectedRule] = useState<CheckResult | null>(null)
+  const [lastOutcome, setLastOutcome] = useState<FixOutcome | null>(null)
 
-  // Group by failed specifically for fixing
-  const failedRules = report?.results.filter((r) => r.status === 'Fail') || [];
+  const failedRules = useMemo(
+    () => report?.results.filter((result) => result.status === 'Fail') ?? [],
+    [report],
+  )
 
-  const handleFix = async (ruleId: string) => {
-    setFixingId(ruleId);
-    await applyFix(ruleId);
-    setFixingId(null);
-  };
+  const handleConfirm = async () => {
+    if (!selectedRule) return
+
+    const outcome = await applyFix(selectedRule.rule.id)
+    setLastOutcome(outcome)
+
+    if (outcome.status !== 'blocked') {
+      setSelectedRule(null)
+    }
+  }
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">Auto Fix</h2>
-        <p className="text-muted-foreground">Review and remediate failing security configurations.</p>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Wrench className="w-5 h-5 text-primary" />
-            Remediation Hub
-          </CardTitle>
-          <CardDescription>
-            {failedRules.length} vulnerabilities found that can be automatically or manually remediated.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {!report && (
-            <div className="text-center py-12 text-muted-foreground">
-              <p>Please run an audit first to find issues to fix.</p>
+    <div className="space-y-6 pb-8">
+      <motion.section
+        className="glass-surface panel-outline rounded-[32px] px-6 py-7 md:px-8"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="section-kicker">
+              <Wrench className="h-3.5 w-3.5" />
+              Guided Remediation
             </div>
-          )}
-          
-          {report && failedRules.length === 0 && (
-            <div className="text-center py-12 flex flex-col items-center">
-              <CheckCircle2 className="w-16 h-16 text-green-500 mb-4" />
-              <h3 className="text-xl font-bold text-green-500">All Clear!</h3>
-              <p className="text-muted-foreground mt-2">No failing rules found. Your environment is secure.</p>
-            </div>
-          )}
+            <h2 className="mt-5 text-4xl font-semibold tracking-tight text-white md:text-5xl">Safe fixes, with operator context.</h2>
+            <p className="mt-4 max-w-3xl text-base leading-8 text-slate-300 md:text-lg">
+              Dokuru separates daemon-level auto-fix from runtime guidance, so you can remediate what is safe directly and preview what still needs redeploy or elevated host access.
+            </p>
+          </div>
 
-          {failedRules.length > 0 && (
-            <div className="space-y-4">
-              {failedRules.map((r, i) => (
-                <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-destructive/20 rounded-lg bg-destructive/5">
-                  <div className="flex-1 mb-4 sm:mb-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-bold text-sm text-destructive">Rule {r.rule_id}</span>
-                      <Badge variant="destructive">Needs Fix</Badge>
+          <div className="rounded-[26px] border border-white/10 bg-white/5 px-5 py-4 text-sm text-slate-300">
+            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Open remediation queue</p>
+            <p className="mt-3 text-4xl font-semibold text-white">{failedRules.length}</p>
+            <p className="mt-2">Controls awaiting action</p>
+          </div>
+        </div>
+      </motion.section>
+
+      {lastOutcome ? (
+        <motion.section className={`panel-outline rounded-[28px] border p-5 ${outcomePanelClass(lastOutcome.status)}`} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-white/85">Latest remediation outcome</p>
+              <p className="mt-3 text-lg font-medium text-white">Rule {lastOutcome.rule_id}</p>
+              <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-200/90">{lastOutcome.message}</p>
+              {lastOutcome.restart_command ? (
+                <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-300/80">Next step: {lastOutcome.restart_command}</p>
+              ) : null}
+            </div>
+            <Badge variant="outline" className="w-fit border-white/12 bg-white/8 px-3 py-1 text-white">
+              {lastOutcome.status}
+            </Badge>
+          </div>
+        </motion.section>
+      ) : null}
+
+      {!report ? (
+        <section className="glass-card panel-outline rounded-[28px] p-8">
+          <div className="py-12 text-center text-slate-400">
+            <Shield className="mx-auto h-10 w-10 text-sky-200/80" />
+            <h3 className="mt-5 text-2xl font-semibold text-white">Remediation queue is waiting for an audit</h3>
+            <p className="mx-auto mt-3 max-w-xl text-sm leading-7">
+              Run a live audit first so Dokuru can identify which daemon or runtime controls still need hardening.
+            </p>
+          </div>
+        </section>
+      ) : null}
+
+      {report && failedRules.length === 0 ? (
+        <section className="glass-card panel-outline rounded-[28px] p-8">
+          <div className="flex flex-col items-center py-12 text-center">
+            <div className="rounded-[28px] border border-emerald-400/20 bg-emerald-400/10 p-4 text-emerald-200">
+              <CheckCircle2 className="h-10 w-10" />
+            </div>
+            <h3 className="mt-6 text-3xl font-semibold text-white">No open remediation queue</h3>
+            <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-400">
+              The latest audit shows no failing CIS controls. Keep rerunning audits after infrastructure changes to catch drift before it spreads.
+            </p>
+          </div>
+        </section>
+      ) : null}
+
+      {failedRules.length > 0 ? (
+        <section className="grid gap-5 xl:grid-cols-[0.96fr_1.04fr]">
+          <motion.div className="glass-card panel-outline rounded-[28px] p-6" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+            <div className="flex items-center gap-3">
+              <span className="rounded-2xl border border-amber-400/18 bg-amber-400/10 p-2.5 text-amber-200">
+                <AlertTriangle className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-lg font-semibold text-white">How remediation works</p>
+                <p className="text-sm text-slate-400">Dokuru distinguishes what can be safely changed now from what must remain guided.</p>
+              </div>
+            </div>
+
+            <div className="mt-6 space-y-3 text-sm leading-7 text-slate-300">
+              <div className="rounded-[24px] border border-white/8 bg-white/4 p-4">
+                <p className="font-medium text-white">Auto</p>
+                <p className="mt-2">Host changes that Dokuru can write directly, such as daemon configuration, provided the agent has the right privileges.</p>
+              </div>
+              <div className="rounded-[24px] border border-white/8 bg-white/4 p-4">
+                <p className="font-medium text-white">Guided</p>
+                <p className="mt-2">Runtime flags that should be changed in Compose files, deployment manifests, or Docker run commands before redeploying workloads.</p>
+              </div>
+              <div className="rounded-[24px] border border-white/8 bg-white/4 p-4">
+                <p className="font-medium text-white">Blocked</p>
+                <p className="mt-2">Dokuru will explain when the running service lacks permission, instead of crashing the workflow with a raw filesystem error.</p>
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div className="glass-card panel-outline rounded-[28px] p-6" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+            <div>
+              <p className="text-lg font-semibold text-white">Remediation queue</p>
+              <p className="mt-2 text-sm leading-7 text-slate-400">Each control includes context, safe action scope, and the next operator move if Dokuru cannot apply it directly.</p>
+            </div>
+
+            <div className="mt-6 space-y-4">
+              {failedRules.map((result, index) => (
+                <motion.div
+                  key={result.rule.id}
+                  className="rounded-[28px] border border-white/8 bg-white/4 p-5 transition hover:bg-white/7"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.14 + index * 0.04, duration: 0.22 }}
+                >
+                  <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold text-white">Rule {result.rule.id}</span>
+                        <Badge variant="destructive" className="border-rose-400/20 bg-rose-400/12 text-rose-100">Needs action</Badge>
+                        <Badge variant="outline" className="border-white/10 bg-white/8 text-slate-100">{result.remediation_kind}</Badge>
+                        <Badge variant="outline" className="border-white/10 bg-white/8 text-slate-100">{result.rule.section}</Badge>
+                      </div>
+                      <p className="mt-4 text-xl font-medium text-white">{result.rule.title}</p>
+                      <p className="mt-3 text-sm leading-7 text-slate-300">{result.message}</p>
+                      <div className="mt-4 rounded-[22px] border border-sky-400/12 bg-sky-400/8 px-4 py-3 text-sm leading-7 text-sky-50/90">
+                        {result.rule.remediation}
+                      </div>
                     </div>
-                    <p className="text-sm text-foreground/80">{r.details}</p>
+
+                    <div className="flex shrink-0 flex-col gap-3 lg:w-[220px]">
+                      <Button
+                        className="w-full rounded-full bg-[linear-gradient(135deg,#38BDF8,#6366F1)] py-6 text-sm font-semibold text-slate-950 hover:opacity-95"
+                        onClick={() => setSelectedRule(result)}
+                      >
+                        {result.remediation_kind === 'auto' ? 'Apply remediation' : 'Preview guidance'}
+                      </Button>
+                      <div className="rounded-[20px] border border-white/8 bg-slate-950/50 px-4 py-3 text-xs uppercase tracking-[0.18em] text-slate-400">
+                        {result.rule.severity} severity
+                      </div>
+                    </div>
                   </div>
-                  <Button 
-                    variant="default" 
-                    className="shrink-0"
-                    onClick={() => handleFix(r.rule_id)}
-                    disabled={fixingId === r.rule_id}
-                  >
-                    {fixingId === r.rule_id ? "Fixing..." : "Apply Fix"}
-                  </Button>
-                </div>
+                </motion.div>
               ))}
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </motion.div>
+        </section>
+      ) : null}
+
+      <FixActionDialog
+        open={selectedRule !== null}
+        result={selectedRule}
+        isApplying={isPending}
+        onClose={() => setSelectedRule(null)}
+        onConfirm={handleConfirm}
+      />
     </div>
   )
+}
+
+function outcomePanelClass(status: FixOutcome['status']) {
+  switch (status) {
+    case 'applied':
+      return 'border-emerald-400/16 bg-emerald-400/10'
+    case 'blocked':
+      return 'border-rose-400/16 bg-rose-400/10'
+    default:
+      return 'border-sky-400/16 bg-sky-400/10'
+  }
 }

@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
-use dokuru_core::{Checker, Fixer, get_all_rules};
-use bollard::Docker;
+use dokuru_core::{Checker, Fixer};
+use bollard::{API_DEFAULT_VERSION, Docker};
 
 /// Dokuru 0.1.0 - Docker Security Hardening Agent (CIS Benchmark v1.8.0)
 #[derive(Parser)]
@@ -33,6 +33,7 @@ enum Commands {
 async fn main() -> eyre::Result<()> {
     // Install eyre panic handler
     color_eyre::install()?;
+    dokuru_server::infrastructure::env::load();
     
     let cli = Cli::parse();
     
@@ -74,7 +75,7 @@ async fn main() -> eyre::Result<()> {
             println!("✅ Created local configuration at .env");
         }
         Commands::Audit => {
-            let docker = Docker::connect_with_local_defaults().map_err(|e| eyre::eyre!(e))?;
+            let docker = connect_docker()?;
             let checker = Checker::new(docker);
             println!("Running Audit...");
             let report = checker.run_audit().await?;
@@ -85,20 +86,28 @@ async fn main() -> eyre::Result<()> {
             }
         }
         Commands::Fix { rule_id } => {
-            let docker = Docker::connect_with_local_defaults().map_err(|e| eyre::eyre!(e))?;
+            let docker = connect_docker()?;
             let fixer = Fixer::new(docker);
             println!("Applying fix for rule {}...", rule_id);
-            let msg = fixer.apply_fix(rule_id).await?;
-            println!("{}", msg);
+            let outcome = fixer.apply_fix(rule_id).await?;
+            println!("{:?}: {}", outcome.status, outcome.message);
+            if let Some(command) = outcome.restart_command {
+                println!("Next step: {}", command);
+            }
         }
         Commands::Tui => {
             dokuru_tui::run().await?;
         }
         Commands::Serve => {
-            println!("API Server starting on port {}...", "3939");
+            println!("API Server starting...");
             dokuru_server::serve().await?;
         }
     }
 
     Ok(())
+}
+
+fn connect_docker() -> eyre::Result<Docker> {
+    let socket = std::env::var("DOCKER_SOCKET").unwrap_or_else(|_| "/var/run/docker.sock".to_string());
+    Docker::connect_with_unix(&socket, 120, API_DEFAULT_VERSION).map_err(|e| eyre::eyre!(e))
 }

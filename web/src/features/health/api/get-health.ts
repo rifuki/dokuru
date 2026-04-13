@@ -1,11 +1,6 @@
 import { apiClient } from '@/lib/api/client';
+import type { HealthDetail } from '@/types/dokuru';
 
-export interface HealthStatus {
-  status: string;
-  docker_connected: boolean;
-  docker_version: string | null;
-}
-
-export async function getHealth(): Promise<HealthStatus> {
-  return apiClient.get<HealthStatus>('/health/detail');
+export async function getHealth(): Promise<HealthDetail> {
+  return apiClient.get<HealthDetail>('/health/detail');
 }

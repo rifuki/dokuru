@@ -1,6 +1,8 @@
 use bollard::Docker;
-use std::collections::HashMap;
 use chrono::Utc;
+use serde_json::Value;
+use std::{fs, path::Path};
+
 use crate::types::*;
 use crate::rules::{get_all_rules, get_rule_by_id};
 
@@ -100,7 +102,7 @@ impl Checker {
                 status: CheckStatus::Error,
                 message: "Unimplemented rule check".to_string(),
                 affected: vec![],
-                fix_available: false,
+                remediation_kind: RemediationKind::Manual,
             }),
         }
     }
@@ -116,7 +118,7 @@ impl Checker {
                 status: CheckStatus::Pass,
                 message: "userns-remap is configured properly".to_string(),
                 affected: vec![],
-                fix_available: false,
+                remediation_kind: RemediationKind::Auto,
             })
         } else {
             Ok(CheckResult {
@@ -124,21 +126,41 @@ impl Checker {
                 status: CheckStatus::Fail,
                 message: "userns-remap is NOT configured".to_string(),
                 affected: vec!["daemon.json".to_string()],
-                fix_available: true,
+                remediation_kind: RemediationKind::Auto,
             })
         }
     }
 
     async fn check_2_11(&self, rule: &CisRule) -> eyre::Result<CheckResult> {
-        // Technically checking daemon arg or daemon.json. We will assume pass unless a wrong config is found,
-        // or we check if cgroup parent isn't changed off default heavily.
-        // For simplicity:
+        let daemon_config = Self::load_daemon_json()?;
+        let cgroup_parent = daemon_config
+            .as_ref()
+            .and_then(|config| config.get("cgroup-parent"))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+
+        let (status, message, affected) = match cgroup_parent {
+            Some(value) => (
+                CheckStatus::Fail,
+                format!(
+                    "Custom cgroup-parent is configured ('{value}'). Review whether this override is intentional and safe."
+                ),
+                vec!["daemon.json".to_string()],
+            ),
+            None => (
+                CheckStatus::Pass,
+                "Default cgroup-parent is in use (no custom cgroup-parent configured).".to_string(),
+                vec![],
+            ),
+        };
+
         Ok(CheckResult {
             rule: rule.clone(),
-            status: CheckStatus::Pass,
-            message: "Default cgroup usage assumed confirmed unless overridden".to_string(),
-            affected: vec![],
-            fix_available: false,
+            status,
+            message,
+            affected,
+            remediation_kind: RemediationKind::Guided,
         })
     }
 
@@ -161,7 +183,7 @@ impl Checker {
                             let name = details
                                 .name
                                 .unwrap_or_else(|| String::from("unknown"));
-                            affected.push(name);
+                            affected.push(name.trim_start_matches('/').to_string());
                         }
                     }
                 }
@@ -178,7 +200,20 @@ impl Checker {
                 format!("{} container(s) non-compliant", affected.len())
             },
             affected,
-            fix_available: true,
+            remediation_kind: RemediationKind::Guided,
         })
+    }
+
+    fn load_daemon_json() -> eyre::Result<Option<Value>> {
+        let path = Path::new("/etc/docker/daemon.json");
+
+        if !path.exists() {
+            return Ok(None);
+        }
+
+        let content = fs::read_to_string(path)?;
+        let config = serde_json::from_str(&content)?;
+
+        Ok(Some(config))
     }
 }

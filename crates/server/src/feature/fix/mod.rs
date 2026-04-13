@@ -1,5 +1,5 @@
 use axum::{Json, extract::State};
-use dokuru_core::Fixer;
+use dokuru_core::{FixOutcome, Fixer};
 use serde::Deserialize;
 use crate::infrastructure::web::response::{ApiResult, ApiSuccess, ApiError};
 use crate::state::AppState;
@@ -12,11 +12,13 @@ pub struct FixRequest {
 pub async fn apply_fix(
     State(state): State<AppState>,
     Json(payload): Json<FixRequest>,
-) -> ApiResult<()> {
+) -> ApiResult<FixOutcome> {
     let fixer = Fixer::new(state.docker.clone());
     
     match fixer.apply_fix(&payload.rule_id).await {
-        Ok(msg) => Ok(ApiSuccess::default().with_message(msg)),
-        Err(e) => Err(ApiError::default().with_message(e.to_string()))
+        Ok(outcome) => Ok(ApiSuccess::default()
+            .with_message("Remediation handled")
+            .with_data(outcome)),
+        Err(e) => Err(ApiError::default().with_message("Failed to process remediation request").with_debug(e.to_string()))
     }
 }

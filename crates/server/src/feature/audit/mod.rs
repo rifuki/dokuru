@@ -5,7 +5,7 @@ use axum::{
 use dokuru_core::{Checker, AuditReport, CheckResult};
 use crate::infrastructure::web::response::{ApiResult, ApiSuccess, ApiError};
 use crate::state::AppState;
-use futures::{sink::SinkExt, stream::StreamExt};
+use futures::sink::SinkExt;
 
 pub async fn run_full_audit(State(state): State<AppState>) -> ApiResult<AuditReport> {
     let checker = Checker::new(state.docker.clone());

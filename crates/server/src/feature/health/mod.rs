@@ -1,19 +1,36 @@
-use axum::Json;
 use axum::extract::State;
-use serde_json::Value;
-use std::collections::HashMap;
+use chrono::Utc;
+use serde::Serialize;
 
-use crate::state::AppState;
+use crate::{
+    infrastructure::web::response::{ApiResult, ApiSuccess},
+    state::AppState,
+};
 
-pub async fn health_detail(State(state): State<AppState>) -> Json<Value> {
+#[derive(Debug, Serialize)]
+pub struct HealthDetail {
+    status: &'static str,
+    version: &'static str,
+    timestamp: String,
+    docker_connected: bool,
+    docker_version: Option<String>,
+}
+
+pub async fn health_check() -> ApiResult<()> {
+    Ok(ApiSuccess::default().with_message("Service is healthy"))
+}
+
+pub async fn health_detail(State(state): State<AppState>) -> ApiResult<HealthDetail> {
     let docker_version = match state.docker.version().await {
         Ok(v) => v.version,
         Err(_) => None,
     };
-    
-    Json(serde_json::json!({
-        "status": "ok",
-        "docker_connected": docker_version.is_some(),
-        "docker_version": docker_version,
+
+    Ok(ApiSuccess::default().with_data(HealthDetail {
+        status: "healthy",
+        version: env!("CARGO_PKG_VERSION"),
+        timestamp: Utc::now().to_rfc3339(),
+        docker_connected: docker_version.is_some(),
+        docker_version,
     }))
 }

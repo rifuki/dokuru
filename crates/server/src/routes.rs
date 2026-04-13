@@ -1,6 +1,5 @@
 use axum::{
     body::Body,
-    extract::Request,
     http::{header, StatusCode, Uri},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -8,7 +7,7 @@ use axum::{
 };
 use rust_embed::RustEmbed;
 use crate::state::AppState;
-use crate::feature::{health, rules, containers, audit, fix};
+use crate::feature::{audit, containers, fix, health, rules, trivy};
 
 #[derive(RustEmbed)]
 #[folder = "../../web/dist"] // Assuming web/dist will be the output folder
@@ -17,13 +16,16 @@ struct WebAssets;
 pub fn build_router(state: AppState) -> Router {
     Router::new()
         // REST API
-        .route("/health/detail", get(health::health_detail)) // Note: the root "/api/v1" prefix can be added via nest
+        .route("/health", get(health::health_check))
+        .route("/health/detail", get(health::health_detail))
+        .route("/api/v1/health", get(health::health_check))
         .route("/api/v1/health/detail", get(health::health_detail))
         .route("/api/v1/rules", get(rules::list_rules))
         .route("/api/v1/containers", get(containers::list_containers))
         .route("/api/v1/audit", get(audit::run_full_audit))
-        .route("/api/v1/audit/:id", get(audit::run_single_audit))
+        .route("/api/v1/audit/{id}", get(audit::run_single_audit))
         .route("/api/v1/fix", post(fix::apply_fix))
+        .route("/api/v1/integrations/trivy/image", post(trivy::scan_image))
         // WebSocket for live audit progress
         .route("/ws/audit", get(audit::ws_audit_handler))
         .with_state(state)

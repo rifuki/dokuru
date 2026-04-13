@@ -1,34 +1,16 @@
-use std::net::{IpAddr, Ipv6Addr, SocketAddr};
+use std::net::SocketAddr;
 
 use tokio::net::TcpListener;
 use tracing::info;
 
-pub async fn create_listener(port: u16) -> eyre::Result<TcpListener> {
-    let addr_v6 = SocketAddr::from((IpAddr::V6(Ipv6Addr::UNSPECIFIED), port));
+pub async fn create_listener(addr: SocketAddr) -> eyre::Result<TcpListener> {
+    let listener = TcpListener::bind(addr)
+        .await
+        .map_err(|e| eyre::eyre!("Failed to bind to {}: {}", addr, e))?;
 
-    match TcpListener::bind(addr_v6).await {
-        Ok(listener) => {
-            info!(
-                address = %listener.local_addr()?,
-                stack = "dual-stack (IPv4+IPv6)",
-                "Server listening"
-            );
-            Ok(listener)
-        }
-        Err(e) => {
-            tracing::debug!("Dual-stack bind failed ({}), falling back to IPv4", e);
-            let addr_v4 = SocketAddr::from(([0, 0, 0, 0], port));
-            let listener = TcpListener::bind(addr_v4)
-                .await
-                .map_err(|e| eyre::eyre!("Failed to bind to port {}: {}", port, e))?;
-            info!(
-                address = %listener.local_addr()?,
-                stack = "IPv4 only",
-                "Server listening"
-            );
-            Ok(listener)
-        }
-    }
+    info!(address = %listener.local_addr()?, "Server listening");
+
+    Ok(listener)
 }
 
 pub async fn shutdown_signal() {
