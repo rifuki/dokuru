@@ -1,0 +1,13 @@
+[package]
+name = "dokuru-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+bollard.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
