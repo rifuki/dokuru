@@ -1,11 +1,11 @@
-use axum::{Json, extract::State};
+use axum::extract::State;
 use bollard::models::ContainerSummary;
-
+use crate::infrastructure::web::response::{ApiResult, ApiSuccess, ApiError};
 use crate::state::AppState;
 
-pub async fn list_containers(State(state): State<AppState>) -> Result<Json<Vec<ContainerSummary>>, axum::http::StatusCode> {
+pub async fn list_containers(State(state): State<AppState>) -> ApiResult<Vec<ContainerSummary>> {
     match state.docker.list_containers::<String>(None).await {
-        Ok(containers) => Ok(Json(containers)),
-        Err(_) => Err(axum::http::StatusCode::INTERNAL_SERVER_ERROR),
+        Ok(containers) => Ok(ApiSuccess::default().with_data(containers)),
+        Err(e) => Err(ApiError::default().with_message(e.to_string())),
     }
 }

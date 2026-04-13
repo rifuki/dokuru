@@ -15,10 +15,10 @@ export const api = axios.create({
 });
 
 export const dokuruApi = {
-  health: () => api.get("/health/detail").then(res => res.data),
-  rules: () => api.get("/rules").then(res => res.data),
-  containers: () => api.get("/containers").then(res => res.data),
-  audit: () => api.get("/audit").then(res => res.data),
-  auditRule: (ruleId: string) => api.get(`/audit/${ruleId}`).then(res => res.data),
+  health: () => api.get("/health/detail").then(res => res.data.data),
+  rules: () => api.get("/rules").then(res => res.data.data),
+  containers: () => api.get("/containers").then(res => res.data.data),
+  audit: () => api.get("/audit").then(res => res.data.data),
+  auditRule: (ruleId: string) => api.get(`/audit/${ruleId}`).then(res => res.data.data),
   fix: (ruleId: string) => api.post("/fix", { rule_id: ruleId }).then(res => res.data),
 };

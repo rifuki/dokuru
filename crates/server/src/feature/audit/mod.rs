@@ -1,28 +1,28 @@
 use axum::{
     extract::{Path, State, ws::{WebSocketUpgrade, WebSocket, Message}},
     response::IntoResponse,
-    Json,
 };
 use dokuru_core::{Checker, AuditReport, CheckResult};
+use crate::infrastructure::web::response::{ApiResult, ApiSuccess, ApiError};
 use crate::state::AppState;
 use futures::{sink::SinkExt, stream::StreamExt};
 
-pub async fn run_full_audit(State(state): State<AppState>) -> Result<Json<AuditReport>, axum::http::StatusCode> {
+pub async fn run_full_audit(State(state): State<AppState>) -> ApiResult<AuditReport> {
     let checker = Checker::new(state.docker.clone());
     match checker.run_audit().await {
-        Ok(report) => Ok(Json(report)),
-        Err(_) => Err(axum::http::StatusCode::INTERNAL_SERVER_ERROR),
+        Ok(report) => Ok(ApiSuccess::default().with_data(report)),
+        Err(e) => Err(ApiError::default().with_message(e.to_string())),
     }
 }
 
 pub async fn run_single_audit(
     Path(rule_id): Path<String>,
     State(state): State<AppState>
-) -> Result<Json<CheckResult>, axum::http::StatusCode> {
+) -> ApiResult<CheckResult> {
     let checker = Checker::new(state.docker.clone());
     match checker.check_single_rule(&rule_id).await {
-        Ok(result) => Ok(Json(result)),
-        Err(_) => Err(axum::http::StatusCode::NOT_FOUND),
+        Ok(result) => Ok(ApiSuccess::default().with_data(result)),
+        Err(e) => Err(ApiError::default().with_code(axum::http::StatusCode::NOT_FOUND).with_message(e.to_string())),
     }
 }
 
