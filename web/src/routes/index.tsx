@@ -2,21 +2,18 @@ import { createFileRoute } from '@tanstack/react-router'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Shield, Activity, ShieldAlert, CheckCircle2 } from 'lucide-react'
-import { useAppStore } from '@/store'
-import { useEffect } from 'react'
+import { useHealth } from '@/features/health/hooks/use-health'
+import { useAudit } from '@/features/audit/hooks/use-audit'
 
 export const Route = createFileRoute('/')({
   component: DashboardPage,
 })
 
 function DashboardPage() {
-  const { score, health, fetchHealth, report, fetchAudit } = useAppStore();
+  const { data: health } = useHealth();
+  const { data: report } = useAudit(true); // enabled if you want automatic refresh on dashboard load, but maybe false works too if we just want cached. Let's say true.
 
-  useEffect(() => {
-    fetchHealth();
-    if (!report) fetchAudit();
-  }, [fetchHealth, fetchAudit, report]);
-
+  const score = report?.score || 0;
   const passedCount = report?.passed || 0;
   const failedCount = report?.failed || 0;
   const totalCount = report?.total_rules || 0;

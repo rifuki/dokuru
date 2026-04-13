@@ -1,7 +1,7 @@
 import { Link, Outlet, useLocation } from '@tanstack/react-router';
 import { Shield, Activity, Wrench, FileText, Menu } from 'lucide-react';
 import { useState } from 'react';
-import { WS_BASE_URL } from '@/lib/api';
+import { WS_BASE_URL } from '@/lib/env';
 import { Button } from '@/components/ui/button';
 import React from 'react';
 

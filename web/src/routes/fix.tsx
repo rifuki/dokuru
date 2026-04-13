@@ -3,7 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Wrench, CheckCircle2 } from 'lucide-react'
-import { useAppStore } from '@/store'
+import { useAudit } from '@/features/audit/hooks/use-audit'
+import { useApplyFix } from '@/features/fix/hooks/use-apply-fix'
 import { useState } from 'react'
 
 export const Route = createFileRoute('/fix')({
@@ -11,7 +12,8 @@ export const Route = createFileRoute('/fix')({
 })
 
 function FixPage() {
-  const { report, applyFix } = useAppStore();
+  const { data: report } = useAudit(false);
+  const { mutateAsync: applyFix } = useApplyFix();
   const [fixingId, setFixingId] = useState<string | null>(null);
 
   // Group by failed specifically for fixing

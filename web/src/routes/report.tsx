@@ -2,14 +2,14 @@ import { createFileRoute } from '@tanstack/react-router'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { FileText, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useAppStore } from '@/store'
+import { useAudit } from '@/features/audit/hooks/use-audit'
 
 export const Route = createFileRoute('/report')({
   component: ReportPage,
 })
 
 function ReportPage() {
-  const { report } = useAppStore();
+  const { data: report } = useAudit(false);
 
   const handleDownload = () => {
     if (!report) return;

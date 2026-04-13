@@ -3,14 +3,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Shield, Play } from 'lucide-react'
-import { useAppStore } from '@/store'
+import { useAudit } from '@/features/audit/hooks/use-audit'
 
 export const Route = createFileRoute('/audit')({
   component: AuditPage,
 })
 
 function AuditPage() {
-  const { report, isLoading, fetchAudit } = useAppStore();
+  const { data: report, isLoading, refetch, isFetching } = useAudit(false);
+  const loading = isLoading || isFetching;
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -19,13 +20,13 @@ function AuditPage() {
           <h2 className="text-3xl font-bold tracking-tight">Live Audit</h2>
           <p className="text-muted-foreground">Run a fresh security audit against your container environment.</p>
         </div>
-        <Button onClick={fetchAudit} disabled={isLoading} className="gap-2">
-          {isLoading ? (
+        <Button onClick={() => refetch()} disabled={loading} className="gap-2">
+          {loading ? (
             <div className="w-4 h-4 rounded-full border-2 border-primary-foreground border-t-transparent animate-spin" />
           ) : (
             <Play className="w-4 h-4" />
           )}
-          {isLoading ? "Auditing..." : "Run New Audit"}
+          {loading ? "Auditing..." : "Run New Audit"}
         </Button>
       </div>
 
@@ -40,14 +41,14 @@ function AuditPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {!report && !isLoading && (
+          {!report && !loading && (
             <div className="text-center py-12 text-muted-foreground flex flex-col items-center">
               <Shield className="w-12 h-12 mb-4 opacity-20" />
               <p>No audit data available. Click "Run New Audit" to begin.</p>
             </div>
           )}
           
-          {isLoading && !report && (
+          {loading && !report && (
             <div className="space-y-4">
               {[1, 2, 3, 4, 5].map((i) => (
                 <div key={i} className="h-20 bg-muted animate-pulse rounded-lg" />
