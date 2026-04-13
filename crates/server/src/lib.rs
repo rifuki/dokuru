@@ -9,6 +9,7 @@ pub mod routes;
 pub mod state;
 
 pub async fn serve() -> eyre::Result<()> {
+    let _ = color_eyre::install(); // Safely install panic handler, ignore if already installed
     infrastructure::env::load();
     let (subscriber, _reload_handle) = infrastructure::logging::setup();
     subscriber.init();
