@@ -17,14 +17,21 @@ pub async fn serve() -> eyre::Result<()> {
     let docker = Docker::connect_with_local_defaults()?;
     
     let state = state::AppState::new(Arc::new(config.clone()), docker);
-    let app = routes::build_router(state);
+    let cors = infrastructure::web::cors::build_cors_layer(&config);
+
+    let app = routes::build_router(state)
+        .layer(axum::middleware::from_fn(infrastructure::web::middleware::http_trace_middleware))
+        .layer(cors);
 
     let listener = infrastructure::server::create_listener(config.port).await?;
     info!("Dokuru agent API listening on port {}", config.port);
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(infrastructure::server::shutdown_signal())
-        .await?;
+    axum::serve(
+        listener, 
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>()
+    )
+    .with_graceful_shutdown(infrastructure::server::shutdown_signal())
+    .await?;
 
     Ok(())
 }

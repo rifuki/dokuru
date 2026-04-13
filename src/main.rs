@@ -31,8 +31,8 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Initialize tracing/logging from tracing-subscriber (can be customized later)
-    tracing_subscriber::fmt::init();
+    // Install eyre panic handler
+    color_eyre::install().map_err(|e| anyhow::anyhow!(e))?;
     
     let cli = Cli::parse();
     
@@ -92,7 +92,7 @@ async fn main() -> anyhow::Result<()> {
             dokuru_tui::run().await?;
         }
         Commands::Serve => {
-            println!("API Server starting on port 8080...");
+            println!("API Server starting on port {}...", "3939");
             dokuru_server::serve().await.map_err(|e| anyhow::anyhow!(e))?;
         }
     }
