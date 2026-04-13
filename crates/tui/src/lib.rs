@@ -14,7 +14,7 @@ mod ui;
 
 use app::App;
 
-pub async fn run() -> anyhow::Result<()> {
+pub async fn run() -> eyre::Result<()> {
     // setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();

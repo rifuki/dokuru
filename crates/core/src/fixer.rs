@@ -12,8 +12,8 @@ impl Fixer {
         Self { docker }
     }
 
-    pub async fn apply_fix(&self, rule_id: &str) -> anyhow::Result<String> {
-        let rule = crate::rules::get_rule_by_id(rule_id).ok_or_else(|| anyhow::anyhow!("Rule not found"))?;
+    pub async fn apply_fix(&self, rule_id: &str) -> eyre::Result<String> {
+        let rule = crate::rules::get_rule_by_id(rule_id).ok_or_else(|| eyre::eyre!("Rule not found"))?;
 
         if rule_id == "2.10" {
             // Apply fix for userns-remap in daemon.json
@@ -28,7 +28,7 @@ impl Fixer {
         Ok(format!("Manual fix required: {}", rule.remediation))
     }
 
-    async fn fix_daemon_json(&self, key: &str, value: &str) -> anyhow::Result<()> {
+    async fn fix_daemon_json(&self, key: &str, value: &str) -> eyre::Result<()> {
         let path = "/etc/docker/daemon.json";
         
         let mut config: Value = if std::path::Path::new(path).exists() {

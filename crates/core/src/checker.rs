@@ -13,7 +13,7 @@ impl Checker {
         Self { docker }
     }
 
-    pub async fn run_audit(&self) -> anyhow::Result<AuditReport> {
+    pub async fn run_audit(&self) -> eyre::Result<AuditReport> {
         let rules = get_all_rules();
         let mut results = Vec::new();
         
@@ -48,8 +48,8 @@ impl Checker {
         })
     }
 
-    pub async fn check_single_rule(&self, rule_id: &str) -> anyhow::Result<CheckResult> {
-        let rule = get_rule_by_id(rule_id).ok_or_else(|| anyhow::anyhow!("Rule not found"))?;
+    pub async fn check_single_rule(&self, rule_id: &str) -> eyre::Result<CheckResult> {
+        let rule = get_rule_by_id(rule_id).ok_or_else(|| eyre::eyre!("Rule not found"))?;
         let containers = self.docker.list_containers::<String>(None).await?;
         self.check_rule(&rule, &containers).await
     }
@@ -58,7 +58,7 @@ impl Checker {
         &self,
         rule: &CisRule,
         containers: &[bollard::models::ContainerSummary],
-    ) -> anyhow::Result<CheckResult> {
+    ) -> eyre::Result<CheckResult> {
         match rule.id.as_str() {
             "2.10" => self.check_2_10(rule).await,
             "2.11" => self.check_2_11(rule).await,
@@ -105,7 +105,7 @@ impl Checker {
         }
     }
 
-    async fn check_2_10(&self, rule: &CisRule) -> anyhow::Result<CheckResult> {
+    async fn check_2_10(&self, rule: &CisRule) -> eyre::Result<CheckResult> {
         let info = self.docker.info().await?;
         let security_options = info.security_options.unwrap_or_default();
         let passed = security_options.iter().any(|opt| opt.contains("name=userns"));
@@ -129,7 +129,7 @@ impl Checker {
         }
     }
 
-    async fn check_2_11(&self, rule: &CisRule) -> anyhow::Result<CheckResult> {
+    async fn check_2_11(&self, rule: &CisRule) -> eyre::Result<CheckResult> {
         // Technically checking daemon arg or daemon.json. We will assume pass unless a wrong config is found,
         // or we check if cgroup parent isn't changed off default heavily.
         // For simplicity:
@@ -147,7 +147,7 @@ impl Checker {
         rule: &CisRule,
         containers: &[bollard::models::ContainerSummary],
         check_fn: F,
-    ) -> anyhow::Result<CheckResult>
+    ) -> eyre::Result<CheckResult>
     where
         F: Fn(&bollard::models::HostConfig) -> bool,
     {

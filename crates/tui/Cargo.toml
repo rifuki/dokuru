@@ -8,4 +8,5 @@ dokuru-core = { path = "../core" }
 ratatui = "0.29"
 crossterm = "0.28"
 tokio.workspace = true
-anyhow.workspace = true
+eyre.workspace = true
+

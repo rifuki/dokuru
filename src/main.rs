@@ -30,9 +30,9 @@ enum Commands {
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> eyre::Result<()> {
     // Install eyre panic handler
-    color_eyre::install().map_err(|e| anyhow::anyhow!(e))?;
+    color_eyre::install()?;
     
     let cli = Cli::parse();
     
@@ -42,17 +42,20 @@ async fn main() -> anyhow::Result<()> {
             let port: String = dialoguer::Input::new()
                 .with_prompt("API Server Port")
                 .default("3939".into())
-                .interact_text()?;
+                .interact_text()
+                .map_err(|e| eyre::eyre!(e))?;
                 
             let host: String = dialoguer::Input::new()
                 .with_prompt("Host Binding")
                 .default("0.0.0.0".into())
-                .interact_text()?;
+                .interact_text()
+                .map_err(|e| eyre::eyre!(e))?;
                 
             let socket: String = dialoguer::Input::new()
                 .with_prompt("Docker Socket Path")
                 .default("/var/run/docker.sock".into())
-                .interact_text()?;
+                .interact_text()
+                .map_err(|e| eyre::eyre!(e))?;
                 
             let env_content = format!("PORT={}\nHOST={}\nDOCKER_SOCKET={}\n", port, host, socket);
             
@@ -71,7 +74,7 @@ async fn main() -> anyhow::Result<()> {
             println!("✅ Created local configuration at .env");
         }
         Commands::Audit => {
-            let docker = Docker::connect_with_local_defaults()?;
+            let docker = Docker::connect_with_local_defaults().map_err(|e| eyre::eyre!(e))?;
             let checker = Checker::new(docker);
             println!("Running Audit...");
             let report = checker.run_audit().await?;
@@ -82,7 +85,7 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         Commands::Fix { rule_id } => {
-            let docker = Docker::connect_with_local_defaults()?;
+            let docker = Docker::connect_with_local_defaults().map_err(|e| eyre::eyre!(e))?;
             let fixer = Fixer::new(docker);
             println!("Applying fix for rule {}...", rule_id);
             let msg = fixer.apply_fix(rule_id).await?;
@@ -93,7 +96,7 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::Serve => {
             println!("API Server starting on port {}...", "3939");
-            dokuru_server::serve().await.map_err(|e| anyhow::anyhow!(e))?;
+            dokuru_server::serve().await?;
         }
     }
 
