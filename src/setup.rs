@@ -197,9 +197,8 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
                         "User '{}' added to docker group",
                         current_user
                     ))?;
-                    note(
-                        "Important",
-                        "Log out and back in (or run 'newgrp docker') for group changes to take effect",
+                    cliclack::log::warning(
+                        "Log out and back in (or run 'newgrp docker') for group changes to take effect"
                     )?;
                 }
             }
