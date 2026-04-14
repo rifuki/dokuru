@@ -137,7 +137,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
     } else {
         mode
     };
-    let preflight = collect_preflight(&config);
+    let mut preflight = collect_preflight(&config);
 
     intro(format!("🐳 Dokuru  {}", effective_mode.heading()))?;
 
@@ -166,7 +166,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
             })?;
 
             // Re-collect preflight after Docker installation
-            let preflight = collect_preflight(&config);
+            preflight = collect_preflight(&config);
             if !preflight.docker_installed || !preflight.docker_group_exists {
                 outro_cancel("Docker installation verification failed")?;
                 bail!("Docker installation failed");
@@ -689,8 +689,17 @@ fn install_docker() -> Result<()> {
         cliclack::log::info(format!("Downloaded script: {} bytes", metadata.len()))?;
     }
 
-    // Execute
-    run_command("sh", &[script_path])?;
+    // Execute with suppressed output (only show errors)
+    let status = Command::new("sh")
+        .arg(script_path)
+        .stdout(Stdio::null())
+        .stderr(Stdio::inherit())
+        .status()
+        .wrap_err("Failed to execute Docker install script")?;
+
+    if !status.success() {
+        bail!("Docker installation script failed");
+    }
 
     // Cleanup
     fs::remove_file(script_path).ok();
