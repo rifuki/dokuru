@@ -11,6 +11,8 @@ pub enum Severity {
 pub enum RuleCategory {
     Namespace,
     Cgroup,
+    Files,
+    Runtime,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

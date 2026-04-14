@@ -464,7 +464,7 @@ impl SetupMode {
 
     fn heading(self) -> &'static str {
         match self {
-            Self::Onboard => "Interactive onboarding",
+            Self::Onboard => "",
             Self::Configure => "Interactive reconfiguration",
         }
     }
