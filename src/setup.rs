@@ -126,13 +126,11 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
     let mut config = resolve_config(args)?;
     let source_binary =
         std::env::current_exe().wrap_err("Failed to resolve current Dokuru binary path")?;
-    let existing_installation = config.install_path.exists()
-        || runtime_config_path(&config).exists()
-        || service_unit_path(&config).exists();
-    let effective_mode = if matches!(mode, SetupMode::Onboard)
-        && existing_installation
-        && same_path(&source_binary, &config.install_path)
-    {
+
+    // Only switch to Configure mode if config already exists
+    // Binary existence alone doesn't mean it's configured
+    let has_config = runtime_config_path(&config).exists();
+    let effective_mode = if matches!(mode, SetupMode::Onboard) && has_config {
         SetupMode::Configure
     } else {
         mode
@@ -142,14 +140,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
     intro(format!("🐳 Dokuru  {}", effective_mode.heading()))?;
 
     if matches!(mode, SetupMode::Onboard) && matches!(effective_mode, SetupMode::Configure) {
-        let reason = if config.install_path.exists() && runtime_config_path(&config).exists() {
-            "Dokuru binary and configuration found"
-        } else if config.install_path.exists() {
-            "Dokuru binary found (configuration will be recreated)"
-        } else {
-            "Dokuru installation detected"
-        };
-        cliclack::log::warning(format!("{} — switching to configure mode", reason))?;
+        cliclack::log::warning("Existing configuration found — switching to configure mode")?;
     }
 
     if matches!(effective_mode, SetupMode::Onboard) {
@@ -1284,10 +1275,4 @@ fn parse_cors_origins(cors_origins: &str) -> Vec<String> {
         .filter(|origin| !origin.is_empty())
         .map(ToString::to_string)
         .collect::<Vec<_>>()
-}
-
-fn same_path(left: &Path, right: &Path) -> bool {
-    let left = left.canonicalize().unwrap_or_else(|_| left.to_path_buf());
-    let right = right.canonicalize().unwrap_or_else(|_| right.to_path_buf());
-    left == right
 }
