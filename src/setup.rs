@@ -935,7 +935,7 @@ fn show_preflight(config: &InstallerConfig, preflight: &Preflight) -> Result<()>
         format!(
             "Docker socket:  {} {}",
             config.docker_socket,
-            if preflight.docker_socket_exists {
+            if preflight.docker_installed && preflight.docker_socket_exists {
                 "✓"
             } else {
                 "(not found)"
@@ -1186,6 +1186,10 @@ fn setup_dokuru_user() -> Result<()> {
 
         args.push("dokuru");
         run_command("useradd", &args)?;
+
+        if stderr().is_terminal() {
+            cliclack::log::info("Created system user 'dokuru' for service isolation")?;
+        }
     } else {
         // User exists, add to docker group if it exists
         if has_docker_group {
@@ -1199,6 +1203,12 @@ fn setup_dokuru_user() -> Result<()> {
         && current_user != "root"
     {
         run_command("usermod", &["-aG", "dokuru", &current_user])?;
+        if stderr().is_terminal() {
+            cliclack::log::info(format!(
+                "Added '{}' to dokuru group for config access",
+                current_user
+            ))?;
+        }
     }
 
     Ok(())
