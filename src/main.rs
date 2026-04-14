@@ -2,6 +2,8 @@ use bollard::{API_DEFAULT_VERSION, Docker};
 use clap::{Parser, Subcommand};
 use dokuru_core::{Checker, Fixer};
 
+mod setup;
+
 /// Dokuru 0.1.0 - Docker Security Hardening Agent (CIS Benchmark v1.8.0)
 #[derive(Parser)]
 #[command(name = "dokuru")]
@@ -14,9 +16,9 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Interactive first-time setup
-    Setup,
+    Setup(setup::SetupArgs),
     /// Re-configure settings interactively
-    Configure,
+    Configure(setup::SetupArgs),
     /// Run all CIS checks and print results to stdout
     Audit,
     /// Apply a specific rule fix
@@ -36,45 +38,8 @@ async fn main() -> eyre::Result<()> {
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::Setup | Commands::Configure => {
-            println!("=== Dokuru Initial Setup ===");
-            let port: String = dialoguer::Input::new()
-                .with_prompt("API Server Port")
-                .default("3939".into())
-                .interact_text()
-                .map_err(|e| eyre::eyre!(e))?;
-
-            let host: String = dialoguer::Input::new()
-                .with_prompt("Host Binding")
-                .default("0.0.0.0".into())
-                .interact_text()
-                .map_err(|e| eyre::eyre!(e))?;
-
-            let socket: String = dialoguer::Input::new()
-                .with_prompt("Docker Socket Path")
-                .default("/var/run/docker.sock".into())
-                .interact_text()
-                .map_err(|e| eyre::eyre!(e))?;
-
-            let env_content = format!("PORT={}\nHOST={}\nDOCKER_SOCKET={}\n", port, host, socket);
-
-            // Try to write to /etc/dokuru/.env if root, else local .env
-            let prod_dir = std::path::Path::new("/etc/dokuru");
-            if prod_dir.exists() || std::fs::create_dir_all(prod_dir).is_ok() {
-                let prod_path = prod_dir.join(".env");
-                if std::fs::write(&prod_path, &env_content).is_ok() {
-                    println!(
-                        "✅ Created production configuration at {}",
-                        prod_path.display()
-                    );
-                    return Ok(());
-                }
-            }
-
-            // Fallback to local
-            std::fs::write(".env", &env_content)?;
-            println!("✅ Created local configuration at .env");
-        }
+        Commands::Setup(args) => setup::run(setup::SetupMode::Setup, args.clone())?,
+        Commands::Configure(args) => setup::run(setup::SetupMode::Configure, args.clone())?,
         Commands::Audit => {
             let docker = connect_docker()?;
             let checker = Checker::new(docker);
