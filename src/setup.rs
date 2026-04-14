@@ -332,11 +332,14 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         }
     }
 
-    // Final success message
+    // Final success message in a box
+    let mut next_steps = Vec::new();
     if !config.skip_service {
-        cliclack::log::info(format!("Logs: journalctl -u {} -f", config.service_name))?;
+        next_steps.push(format!("Logs:      journalctl -u {} -f", config.service_name));
     }
-    cliclack::log::info(format!("Dashboard: http://<your-host>:{}", config.port))?;
+    next_steps.push(format!("Dashboard: http://<your-host>:{}", config.port));
+    
+    note("Next steps", next_steps.join("\n"))?;
     outro("Dokuru is ready.")?;
 
     Ok(())
