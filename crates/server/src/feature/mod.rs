@@ -1,8 +1,8 @@
-pub mod health;
-pub mod rules;
-pub mod containers;
 pub mod audit;
-pub mod fix;
-pub mod trivy;
+pub mod containers;
 pub mod environments;
+pub mod fix;
+pub mod health;
 pub mod proxy;
+pub mod rules;
+pub mod trivy;

@@ -1,13 +1,13 @@
-use std::io;
 use ratatui::{
+    Terminal,
+    backend::{Backend, CrosstermBackend},
     crossterm::{
         event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
         execute,
-        terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+        terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
     },
-    backend::{Backend, CrosstermBackend},
-    Terminal,
 };
+use std::io;
 
 mod app;
 mod ui;

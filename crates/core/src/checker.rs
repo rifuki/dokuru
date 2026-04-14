@@ -3,8 +3,8 @@ use chrono::Utc;
 use serde_json::Value;
 use std::{fs, path::Path};
 
-use crate::types::*;
 use crate::rules::{get_all_rules, get_rule_by_id};
+use crate::types::*;
 
 pub struct Checker {
     docker: Docker,
@@ -18,7 +18,7 @@ impl Checker {
     pub async fn run_audit(&self) -> eyre::Result<AuditReport> {
         let rules = get_all_rules();
         let mut results = Vec::new();
-        
+
         let info = self.docker.info().await?;
         let version = self.docker.version().await?;
         let containers = self.docker.list_containers::<String>(None).await?;
@@ -29,9 +29,15 @@ impl Checker {
             results.push(result);
         }
 
-        let passed = results.iter().filter(|r| r.status == CheckStatus::Pass).count();
-        let failed = results.iter().filter(|r| r.status == CheckStatus::Fail).count();
-        
+        let passed = results
+            .iter()
+            .filter(|r| r.status == CheckStatus::Pass)
+            .count();
+        let failed = results
+            .iter()
+            .filter(|r| r.status == CheckStatus::Fail)
+            .count();
+
         let score = if results.is_empty() {
             0
         } else {
@@ -64,39 +70,69 @@ impl Checker {
         match rule.id.as_str() {
             "2.10" => self.check_2_10(rule).await,
             "2.11" => self.check_2_11(rule).await,
-            "5.10" => self.check_container_rule(rule, containers, |config| {
-                config.network_mode.as_deref() != Some("host")
-            }).await,
-            "5.16" => self.check_container_rule(rule, containers, |config| {
-                config.pid_mode.as_deref() != Some("host")
-            }).await,
-            "5.17" => self.check_container_rule(rule, containers, |config| {
-                config.ipc_mode.as_deref() != Some("host")
-            }).await,
-            "5.21" => self.check_container_rule(rule, containers, |config| {
-                config.uts_mode.as_deref() != Some("host")
-            }).await,
-            "5.31" => self.check_container_rule(rule, containers, |config| {
-                config.userns_mode.as_deref() != Some("host")
-            }).await,
-            "5.11" => self.check_container_rule(rule, containers, |config| {
-                config.memory.unwrap_or(0) > 0
-            }).await,
-            "5.12" => self.check_container_rule(rule, containers, |config| {
-                let shares = config.cpu_shares.unwrap_or(0);
-                shares != 0 && shares != 1024
-            }).await,
-            "5.25" => self.check_container_rule(rule, containers, |config| {
-                !config.privileged.unwrap_or(false)
-            }).await,
-            "5.26" => self.check_container_rule(rule, containers, |config| {
-                config.security_opt.as_ref().map_or(false, |opts| {
-                    opts.iter().any(|opt| opt == "no-new-privileges" || opt == "no-new-privileges=true")
+            "5.10" => {
+                self.check_container_rule(rule, containers, |config| {
+                    config.network_mode.as_deref() != Some("host")
                 })
-            }).await,
-            "5.29" => self.check_container_rule(rule, containers, |config| {
-                config.pids_limit.unwrap_or(0) > 0
-            }).await,
+                .await
+            }
+            "5.16" => {
+                self.check_container_rule(rule, containers, |config| {
+                    config.pid_mode.as_deref() != Some("host")
+                })
+                .await
+            }
+            "5.17" => {
+                self.check_container_rule(rule, containers, |config| {
+                    config.ipc_mode.as_deref() != Some("host")
+                })
+                .await
+            }
+            "5.21" => {
+                self.check_container_rule(rule, containers, |config| {
+                    config.uts_mode.as_deref() != Some("host")
+                })
+                .await
+            }
+            "5.31" => {
+                self.check_container_rule(rule, containers, |config| {
+                    config.userns_mode.as_deref() != Some("host")
+                })
+                .await
+            }
+            "5.11" => {
+                self.check_container_rule(rule, containers, |config| config.memory.unwrap_or(0) > 0)
+                    .await
+            }
+            "5.12" => {
+                self.check_container_rule(rule, containers, |config| {
+                    let shares = config.cpu_shares.unwrap_or(0);
+                    shares != 0 && shares != 1024
+                })
+                .await
+            }
+            "5.25" => {
+                self.check_container_rule(rule, containers, |config| {
+                    !config.privileged.unwrap_or(false)
+                })
+                .await
+            }
+            "5.26" => {
+                self.check_container_rule(rule, containers, |config| {
+                    config.security_opt.as_ref().map_or(false, |opts| {
+                        opts.iter().any(|opt| {
+                            opt == "no-new-privileges" || opt == "no-new-privileges=true"
+                        })
+                    })
+                })
+                .await
+            }
+            "5.29" => {
+                self.check_container_rule(rule, containers, |config| {
+                    config.pids_limit.unwrap_or(0) > 0
+                })
+                .await
+            }
             _ => Ok(CheckResult {
                 rule: rule.clone(),
                 status: CheckStatus::Error,
@@ -110,7 +146,9 @@ impl Checker {
     async fn check_2_10(&self, rule: &CisRule) -> eyre::Result<CheckResult> {
         let info = self.docker.info().await?;
         let security_options = info.security_options.unwrap_or_default();
-        let passed = security_options.iter().any(|opt| opt.contains("name=userns"));
+        let passed = security_options
+            .iter()
+            .any(|opt| opt.contains("name=userns"));
 
         if passed {
             Ok(CheckResult {
@@ -180,9 +218,7 @@ impl Checker {
                 if let Ok(details) = self.docker.inspect_container(id, None).await {
                     if let Some(host_config) = details.host_config {
                         if !check_fn(&host_config) {
-                            let name = details
-                                .name
-                                .unwrap_or_else(|| String::from("unknown"));
+                            let name = details.name.unwrap_or_else(|| String::from("unknown"));
                             affected.push(name.trim_start_matches('/').to_string());
                         }
                     }
@@ -193,7 +229,11 @@ impl Checker {
         let passed = affected.is_empty();
         Ok(CheckResult {
             rule: rule.clone(),
-            status: if passed { CheckStatus::Pass } else { CheckStatus::Fail },
+            status: if passed {
+                CheckStatus::Pass
+            } else {
+                CheckStatus::Fail
+            },
             message: if passed {
                 "All containers compliant".to_string()
             } else {

@@ -1,10 +1,10 @@
+use crate::state::AppState;
 use axum::{
     body::Body,
     extract::{Path, Request, State},
-    http::{header, HeaderMap, HeaderName, HeaderValue, Method, StatusCode, Uri},
+    http::{header, HeaderMap, HeaderName, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
-use crate::state::AppState;
 
 /// Generic reverse proxy: forwards any request to the target environment's agent
 /// and streams the response back to the caller.

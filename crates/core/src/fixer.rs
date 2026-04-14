@@ -12,7 +12,8 @@ impl Fixer {
     }
 
     pub async fn apply_fix(&self, rule_id: &str) -> eyre::Result<FixOutcome> {
-        let rule = crate::rules::get_rule_by_id(rule_id).ok_or_else(|| eyre::eyre!("Rule not found"))?;
+        let rule =
+            crate::rules::get_rule_by_id(rule_id).ok_or_else(|| eyre::eyre!("Rule not found"))?;
 
         match rule_id {
             "2.10" => {
@@ -80,7 +81,7 @@ impl Fixer {
         if let Some(parent) = Path::new(path).parent() {
             fs::create_dir_all(parent)?;
         }
-        
+
         let mut config: Value = if std::path::Path::new(path).exists() {
             let content = fs::read_to_string(path).unwrap_or_else(|_| "{}".to_string());
             serde_json::from_str(&content).unwrap_or_else(|_| serde_json::json!({}))
@@ -93,11 +94,11 @@ impl Fixer {
         }
 
         let new_content = serde_json::to_string_pretty(&config)?;
-        
+
         // This won't work correctly if we don't have root, but this tool runs as root or systemd.
         // If it fails, return error.
         fs::write(path, new_content.as_bytes())?;
-        
+
         Ok(())
     }
 

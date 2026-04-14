@@ -10,7 +10,6 @@ use tracing_subscriber::{
 
 pub type ReloadFilterHandle = Handle<EnvFilter, Registry>;
 
-
 pub fn setup() -> (impl SubscriberInitExt, ReloadFilterHandle) {
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("debug"));
 
@@ -30,7 +29,7 @@ pub fn setup() -> (impl SubscriberInitExt, ReloadFilterHandle) {
     } else {
         std::env::current_dir().unwrap_or_default().join("logs")
     };
-    
+
     if let Err(e) = create_dir_all(&log_dir) {
         eprintln!("Failed to create log directory: {e}");
     }

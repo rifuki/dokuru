@@ -73,18 +73,11 @@ pub async fn add_environment(
         .build()
         .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
-    client
-        .get(&test_url)
-        .send()
-        .await
-        .map_err(|e| {
-            ApiError::default()
-                .with_code(StatusCode::BAD_GATEWAY)
-                .with_message(format!(
-                    "Cannot reach remote agent at {}: {}",
-                    url, e
-                ))
-        })?;
+    client.get(&test_url).send().await.map_err(|e| {
+        ApiError::default()
+            .with_code(StatusCode::BAD_GATEWAY)
+            .with_message(format!("Cannot reach remote agent at {}: {}", url, e))
+    })?;
 
     let env = Environment {
         id: Uuid::new_v4().to_string(),

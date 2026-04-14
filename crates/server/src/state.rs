@@ -1,8 +1,8 @@
-use std::sync::Arc;
-use bollard::Docker;
-use tokio::sync::RwLock;
 use crate::feature::environments::Environment;
 use crate::infrastructure::config::Config;
+use bollard::Docker;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 #[derive(Clone)]
 pub struct AppState {

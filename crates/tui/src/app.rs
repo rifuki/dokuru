@@ -28,7 +28,7 @@ impl App {
             self.active_tab = self.tabs.len() - 1;
         }
     }
-    
+
     pub async fn run_audit(&mut self) {
         // Logic will hook to core
     }

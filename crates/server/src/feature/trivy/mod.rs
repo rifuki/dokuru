@@ -105,7 +105,9 @@ pub async fn scan_image(
             std::io::ErrorKind::NotFound => ApiError::default()
                 .with_code(axum::http::StatusCode::SERVICE_UNAVAILABLE)
                 .with_message("Trivy is not installed on this host")
-                .with_details("Install Trivy and ensure it is available in PATH before using image scanning."),
+                .with_details(
+                    "Install Trivy and ensure it is available in PATH before using image scanning.",
+                ),
             _ => ApiError::default()
                 .with_code(axum::http::StatusCode::INTERNAL_SERVER_ERROR)
                 .with_message("Failed to start Trivy scan")
@@ -152,7 +154,9 @@ pub async fn scan_image(
                 target: target.clone(),
                 vulnerability_id: vuln.vulnerability_id,
                 package_name: vuln.package_name.unwrap_or_else(|| "unknown".to_string()),
-                installed_version: vuln.installed_version.unwrap_or_else(|| "unknown".to_string()),
+                installed_version: vuln
+                    .installed_version
+                    .unwrap_or_else(|| "unknown".to_string()),
                 fixed_version: vuln.fixed_version,
                 severity,
                 title: vuln.title,

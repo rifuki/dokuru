@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use bollard::{API_DEFAULT_VERSION, Docker};
+use std::sync::Arc;
 use tracing::info;
 use tracing_subscriber::util::SubscriberInitExt;
 
@@ -25,7 +25,9 @@ pub async fn serve() -> eyre::Result<()> {
     let cors = infrastructure::web::cors::build_cors_layer(&config);
 
     let app = routes::build_router(state)
-        .layer(axum::middleware::from_fn(infrastructure::web::middleware::http_trace_middleware))
+        .layer(axum::middleware::from_fn(
+            infrastructure::web::middleware::http_trace_middleware,
+        ))
         .layer(cors);
 
     let listener = infrastructure::server::create_listener(config.server_addr()?).await?;
