@@ -33,8 +33,7 @@ dokuru-core = { path = "crates/core" }
 dokuru-server = { path = "crates/server" }
 dokuru-tui = { path = "crates/tui" }
 clap = { version = "4", features = ["derive"] }
-dialoguer = "0.11"
-indicatif = "0.17"
+cliclack = "0.3"
 toml = "0.8"
 tokio.workspace = true
 eyre.workspace = true

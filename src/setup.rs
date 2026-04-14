@@ -1,17 +1,14 @@
 use clap::Args;
-use dialoguer::console::Style;
-use dialoguer::{theme::ColorfulTheme, Confirm, Input, Select};
+use cliclack::{confirm, input, intro, note, outro, outro_cancel, select, spinner};
 use dokuru_server::infrastructure::config::{
     config_path_in, Config as RuntimeConfig, DockerConfig, ServerConfig,
 };
 use eyre::{bail, Result, WrapErr};
-use indicatif::{ProgressBar, ProgressStyle};
 use std::fs;
-use std::io::{stderr, stdout, IsTerminal};
+use std::io::{stderr, IsTerminal};
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::Duration;
 
 const REPO_URL: &str = "https://github.com/rifuki/dokuru";
 const LATEST_RELEASE_BASE_URL: &str = "https://github.com/rifuki/dokuru/releases/download/latest";
@@ -123,6 +120,8 @@ enum ChecksumTool {
     Shasum,
 }
 
+// ─── Setup / Onboard / Configure ─────────────────────────────────────────────
+
 pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
     let mut config = resolve_config(args)?;
     let source_binary =
@@ -134,34 +133,45 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         && existing_installation
         && same_path(&source_binary, &config.install_path)
     {
-        log_warn("Dokuru is already installed on this host; switching to configure mode");
         SetupMode::Configure
     } else {
         mode
     };
     let preflight = collect_preflight(&config);
 
-    print_banner(effective_mode);
-    print_preflight(&config, &preflight);
+    intro(format!("🐳 Dokuru  {}", effective_mode.heading()))?;
+
+    if matches!(mode, SetupMode::Onboard) && matches!(effective_mode, SetupMode::Configure) {
+        cliclack::log::warning(
+            "Already installed on this host — switching to configure mode",
+        )?;
+    }
+
+    if matches!(effective_mode, SetupMode::Onboard) {
+        show_preflight(&config, &preflight)?;
+    }
 
     if !preflight.running_as_root {
-        bail!(
-            "{} requires root privileges. Re-run with `sudo dokuru {}`.",
-            effective_mode.label(),
+        outro_cancel(format!(
+            "Root privileges required. Re-run with: sudo dokuru {}",
             effective_mode.command_name()
-        );
+        ))?;
+        bail!("root privileges required");
     }
 
     config = prompt_for_config(effective_mode, config)?;
-    print_plan(&config, &preflight);
+    show_plan(&config, &preflight)?;
 
     if !config.skip_service && !preflight.has_systemd {
-        log_warn("systemd was not detected; continuing without a managed service");
+        cliclack::log::warning(
+            "systemd not detected — continuing without a managed service",
+        )?;
         config.skip_service = true;
     }
 
     if !confirm_install(effective_mode, &config)? {
-        bail!("Configuration cancelled.");
+        outro_cancel("Configuration cancelled.")?;
+        bail!("cancelled");
     }
 
     if effective_mode.should_install_binary() {
@@ -170,9 +180,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         })?;
     }
 
-    run_step("Writing Dokuru configuration", || {
-        write_config_file(&config)
-    })?;
+    run_step("Writing Dokuru configuration", || write_config_file(&config))?;
 
     if !config.skip_service {
         run_step("Writing systemd unit", || {
@@ -184,39 +192,41 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         })?;
 
         if !preflight.docker_socket_exists {
-            print_docker_missing_hint(&config.docker_socket);
-            log_warn(
-                "Dokuru service was installed but not started because Docker is not ready yet",
-            );
-            log_info(&format!(
-                "Start Docker first, then run: systemctl restart {}",
+            cliclack::log::warning(&format!(
+                "Docker is not ready on {}",
+                config.docker_socket
+            ))?;
+            cliclack::log::info(&format!(
+                "Start Docker first, then: systemctl restart {}",
                 config.service_name
-            ));
-            print_summary(&config, false);
+            ))?;
+            show_summary(&config, false)?;
             return Ok(());
         }
 
         match run_step("Starting Dokuru service", || {
             restart_service(&config.service_name)
         }) {
-            Ok(_) => print_summary(&config, true),
+            Ok(_) => show_summary(&config, true)?,
             Err(err) => {
-                log_warn(&format!(
-                    "Dokuru service was installed but failed to start: {err}"
-                ));
-                log_info(&format!(
-                    "Inspect logs with: journalctl -u {} -f",
+                cliclack::log::warning(&format!(
+                    "Service installed but failed to start: {err}"
+                ))?;
+                cliclack::log::info(&format!(
+                    "Inspect logs: journalctl -u {} -f",
                     config.service_name
-                ));
-                print_summary(&config, false);
+                ))?;
+                show_summary(&config, false)?;
             }
         }
     } else {
-        print_summary(&config, false);
+        show_summary(&config, false)?;
     }
 
     Ok(())
 }
+
+// ─── Doctor ──────────────────────────────────────────────────────────────────
 
 pub fn run_doctor(args: DoctorArgs) -> Result<()> {
     let config = resolve_shared_config(&args.shared, args.docker_socket)?;
@@ -231,122 +241,81 @@ pub fn run_doctor(args: DoctorArgs) -> Result<()> {
     let service_active =
         service_exists && command_success("systemctl", &["is-active", &config.service_name]);
 
-    println!();
-    println!("  {} {}", bold("dokuru"), dim("host diagnostics"));
-    println!();
-    println!("  {}", bold("Status"));
-    print_item(
-        if binary_exists {
-            ok_prefix()
+    intro("🐳 Dokuru  host diagnostics")?;
+
+    // Status section
+    let log_item = |ok: bool, label: &str, value: &str| -> Result<()> {
+        if ok {
+            cliclack::log::success(&format!("{:<16} {}", label, value))?;
         } else {
-            fail_prefix()
-        },
-        "Binary",
-        &config.install_path.display().to_string(),
-    );
-    print_item(
-        if config_exists {
-            ok_prefix()
-        } else {
-            fail_prefix()
-        },
-        "Config",
-        &config_path.display().to_string(),
-    );
-    print_item(
-        if preflight.docker_socket_exists {
-            ok_prefix()
-        } else {
-            fail_prefix()
-        },
+            cliclack::log::warning(&format!("{:<16} {}", label, value))?;
+        }
+        Ok(())
+    };
+
+    log_item(binary_exists, "Binary", &config.install_path.display().to_string())?;
+    log_item(config_exists, "Config", &config_path.display().to_string())?;
+    log_item(
+        preflight.docker_socket_exists,
         "Docker socket",
         &config.docker_socket,
-    );
-    print_item(
-        if preflight.has_systemd {
-            ok_prefix()
-        } else {
-            warn_prefix()
-        },
+    )?;
+    log_item(
+        preflight.has_systemd,
         "Systemd",
         if preflight.has_systemd {
             "detected"
         } else {
             "not detected"
         },
-    );
-    print_item(
-        if service_exists {
-            ok_prefix()
-        } else {
-            warn_prefix()
-        },
-        "Service unit",
-        &service_path.display().to_string(),
-    );
-
+    )?;
+    log_item(service_exists, "Service unit", &service_path.display().to_string())?;
     if service_exists {
-        print_item(
-            if service_enabled {
-                ok_prefix()
-            } else {
-                warn_prefix()
-            },
-            "Service enabled",
-            if service_enabled { "yes" } else { "no" },
-        );
-        print_item(
-            if service_active {
-                ok_prefix()
-            } else {
-                warn_prefix()
-            },
-            "Service active",
-            if service_active { "yes" } else { "no" },
-        );
+        log_item(service_enabled, "Service enabled", if service_enabled { "yes" } else { "no" })?;
+        log_item(service_active, "Service active", if service_active { "yes" } else { "no" })?;
     }
 
-    println!();
-    println!("  {}", bold("Configuration"));
-    print_item(step_prefix(), "Port", &config.port.to_string());
-    print_item(step_prefix(), "Host", &config.host);
-    print_item(step_prefix(), "CORS", &config.cors_origins);
-    print_item(
-        step_prefix(),
-        "docker.service",
-        if preflight.docker_service_exists {
-            "detected"
-        } else {
-            "not detected"
-        },
-    );
-
+    // Config note
+    let mut config_lines = vec![
+        format!("Port:           {}", config.port),
+        format!("Host:           {}", config.host),
+        format!("CORS:           {}", config.cors_origins),
+        format!(
+            "docker.service: {}",
+            if preflight.docker_service_exists {
+                "detected"
+            } else {
+                "not detected"
+            }
+        ),
+    ];
     if binary_exists {
         if let Some(version) = binary_version(&config.install_path) {
-            println!();
-            println!("  {}", bold("Binary Info"));
-            print_item(step_prefix(), "Version", &version);
+            config_lines.push(format!("Version:        {}", version));
         }
     }
+    note("Configuration", config_lines.join("\n"))?;
 
-    println!();
-    log_info(&format!(
+    cliclack::log::info(&format!(
         "Run `dokuru update --install-path {}` to refresh the binary.",
         config.install_path.display()
-    ));
+    ))?;
+
+    outro("Diagnostics complete.")?;
     Ok(())
 }
+
+// ─── Update ──────────────────────────────────────────────────────────────────
 
 pub fn run_update(args: UpdateArgs) -> Result<()> {
     let config = resolve_shared_config(&args.shared, None)?;
     let preflight = collect_preflight(&config);
 
-    println!();
-    println!("  {} {}", bold("dokuru"), dim("rolling latest updater"));
-    println!();
+    intro("🐳 Dokuru  rolling latest updater")?;
 
     if !preflight.running_as_root {
-        bail!("Dokuru update requires root privileges. Re-run with `sudo dokuru update`.");
+        outro_cancel("Root privileges required. Re-run with: sudo dokuru update")?;
+        bail!("root privileges required");
     }
 
     ensure_command("curl")?;
@@ -356,19 +325,22 @@ pub fn run_update(args: UpdateArgs) -> Result<()> {
     let binary_path = temp_dir.join(asset_name);
     let checksum_path = temp_dir.join("SHA256SUMS");
 
-    print_item(
-        step_prefix(),
-        "Target binary",
-        &config.install_path.display().to_string(),
-    );
-    print_item(step_prefix(), "Release asset", asset_name);
-    print_item(step_prefix(), "Service", &config.service_name);
+    note(
+        "Update plan",
+        format!(
+            "Target:  {}\nAsset:   {}\nService: {}",
+            config.install_path.display(),
+            asset_name,
+            config.service_name,
+        ),
+    )?;
 
     if !confirm_action(
         args.shared.yes,
         &format!("Update Dokuru at {}?", config.install_path.display()),
     )? {
-        bail!("Update cancelled.");
+        outro_cancel("Update cancelled.")?;
+        bail!("cancelled");
     }
 
     run_step("Downloading latest Dokuru binary", || {
@@ -396,19 +368,18 @@ pub fn run_update(args: UpdateArgs) -> Result<()> {
         })?;
     }
 
-    println!();
-    println!("  {}", bold("Update Complete"));
-    print_item(
-        ok_prefix(),
-        "Binary",
-        &config.install_path.display().to_string(),
-    );
+    let mut result_lines = vec![format!("Binary:  {}", config.install_path.display())];
     if let Some(version) = binary_version(&config.install_path) {
-        print_item(ok_prefix(), "Version", &version);
+        result_lines.push(format!("Version: {}", version));
     }
-    log_info(&format!("Dashboard: http://<your-host>:{}", config.port));
+    note("Update complete", result_lines.join("\n"))?;
+
+    cliclack::log::info(&format!("Dashboard: http://<your-host>:{}", config.port))?;
+    outro("Dokuru updated successfully.")?;
     Ok(())
 }
+
+// ─── Uninstall ────────────────────────────────────────────────────────────────
 
 pub fn run_uninstall(args: UninstallArgs) -> Result<()> {
     let config = resolve_shared_config(&args.shared, None)?;
@@ -416,31 +387,31 @@ pub fn run_uninstall(args: UninstallArgs) -> Result<()> {
     let unit_path = service_unit_path(&config);
     let config_path = runtime_config_path(&config);
 
-    println!();
-    println!("  {} {}", bold("dokuru"), dim("uninstall"));
-    println!();
+    intro("🐳 Dokuru  uninstall")?;
 
     if !preflight.running_as_root {
-        bail!("Dokuru uninstall requires root privileges. Re-run with `sudo dokuru uninstall`.");
+        outro_cancel(
+            "Root privileges required. Re-run with: sudo dokuru uninstall",
+        )?;
+        bail!("root privileges required");
     }
 
-    print_item(
-        step_prefix(),
-        "Binary",
-        &config.install_path.display().to_string(),
-    );
-    print_item(step_prefix(), "Config", &config_path.display().to_string());
-    print_item(
-        step_prefix(),
-        "Service unit",
-        &unit_path.display().to_string(),
-    );
+    note(
+        "Will remove",
+        format!(
+            "Binary:  {}\nConfig:  {}\nService: {}",
+            config.install_path.display(),
+            config_path.display(),
+            unit_path.display(),
+        ),
+    )?;
 
     if !confirm_action(
         args.shared.yes,
         &format!("Uninstall Dokuru from {}?", config.install_path.display()),
     )? {
-        bail!("Uninstall cancelled.");
+        outro_cancel("Uninstall cancelled.")?;
+        bail!("cancelled");
     }
 
     if preflight.has_systemd && unit_path.exists() {
@@ -463,25 +434,19 @@ pub fn run_uninstall(args: UninstallArgs) -> Result<()> {
         remove_dir_if_present(&config.config_dir)
     })?;
 
-    println!();
-    println!("  {}", bold("Uninstall Complete"));
-    print_item(ok_prefix(), "Binary", "removed");
-    print_item(ok_prefix(), "Config", "removed");
+    let mut removed = vec!["Binary:  removed".to_string(), "Config:  removed".to_string()];
     if preflight.has_systemd {
-        print_item(ok_prefix(), "Service", "removed");
+        removed.push("Service: removed".to_string());
     }
-    println!();
+    note("Uninstall complete", removed.join("\n"))?;
+
+    outro("Dokuru has been removed from this host.")?;
     Ok(())
 }
 
-impl SetupMode {
-    fn label(self) -> &'static str {
-        match self {
-            Self::Onboard => "Dokuru onboard",
-            Self::Configure => "Dokuru configure",
-        }
-    }
+// ─── SetupMode ───────────────────────────────────────────────────────────────
 
+impl SetupMode {
     fn command_name(self) -> &'static str {
         match self {
             Self::Onboard => "onboard",
@@ -500,6 +465,8 @@ impl SetupMode {
         matches!(self, Self::Onboard)
     }
 }
+
+// ─── Config Resolution ───────────────────────────────────────────────────────
 
 fn resolve_config(args: SetupArgs) -> Result<InstallerConfig> {
     let install_path = args
@@ -603,166 +570,109 @@ fn collect_preflight(config: &InstallerConfig) -> Preflight {
     }
 }
 
-fn prompt_for_config(_mode: SetupMode, mut config: InstallerConfig) -> Result<InstallerConfig> {
+// ─── Interactive Prompts ──────────────────────────────────────────────────────
+
+fn prompt_for_config(mode: SetupMode, mut config: InstallerConfig) -> Result<InstallerConfig> {
     if config.yes || !stderr().is_terminal() {
         return Ok(config);
     }
 
-    let theme = prompt_theme();
-
-    match _mode {
+    match mode {
         SetupMode::Onboard => {
-            print_quickstart_box(&config);
-            configure_server_section(&theme, &mut config)?;
-            configure_docker_section(&theme, &mut config)?;
-            configure_service_section(&theme, &mut config)?;
+            note(
+                "QuickStart defaults",
+                format!(
+                    "Port:    {}\nBind:    {}\nDocker:  {}\nService: {}",
+                    config.port,
+                    config.host,
+                    config.docker_socket,
+                    if config.skip_service { "disabled" } else { "enabled" },
+                ),
+            )?;
+            configure_server_section(&mut config)?;
+            configure_docker_section(&mut config)?;
+            configure_service_section(&mut config)?;
         }
         SetupMode::Configure => {
-            print_existing_config_box(&config);
-            run_configure_sections(&theme, &mut config)?;
+            note(
+                "Existing config",
+                format!(
+                    "Server:  {}:{}\nDocker:  {}\nService: {}",
+                    config.host,
+                    config.port,
+                    config.docker_socket,
+                    if config.skip_service { "disabled" } else { &config.service_name },
+                ),
+            )?;
+            run_configure_sections(&mut config)?;
         }
     }
 
     Ok(config)
 }
 
-fn run_configure_sections(theme: &ColorfulTheme, config: &mut InstallerConfig) -> Result<()> {
+#[derive(Clone, Eq, PartialEq)]
+enum ConfigSection {
+    Server,
+    Docker,
+    Service,
+    Done,
+}
+
+fn run_configure_sections(config: &mut InstallerConfig) -> Result<()> {
     loop {
-        let selection = Select::with_theme(theme)
-            .with_prompt("Select section to configure")
-            .items(&["Server", "Docker", "Service", "Continue"])
-            .default(0)
+        let section = select("Select section to configure")
+            .item(ConfigSection::Server, "Server", "bind address, port, and CORS")
+            .item(ConfigSection::Docker, "Docker", "socket path")
+            .item(ConfigSection::Service, "Service", "systemd service")
+            .item(ConfigSection::Done, "Continue", "finish and apply")
             .interact()?;
 
-        match selection {
-            0 => configure_server_section(theme, config)?,
-            1 => configure_docker_section(theme, config)?,
-            2 => configure_service_section(theme, config)?,
-            _ => break,
+        match section {
+            ConfigSection::Server => configure_server_section(config)?,
+            ConfigSection::Docker => configure_docker_section(config)?,
+            ConfigSection::Service => configure_service_section(config)?,
+            ConfigSection::Done => break,
         }
     }
+    Ok(())
+}
+
+fn configure_server_section(config: &mut InstallerConfig) -> Result<()> {
+    let port_default = config.port.to_string();
+    config.port = input("Dokuru port")
+        .default_input(&port_default)
+        .interact()?;
+
+    let host_default = config.host.clone();
+    config.host = input("Bind address")
+        .placeholder("0.0.0.0")
+        .default_input(&host_default)
+        .interact()?;
+
+    let cors_default = config.cors_origins.clone();
+    config.cors_origins = input("CORS origins")
+        .placeholder("* or https://example.com")
+        .default_input(&cors_default)
+        .interact()?;
 
     Ok(())
 }
 
-fn configure_server_section(theme: &ColorfulTheme, config: &mut InstallerConfig) -> Result<()> {
-    print_box(
-        "Server",
-        &[
-            format!("Port: {}", config.port),
-            format!("Bind: {}", config.host),
-            format!("CORS: {}", config.cors_origins),
-        ],
-    );
-
-    config.port = Input::with_theme(theme)
-        .with_prompt("Dokuru port")
-        .default(config.port)
-        .interact_text()?;
-
-    config.host = Input::with_theme(theme)
-        .with_prompt("Bind address")
-        .default(config.host.clone())
-        .interact_text()?;
-
-    config.cors_origins = Input::with_theme(theme)
-        .with_prompt("CORS origins")
-        .default(config.cors_origins.clone())
-        .interact_text()?;
-
+fn configure_docker_section(config: &mut InstallerConfig) -> Result<()> {
+    let socket_default = config.docker_socket.clone();
+    config.docker_socket = input("Docker socket path")
+        .default_input(&socket_default)
+        .interact()?;
     Ok(())
 }
 
-fn configure_docker_section(theme: &ColorfulTheme, config: &mut InstallerConfig) -> Result<()> {
-    print_box("Docker", &[format!("Socket: {}", config.docker_socket)]);
-
-    config.docker_socket = Input::with_theme(theme)
-        .with_prompt("Docker socket path")
-        .default(config.docker_socket.clone())
-        .interact_text()?;
-
+fn configure_service_section(config: &mut InstallerConfig) -> Result<()> {
+    let want_service = confirm("Install and manage Dokuru as a systemd service?")
+        .initial_value(!config.skip_service)
+        .interact()?;
+    config.skip_service = !want_service;
     Ok(())
-}
-
-fn configure_service_section(theme: &ColorfulTheme, config: &mut InstallerConfig) -> Result<()> {
-    print_box(
-        "Service",
-        &[
-            format!("Install path: {}", config.install_path.display()),
-            format!("Config dir: {}", config.config_dir.display()),
-            format!("Service name: {}", config.service_name),
-            format!(
-                "Managed service: {}",
-                if config.skip_service {
-                    "disabled"
-                } else {
-                    "enabled"
-                }
-            ),
-        ],
-    );
-
-    if !config.skip_service {
-        config.skip_service = !Confirm::with_theme(theme)
-            .with_prompt("Install and manage Dokuru as a systemd service?")
-            .default(true)
-            .interact()?;
-    } else {
-        config.skip_service = !Confirm::with_theme(theme)
-            .with_prompt("Enable and manage Dokuru as a systemd service?")
-            .default(false)
-            .interact()?;
-    }
-
-    Ok(())
-}
-
-fn print_existing_config_box(config: &InstallerConfig) {
-    print_box(
-        "Existing config detected",
-        &[
-            format!("Server: {}:{}", config.host, config.port),
-            format!("Docker socket: {}", config.docker_socket),
-            format!(
-                "Service: {}",
-                if config.skip_service {
-                    "disabled"
-                } else {
-                    &config.service_name
-                }
-            ),
-        ],
-    );
-}
-
-fn print_quickstart_box(config: &InstallerConfig) {
-    print_box(
-        "QuickStart",
-        &[
-            format!("Dokuru port: {}", config.port),
-            format!("Bind address: {}", config.host),
-            format!("Docker socket: {}", config.docker_socket),
-            format!(
-                "Managed service: {}",
-                if config.skip_service {
-                    "disabled"
-                } else {
-                    "enabled"
-                }
-            ),
-        ],
-    );
-}
-
-fn print_box(title: &str, lines: &[String]) {
-    println!();
-    let title = format!("{} {}", bullet_prefix(), accent(title));
-    println!("  {title}");
-    println!("  {}", panel_top());
-    for line in lines {
-        println!("  {}  {}", panel_side(), muted(line));
-    }
-    println!("  {}", panel_bottom());
 }
 
 fn confirm_install(mode: SetupMode, config: &InstallerConfig) -> Result<bool> {
@@ -770,7 +680,6 @@ fn confirm_install(mode: SetupMode, config: &InstallerConfig) -> Result<bool> {
         return Ok(true);
     }
 
-    let theme = ColorfulTheme::default();
     let prompt = match mode {
         SetupMode::Onboard => format!(
             "Apply these settings and install Dokuru to {}?",
@@ -779,12 +688,148 @@ fn confirm_install(mode: SetupMode, config: &InstallerConfig) -> Result<bool> {
         SetupMode::Configure => format!("Apply changes to {}?", config.config_dir.display()),
     };
 
-    Confirm::with_theme(&theme)
-        .with_prompt(prompt)
-        .default(true)
+    confirm(prompt)
+        .initial_value(false)
         .interact()
         .map_err(Into::into)
 }
+
+fn confirm_action(yes: bool, prompt: &str) -> Result<bool> {
+    if yes || !stderr().is_terminal() {
+        return Ok(true);
+    }
+
+    confirm(prompt)
+        .initial_value(true)
+        .interact()
+        .map_err(Into::into)
+}
+
+// ─── Display Helpers ──────────────────────────────────────────────────────────
+
+fn show_preflight(config: &InstallerConfig, preflight: &Preflight) -> Result<()> {
+    let lines = vec![
+        format!(
+            "OS:             {}",
+            preflight.os
+        ),
+        format!(
+            "Architecture:   {}",
+            preflight.arch
+        ),
+        format!(
+            "Privileges:     {}",
+            if preflight.running_as_root { "root ✓" } else { "not root ✗" }
+        ),
+        format!(
+            "Init system:    {}",
+            if preflight.has_systemd { "systemd ✓" } else { "systemd not found" }
+        ),
+        format!(
+            "Docker socket:  {} {}",
+            config.docker_socket,
+            if preflight.docker_socket_exists { "✓" } else { "(not found)" }
+        ),
+        format!(
+            "docker.service: {}",
+            if preflight.docker_service_exists { "detected ✓" } else { "not detected" }
+        ),
+    ];
+    note("Preflight", lines.join("\n"))?;
+    Ok(())
+}
+
+fn show_plan(config: &InstallerConfig, preflight: &Preflight) -> Result<()> {
+    let mut lines = vec![
+        format!("Binary:  {}", config.install_path.display()),
+        format!("Config:  {}", runtime_config_path(config).display()),
+        format!("Port:    {}", config.port),
+        format!("Bind:    {}", config.host),
+        format!("Docker:  {}", config.docker_socket),
+        format!("CORS:    {}", config.cors_origins),
+    ];
+
+    if config.skip_service {
+        lines.push("Service: skipped".to_string());
+    } else if preflight.has_systemd {
+        lines.push(format!(
+            "Service: {}",
+            config
+                .systemd_dir
+                .join(format!("{}.service", config.service_name))
+                .display()
+        ));
+    }
+
+    note("Install plan", lines.join("\n"))?;
+    Ok(())
+}
+
+fn show_summary(config: &InstallerConfig, service_started: bool) -> Result<()> {
+    let service_status = if config.skip_service {
+        "not installed".to_string()
+    } else if service_started {
+        "running ✓".to_string()
+    } else {
+        "installed, not running".to_string()
+    };
+
+    note(
+        "Summary",
+        format!(
+            "Config:  {}\nServer:  {}:{}\nDocker:  {}\nCORS:    {}\nBinary:  {}\nService: {}",
+            runtime_config_path(config).display(),
+            config.host,
+            config.port,
+            config.docker_socket,
+            config.cors_origins,
+            config.install_path.display(),
+            service_status,
+        ),
+    )?;
+
+    if config.skip_service {
+        cliclack::log::info(&format!(
+            "Run manually: {} serve",
+            config.install_path.display()
+        ))?;
+    } else if service_started {
+        cliclack::log::info(&format!(
+            "Logs: journalctl -u {} -f",
+            config.service_name
+        ))?;
+    }
+    cliclack::log::info(&format!("Dashboard: http://<your-host>:{}", config.port))?;
+
+    outro("Dokuru is ready.")?;
+    Ok(())
+}
+
+// ─── Step Runner ─────────────────────────────────────────────────────────────
+
+fn run_step<T, F>(label: &str, action: F) -> Result<T>
+where
+    F: FnOnce() -> Result<T>,
+{
+    if stderr().is_terminal() {
+        let sp = spinner();
+        sp.start(label);
+        match action() {
+            Ok(value) => {
+                sp.stop(label);
+                Ok(value)
+            }
+            Err(err) => {
+                sp.error(&err.to_string());
+                Err(err)
+            }
+        }
+    } else {
+        action()
+    }
+}
+
+// ─── System Operations ────────────────────────────────────────────────────────
 
 fn install_binary(source: &Path, destination: &Path) -> Result<()> {
     if source == destination {
@@ -1052,43 +1097,6 @@ fn command_success(program: &str, args: &[&str]) -> bool {
         .unwrap_or(false)
 }
 
-fn confirm_action(yes: bool, prompt: &str) -> Result<bool> {
-    if yes || !stderr().is_terminal() {
-        return Ok(true);
-    }
-
-    Confirm::with_theme(&ColorfulTheme::default())
-        .with_prompt(prompt)
-        .default(true)
-        .interact()
-        .map_err(Into::into)
-}
-
-fn service_unit_path(config: &InstallerConfig) -> PathBuf {
-    config
-        .systemd_dir
-        .join(format!("{}.service", config.service_name))
-}
-
-fn runtime_config_path(config: &InstallerConfig) -> PathBuf {
-    config_path_in(&config.config_dir)
-}
-
-fn parse_cors_origins(cors_origins: &str) -> Vec<String> {
-    cors_origins
-        .split(',')
-        .map(str::trim)
-        .filter(|origin| !origin.is_empty())
-        .map(ToString::to_string)
-        .collect::<Vec<_>>()
-}
-
-fn same_path(left: &Path, right: &Path) -> bool {
-    let left = left.canonicalize().unwrap_or_else(|_| left.to_path_buf());
-    let right = right.canonicalize().unwrap_or_else(|_| right.to_path_buf());
-    left == right
-}
-
 fn run_command(program: &str, args: &[&str]) -> Result<()> {
     let status = Command::new(program)
         .args(args)
@@ -1102,219 +1110,7 @@ fn run_command(program: &str, args: &[&str]) -> Result<()> {
     Ok(())
 }
 
-fn run_step<T, F>(label: &str, action: F) -> Result<T>
-where
-    F: FnOnce() -> Result<T>,
-{
-    if stderr().is_terminal() {
-        let spinner = ProgressBar::new_spinner();
-        spinner.set_style(
-            ProgressStyle::with_template("  {spinner} {msg}")
-                .unwrap()
-                .tick_strings(&["✦ · ·", "· ✦ ·", "· · ✦", "· ✦ ·"]),
-        );
-        spinner.enable_steady_tick(Duration::from_millis(80));
-        spinner.set_message(label.to_string());
-
-        match action() {
-            Ok(value) => {
-                spinner.finish_with_message(format!("{} {}", ok_prefix(), label));
-                Ok(value)
-            }
-            Err(err) => {
-                spinner.finish_and_clear();
-                Err(err)
-            }
-        }
-    } else {
-        log_step(label);
-        let result = action();
-        if result.is_ok() {
-            log_ok(label);
-        }
-        result
-    }
-}
-
-fn print_banner(mode: SetupMode) {
-    println!();
-    println!("  {} {}", accent("🐳 Dokuru"), muted(mode.heading()));
-    println!("  {}", dim("Docker hardening agent installer"));
-}
-
-fn print_preflight(config: &InstallerConfig, preflight: &Preflight) {
-    println!();
-    println!("  {}", accent("Preflight"));
-    print_item(ok_prefix(), "OS", preflight.os);
-    print_item(ok_prefix(), "Architecture", preflight.arch);
-    print_item(
-        if preflight.running_as_root {
-            ok_prefix()
-        } else {
-            fail_prefix()
-        },
-        "Privileges",
-        if preflight.running_as_root {
-            "running as root"
-        } else {
-            "root privileges required"
-        },
-    );
-    print_item(
-        if preflight.has_systemd {
-            ok_prefix()
-        } else {
-            warn_prefix()
-        },
-        "Init system",
-        if preflight.has_systemd {
-            "systemd detected"
-        } else {
-            "systemd not detected"
-        },
-    );
-    print_item(
-        if preflight.docker_socket_exists {
-            ok_prefix()
-        } else {
-            fail_prefix()
-        },
-        "Docker socket",
-        &config.docker_socket,
-    );
-    print_item(
-        if preflight.docker_service_exists {
-            ok_prefix()
-        } else {
-            warn_prefix()
-        },
-        "docker.service",
-        if preflight.docker_service_exists {
-            "detected"
-        } else {
-            "not detected"
-        },
-    );
-}
-
-fn print_plan(config: &InstallerConfig, preflight: &Preflight) {
-    println!();
-    println!("  {}", accent("Plan"));
-    print_item(
-        step_prefix(),
-        "Binary",
-        &config.install_path.display().to_string(),
-    );
-    print_item(
-        step_prefix(),
-        "Config",
-        &runtime_config_path(config).display().to_string(),
-    );
-    print_item(step_prefix(), "Port", &config.port.to_string());
-    print_item(step_prefix(), "Host", &config.host);
-    print_item(step_prefix(), "Docker socket", &config.docker_socket);
-    print_item(step_prefix(), "CORS", &config.cors_origins);
-
-    if config.skip_service {
-        print_item(step_prefix(), "Service", "skipped");
-    } else if preflight.has_systemd {
-        print_item(
-            step_prefix(),
-            "Service",
-            &config
-                .systemd_dir
-                .join(format!("{}.service", config.service_name))
-                .display()
-                .to_string(),
-        );
-    }
-}
-
-fn print_summary(config: &InstallerConfig, service_started: bool) {
-    println!();
-    println!("  {}", accent("Configuration saved to:"));
-    println!(
-        "    {}",
-        muted(&runtime_config_path(config).display().to_string())
-    );
-
-    println!();
-    println!("  {}", accent("Quick summary:"));
-    print_summary_item(
-        "⚙",
-        "Config",
-        &runtime_config_path(config).display().to_string(),
-    );
-    print_summary_item("🌐", "Server", &format!("{}:{}", config.host, config.port));
-    print_summary_item("🐳", "Docker", &config.docker_socket);
-    print_summary_item("🔐", "CORS", &config.cors_origins);
-    print_summary_item("📦", "Binary", &config.install_path.display().to_string());
-
-    if config.skip_service {
-        print_summary_item("🛠", "Service", "not installed");
-        log_info(&format!(
-            "Run manually: {} serve",
-            config.install_path.display()
-        ));
-    } else if service_started {
-        print_summary_item("🛠", "Service", "running");
-        log_info(&format!("Logs: journalctl -u {} -f", config.service_name));
-    } else {
-        print_summary_item("🛠", "Service", "installed but not running");
-    }
-
-    log_info(&format!("Dashboard: http://<your-host>:{}", config.port));
-    println!();
-}
-
-fn print_docker_missing_hint(socket_path: &str) {
-    println!();
-    println!("  {} {}", paint("38;5;45", "🐳"), accent("Docker Required"));
-    println!(
-        "  {} Docker daemon is not ready on {}",
-        warn_prefix(),
-        socket_path
-    );
-    println!(
-        "  {} Install or start Docker, then rerun Dokuru",
-        dim("next:")
-    );
-    println!("  {} sudo systemctl enable --now docker", dim("cmd:"));
-}
-
-fn print_item(status: String, label: &str, value: &str) {
-    println!("    {:<6} {:<16} {}", status, muted(label), value);
-}
-
-fn print_summary_item(icon: &str, label: &str, value: &str) {
-    println!(
-        "    {} {:<12} {}",
-        icon,
-        muted(&format!("{}:", label)),
-        value
-    );
-}
-
-fn prompt_theme() -> ColorfulTheme {
-    let mut theme = ColorfulTheme::default();
-    theme.prompt_style = Style::new().color256(215).bold();
-    theme.prompt_prefix = Style::new().color256(151).apply_to("◇".to_string());
-    theme.prompt_suffix = Style::new().color256(147).apply_to("›".to_string());
-    theme.success_prefix = Style::new().color256(121).apply_to("✔".to_string());
-    theme.success_suffix = Style::new().color256(147).apply_to("·".to_string());
-    theme.active_item_prefix = Style::new().color256(121).apply_to("❯".to_string());
-    theme.inactive_item_prefix = Style::new().color256(244).apply_to(" ".to_string());
-    theme.active_item_style = Style::new().color256(121).bold();
-    theme.inactive_item_style = Style::new().color256(252);
-    theme.values_style = Style::new().color256(189);
-    theme.hint_style = Style::new().color256(245);
-    theme.defaults_style = Style::new().color256(245);
-    theme.error_prefix = Style::new().color256(203).apply_to("✗".to_string());
-    theme.error_style = Style::new().color256(203).bold();
-    theme.checked_item_prefix = Style::new().color256(121).apply_to("◉".to_string());
-    theme.unchecked_item_prefix = Style::new().color256(244).apply_to("◯".to_string());
-    theme
-}
+// ─── Utility ──────────────────────────────────────────────────────────────────
 
 fn command_exists(program: &str) -> bool {
     Command::new("sh")
@@ -1368,84 +1164,28 @@ fn default_systemd_dir() -> PathBuf {
     PathBuf::from("/etc/systemd/system")
 }
 
-fn use_color() -> bool {
-    stdout().is_terminal()
+fn service_unit_path(config: &InstallerConfig) -> PathBuf {
+    config
+        .systemd_dir
+        .join(format!("{}.service", config.service_name))
 }
 
-fn paint(code: &str, text: &str) -> String {
-    if use_color() {
-        format!("\x1b[{code}m{text}\x1b[0m")
-    } else {
-        text.to_string()
-    }
+fn runtime_config_path(config: &InstallerConfig) -> PathBuf {
+    config_path_in(&config.config_dir)
 }
 
-fn bold(text: &str) -> String {
-    paint("1", text)
+fn parse_cors_origins(cors_origins: &str) -> Vec<String> {
+    cors_origins
+        .split(',')
+        .map(str::trim)
+        .filter(|origin| !origin.is_empty())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
 }
 
-fn dim(text: &str) -> String {
-    paint("2", text)
+fn same_path(left: &Path, right: &Path) -> bool {
+    let left = left.canonicalize().unwrap_or_else(|_| left.to_path_buf());
+    let right = right.canonicalize().unwrap_or_else(|_| right.to_path_buf());
+    left == right
 }
 
-fn accent(text: &str) -> String {
-    paint("38;5;215;1", text)
-}
-
-fn muted(text: &str) -> String {
-    paint("38;5;245", text)
-}
-
-fn ok_prefix() -> String {
-    paint("38;5;83", "[ok]")
-}
-
-fn warn_prefix() -> String {
-    paint("38;5;208", "[!!]")
-}
-
-fn fail_prefix() -> String {
-    paint("38;5;196", "[xx]")
-}
-
-fn step_prefix() -> String {
-    paint("38;5;45", "[->]")
-}
-
-fn bullet_prefix() -> String {
-    paint("38;5;45", "◇")
-}
-
-fn panel_side() -> String {
-    paint("38;5;60", "│")
-}
-
-fn panel_top() -> String {
-    paint(
-        "38;5;60",
-        "╭──────────────────────────────────────────────╮",
-    )
-}
-
-fn panel_bottom() -> String {
-    paint(
-        "38;5;60",
-        "╰──────────────────────────────────────────────╯",
-    )
-}
-
-fn log_step(message: &str) {
-    println!("  {} {}", step_prefix(), message);
-}
-
-fn log_ok(message: &str) {
-    println!("  {} {}", ok_prefix(), message);
-}
-
-fn log_warn(message: &str) {
-    println!("  {} {}", warn_prefix(), message);
-}
-
-fn log_info(message: &str) {
-    println!("  {}", dim(message));
-}
