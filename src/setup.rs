@@ -1371,6 +1371,8 @@ fn command_success(program: &str, args: &[&str]) -> bool {
 fn run_command(program: &str, args: &[&str]) -> Result<()> {
     let status = Command::new(program)
         .args(args)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .status()
         .wrap_err_with(|| format!("Failed to execute {}", program))?;
 
