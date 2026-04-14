@@ -179,28 +179,31 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
     }
 
     // Offer to add current user to docker group
-    if preflight.docker_group_exists
-        && !config.yes
-        && let Ok(current_user) = std::env::var("SUDO_USER").or_else(|_| std::env::var("USER"))
-        && !current_user.is_empty()
-        && current_user != "root"
-        && !user_in_docker_group(&current_user)?
-        && confirm(format!(
-            "Add user '{}' to docker group? (recommended)",
-            current_user
-        ))
-        .initial_value(true)
-        .interact()?
-    {
-        run_command("usermod", &["-aG", "docker", &current_user])?;
-        cliclack::log::success(format!(
-            "User '{}' added to docker group",
-            current_user
-        ))?;
-        note(
-            "Important",
-            "Log out and back in (or run 'newgrp docker') for group changes to take effect",
-        )?;
+    #[allow(clippy::collapsible_if)]
+    if preflight.docker_group_exists && !config.yes {
+        if let Ok(current_user) = std::env::var("SUDO_USER").or_else(|_| std::env::var("USER")) {
+            if !current_user.is_empty() && current_user != "root" {
+                let in_group = user_in_docker_group(&current_user)?;
+                if !in_group
+                    && confirm(format!(
+                        "Add user '{}' to docker group? (recommended)",
+                        current_user
+                    ))
+                    .initial_value(true)
+                    .interact()?
+                {
+                    run_command("usermod", &["-aG", "docker", &current_user])?;
+                    cliclack::log::success(format!(
+                        "User '{}' added to docker group",
+                        current_user
+                    ))?;
+                    note(
+                        "Important",
+                        "Log out and back in (or run 'newgrp docker') for group changes to take effect",
+                    )?;
+                }
+            }
+        }
     }
 
     config = prompt_for_config(effective_mode, config)?;
