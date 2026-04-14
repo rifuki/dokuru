@@ -1,5 +1,5 @@
 use clap::Args;
-use dialoguer::{theme::ColorfulTheme, Confirm, Input};
+use dialoguer::{theme::ColorfulTheme, Confirm, Input, Select};
 use dokuru_server::infrastructure::config::{
     config_path_in, Config as RuntimeConfig, DockerConfig, ServerConfig,
 };
@@ -602,49 +602,165 @@ fn collect_preflight(config: &InstallerConfig) -> Preflight {
     }
 }
 
-fn prompt_for_config(mode: SetupMode, mut config: InstallerConfig) -> Result<InstallerConfig> {
+fn prompt_for_config(_mode: SetupMode, mut config: InstallerConfig) -> Result<InstallerConfig> {
     if config.yes || !stderr().is_terminal() {
         return Ok(config);
     }
 
     let theme = ColorfulTheme::default();
 
-    if !Confirm::with_theme(&theme)
-        .with_prompt(format!("{} now?", mode.label()))
-        .default(true)
-        .interact()?
-    {
-        bail!("Setup cancelled.");
+    match _mode {
+        SetupMode::Onboard => {
+            print_quickstart_box(&config);
+            configure_server_section(&theme, &mut config)?;
+            configure_docker_section(&theme, &mut config)?;
+            configure_service_section(&theme, &mut config)?;
+        }
+        SetupMode::Configure => {
+            print_existing_config_box(&config);
+            run_configure_sections(&theme, &mut config)?;
+        }
     }
 
-    config.port = Input::with_theme(&theme)
+    Ok(config)
+}
+
+fn run_configure_sections(theme: &ColorfulTheme, config: &mut InstallerConfig) -> Result<()> {
+    loop {
+        let selection = Select::with_theme(theme)
+            .with_prompt("Select section to configure")
+            .items(&["Server", "Docker", "Service", "Continue"])
+            .default(0)
+            .interact()?;
+
+        match selection {
+            0 => configure_server_section(theme, config)?,
+            1 => configure_docker_section(theme, config)?,
+            2 => configure_service_section(theme, config)?,
+            _ => break,
+        }
+    }
+
+    Ok(())
+}
+
+fn configure_server_section(theme: &ColorfulTheme, config: &mut InstallerConfig) -> Result<()> {
+    print_box(
+        "Server",
+        &[
+            format!("Port: {}", config.port),
+            format!("Bind: {}", config.host),
+            format!("CORS: {}", config.cors_origins),
+        ],
+    );
+
+    config.port = Input::with_theme(theme)
         .with_prompt("Dokuru port")
         .default(config.port)
         .interact_text()?;
 
-    config.host = Input::with_theme(&theme)
+    config.host = Input::with_theme(theme)
         .with_prompt("Bind address")
         .default(config.host.clone())
         .interact_text()?;
 
-    config.docker_socket = Input::with_theme(&theme)
-        .with_prompt("Docker socket path")
-        .default(config.docker_socket.clone())
-        .interact_text()?;
-
-    config.cors_origins = Input::with_theme(&theme)
+    config.cors_origins = Input::with_theme(theme)
         .with_prompt("CORS origins")
         .default(config.cors_origins.clone())
         .interact_text()?;
 
+    Ok(())
+}
+
+fn configure_docker_section(theme: &ColorfulTheme, config: &mut InstallerConfig) -> Result<()> {
+    print_box("Docker", &[format!("Socket: {}", config.docker_socket)]);
+
+    config.docker_socket = Input::with_theme(theme)
+        .with_prompt("Docker socket path")
+        .default(config.docker_socket.clone())
+        .interact_text()?;
+
+    Ok(())
+}
+
+fn configure_service_section(theme: &ColorfulTheme, config: &mut InstallerConfig) -> Result<()> {
+    print_box(
+        "Service",
+        &[
+            format!("Install path: {}", config.install_path.display()),
+            format!("Config dir: {}", config.config_dir.display()),
+            format!("Service name: {}", config.service_name),
+            format!(
+                "Managed service: {}",
+                if config.skip_service {
+                    "disabled"
+                } else {
+                    "enabled"
+                }
+            ),
+        ],
+    );
+
     if !config.skip_service {
-        config.skip_service = !Confirm::with_theme(&theme)
+        config.skip_service = !Confirm::with_theme(theme)
             .with_prompt("Install and manage Dokuru as a systemd service?")
             .default(true)
             .interact()?;
+    } else {
+        config.skip_service = !Confirm::with_theme(theme)
+            .with_prompt("Enable and manage Dokuru as a systemd service?")
+            .default(false)
+            .interact()?;
     }
 
-    Ok(config)
+    Ok(())
+}
+
+fn print_existing_config_box(config: &InstallerConfig) {
+    print_box(
+        "Existing config detected",
+        &[
+            format!("Server: {}:{}", config.host, config.port),
+            format!("Docker socket: {}", config.docker_socket),
+            format!(
+                "Service: {}",
+                if config.skip_service {
+                    "disabled"
+                } else {
+                    &config.service_name
+                }
+            ),
+        ],
+    );
+}
+
+fn print_quickstart_box(config: &InstallerConfig) {
+    print_box(
+        "QuickStart",
+        &[
+            format!("Dokuru port: {}", config.port),
+            format!("Bind address: {}", config.host),
+            format!("Docker socket: {}", config.docker_socket),
+            format!(
+                "Managed service: {}",
+                if config.skip_service {
+                    "disabled"
+                } else {
+                    "enabled"
+                }
+            ),
+        ],
+    );
+}
+
+fn print_box(title: &str, lines: &[String]) {
+    println!();
+    println!("  {} {}", bullet_prefix(), title);
+    println!("  │");
+    for line in lines {
+        println!("  │  {}", line);
+    }
+    println!("  │");
 }
 
 fn confirm_install(mode: SetupMode, config: &InstallerConfig) -> Result<bool> {
@@ -654,7 +770,10 @@ fn confirm_install(mode: SetupMode, config: &InstallerConfig) -> Result<bool> {
 
     let theme = ColorfulTheme::default();
     let prompt = match mode {
-        SetupMode::Onboard => format!("Install Dokuru to {}?", config.install_path.display()),
+        SetupMode::Onboard => format!(
+            "Apply these settings and install Dokuru to {}?",
+            config.install_path.display()
+        ),
         SetupMode::Configure => format!("Apply changes to {}?", config.config_dir.display()),
     };
 
@@ -1111,30 +1230,32 @@ fn print_plan(config: &InstallerConfig, preflight: &Preflight) {
 
 fn print_summary(config: &InstallerConfig, service_started: bool) {
     println!();
-    println!("  {}", bold("Summary"));
-    print_item(ok_prefix(), "Version", env!("CARGO_PKG_VERSION"));
-    print_item(
-        ok_prefix(),
-        "Binary",
-        &config.install_path.display().to_string(),
-    );
-    print_item(
-        ok_prefix(),
+    println!("  {}", bold("Configuration saved to:"));
+    println!("    {}", runtime_config_path(config).display());
+
+    println!();
+    println!("  {}", bold("Quick summary:"));
+    print_summary_item(
+        "⚙",
         "Config",
         &runtime_config_path(config).display().to_string(),
     );
+    print_summary_item("🌐", "Server", &format!("{}:{}", config.host, config.port));
+    print_summary_item("🐳", "Docker", &config.docker_socket);
+    print_summary_item("🔐", "CORS", &config.cors_origins);
+    print_summary_item("📦", "Binary", &config.install_path.display().to_string());
 
     if config.skip_service {
-        print_item(warn_prefix(), "Service", "not installed");
+        print_summary_item("🛠", "Service", "not installed");
         log_info(&format!(
             "Run manually: {} serve",
             config.install_path.display()
         ));
     } else if service_started {
-        print_item(ok_prefix(), "Service", "running");
+        print_summary_item("🛠", "Service", "running");
         log_info(&format!("Logs: journalctl -u {} -f", config.service_name));
     } else {
-        print_item(warn_prefix(), "Service", "installed but not running");
+        print_summary_item("🛠", "Service", "installed but not running");
     }
 
     log_info(&format!("Dashboard: http://<your-host>:{}", config.port));
@@ -1143,38 +1264,25 @@ fn print_summary(config: &InstallerConfig, service_started: bool) {
 
 fn print_docker_missing_hint(socket_path: &str) {
     println!();
-    println!("  {}", bold("Docker Required"));
-    for line in [
-        "          +-------+  +-------+",
-        "          |[] [] |  |[] [] |",
-        "          +-------+  +-------+",
-        "       +-------+  +-------+",
-        "       |[] [] |  |[] [] |",
-        "       +-------+  +-------+",
-    ] {
-        println!("  {}", paint("38;5;51", line));
-    }
-    for line in [
-        "              \\",
-        "        ____________________",
-        "   ____/  _   _   _   _     \\___",
-        "  /___                       ___\\",
-        "      \\__                 __/",
-        "         \\_______________/",
-        "          ~  ~  ~  ~  ~  ~",
-    ] {
-        println!("  {}", paint("38;5;39", line));
-    }
+    println!("  {} {}", paint("38;5;45", "🐳"), bold("Docker Required"));
     println!(
         "  {} Docker daemon is not ready on {}",
         warn_prefix(),
         socket_path
     );
-    println!("  {} Try: sudo systemctl enable --now docker", dim("next:"));
+    println!(
+        "  {} Install or start Docker, then rerun Dokuru",
+        dim("next:")
+    );
+    println!("  {} sudo systemctl enable --now docker", dim("cmd:"));
 }
 
 fn print_item(status: String, label: &str, value: &str) {
     println!("    {:<6} {:<16} {}", status, label, value);
+}
+
+fn print_summary_item(icon: &str, label: &str, value: &str) {
+    println!("    {} {:<12} {}", icon, format!("{}:", label), value);
 }
 
 fn command_exists(program: &str) -> bool {
@@ -1263,6 +1371,10 @@ fn fail_prefix() -> String {
 
 fn step_prefix() -> String {
     paint("38;5;45", "[->]")
+}
+
+fn bullet_prefix() -> String {
+    paint("38;5;45", "◇")
 }
 
 fn log_step(message: &str) {
