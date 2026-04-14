@@ -1107,7 +1107,7 @@ fn write_systemd_unit(config: &InstallerConfig, preflight: &Preflight) -> Result
         .join(format!("{}.service", config.service_name));
 
     let unit_content = format!(
-        "[Unit]\nDescription=Dokuru Docker Hardening Agent\nDocumentation={}\nAfter={}\nWants={}\n\n[Service]\nType=simple\nUser=dokuru\nGroup=dokuru\nSupplementaryGroups=docker\nEnvironment=DOKURU_CONFIG={}\nExecStart={} serve\nRestart=on-failure\nRestartSec=5s\nStandardOutput=journal\nStandardError=journal\nSyslogIdentifier={}\nNoNewPrivileges=yes\nProtectSystem=strict\nReadWritePaths={} /etc/docker\n\n[Install]\nWantedBy=multi-user.target\n",
+        "[Unit]\nDescription=Dokuru Docker Hardening Agent\nDocumentation={}\nAfter={}\nWants={}\n\n[Service]\nType=simple\nUser=dokuru\nGroup=dokuru\nSupplementaryGroups=docker\nEnvironment=DOKURU_CONFIG={}\nExecStart={} serve\nRestart=on-failure\nRestartSec=5s\nStandardOutput=journal\nStandardError=journal\nSyslogIdentifier={}\nNoNewPrivileges=yes\nProtectSystem=strict\nReadWritePaths={} /etc/docker /var/log/dokuru\n\n[Install]\nWantedBy=multi-user.target\n",
         REPO_URL,
         after_targets,
         wants_targets,
