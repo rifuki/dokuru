@@ -1,5 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import { API_URL } from '@/lib/env';
+import { useEnvironmentStore } from '@/stores/environment-store';
 import { HttpError } from './types';
 import type { ApiSuccess, ApiError } from './types';
 
@@ -16,13 +17,28 @@ export const client = axios.create({
  * - Unwraps the envelope so callers get `T` directly
  * - Throws `HttpError` on success=false or network errors
  */
+
+function resolvePath(path: string): string {
+  if (path.startsWith('/environments')) {
+    return path;
+  }
+  
+  const activeId = useEnvironmentStore.getState().activeEnvironmentId;
+  // If there's an active environment set, proxy all other API calls
+  if (activeId) {
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    return `/remote/${activeId}${cleanPath}`;
+  }
+  return path;
+}
+
 export const apiClient = {
   async get<T>(path: string, params?: Record<string, string | number | undefined>): Promise<T> {
     const filtered = params
       ? Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined))
       : undefined;
     try {
-      const res = await client.get<ApiSuccess<T>>(path, { params: filtered });
+      const res = await client.get<ApiSuccess<T>>(resolvePath(path), { params: filtered });
       return res.data.data as T;
     } catch (err) {
       throw toHttpError(err);
@@ -31,7 +47,7 @@ export const apiClient = {
 
   async post<T>(path: string, body?: unknown): Promise<T> {
     try {
-      const res = await client.post<ApiSuccess<T>>(path, body);
+      const res = await client.post<ApiSuccess<T>>(resolvePath(path), body);
       return res.data.data as T;
     } catch (err) {
       throw toHttpError(err);
@@ -40,7 +56,7 @@ export const apiClient = {
 
   async delete<T = void>(path: string): Promise<T> {
     try {
-      const res = await client.delete<ApiSuccess<T>>(path);
+      const res = await client.delete<ApiSuccess<T>>(resolvePath(path));
       return res.data.data as T;
     } catch (err) {
       throw toHttpError(err);

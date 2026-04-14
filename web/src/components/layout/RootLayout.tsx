@@ -15,6 +15,7 @@ import {
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { useEnvironmentStore } from '@/stores/environment-store';
 
 const DockerIcon = ({ className = 'w-4 h-4' }: { className?: string }) => (
   <svg viewBox="0 0 340 268" fill="currentColor" className={className}>
@@ -39,6 +40,10 @@ export function RootLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isEnvOpen, setIsEnvOpen] = useState(true);
   const location = useLocation();
+
+  const environments = useEnvironmentStore(s => s.environments);
+  const activeEnvId = useEnvironmentStore(s => s.activeEnvironmentId);
+  const activeEnv = environments.find(e => e.id === activeEnvId);
 
   const isActivePath = (path: string) => {
     if (path === '/') return location.pathname === '/';
@@ -78,7 +83,7 @@ export function RootLayout() {
             >
               <div className="flex items-center gap-2.5">
                 <DockerIcon className="w-4 h-4 text-[#3BA5EF]" />
-                <span className="font-medium">local</span>
+                <span className="font-medium truncate max-w-[140px]">{activeEnv?.name || 'No Environment'}</span>
               </div>
               <ChevronDown className={`w-3.5 h-3.5 text-[#6B7280] transition-transform ${isEnvOpen ? '' : '-rotate-90'}`} />
             </button>
