@@ -1,5 +1,4 @@
 import axios, { AxiosError } from 'axios';
-import { API_URL } from '@/lib/env';
 import { useEnvironmentStore } from '@/stores/environment-store';
 import { HttpError } from './types';
 import type { ApiSuccess, ApiError } from './types';
@@ -7,8 +6,18 @@ import type { ApiSuccess, ApiError } from './types';
 export { HttpError } from './types';
 export type { ApiSuccess, ApiError, ApiResponse } from './types';
 
+function getBaseURL(): string {
+  const state = useEnvironmentStore.getState();
+  const activeEnv = state.environments.find(e => e.id === state.activeEnvironmentId);
+  return activeEnv ? `${activeEnv.url}/api/v1` : '/api/v1';
+}
+
+function resolvePath(path: string): string {
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  return `${getBaseURL()}${cleanPath}`;
+}
+
 export const client = axios.create({
-  baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -17,20 +26,6 @@ export const client = axios.create({
  * - Unwraps the envelope so callers get `T` directly
  * - Throws `HttpError` on success=false or network errors
  */
-
-function resolvePath(path: string): string {
-  if (path.startsWith('/environments')) {
-    return path;
-  }
-  
-  const activeId = useEnvironmentStore.getState().activeEnvironmentId;
-  // If there's an active environment set, proxy all other API calls
-  if (activeId) {
-    const cleanPath = path.startsWith('/') ? path : `/${path}`;
-    return `/remote/${activeId}${cleanPath}`;
-  }
-  return path;
-}
 
 export const apiClient = {
   async get<T>(path: string, params?: Record<string, string | number | undefined>): Promise<T> {

@@ -198,7 +198,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
                         current_user
                     ))?;
                     cliclack::log::warning(
-                        "Log out and back in (or run 'newgrp docker') for group changes to take effect"
+                        "Log out and back in (or run 'newgrp docker') for group changes to take effect",
                     )?;
                 }
             }
@@ -330,10 +330,13 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
     // Final success message in a box
     let mut next_steps = Vec::new();
     if !config.skip_service {
-        next_steps.push(format!("Logs:      journalctl -u {} -f", config.service_name));
+        next_steps.push(format!(
+            "Logs:      journalctl -u {} -f",
+            config.service_name
+        ));
     }
     next_steps.push(format!("Dashboard: http://<your-host>:{}", config.port));
-    
+
     note("Next steps", next_steps.join("\n"))?;
     outro("Dokuru is ready.")?;
 

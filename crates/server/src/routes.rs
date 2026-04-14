@@ -1,4 +1,4 @@
-use crate::feature::{audit, containers, environments, fix, health, proxy, rules, trivy};
+use crate::feature::{audit, containers, environments, fix, health, info, proxy, rules, trivy};
 use crate::state::AppState;
 use axum::{
     Router,
@@ -20,6 +20,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/health/detail", get(health::health_detail))
         .route("/api/v1/health", get(health::health_check))
         .route("/api/v1/health/detail", get(health::health_detail))
+        .route("/api/v1/info", get(info::get_info))
         .route("/api/v1/rules", get(rules::list_rules))
         .route("/api/v1/containers", get(containers::list_containers))
         .route("/api/v1/audit", get(audit::run_full_audit))

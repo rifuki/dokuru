@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { Server, RefreshCw, Edit, Trash2, CheckCircle2, HardDrive, ChevronDown } from 'lucide-react'
+import { Server, RefreshCw, HardDrive, ChevronDown, Cpu, MemoryStick, Container, Database, Image, Edit, Trash2, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useEnvironmentStore } from '@/stores/environment-store'
+import { useEnvironmentStore, Environment } from '@/stores/environment-store'
 import { AddEnvironmentModal } from '@/components/environments/AddEnvironmentModal'
+import { getEnvInfo, EnvironmentInfo } from '@/features/environments/api/get-env-info'
 
 export const Route = createFileRoute('/')({
   component: EnvironmentsPage,
@@ -76,73 +77,18 @@ function EnvironmentsPage() {
 
       {/* Environment List */}
       <div className="space-y-3">
-        {environments.map((env) => {
-          const isActive = activeEnvId === env.id;
-          
-          return (
-            <div key={env.id} className={`bg-[#23282D] rounded-md border ${isActive ? 'border-[#3BA5EF]/50' : 'border-white/5'} flex transition-all`}>
-                <div 
-                  className="flex-1 p-4 cursor-pointer hover:bg-white/[0.02] transition-colors flex items-center gap-6"
-                  onClick={() => {
-                    setActiveEnv(env.id);
-                    navigate({ to: '/dashboard' });
-                  }}
-                >
-                    <div className="w-14 items-center flex justify-center text-[#3BA5EF]">
-                        <DockerIcon className="w-14 h-14" />
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3">
-                            <span className="text-base font-bold text-white tracking-tight">{env.name}</span>
-                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-[11px] font-semibold uppercase">
-                              <CheckCircle2 className="w-3 h-3" />
-                              UP
-                            </span>
-                            <span className="text-[12px] text-slate-300 font-mono font-medium ml-2">{env.type.replace('_', ' ')}</span>
-                            <span className="text-[12px] text-slate-400 font-mono">{env.url}</span>
-                        </div>
-
-                        <div className="flex items-center gap-4 mt-2 text-[12px] text-slate-400">
-                            <div className="flex items-center gap-2">
-                                <span className="font-semibold text-slate-300">Added:</span> {new Date(env.added_at).toLocaleString()}
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                                <Tag className="w-3.5 h-3.5" /> No tags
-                            </div>
-                        </div>
-
-                        {/* We hide the deep resource metrics until user clicks inside, to simplify the main list for multi-tenancy */}
-                    </div>
-                </div>
-                
-                <div className="w-[200px] border-l border-white/5 flex flex-col justify-center gap-2 px-4 py-2 bg-black/10">
-                    <button 
-                       className={`flex items-center justify-center gap-2 h-8 w-full bg-[#203D33] text-emerald-400 text-sm rounded font-medium transition-colors border border-emerald-500/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] cursor-pointer hover:bg-[#254A3E] ${isActive ? 'ring-1 ring-emerald-500/50' : ''}`}
-                       onClick={() => {
-                         setActiveEnv(env.id);
-                         navigate({ to: '/dashboard' });
-                       }}
-                    >
-                       <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> {isActive ? 'Active' : 'Connect'}
-                    </button>
-                </div>
-                
-                <div className="w-12 border-l border-white/5 flex flex-col items-center justify-start py-4 bg-black/10">
-                    <button className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white rounded hover:bg-white/5 transition-colors group cursor-pointer" title="Edit environment">
-                       <Edit className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                    </button>
-                    <button 
-                      onClick={() => removeEnv(env.id)}
-                      className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-rose-400 rounded hover:bg-white/5 transition-colors group cursor-pointer" 
-                      title="Delete environment"
-                    >
-                       <Trash2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                    </button>
-                </div>
-            </div>
-          )
-        })}
+        {environments.map((env) => (
+          <EnvironmentCard
+            key={env.id}
+            env={env}
+            isActive={activeEnvId === env.id}
+            onConnect={() => {
+              setActiveEnv(env.id);
+              navigate({ to: '/dashboard' });
+            }}
+            onRemove={() => removeEnv(env.id)}
+          />
+        ))}
         {environments.length === 0 && (
            <div className="py-12 flex flex-col items-center justify-center text-slate-400 bg-[#23282D] rounded-md border border-white/5 border-dashed">
               <Server className="w-12 h-12 mb-3 opacity-20" />
@@ -162,6 +108,134 @@ function EnvironmentsPage() {
 
     </div>
   )
+}
+
+function EnvironmentCard({
+  env,
+  isActive,
+  onConnect,
+  onRemove,
+}: {
+  env: Environment;
+  isActive: boolean;
+  onConnect: () => void;
+  onRemove: () => void;
+}) {
+  const [info, setInfo] = useState<EnvironmentInfo | null>(null);
+
+  useEffect(() => {
+    getEnvInfo(env.url)
+      .then(setInfo)
+      .catch(() => setInfo(null));
+  }, [env.url]);
+
+  const formatBytes = (bytes: number) => {
+    const gb = bytes / 1024 / 1024 / 1024;
+    return gb >= 1 ? `${gb.toFixed(0)} GB` : `${(bytes / 1024 / 1024).toFixed(0)} MB`;
+  };
+
+  return (
+    <div className={`bg-[#23282D] rounded-md border ${isActive ? 'border-[#3BA5EF]/50' : 'border-white/5'} flex transition-all`}>
+      <div
+        className="flex-1 p-4 cursor-pointer hover:bg-white/[0.02] transition-colors"
+        onClick={onConnect}
+      >
+        <div className="flex items-start gap-6">
+          <div className="w-14 items-center flex justify-center text-[#3BA5EF] shrink-0 mt-1">
+            <DockerIcon className="w-14 h-14" />
+          </div>
+
+          <div className="flex-1 min-w-0">
+            {/* Top row */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-base font-bold text-white tracking-tight">{env.name}</span>
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-[11px] font-semibold uppercase">
+                <CheckCircle2 className="w-3 h-3" />
+                UP
+              </span>
+              {info && (
+                <span className="text-[12px] text-slate-400 font-mono">
+                  Docker {info.docker_version}
+                </span>
+              )}
+              <span className="text-[12px] text-slate-300 font-mono font-medium">{env.type.replace('_', ' ')}</span>
+              <span className="text-[12px] text-slate-400 font-mono">{env.url}</span>
+            </div>
+
+            {/* Second row */}
+            <div className="flex items-center gap-4 mt-1.5 text-[12px] text-slate-400">
+              <span><span className="font-semibold text-slate-300">Added:</span> {new Date(env.added_at).toLocaleString()}</span>
+              <div className="flex items-center gap-1.5">
+                <Tag className="w-3.5 h-3.5" /> No tags
+              </div>
+            </div>
+
+            {/* Stats row */}
+            {info && (
+              <div className="flex items-center gap-5 mt-3 flex-wrap text-[12px] text-slate-300">
+                {/* Containers */}
+                <div className="flex items-center gap-1.5">
+                  <Container className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="font-medium">{info.containers.total} containers</span>
+                  <span className="text-emerald-400">⏻ {info.containers.running}</span>
+                  <span className="text-slate-500">⏼ {info.containers.stopped}</span>
+                  <span className="text-green-400">♥ {info.containers.healthy}</span>
+                  <span className="text-orange-400">♥ {info.containers.unhealthy}</span>
+                </div>
+
+                {/* Volumes */}
+                <div className="flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-slate-400" />
+                  <span>{info.volumes} {info.volumes === 1 ? 'volume' : 'volumes'}</span>
+                </div>
+
+                {/* Images */}
+                <div className="flex items-center gap-1.5">
+                  <Image className="w-3.5 h-3.5 text-slate-400" />
+                  <span>{info.images} images</span>
+                </div>
+
+                {/* CPU */}
+                <div className="flex items-center gap-1.5">
+                  <Cpu className="w-3.5 h-3.5 text-slate-400" />
+                  <span>{info.cpu_count} CPU</span>
+                </div>
+
+                {/* RAM */}
+                <div className="flex items-center gap-1.5">
+                  <MemoryStick className="w-3.5 h-3.5 text-slate-400" />
+                  <span>{formatBytes(info.memory_total)} RAM</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="w-[200px] border-l border-white/5 flex flex-col justify-center gap-2 px-4 py-2 bg-black/10">
+        <button
+          className={`flex items-center justify-center gap-2 h-8 w-full bg-[#203D33] text-emerald-400 text-sm rounded font-medium transition-colors border border-emerald-500/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] cursor-pointer hover:bg-[#254A3E] ${isActive ? 'ring-1 ring-emerald-500/50' : ''}`}
+          onClick={onConnect}
+        >
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          {isActive ? 'Active' : 'Connect'}
+        </button>
+      </div>
+
+      <div className="w-12 border-l border-white/5 flex flex-col items-center justify-start py-4 bg-black/10">
+        <button className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white rounded hover:bg-white/5 transition-colors group cursor-pointer" title="Edit environment">
+          <Edit className="w-4 h-4 group-hover:scale-110 transition-transform" />
+        </button>
+        <button
+          onClick={onRemove}
+          className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-rose-400 rounded hover:bg-white/5 transition-colors group cursor-pointer"
+          title="Delete environment"
+        >
+          <Trash2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function DockerIcon({ className }: { className?: string }) {

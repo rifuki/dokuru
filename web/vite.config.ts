@@ -7,7 +7,7 @@ import path from "path"
 export default defineConfig({
   plugins: [
     TanStackRouterVite(),
-    react(), 
+    react(),
     tailwindcss()
   ],
   resolve: {

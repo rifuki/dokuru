@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { apiClient } from '@/lib/api/client';
 
 export type EnvironmentType = 'docker_standalone' | 'docker_swarm' | 'podman' | 'other';
 
@@ -49,16 +48,16 @@ export const useEnvironmentStore = create<EnvironmentState>()(
         set({ environments: envs }),
 
       fetchEnvironments: async () => {
-        try {
-          const envs = await apiClient.get<Environment[]>('/environments');
-          set({ environments: envs });
-          // If no active environment is set, pick the first one from the backend
-          const state = get();
-          if (!state.activeEnvironmentId && envs.length > 0) {
-            set({ activeEnvironmentId: envs[0].id });
-          }
-        } catch (error) {
-          console.error('Failed to fetch environments:', error);
+        const state = get();
+        // If no environments exist, user needs to add one manually
+        if (state.environments.length === 0) {
+          console.log('No environments configured. Please add an environment.');
+          return;
+        }
+        
+        // Set first environment as active if none selected
+        if (!state.activeEnvironmentId && state.environments.length > 0) {
+          set({ activeEnvironmentId: state.environments[0].id });
         }
       },
     }),

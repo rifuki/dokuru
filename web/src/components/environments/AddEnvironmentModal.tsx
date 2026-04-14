@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Server, Globe, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { apiClient } from '@/lib/api/client';
+import axios from 'axios';
 import { useEnvironmentStore, EnvironmentType, Environment } from '@/stores/environment-store';
 
 interface AddEnvironmentModalProps {
@@ -45,12 +45,12 @@ export function AddEnvironmentModal({ isOpen, onClose }: AddEnvironmentModalProp
     }
 
     try {
-      // Create via backend proxy registry
-      const newEnv = await apiClient.post<Environment>('/environments', {
+      const res = await axios.post<{ data: Environment }>(`${parsedUrl}/api/v1/environments`, {
         name: name.trim(),
         url: parsedUrl,
         type,
       });
+      const newEnv = res.data.data;
 
       addEnvironment(newEnv);
       setActiveEnvironment(newEnv.id);
