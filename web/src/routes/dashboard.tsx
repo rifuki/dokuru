@@ -1,8 +1,10 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Activity, Shield, Server, Box, Layers, Network, HardDrive, AlertTriangle, CheckCircle2 } from 'lucide-react'
 
 import { useAudit } from '@/features/audit/hooks/use-audit'
 import { useHealth } from '@/features/health/hooks/use-health'
+import { useEnvInfo } from '@/features/environments/hooks/use-env-info'
+import { useEnvironmentStore } from '@/stores/environment-store'
 import { Progress } from '@/components/ui/progress'
 
 export const Route = createFileRoute('/dashboard')({
@@ -10,14 +12,37 @@ export const Route = createFileRoute('/dashboard')({
 })
 
 function DashboardPage() {
+  const navigate = useNavigate()
   const { data: health } = useHealth()
   const { data: report } = useAudit(true)
+  const { data: info } = useEnvInfo()
+
+  const environments = useEnvironmentStore((s) => s.environments)
+  const activeId = useEnvironmentStore((s) => s.activeEnvironmentId)
+  const activeEnv = environments.find((e) => e.id === activeId)
+
+  if (!activeId) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] gap-4 text-slate-400">
+        <Server className="w-14 h-14 opacity-20" />
+        <p className="text-base">No environment connected.</p>
+        <button
+          onClick={() => navigate({ to: '/' })}
+          className="text-[#3BA5EF] text-sm hover:underline cursor-pointer"
+        >
+          Go to Environments →
+        </button>
+      </div>
+    )
+  }
 
   const failedRules = report?.results.filter((result) => result.status === 'Fail') ?? []
   const passedRules = report?.passed ?? 0
   const totalRules = report?.results.length ?? 0
   const daemonRules = report?.results.filter((result) => result.rule.section === 'Daemon') ?? []
+  const daemonFailed = daemonRules.some((r) => r.status === 'Fail')
   const runtimeRules = report?.results.filter((result) => result.rule.section !== 'Daemon') ?? []
+  const runtimeFailed = runtimeRules.some((r) => r.status === 'Fail')
 
   return (
     <div className="space-y-6 pb-8 max-w-6xl mx-auto">
@@ -28,7 +53,7 @@ function DashboardPage() {
             <Server className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white">Dashboard <span className="text-slate-500 font-normal text-base ml-2">local</span></h1>
+            <h1 className="text-xl font-bold text-white">Dashboard <span className="text-slate-500 font-normal text-base ml-2">{activeEnv?.name ?? 'local'}</span></h1>
             <p className="text-xs text-slate-400 mt-0.5">{health?.docker_version ? `Docker Standalone ${health.docker_version}` : 'Connecting...'}</p>
           </div>
         </div>
@@ -55,7 +80,9 @@ function DashboardPage() {
                </div>
                <div>
                   <p className="text-xs text-slate-500">OS / Architecture</p>
-                  <p className="text-sm font-medium text-white truncate mt-0.5">linux / amd64</p>
+                  <p className="text-sm font-medium text-white truncate mt-0.5">
+                    {info ? `${info.os ?? '--'} / ${info.architecture ?? '--'}` : '--'}
+                  </p>
                </div>
                <div>
                   <p className="text-xs text-slate-500">Total Containers</p>
@@ -103,11 +130,11 @@ function DashboardPage() {
       {/* Portainer Style Resource Overview */}
       <h2 className="text-sm font-medium text-slate-200 mt-6 mb-3">Resource Overview</h2>
       <div className="grid gap-3 grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
-         <StatsBox icon={Layers} label="Stacks" value="5" color="text-indigo-400" bgColor="bg-indigo-400/10" />
-         <StatsBox icon={Box} label="Containers" value={report?.total_containers?.toString() ?? '0'} color="text-sky-400" bgColor="bg-sky-400/10" />
-         <StatsBox icon={HardDrive} label="Images" value="35" color="text-amber-400" bgColor="bg-amber-400/10" />
-         <StatsBox icon={Activity} label="Volumes" value="1" color="text-emerald-400" bgColor="bg-emerald-400/10" />
-         <StatsBox icon={Network} label="Networks" value="3" color="text-purple-400" bgColor="bg-purple-400/10" />
+         <StatsBox icon={Layers} label="Stacks" value={info?.stacks != null ? info.stacks.toString() : '--'} color="text-indigo-400" bgColor="bg-indigo-400/10" />
+         <StatsBox icon={Box} label="Containers" value={info?.containers?.total != null ? info.containers.total.toString() : (report?.total_containers?.toString() ?? '0')} color="text-sky-400" bgColor="bg-sky-400/10" />
+         <StatsBox icon={HardDrive} label="Images" value={info?.images != null ? info.images.toString() : '--'} color="text-amber-400" bgColor="bg-amber-400/10" />
+         <StatsBox icon={Activity} label="Volumes" value={info?.volumes != null ? info.volumes.toString() : '--'} color="text-emerald-400" bgColor="bg-emerald-400/10" />
+         <StatsBox icon={Network} label="Networks" value={info?.networks != null ? info.networks.toString() : '--'} color="text-purple-400" bgColor="bg-purple-400/10" />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 mt-2">
@@ -118,8 +145,10 @@ function DashboardPage() {
                    <p className="text-2xl font-bold text-white">{daemonRules.length}</p>
                    <p className="text-xs text-slate-500 mt-1">Host-level configuration rules</p>
                 </div>
-                <div className="h-10 w-10 rounded-full border-4 border-emerald-500/20 flex items-center justify-center">
-                    <span className="text-[10px] font-bold text-emerald-500">OK</span>
+                <div className={`h-10 w-10 rounded-full border-4 flex items-center justify-center ${daemonFailed ? 'border-rose-500/20' : 'border-emerald-500/20'}`}>
+                    <span className={`text-[10px] font-bold ${daemonFailed ? 'text-rose-500' : 'text-emerald-500'}`}>
+                      {daemonFailed ? 'FAIL' : 'OK'}
+                    </span>
                 </div>
             </div>
         </div>
@@ -130,8 +159,10 @@ function DashboardPage() {
                    <p className="text-2xl font-bold text-white">{runtimeRules.length}</p>
                    <p className="text-xs text-slate-500 mt-1">Workload isolation and capability rules</p>
                 </div>
-                <div className="h-10 w-10 rounded-full border-4 border-rose-500/20 flex items-center justify-center">
-                    <span className="text-[10px] font-bold text-rose-500">FAIL</span>
+                <div className={`h-10 w-10 rounded-full border-4 flex items-center justify-center ${runtimeFailed ? 'border-rose-500/20' : 'border-emerald-500/20'}`}>
+                    <span className={`text-[10px] font-bold ${runtimeFailed ? 'text-rose-500' : 'text-emerald-500'}`}>
+                      {runtimeFailed ? 'FAIL' : 'OK'}
+                    </span>
                 </div>
             </div>
         </div>

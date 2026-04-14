@@ -489,6 +489,7 @@ pub fn run_update(args: UpdateArgs) -> Result<()> {
     run_step("Verifying release checksum", || {
         verify_download_checksum(&checksum_path, &binary_path, asset_name, checksum_tool)
     })?;
+
     run_step("Installing updated Dokuru binary", || {
         install_binary(&binary_path, &config.install_path)
     })?;
@@ -1024,20 +1025,33 @@ fn install_binary(source: &Path, destination: &Path) -> Result<()> {
 
     fs::create_dir_all(parent)
         .wrap_err_with(|| format!("Failed to create {}", parent.display()))?;
-    fs::copy(source, destination).wrap_err_with(|| {
+
+    // Write to a temp file in the same directory, then atomically rename.
+    // This avoids "Text file busy" (ETXTBSY) when the destination is currently
+    // executing — rename replaces the directory entry without touching the
+    // running inode, so the live process is unaffected.
+    let tmp = destination.with_extension("tmp");
+    fs::copy(source, &tmp).wrap_err_with(|| {
         format!(
             "Failed to copy Dokuru binary from {} to {}",
             source.display(),
-            destination.display()
+            tmp.display()
         )
     })?;
 
-    let mut permissions = fs::metadata(destination)
-        .wrap_err_with(|| format!("Failed to stat {}", destination.display()))?
+    let mut permissions = fs::metadata(&tmp)
+        .wrap_err_with(|| format!("Failed to stat {}", tmp.display()))?
         .permissions();
     permissions.set_mode(0o755);
-    fs::set_permissions(destination, permissions)
-        .wrap_err_with(|| format!("Failed to chmod {}", destination.display()))?;
+    fs::set_permissions(&tmp, permissions)
+        .wrap_err_with(|| format!("Failed to chmod {}", tmp.display()))?;
+
+    fs::rename(&tmp, destination).wrap_err_with(|| {
+        format!(
+            "Failed to replace {} with updated binary",
+            destination.display()
+        )
+    })?;
 
     Ok(())
 }

@@ -10,9 +10,13 @@ export interface ContainerStats {
 
 export interface EnvironmentInfo {
   docker_version: string;
+  os: string;
+  architecture: string;
   containers: ContainerStats;
+  stacks: number;
   volumes: number;
   images: number;
+  networks: number;
   cpu_count: number;
   memory_total: number;
 }

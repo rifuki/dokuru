@@ -21,6 +21,7 @@ interface EnvironmentState {
   addEnvironment: (env: Environment) => void;
   removeEnvironment: (id: string) => void;
   setActiveEnvironment: (id: string) => void;
+  disconnectEnvironment: () => void;
   setEnvironments: (envs: Environment[]) => void;
   fetchEnvironments: () => Promise<void>;
 }
@@ -43,6 +44,9 @@ export const useEnvironmentStore = create<EnvironmentState>()(
 
       setActiveEnvironment: (id) =>
         set({ activeEnvironmentId: id }),
+
+      disconnectEnvironment: () =>
+        set({ activeEnvironmentId: null }),
 
       setEnvironments: (envs) =>
         set({ environments: envs }),
