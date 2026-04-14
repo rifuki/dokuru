@@ -208,7 +208,12 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
 
     config = prompt_for_config(effective_mode, config)?;
 
-    // Show summary of what will be applied
+    if !config.skip_service && !preflight.has_systemd {
+        cliclack::log::warning("systemd not detected — continuing without a managed service")?;
+        config.skip_service = true;
+    }
+
+    // Show summary and confirm
     let mut summary_lines = vec![
         format!("Binary:  {}", config.install_path.display()),
         format!("Config:  {}", runtime_config_path(&config).display()),
@@ -232,9 +237,24 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
 
     note("Install plan", summary_lines.join("\n"))?;
 
-    if !config.skip_service && !preflight.has_systemd {
-        cliclack::log::warning("systemd not detected — continuing without a managed service")?;
-        config.skip_service = true;
+    let prompt = match effective_mode {
+        SetupMode::Onboard => {
+            let source_binary = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("dokuru"));
+            if source_binary == config.install_path {
+                "Apply these settings?".to_string()
+            } else {
+                format!(
+                    "Apply these settings and install Dokuru to {}?",
+                    config.install_path.display()
+                )
+            }
+        }
+        SetupMode::Configure => format!("Apply changes to {}?", config.config_dir.display()),
+    };
+
+    if !config.yes && stderr().is_terminal() && !confirm(prompt).initial_value(true).interact()? {
+        outro_cancel("Configuration cancelled.")?;
+        bail!("cancelled");
     }
 
     if effective_mode.should_install_binary() && source_binary != config.install_path {
