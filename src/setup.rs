@@ -213,6 +213,30 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         config.skip_service = true;
     }
 
+    // Show summary before applying
+    let mut summary_lines = vec![
+        format!("Binary:  {}", config.install_path.display()),
+        format!("Config:  {}", runtime_config_path(&config).display()),
+        format!("Port:    {}", config.port),
+        format!("Bind:    {}", config.host),
+        format!("Docker:  {}", config.docker_socket),
+        format!("CORS:    {}", config.cors_origins),
+    ];
+
+    if config.skip_service {
+        summary_lines.push("Service: skipped".to_string());
+    } else if preflight.has_systemd {
+        summary_lines.push(format!(
+            "Service: {}",
+            config
+                .systemd_dir
+                .join(format!("{}.service", config.service_name))
+                .display()
+        ));
+    }
+
+    note("Configuration", summary_lines.join("\n"))?;
+
     // Confirm before applying
     let prompt = match effective_mode {
         SetupMode::Onboard => {
@@ -241,6 +265,9 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
     }
 
     run_step("Setting up dokuru user and group", setup_dokuru_user)?;
+    if stderr().is_terminal() {
+        cliclack::log::info("→ Created system user 'dokuru' for service isolation")?;
+    }
 
     run_step("Writing Dokuru configuration", || {
         write_config_file(&config)
@@ -263,7 +290,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
             enable_service(&config.service_name)
         })?;
         if stderr().is_terminal() {
-            cliclack::log::info(format!("→ {}", config.service_name))?;
+            cliclack::log::info(format!("→ systemctl enable {}", config.service_name))?;
         }
 
         if !preflight.docker_socket_exists {
@@ -272,7 +299,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
                 "Start Docker first, then: systemctl restart {}",
                 config.service_name
             ))?;
-            show_summary(&config, false)?;
+            outro("Dokuru configured. Start Docker to run the service.")?;
             return Ok(());
         }
 
@@ -283,7 +310,6 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
                 if stderr().is_terminal() {
                     cliclack::log::success("✓ Active and running")?;
                 }
-                show_summary(&config, true)?
             }
             Err(err) => {
                 cliclack::log::warning(format!("Service installed but failed to start: {err}"))?;
@@ -291,12 +317,18 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
                     "Inspect logs: journalctl -u {} -f",
                     config.service_name
                 ))?;
-                show_summary(&config, false)?;
+                outro("Dokuru configured but service failed to start.")?;
+                return Ok(());
             }
         }
-    } else {
-        show_summary(&config, false)?;
     }
+
+    // Final success message
+    if !config.skip_service {
+        cliclack::log::info(format!("Logs: journalctl -u {} -f", config.service_name))?;
+    }
+    cliclack::log::info(format!("Dashboard: http://<your-host>:{}", config.port))?;
+    outro("Dokuru is ready.")?;
 
     Ok(())
 }
@@ -942,43 +974,6 @@ fn show_preflight(config: &InstallerConfig, preflight: &Preflight) -> Result<()>
         ),
     ];
     note("Preflight", lines.join("\n"))?;
-    Ok(())
-}
-
-fn show_summary(config: &InstallerConfig, service_started: bool) -> Result<()> {
-    let service_status = if config.skip_service {
-        "not installed".to_string()
-    } else if service_started {
-        "running ✓".to_string()
-    } else {
-        "installed, not running".to_string()
-    };
-
-    note(
-        "Summary",
-        format!(
-            "Config:  {}\nServer:  {}:{}\nDocker:  {}\nCORS:    {}\nBinary:  {}\nService: {}",
-            runtime_config_path(config).display(),
-            config.host,
-            config.port,
-            config.docker_socket,
-            config.cors_origins,
-            config.install_path.display(),
-            service_status,
-        ),
-    )?;
-
-    if config.skip_service {
-        cliclack::log::info(format!(
-            "Run manually: {} serve",
-            config.install_path.display()
-        ))?;
-    } else if service_started {
-        cliclack::log::info(format!("Logs: journalctl -u {} -f", config.service_name))?;
-    }
-    cliclack::log::info(format!("Dashboard: http://<your-host>:{}", config.port))?;
-
-    outro("Dokuru is ready.")?;
     Ok(())
 }
 
