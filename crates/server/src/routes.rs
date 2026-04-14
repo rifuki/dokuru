@@ -37,7 +37,7 @@ pub fn build_router(state: AppState) -> Router {
         )
         // Proxy to remote environments
         .route(
-            "/api/v1/remote/{env_id}/*tail",
+            "/api/v1/remote/{env_id}/{*tail}",
             axum::routing::any(proxy::proxy_to_environment),
         )
         // WebSocket for live audit progress
