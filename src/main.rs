@@ -19,6 +19,12 @@ enum Commands {
     Setup(setup::SetupArgs),
     /// Re-configure settings interactively
     Configure(setup::SetupArgs),
+    /// Inspect Dokuru installation and host readiness
+    Doctor(setup::DoctorArgs),
+    /// Update Dokuru from the rolling latest release
+    Update(setup::UpdateArgs),
+    /// Remove Dokuru from this host
+    Uninstall(setup::UninstallArgs),
     /// Run all CIS checks and print results to stdout
     Audit,
     /// Apply a specific rule fix
@@ -40,6 +46,9 @@ async fn main() -> eyre::Result<()> {
     match &cli.command {
         Commands::Setup(args) => setup::run(setup::SetupMode::Setup, args.clone())?,
         Commands::Configure(args) => setup::run(setup::SetupMode::Configure, args.clone())?,
+        Commands::Doctor(args) => setup::run_doctor(args.clone())?,
+        Commands::Update(args) => setup::run_update(args.clone())?,
+        Commands::Uninstall(args) => setup::run_uninstall(args.clone())?,
         Commands::Audit => {
             let docker = connect_docker()?;
             let checker = Checker::new(docker);

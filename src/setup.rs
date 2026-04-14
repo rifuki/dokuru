@@ -9,11 +9,36 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
+const REPO_URL: &str = "https://github.com/rifuki/dokuru";
+const LATEST_RELEASE_BASE_URL: &str = "https://github.com/rifuki/dokuru/releases/download/latest";
+
 #[derive(Args, Debug, Clone, Default)]
-pub struct SetupArgs {
+pub struct SharedArgs {
     /// Skip interactive prompts and use detected defaults
     #[arg(long, short = 'y')]
     pub yes: bool,
+
+    /// Override the binary install path
+    #[arg(long = "install-path")]
+    pub install_path: Option<PathBuf>,
+
+    /// Override the config directory
+    #[arg(long = "config-dir")]
+    pub config_dir: Option<PathBuf>,
+
+    /// Override the systemd unit directory
+    #[arg(long = "systemd-dir")]
+    pub systemd_dir: Option<PathBuf>,
+
+    /// Override the systemd service name
+    #[arg(long = "service-name")]
+    pub service_name: Option<String>,
+}
+
+#[derive(Args, Debug, Clone, Default)]
+pub struct SetupArgs {
+    #[command(flatten)]
+    pub shared: SharedArgs,
 
     /// Override the service port
     #[arg(long)]
@@ -31,25 +56,31 @@ pub struct SetupArgs {
     #[arg(long = "cors-origins")]
     pub cors_origins: Option<String>,
 
-    /// Override the binary install path
-    #[arg(long = "install-path")]
-    pub install_path: Option<PathBuf>,
-
-    /// Override the config directory
-    #[arg(long = "config-dir")]
-    pub config_dir: Option<PathBuf>,
-
-    /// Override the systemd unit directory
-    #[arg(long = "systemd-dir")]
-    pub systemd_dir: Option<PathBuf>,
-
-    /// Override the systemd service name
-    #[arg(long = "service-name")]
-    pub service_name: Option<String>,
-
     /// Skip writing and starting a systemd unit
     #[arg(long = "skip-service")]
     pub skip_service: bool,
+}
+
+#[derive(Args, Debug, Clone, Default)]
+pub struct DoctorArgs {
+    #[command(flatten)]
+    pub shared: SharedArgs,
+
+    /// Override the Docker socket path reported by doctor
+    #[arg(long = "docker-socket")]
+    pub docker_socket: Option<String>,
+}
+
+#[derive(Args, Debug, Clone, Default)]
+pub struct UpdateArgs {
+    #[command(flatten)]
+    pub shared: SharedArgs,
+}
+
+#[derive(Args, Debug, Clone, Default)]
+pub struct UninstallArgs {
+    #[command(flatten)]
+    pub shared: SharedArgs,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -80,6 +111,12 @@ struct Preflight {
     has_systemd: bool,
     docker_socket_exists: bool,
     docker_service_exists: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum ChecksumTool {
+    Sha256sum,
+    Shasum,
 }
 
 pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
@@ -161,6 +198,262 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
     Ok(())
 }
 
+pub fn run_doctor(args: DoctorArgs) -> Result<()> {
+    let config = resolve_shared_config(&args.shared, args.docker_socket)?;
+    let preflight = collect_preflight(&config);
+    let env_path = env_path(&config);
+    let service_path = service_unit_path(&config);
+    let binary_exists = config.install_path.exists();
+    let config_exists = env_path.exists();
+    let service_exists = service_path.exists();
+    let service_enabled =
+        service_exists && command_success("systemctl", &["is-enabled", &config.service_name]);
+    let service_active =
+        service_exists && command_success("systemctl", &["is-active", &config.service_name]);
+
+    println!();
+    println!("  {} {}", bold("dokuru"), dim("host diagnostics"));
+    println!();
+    println!("  {}", bold("Status"));
+    print_item(
+        if binary_exists {
+            ok_prefix()
+        } else {
+            fail_prefix()
+        },
+        "Binary",
+        &config.install_path.display().to_string(),
+    );
+    print_item(
+        if config_exists {
+            ok_prefix()
+        } else {
+            fail_prefix()
+        },
+        "Config",
+        &env_path.display().to_string(),
+    );
+    print_item(
+        if preflight.docker_socket_exists {
+            ok_prefix()
+        } else {
+            fail_prefix()
+        },
+        "Docker socket",
+        &config.docker_socket,
+    );
+    print_item(
+        if preflight.has_systemd {
+            ok_prefix()
+        } else {
+            warn_prefix()
+        },
+        "Systemd",
+        if preflight.has_systemd {
+            "detected"
+        } else {
+            "not detected"
+        },
+    );
+    print_item(
+        if service_exists {
+            ok_prefix()
+        } else {
+            warn_prefix()
+        },
+        "Service unit",
+        &service_path.display().to_string(),
+    );
+
+    if service_exists {
+        print_item(
+            if service_enabled {
+                ok_prefix()
+            } else {
+                warn_prefix()
+            },
+            "Service enabled",
+            if service_enabled { "yes" } else { "no" },
+        );
+        print_item(
+            if service_active {
+                ok_prefix()
+            } else {
+                warn_prefix()
+            },
+            "Service active",
+            if service_active { "yes" } else { "no" },
+        );
+    }
+
+    println!();
+    println!("  {}", bold("Configuration"));
+    print_item(step_prefix(), "Port", &config.port.to_string());
+    print_item(step_prefix(), "Host", &config.host);
+    print_item(step_prefix(), "CORS", &config.cors_origins);
+    print_item(
+        step_prefix(),
+        "docker.service",
+        if preflight.docker_service_exists {
+            "detected"
+        } else {
+            "not detected"
+        },
+    );
+
+    if binary_exists {
+        if let Some(version) = binary_version(&config.install_path) {
+            println!();
+            println!("  {}", bold("Binary Info"));
+            print_item(step_prefix(), "Version", &version);
+        }
+    }
+
+    println!();
+    log_info(&format!(
+        "Run `dokuru update --install-path {}` to refresh the binary.",
+        config.install_path.display()
+    ));
+    Ok(())
+}
+
+pub fn run_update(args: UpdateArgs) -> Result<()> {
+    let config = resolve_shared_config(&args.shared, None)?;
+    let preflight = collect_preflight(&config);
+
+    println!();
+    println!("  {} {}", bold("dokuru"), dim("rolling latest updater"));
+    println!();
+
+    if !preflight.running_as_root {
+        bail!("Dokuru update requires root privileges. Re-run with `sudo dokuru update`.");
+    }
+
+    ensure_command("curl")?;
+    let checksum_tool = detect_checksum_tool()?;
+    let asset_name = release_asset_name()?;
+    let temp_dir = create_temp_dir("dokuru-update")?;
+    let binary_path = temp_dir.join(asset_name);
+    let checksum_path = temp_dir.join("SHA256SUMS");
+
+    print_item(
+        step_prefix(),
+        "Target binary",
+        &config.install_path.display().to_string(),
+    );
+    print_item(step_prefix(), "Release asset", asset_name);
+    print_item(step_prefix(), "Service", &config.service_name);
+
+    if !confirm_action(
+        args.shared.yes,
+        &format!("Update Dokuru at {}?", config.install_path.display()),
+    )? {
+        bail!("Update cancelled.");
+    }
+
+    run_step("Downloading latest Dokuru binary", || {
+        download_file(
+            &format!("{LATEST_RELEASE_BASE_URL}/{asset_name}"),
+            &binary_path,
+        )
+    })?;
+    run_step("Downloading release checksums", || {
+        download_file(
+            &format!("{LATEST_RELEASE_BASE_URL}/SHA256SUMS"),
+            &checksum_path,
+        )
+    })?;
+    run_step("Verifying release checksum", || {
+        verify_download_checksum(&checksum_path, &binary_path, asset_name, checksum_tool)
+    })?;
+    run_step("Installing updated Dokuru binary", || {
+        install_binary(&binary_path, &config.install_path)
+    })?;
+
+    if service_unit_path(&config).exists() && preflight.has_systemd {
+        run_step("Restarting Dokuru service", || {
+            restart_service(&config.service_name)
+        })?;
+    }
+
+    println!();
+    println!("  {}", bold("Update Complete"));
+    print_item(
+        ok_prefix(),
+        "Binary",
+        &config.install_path.display().to_string(),
+    );
+    if let Some(version) = binary_version(&config.install_path) {
+        print_item(ok_prefix(), "Version", &version);
+    }
+    log_info(&format!("Dashboard: http://<your-host>:{}", config.port));
+    Ok(())
+}
+
+pub fn run_uninstall(args: UninstallArgs) -> Result<()> {
+    let config = resolve_shared_config(&args.shared, None)?;
+    let preflight = collect_preflight(&config);
+    let unit_path = service_unit_path(&config);
+    let env_path = env_path(&config);
+
+    println!();
+    println!("  {} {}", bold("dokuru"), dim("uninstall"));
+    println!();
+
+    if !preflight.running_as_root {
+        bail!("Dokuru uninstall requires root privileges. Re-run with `sudo dokuru uninstall`.");
+    }
+
+    print_item(
+        step_prefix(),
+        "Binary",
+        &config.install_path.display().to_string(),
+    );
+    print_item(step_prefix(), "Config", &env_path.display().to_string());
+    print_item(
+        step_prefix(),
+        "Service unit",
+        &unit_path.display().to_string(),
+    );
+
+    if !confirm_action(
+        args.shared.yes,
+        &format!("Uninstall Dokuru from {}?", config.install_path.display()),
+    )? {
+        bail!("Uninstall cancelled.");
+    }
+
+    if preflight.has_systemd && unit_path.exists() {
+        run_step("Stopping Dokuru service", || {
+            stop_service_if_present(&config.service_name)
+        })?;
+        run_step("Disabling Dokuru service", || {
+            disable_service_if_present(&config.service_name)
+        })?;
+        run_step("Removing systemd unit", || {
+            remove_file_if_present(&unit_path)
+        })?;
+        run_step("Reloading systemd", reload_systemd)?;
+    }
+
+    run_step("Removing Dokuru binary", || {
+        remove_file_if_present(&config.install_path)
+    })?;
+    run_step("Removing Dokuru config", || {
+        remove_dir_if_present(&config.config_dir)
+    })?;
+
+    println!();
+    println!("  {}", bold("Uninstall Complete"));
+    print_item(ok_prefix(), "Binary", "removed");
+    print_item(ok_prefix(), "Config", "removed");
+    if preflight.has_systemd {
+        print_item(ok_prefix(), "Service", "removed");
+    }
+    println!();
+    Ok(())
+}
+
 impl SetupMode {
     fn label(self) -> &'static str {
         match self {
@@ -189,10 +482,16 @@ impl SetupMode {
 }
 
 fn resolve_config(args: SetupArgs) -> Result<InstallerConfig> {
-    let install_path = args.install_path.unwrap_or_else(default_install_path);
-    let config_dir = args.config_dir.unwrap_or_else(default_config_dir);
-    let systemd_dir = args.systemd_dir.unwrap_or_else(default_systemd_dir);
-    let service_name = args.service_name.unwrap_or_else(|| "dokuru".to_string());
+    let install_path = args
+        .shared
+        .install_path
+        .unwrap_or_else(default_install_path);
+    let config_dir = args.shared.config_dir.unwrap_or_else(default_config_dir);
+    let systemd_dir = args.shared.systemd_dir.unwrap_or_else(default_systemd_dir);
+    let service_name = args
+        .shared
+        .service_name
+        .unwrap_or_else(|| "dokuru".to_string());
 
     let port = match args.port {
         Some(port) => port,
@@ -218,7 +517,7 @@ fn resolve_config(args: SetupArgs) -> Result<InstallerConfig> {
         .unwrap_or_else(|| "*".to_string());
 
     Ok(InstallerConfig {
-        yes: args.yes,
+        yes: args.shared.yes,
         install_path,
         config_dir,
         systemd_dir,
@@ -229,6 +528,81 @@ fn resolve_config(args: SetupArgs) -> Result<InstallerConfig> {
         cors_origins,
         skip_service: args.skip_service,
     })
+}
+
+fn resolve_shared_config(
+    shared: &SharedArgs,
+    docker_socket_override: Option<String>,
+) -> Result<InstallerConfig> {
+    let install_path = shared
+        .install_path
+        .clone()
+        .unwrap_or_else(default_install_path);
+    let config_dir = shared.config_dir.clone().unwrap_or_else(default_config_dir);
+    let systemd_dir = shared
+        .systemd_dir
+        .clone()
+        .unwrap_or_else(default_systemd_dir);
+    let service_name = shared
+        .service_name
+        .clone()
+        .unwrap_or_else(|| "dokuru".to_string());
+    let env_values = load_env_values(&config_dir)?;
+
+    let port = env_values
+        .get("PORT")
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(3939);
+
+    let host = env_values
+        .get("HOST")
+        .cloned()
+        .unwrap_or_else(|| "0.0.0.0".to_string());
+
+    let docker_socket = docker_socket_override
+        .or_else(|| env_values.get("DOCKER_SOCKET").cloned())
+        .unwrap_or_else(|| "/var/run/docker.sock".to_string());
+
+    let cors_origins = env_values
+        .get("CORS_ORIGINS")
+        .cloned()
+        .unwrap_or_else(|| "*".to_string());
+
+    Ok(InstallerConfig {
+        yes: shared.yes,
+        install_path,
+        config_dir,
+        systemd_dir,
+        service_name,
+        port,
+        host,
+        docker_socket,
+        cors_origins,
+        skip_service: false,
+    })
+}
+
+fn load_env_values(config_dir: &Path) -> Result<std::collections::BTreeMap<String, String>> {
+    let env_path = config_dir.join(".env");
+    if !env_path.exists() {
+        return Ok(std::collections::BTreeMap::new());
+    }
+
+    let content = fs::read_to_string(&env_path)
+        .wrap_err_with(|| format!("Failed to read {}", env_path.display()))?;
+    let mut values = std::collections::BTreeMap::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if let Some((key, value)) = trimmed.split_once('=') {
+            values.insert(key.trim().to_string(), value.trim().to_string());
+        }
+    }
+
+    Ok(values)
 }
 
 fn collect_preflight(config: &InstallerConfig) -> Preflight {
@@ -369,7 +743,8 @@ fn write_systemd_unit(config: &InstallerConfig, preflight: &Preflight) -> Result
         .join(format!("{}.service", config.service_name));
 
     let unit_content = format!(
-        "[Unit]\nDescription=Dokuru Docker Hardening Agent\nDocumentation=https://github.com/rifuki/dokuru\nAfter={}\nWants={}\n\n[Service]\nType=simple\nEnvironmentFile=-{}/.env\nExecStart={} serve\nRestart=on-failure\nRestartSec=5s\nStandardOutput=journal\nStandardError=journal\nSyslogIdentifier={}\nNoNewPrivileges=yes\nProtectSystem=strict\nReadWritePaths={} /etc/docker\n\n[Install]\nWantedBy=multi-user.target\n",
+        "[Unit]\nDescription=Dokuru Docker Hardening Agent\nDocumentation={}\nAfter={}\nWants={}\n\n[Service]\nType=simple\nEnvironmentFile=-{}/.env\nExecStart={} serve\nRestart=on-failure\nRestartSec=5s\nStandardOutput=journal\nStandardError=journal\nSyslogIdentifier={}\nNoNewPrivileges=yes\nProtectSystem=strict\nReadWritePaths={} /etc/docker\n\n[Install]\nWantedBy=multi-user.target\n",
+        REPO_URL,
         after_targets,
         wants_targets,
         config.config_dir.display(),
@@ -392,6 +767,196 @@ fn enable_service(service_name: &str) -> Result<()> {
 
 fn restart_service(service_name: &str) -> Result<()> {
     run_command("systemctl", &["restart", service_name])
+}
+
+fn stop_service_if_present(service_name: &str) -> Result<()> {
+    if command_success("systemctl", &["is-active", service_name]) {
+        run_command("systemctl", &["stop", service_name])?;
+    }
+    Ok(())
+}
+
+fn disable_service_if_present(service_name: &str) -> Result<()> {
+    if command_success("systemctl", &["is-enabled", service_name]) {
+        run_command("systemctl", &["disable", service_name])?;
+    }
+    Ok(())
+}
+
+fn remove_file_if_present(path: &Path) -> Result<()> {
+    if path.exists() {
+        fs::remove_file(path).wrap_err_with(|| format!("Failed to remove {}", path.display()))?;
+    }
+    Ok(())
+}
+
+fn remove_dir_if_present(path: &Path) -> Result<()> {
+    if path.exists() {
+        fs::remove_dir_all(path)
+            .wrap_err_with(|| format!("Failed to remove {}", path.display()))?;
+    }
+    Ok(())
+}
+
+fn ensure_command(program: &str) -> Result<()> {
+    if command_exists(program) {
+        Ok(())
+    } else {
+        bail!("Required command '{}' not found", program);
+    }
+}
+
+fn detect_checksum_tool() -> Result<ChecksumTool> {
+    if command_exists("sha256sum") {
+        return Ok(ChecksumTool::Sha256sum);
+    }
+    if command_exists("shasum") {
+        return Ok(ChecksumTool::Shasum);
+    }
+    bail!("Neither sha256sum nor shasum is available")
+}
+
+fn release_asset_name() -> Result<&'static str> {
+    match std::env::consts::ARCH {
+        "x86_64" => Ok("dokuru-linux-amd64"),
+        "aarch64" => Ok("dokuru-linux-arm64"),
+        arch => bail!(
+            "Unsupported architecture for rolling release update: {}",
+            arch
+        ),
+    }
+}
+
+fn create_temp_dir(prefix: &str) -> Result<PathBuf> {
+    let unique = format!(
+        "{}-{}-{}",
+        prefix,
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|err| eyre::eyre!(err))?
+            .as_millis()
+    );
+    let path = std::env::temp_dir().join(unique);
+    fs::create_dir_all(&path).wrap_err_with(|| format!("Failed to create {}", path.display()))?;
+    Ok(path)
+}
+
+fn download_file(url: &str, output: &Path) -> Result<()> {
+    let mut command = Command::new("curl");
+    command.args(["--fail", "--location", "--retry", "3", "--retry-delay", "1"]);
+    if stderr().is_terminal() {
+        command.arg("--progress-bar");
+    } else {
+        command.arg("--silent");
+    }
+    let status = command
+        .arg("-o")
+        .arg(output)
+        .arg(url)
+        .status()
+        .wrap_err("Failed to execute curl")?;
+    if !status.success() {
+        bail!("curl failed while downloading {}", url);
+    }
+    Ok(())
+}
+
+fn verify_download_checksum(
+    checksum_path: &Path,
+    binary_path: &Path,
+    asset_name: &str,
+    tool: ChecksumTool,
+) -> Result<()> {
+    let checksums = fs::read_to_string(checksum_path)
+        .wrap_err_with(|| format!("Failed to read {}", checksum_path.display()))?;
+    let expected = checksums
+        .lines()
+        .find_map(|line| {
+            let trimmed = line.trim();
+            if trimmed.ends_with(asset_name) {
+                trimmed.split_whitespace().next().map(str::to_string)
+            } else {
+                None
+            }
+        })
+        .ok_or_else(|| eyre::eyre!("Checksum entry for {} not found", asset_name))?;
+
+    let actual = match tool {
+        ChecksumTool::Sha256sum => {
+            command_output("sha256sum", &[binary_path.to_string_lossy().as_ref()])?
+        }
+        ChecksumTool::Shasum => command_output(
+            "shasum",
+            &["-a", "256", binary_path.to_string_lossy().as_ref()],
+        )?,
+    };
+    let actual = actual
+        .split_whitespace()
+        .next()
+        .ok_or_else(|| eyre::eyre!("Failed to parse checksum for {}", binary_path.display()))?;
+
+    if actual != expected {
+        bail!("Checksum mismatch for {}", asset_name);
+    }
+
+    Ok(())
+}
+
+fn command_output(program: &str, args: &[&str]) -> Result<String> {
+    let output = Command::new(program)
+        .args(args)
+        .output()
+        .wrap_err_with(|| format!("Failed to execute {}", program))?;
+    if !output.status.success() {
+        bail!(
+            "{} {:?} exited with status {}",
+            program,
+            args,
+            output.status
+        );
+    }
+    String::from_utf8(output.stdout)
+        .map(|text| text.trim().to_string())
+        .map_err(|err| eyre::eyre!(err))
+}
+
+fn binary_version(path: &Path) -> Option<String> {
+    let output = Command::new(path).arg("--version").output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn command_success(program: &str, args: &[&str]) -> bool {
+    Command::new(program)
+        .args(args)
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+fn confirm_action(yes: bool, prompt: &str) -> Result<bool> {
+    if yes || !stderr().is_terminal() {
+        return Ok(true);
+    }
+
+    Confirm::with_theme(&ColorfulTheme::default())
+        .with_prompt(prompt)
+        .default(true)
+        .interact()
+        .map_err(Into::into)
+}
+
+fn service_unit_path(config: &InstallerConfig) -> PathBuf {
+    config
+        .systemd_dir
+        .join(format!("{}.service", config.service_name))
+}
+
+fn env_path(config: &InstallerConfig) -> PathBuf {
+    config.config_dir.join(".env")
 }
 
 fn run_command(program: &str, args: &[&str]) -> Result<()> {
