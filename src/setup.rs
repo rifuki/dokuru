@@ -245,15 +245,26 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
     run_step("Writing Dokuru configuration", || {
         write_config_file(&config)
     })?;
+    if stderr().is_terminal() {
+        cliclack::log::info(format!("→ {}", runtime_config_path(&config).display()))?;
+    }
 
     if !config.skip_service {
         run_step("Writing systemd unit", || {
             write_systemd_unit(&config, &preflight)
         })?;
+        if stderr().is_terminal() {
+            cliclack::log::info(format!("→ {}", service_unit_path(&config).display()))?;
+        }
+
         run_step("Reloading systemd", reload_systemd)?;
+
         run_step("Enabling Dokuru service", || {
             enable_service(&config.service_name)
         })?;
+        if stderr().is_terminal() {
+            cliclack::log::info(format!("→ {}", config.service_name))?;
+        }
 
         if !preflight.docker_socket_exists {
             cliclack::log::warning(format!("Docker is not ready on {}", config.docker_socket))?;
@@ -268,7 +279,12 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         match run_step("Starting Dokuru service", || {
             restart_service(&config.service_name)
         }) {
-            Ok(_) => show_summary(&config, true)?,
+            Ok(_) => {
+                if stderr().is_terminal() {
+                    cliclack::log::success("✓ Active and running")?;
+                }
+                show_summary(&config, true)?
+            }
             Err(err) => {
                 cliclack::log::warning(format!("Service installed but failed to start: {err}"))?;
                 cliclack::log::info(format!(
@@ -1135,10 +1151,6 @@ fn setup_dokuru_user() -> Result<()> {
 
         args.push("dokuru");
         run_command("useradd", &args)?;
-
-        if stderr().is_terminal() {
-            cliclack::log::info("Created system user 'dokuru' for service isolation")?;
-        }
     } else {
         // User exists, add to docker group if it exists
         if has_docker_group {
@@ -1152,12 +1164,6 @@ fn setup_dokuru_user() -> Result<()> {
         && current_user != "root"
     {
         run_command("usermod", &["-aG", "dokuru", &current_user])?;
-        if stderr().is_terminal() {
-            cliclack::log::info(format!(
-                "Added '{}' to dokuru group for config access",
-                current_user
-            ))?;
-        }
     }
 
     Ok(())
