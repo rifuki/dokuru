@@ -618,17 +618,6 @@ fn load_saved_runtime_config(config_dir: &Path) -> Result<RuntimeConfig> {
 fn offer_docker_installation(config: &InstallerConfig) -> Result<bool> {
     cliclack::log::warning("Docker is not installed")?;
 
-    note(
-        "Docker Installation",
-        "Dokuru will run the official Docker installation script:\n\
-         curl -fsSL https://get.docker.com | sh\n\n\
-         This script will:\n\
-         • Detect your Linux distribution\n\
-         • Add Docker's official repository\n\
-         • Install Docker Engine\n\
-         • Start and enable the Docker service",
-    )?;
-
     if config.yes {
         cliclack::log::info("Non-interactive mode: skipping Docker installation")?;
         return Ok(false);
@@ -660,7 +649,19 @@ fn offer_docker_installation(config: &InstallerConfig) -> Result<bool> {
         .interact()?;
 
     match choice {
-        DockerChoice::Install => Ok(true),
+        DockerChoice::Install => {
+            note(
+                "Docker Installation",
+                "Dokuru will run the official Docker installation script:\n\
+                 curl -fsSL https://get.docker.com | sh\n\n\
+                 This script will:\n\
+                 • Detect your Linux distribution\n\
+                 • Add Docker's official repository\n\
+                 • Install Docker Engine\n\
+                 • Start and enable the Docker service",
+            )?;
+            Ok(true)
+        }
         DockerChoice::Manual => {
             note(
                 "Manual installation",
@@ -670,10 +671,7 @@ fn offer_docker_installation(config: &InstallerConfig) -> Result<bool> {
             )?;
             bail!("Docker installation required");
         }
-        DockerChoice::Skip => {
-            cliclack::log::warning("Continuing without Docker - service will not start")?;
-            Ok(false)
-        }
+        DockerChoice::Skip => Ok(false),
     }
 }
 
