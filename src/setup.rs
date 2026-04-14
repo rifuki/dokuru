@@ -88,7 +88,7 @@ pub struct UninstallArgs {
 
 #[derive(Clone, Copy, Debug)]
 pub enum SetupMode {
-    Setup,
+    Onboard,
     Configure,
 }
 
@@ -123,46 +123,47 @@ enum ChecksumTool {
 }
 
 pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
-    let config = resolve_config(args)?;
+    let mut config = resolve_config(args)?;
+    let source_binary =
+        std::env::current_exe().wrap_err("Failed to resolve current Dokuru binary path")?;
+    let existing_installation = config.install_path.exists()
+        || runtime_config_path(&config).exists()
+        || service_unit_path(&config).exists();
+    let effective_mode = if matches!(mode, SetupMode::Onboard)
+        && existing_installation
+        && same_path(&source_binary, &config.install_path)
+    {
+        log_warn("Dokuru is already installed on this host; switching to configure mode");
+        SetupMode::Configure
+    } else {
+        mode
+    };
     let preflight = collect_preflight(&config);
 
-    print_banner(mode);
+    print_banner(effective_mode);
     print_preflight(&config, &preflight);
 
     if !preflight.running_as_root {
         bail!(
             "{} requires root privileges. Re-run with `sudo dokuru {}`.",
-            mode.label(),
-            mode.command_name()
+            effective_mode.label(),
+            effective_mode.command_name()
         );
     }
 
-    if !preflight.docker_socket_exists {
-        bail!(
-            "Docker socket {} is not available. Start Docker before continuing.",
-            config.docker_socket
-        );
-    }
-
-    let config = prompt_for_config(mode, config)?;
+    config = prompt_for_config(effective_mode, config)?;
     print_plan(&config, &preflight);
 
     if !config.skip_service && !preflight.has_systemd {
-        bail!("systemd was not detected. Re-run with `--skip-service` to configure Dokuru without a service.");
+        log_warn("systemd was not detected; continuing without a managed service");
+        config.skip_service = true;
     }
 
-    if !config.skip_service && !confirm_install(mode, &config)? {
-        bail!("Installation cancelled.");
-    }
-
-    if config.skip_service && !confirm_install(mode, &config)? {
+    if !confirm_install(effective_mode, &config)? {
         bail!("Configuration cancelled.");
     }
 
-    let source_binary =
-        std::env::current_exe().wrap_err("Failed to resolve current Dokuru binary path")?;
-
-    if mode.should_install_binary() {
+    if effective_mode.should_install_binary() {
         run_step("Installing Dokuru binary", || {
             install_binary(&source_binary, &config.install_path)
         })?;
@@ -180,6 +181,19 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         run_step("Enabling Dokuru service", || {
             enable_service(&config.service_name)
         })?;
+
+        if !preflight.docker_socket_exists {
+            print_docker_missing_hint(&config.docker_socket);
+            log_warn(
+                "Dokuru service was installed but not started because Docker is not ready yet",
+            );
+            log_info(&format!(
+                "Start Docker first, then run: systemctl restart {}",
+                config.service_name
+            ));
+            print_summary(&config, false);
+            return Ok(());
+        }
 
         match run_step("Starting Dokuru service", || {
             restart_service(&config.service_name)
@@ -462,27 +476,27 @@ pub fn run_uninstall(args: UninstallArgs) -> Result<()> {
 impl SetupMode {
     fn label(self) -> &'static str {
         match self {
-            Self::Setup => "Dokuru setup",
+            Self::Onboard => "Dokuru onboard",
             Self::Configure => "Dokuru configure",
         }
     }
 
     fn command_name(self) -> &'static str {
         match self {
-            Self::Setup => "setup",
+            Self::Onboard => "onboard",
             Self::Configure => "configure",
         }
     }
 
     fn heading(self) -> &'static str {
         match self {
-            Self::Setup => "Interactive installer",
+            Self::Onboard => "Interactive onboarding",
             Self::Configure => "Interactive reconfiguration",
         }
     }
 
     fn should_install_binary(self) -> bool {
-        matches!(self, Self::Setup)
+        matches!(self, Self::Onboard)
     }
 }
 
@@ -640,7 +654,7 @@ fn confirm_install(mode: SetupMode, config: &InstallerConfig) -> Result<bool> {
 
     let theme = ColorfulTheme::default();
     let prompt = match mode {
-        SetupMode::Setup => format!("Install Dokuru to {}?", config.install_path.display()),
+        SetupMode::Onboard => format!("Install Dokuru to {}?", config.install_path.display()),
         SetupMode::Configure => format!("Apply changes to {}?", config.config_dir.display()),
     };
 
@@ -948,6 +962,12 @@ fn parse_cors_origins(cors_origins: &str) -> Vec<String> {
         .collect::<Vec<_>>()
 }
 
+fn same_path(left: &Path, right: &Path) -> bool {
+    let left = left.canonicalize().unwrap_or_else(|_| left.to_path_buf());
+    let right = right.canonicalize().unwrap_or_else(|_| right.to_path_buf());
+    left == right
+}
+
 fn run_command(program: &str, args: &[&str]) -> Result<()> {
     let status = Command::new(program)
         .args(args)
@@ -970,7 +990,7 @@ where
         spinner.set_style(
             ProgressStyle::with_template("  {spinner} {msg}")
                 .unwrap()
-                .tick_strings(&["[   ]", "[.  ]", "[.. ]", "[ ..]", "[  .]"]),
+                .tick_strings(&["✦ · ·", "· ✦ ·", "· · ✦", "· ✦ ·"]),
         );
         spinner.enable_steady_tick(Duration::from_millis(80));
         spinner.set_message(label.to_string());
@@ -1119,6 +1139,38 @@ fn print_summary(config: &InstallerConfig, service_started: bool) {
 
     log_info(&format!("Dashboard: http://<your-host>:{}", config.port));
     println!();
+}
+
+fn print_docker_missing_hint(socket_path: &str) {
+    println!();
+    println!("  {}", bold("Docker Required"));
+    for line in [
+        "          +-------+  +-------+",
+        "          |[] [] |  |[] [] |",
+        "          +-------+  +-------+",
+        "       +-------+  +-------+",
+        "       |[] [] |  |[] [] |",
+        "       +-------+  +-------+",
+    ] {
+        println!("  {}", paint("38;5;51", line));
+    }
+    for line in [
+        "              \\",
+        "        ____________________",
+        "   ____/  _   _   _   _     \\___",
+        "  /___                       ___\\",
+        "      \\__                 __/",
+        "         \\_______________/",
+        "          ~  ~  ~  ~  ~  ~",
+    ] {
+        println!("  {}", paint("38;5;39", line));
+    }
+    println!(
+        "  {} Docker daemon is not ready on {}",
+        warn_prefix(),
+        socket_path
+    );
+    println!("  {} Try: sudo systemctl enable --now docker", dim("next:"));
 }
 
 fn print_item(status: String, label: &str, value: &str) {

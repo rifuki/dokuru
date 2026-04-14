@@ -15,8 +15,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Interactive first-time setup
-    Setup(setup::SetupArgs),
+    /// Guided first-time onboarding
+    Onboard(setup::SetupArgs),
     /// Re-configure settings interactively
     Configure(setup::SetupArgs),
     /// Inspect Dokuru installation and host readiness
@@ -43,8 +43,8 @@ async fn main() -> eyre::Result<()> {
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::Setup(args) => {
-            if let Err(err) = setup::run(setup::SetupMode::Setup, args.clone()) {
+        Commands::Onboard(args) => {
+            if let Err(err) = setup::run(setup::SetupMode::Onboard, args.clone()) {
                 eprintln!("\n[dokuru] {err}");
                 std::process::exit(1);
             }
