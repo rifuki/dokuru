@@ -878,7 +878,7 @@ fn confirm_install(mode: SetupMode, config: &InstallerConfig) -> Result<bool> {
     };
 
     confirm(prompt)
-        .initial_value(false)
+        .initial_value(true)
         .interact()
         .map_err(Into::into)
 }
