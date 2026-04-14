@@ -106,7 +106,7 @@ struct InstallerConfig {
 
 #[derive(Debug)]
 struct Preflight {
-    os: &'static str,
+    distro: String,
     arch: &'static str,
     running_as_root: bool,
     has_systemd: bool,
@@ -717,7 +717,7 @@ fn collect_preflight(config: &InstallerConfig) -> Preflight {
     let docker_group_exists = command_success("getent", &["group", "docker"]);
 
     Preflight {
-        os: std::env::consts::OS,
+        distro: detect_distro(),
         arch: std::env::consts::ARCH,
         running_as_root: nix_like_is_root(),
         has_systemd: command_exists("systemctl"),
@@ -879,7 +879,7 @@ fn confirm_action(yes: bool, prompt: &str) -> Result<bool> {
 
 fn show_preflight(config: &InstallerConfig, preflight: &Preflight) -> Result<()> {
     let lines = [
-        format!("OS:             {}", preflight.os),
+        format!("Distribution:   {}", preflight.distro),
         format!("Architecture:   {}", preflight.arch),
         format!(
             "Privileges:     {}",
@@ -1418,6 +1418,20 @@ fn uid_via_id() -> Option<u32> {
         .trim()
         .parse()
         .ok()
+}
+
+fn detect_distro() -> String {
+    // Try /etc/os-release first (standard)
+    if let Ok(content) = fs::read_to_string("/etc/os-release") {
+        for line in content.lines() {
+            if let Some(pretty_name) = line.strip_prefix("PRETTY_NAME=") {
+                return pretty_name.trim_matches('"').to_string();
+            }
+        }
+    }
+
+    // Fallback to generic
+    format!("{} (unknown distro)", std::env::consts::OS)
 }
 
 fn default_install_path() -> PathBuf {
