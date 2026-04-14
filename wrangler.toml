@@ -1,0 +1,22 @@
+name = "dokuru-worker"
+main = "build/index.js"
+compatibility_date = "2026-04-14"
+
+[[routes]]
+pattern = "dokuru.rifuki.dev"
+zone_name = "rifuki.dev"
+
+[[routes]]
+pattern = "dokuru.rifuki.dev/install"
+zone_name = "rifuki.dev"
+
+[[routes]]
+pattern = "dokuru.rifuki.dev/install.sh"
+zone_name = "rifuki.dev"
+
+[[routes]]
+pattern = "dokuru.rifuki.dev/health"
+zone_name = "rifuki.dev"
+
+[build]
+command = "cargo install -q \"worker-build@^0.8\" && worker-build --release"
