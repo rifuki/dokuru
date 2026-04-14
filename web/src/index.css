@@ -39,26 +39,26 @@
 }
 
 :root {
-  --background: 220 44% 8%;
-  --foreground: 210 40% 98%;
-  --card: 221 39% 12%;
-  --card-foreground: 210 36% 96%;
-  --popover: 222 39% 10%;
-  --popover-foreground: 210 40% 98%;
-  --primary: 196 100% 56%;
-  --primary-foreground: 222 47% 11%;
-  --secondary: 222 33% 16%;
-  --secondary-foreground: 210 40% 96%;
-  --muted: 221 27% 15%;
-  --muted-foreground: 215 17% 68%;
-  --accent: 240 68% 64%;
-  --accent-foreground: 210 40% 98%;
-  --destructive: 2 90% 67%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 216 33% 24%;
-  --input: 217 27% 22%;
-  --ring: 196 100% 56%;
-  --radius: 1rem;
+  --background: 220 10% 13%; /* Portainer Main #1E2125 */
+  --foreground: 220 10% 90%;
+  --card: 220 12% 17%; /* Portainer Card #23282D */
+  --card-foreground: 220 10% 90%;
+  --popover: 220 10% 13%;
+  --popover-foreground: 220 10% 90%;
+  --primary: 220 10% 90%;
+  --primary-foreground: 220 10% 13%;
+  --secondary: 220 10% 20%;
+  --secondary-foreground: 220 10% 90%;
+  --muted: 220 10% 20%;
+  --muted-foreground: 220 10% 65%;
+  --accent: 220 10% 20%;
+  --accent-foreground: 220 10% 90%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 220 10% 90%;
+  --border: 220 10% 25%;
+  --input: 220 10% 25%;
+  --ring: 220 10% 70%;
+  --radius: 0.25rem;
 }
 
 @layer base {
@@ -72,11 +72,7 @@
 
   body {
     min-height: 100vh;
-    background:
-      radial-gradient(circle at top left, rgba(34, 211, 238, 0.16), transparent 24%),
-      radial-gradient(circle at top right, rgba(99, 102, 241, 0.20), transparent 30%),
-      radial-gradient(circle at bottom left, rgba(14, 165, 233, 0.16), transparent 28%),
-      linear-gradient(180deg, #07111f 0%, #040a13 100%);
+    background-color: #1E2125;
     color: hsl(var(--foreground));
     font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
     text-rendering: optimizeLegibility;
@@ -107,54 +103,24 @@
     overflow: hidden;
   }
 
-  .glass-surface {
-    background: linear-gradient(180deg, rgba(15, 23, 42, 0.88), rgba(9, 14, 27, 0.72));
-    border: 1px solid rgba(148, 163, 184, 0.12);
-    box-shadow:
-      0 24px 80px rgba(2, 6, 23, 0.42),
-      inset 0 1px 0 rgba(255, 255, 255, 0.06);
-    backdrop-filter: blur(24px);
+  .neo-card {
+    background-color: #23282D;
+    border: 1px solid theme('colors.white/[0.05]');
+    box-shadow: none;
+    border-radius: 4px;
   }
 
-  .glass-card {
-    background: linear-gradient(180deg, rgba(15, 23, 42, 0.72), rgba(8, 12, 22, 0.54));
-    border: 1px solid rgba(148, 163, 184, 0.12);
-    box-shadow:
-      0 20px 60px rgba(2, 6, 23, 0.28),
-      inset 0 1px 0 rgba(255, 255, 255, 0.04);
-    backdrop-filter: blur(22px);
+  .neo-card-subtle {
+    background-color: transparent;
+    border: 1px solid theme('colors.white/[0.04]');
+    border-radius: 4px;
   }
 
-  .panel-outline {
-    position: relative;
-    overflow: hidden;
+  .neo-interactive {
+    transition: all 150ms ease;
   }
-
-  .panel-outline::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    padding: 1px;
-    background: linear-gradient(135deg, rgba(125, 211, 252, 0.28), rgba(99, 102, 241, 0.08), rgba(255, 255, 255, 0.02));
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    pointer-events: none;
-  }
-
-  .dashboard-grid {
-    background-image:
-      linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
-    background-size: 40px 40px;
-    mask-image: linear-gradient(180deg, rgba(255, 255, 255, 0.34), transparent 95%);
-  }
-
-  .metric-highlight {
-    background:
-      radial-gradient(circle at top right, rgba(56, 189, 248, 0.14), transparent 40%),
-      linear-gradient(180deg, rgba(15, 23, 42, 0.84), rgba(7, 10, 18, 0.74));
+  .neo-interactive:hover {
+    background-color: theme('colors.white/5');
   }
 
   .section-kicker {

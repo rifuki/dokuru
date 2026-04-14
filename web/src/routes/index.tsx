@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { motion } from 'framer-motion'
+// import { motion } from 'framer-motion'
 import {
   Activity,
   ArrowRight,
@@ -32,21 +32,15 @@ function DashboardPage() {
 
   return (
     <div className="space-y-6 pb-8">
-      <motion.section
-        className="glass-surface panel-outline relative overflow-hidden rounded-[32px] px-6 py-7 md:px-8"
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.28 }}
-      >
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.2),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(99,102,241,0.18),transparent_34%)]" />
-        <div className="relative grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
+      <section className="neo-card relative overflow-hidden px-4 py-4 md:px-5">
+        <div className="relative grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
           <div>
             <div className="section-kicker">
               <Sparkles className="h-3.5 w-3.5" />
               Host Security Overview
             </div>
             <div className="mt-5 flex flex-wrap items-center gap-3">
-              <h2 className="text-4xl font-semibold tracking-tight text-white md:text-5xl">
+              <h2 className="text-2xl font-semibold tracking-tight text-white md:text-3xl">
                 Docker hardening, made visible.
               </h2>
             </div>
@@ -57,14 +51,14 @@ function DashboardPage() {
             <div className="mt-6 flex flex-wrap gap-3">
               <Link
                 to="/audit"
-                className="inline-flex items-center gap-2 rounded-full bg-[linear-gradient(135deg,#38BDF8,#6366F1)] px-5 py-3 text-sm font-semibold text-slate-950 shadow-[0_18px_50px_rgba(56,189,248,0.25)] transition hover:translate-y-[-1px]"
+                className="inline-flex items-center gap-2 rounded-md bg-white px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-zinc-200"
               >
                 Run live audit
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <Link
                 to="/fix"
-                className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/6 px-5 py-3 text-sm font-medium text-white transition hover:bg-white/10"
+                className="inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-white/10"
               >
                 Open remediation hub
                 <Wrench className="h-4 w-4" />
@@ -81,7 +75,7 @@ function DashboardPage() {
             </div>
           </div>
 
-          <div className="metric-highlight panel-outline rounded-[28px] p-6">
+          <div className="neo-card-subtle p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-medium uppercase tracking-[0.3em] text-sky-200/80">Security score</p>
@@ -96,7 +90,7 @@ function DashboardPage() {
             </div>
 
             <div className="mt-6">
-              <Progress value={report?.score ?? 0} className="h-2.5 bg-white/10 [&_[data-slot=progress-indicator]]:bg-[linear-gradient(90deg,#38BDF8,#6366F1)]" />
+              <Progress value={report?.score ?? 0} className="h-2.5 bg-white/10 [&_[data-slot=progress-indicator]]:bg-sky-400" />
             </div>
 
             <div className="mt-6 grid gap-4 sm:grid-cols-3">
@@ -106,10 +100,10 @@ function DashboardPage() {
             </div>
           </div>
         </div>
-      </motion.section>
+      </section>
 
-      <section className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-        <motion.div className="glass-card panel-outline rounded-[28px] p-6" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06, duration: 0.28 }}>
+      <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+        <div className="neo-card p-4">
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-sm font-medium text-slate-200">Risk focus</p>
@@ -141,9 +135,9 @@ function DashboardPage() {
               tone="success"
             />
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div className="glass-card panel-outline rounded-[28px] p-6" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.28 }}>
+        <div className="neo-card p-4">
           <div className="flex items-center gap-3">
             <span className="rounded-2xl border border-white/10 bg-white/5 p-2.5 text-sky-200">
               <Activity className="h-5 w-5" />
@@ -160,10 +154,10 @@ function DashboardPage() {
             <TelemetryRow label="Rules evaluated" value={report ? String(report.results.length) : 'Loading...'} />
             <TelemetryRow label="Last audit" value={report?.timestamp ? formatRelative(report.timestamp) : isLoading ? 'Running...' : 'Not yet available'} />
           </div>
-        </motion.div>
+        </div>
       </section>
 
-      <motion.section className="glass-card panel-outline rounded-[28px] p-6" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14, duration: 0.28 }}>
+      <section className="neo-card p-4">
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-lg font-semibold text-white">Signal timeline</p>
@@ -177,13 +171,10 @@ function DashboardPage() {
 
         {highlighted.length > 0 ? (
           <div className="mt-6 space-y-3">
-            {highlighted.map((result, index) => (
-              <motion.div
+            {highlighted.map((result) => (
+              <div
                 key={`${result.rule.id}-${result.status}`}
-                className="rounded-[24px] border border-white/8 bg-white/4 p-4 transition hover:bg-white/7"
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.18 + index * 0.05, duration: 0.24 }}
+                className="rounded-md border border-white/5 bg-white/[0.02] p-3 neo-interactive"
               >
                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                   <div>
@@ -205,7 +196,7 @@ function DashboardPage() {
                     {result.remediation_kind}
                   </div>
                 </div>
-              </motion.div>
+              </div>
             ))}
           </div>
         ) : (
@@ -214,7 +205,7 @@ function DashboardPage() {
             Audit data is still loading. Once available, the newest CIS signals will appear here.
           </div>
         )}
-      </motion.section>
+      </section>
     </div>
   )
 }
@@ -233,19 +224,19 @@ function MetricCard({
   tone: 'success' | 'danger' | 'info'
 }) {
   const toneClass = {
-    success: 'from-emerald-400/12 to-transparent text-emerald-100',
-    danger: 'from-rose-400/12 to-transparent text-rose-100',
-    info: 'from-sky-400/12 to-transparent text-sky-100',
+    success: 'border-emerald-500/20 bg-emerald-500/5 text-emerald-100',
+    danger: 'border-rose-500/20 bg-rose-500/5 text-rose-100',
+    info: 'border-sky-500/20 bg-sky-500/5 text-sky-100',
   }[tone]
 
   return (
-    <div className={`rounded-[24px] border border-white/8 bg-gradient-to-br ${toneClass} p-5`}>
+    <div className={`rounded-md border ${toneClass} p-4`}>
       <div className="flex items-center justify-between gap-4">
         <div>
           <p className="text-sm text-slate-300">{title}</p>
           <p className="mt-3 text-4xl font-semibold text-white">{value}</p>
         </div>
-        <div className="rounded-2xl border border-white/8 bg-slate-950/40 p-3">{icon}</div>
+        <div className="rounded-lg border border-white/5 bg-black/40 p-3">{icon}</div>
       </div>
       <p className="mt-4 text-sm leading-7 text-slate-400">{description}</p>
     </div>
@@ -260,7 +251,7 @@ function MetricMini({ label, value, tone }: { label: string; value: number; tone
   }[tone]
 
   return (
-    <div className="rounded-[22px] border border-white/8 bg-white/5 px-4 py-3">
+    <div className="rounded-md border border-white/5 bg-white/[0.02] px-4 py-3">
       <p className="text-xs uppercase tracking-[0.24em] text-slate-400">{label}</p>
       <p className={`mt-3 text-2xl font-semibold ${toneClass}`}>{value}</p>
     </div>
@@ -269,7 +260,7 @@ function MetricMini({ label, value, tone }: { label: string; value: number; tone
 
 function TelemetryRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/8 bg-white/4 px-4 py-3">
+    <div className="flex items-center justify-between gap-4 rounded-md border border-white/5 bg-white/[0.02] px-4 py-3">
       <span className="text-sm text-slate-400">{label}</span>
       <span className="text-sm font-medium text-slate-100">{value}</span>
     </div>

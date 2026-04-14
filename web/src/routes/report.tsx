@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { motion } from 'framer-motion'
+// import { motion } from 'framer-motion'
 import { Download, FileText, Search, ShieldAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -48,24 +48,20 @@ function ReportPage() {
 
   return (
     <div className="space-y-6 pb-8">
-      <motion.section
-        className="glass-surface panel-outline rounded-[32px] px-6 py-7 md:px-8"
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
+      <section className="neo-card px-4 py-4 md:px-5">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="section-kicker">
               <FileText className="h-3.5 w-3.5" />
               Executive Report
             </div>
-            <h2 className="mt-5 text-4xl font-semibold tracking-tight text-white md:text-5xl">Operational narrative, not raw JSON.</h2>
+            <h2 className="mt-5 text-2xl font-semibold tracking-tight text-white md:text-3xl">Operational narrative, not raw JSON.</h2>
             <p className="mt-4 max-w-3xl text-base leading-8 text-slate-300 md:text-lg">
               Summarize host posture, isolate the failing controls worth prioritizing, and layer optional image vulnerability scanning without losing the hardening-first focus.
             </p>
           </div>
 
-          <Button onClick={handleDownload} disabled={!report} className="rounded-full bg-[linear-gradient(135deg,#38BDF8,#6366F1)] px-5 py-6 text-sm font-semibold text-slate-950 hover:opacity-95">
+          <Button onClick={handleDownload} disabled={!report} className="rounded bg-zinc-200 px-4 py-2 text-sm font-semibold text-black hover:bg-zinc-300">
             <Download className="mr-2 h-4 w-4" />
             Export JSON snapshot
           </Button>
@@ -77,28 +73,28 @@ function ReportPage() {
           <ReportMetric label="Hostname" value={report?.hostname ?? '--'} detail="Active Docker host" />
           <ReportMetric label="Docker" value={report?.docker_version ? `v${report.docker_version}` : '--'} detail="Engine version" />
         </div>
-      </motion.section>
+      </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
-        <motion.div className="glass-card panel-outline rounded-[28px] p-6" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }}>
+      <section className="grid gap-4 xl:grid-cols-[1.02fr_0.98fr]">
+        <div className="neo-card p-4">
           <div>
             <p className="text-lg font-semibold text-white">Executive summary</p>
             <p className="mt-2 text-sm leading-7 text-slate-400">The controls that matter most to the operator right now.</p>
           </div>
 
           {!report ? (
-            <div className="mt-8 rounded-[24px] border border-white/8 bg-white/4 px-5 py-6 text-sm text-slate-400">
+            <div className="mt-8 rounded-md border border-white/8 bg-white/4 px-4 py-4 text-sm text-slate-400">
               No audit snapshot available yet. Run a live audit to generate the first report state.
             </div>
           ) : (
             <div className="mt-6 space-y-4">
               {failing.length === 0 ? (
-                <div className="rounded-[24px] border border-emerald-400/16 bg-emerald-400/8 px-5 py-6 text-sm text-emerald-50/90">
+                <div className="rounded-md border border-emerald-400/16 bg-emerald-400/8 px-4 py-4 text-sm text-emerald-50/90">
                   No failing controls were found in the latest report snapshot.
                 </div>
               ) : (
                 failing.map((result) => (
-                  <div key={result.rule.id} className="rounded-[26px] border border-rose-400/12 bg-rose-400/6 p-5">
+                  <div key={result.rule.id} className="rounded-md border border-rose-400/12 bg-rose-400/6 p-4">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-sm font-semibold text-white">Rule {result.rule.id}</span>
                       <Badge variant="destructive" className="border-rose-400/20 bg-rose-400/12 text-rose-100">{result.status}</Badge>
@@ -113,9 +109,9 @@ function ReportPage() {
               )}
             </div>
           )}
-        </motion.div>
+        </div>
 
-        <motion.div className="glass-card panel-outline rounded-[28px] p-6" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+        <div className="neo-card p-4">
           <div>
             <p className="text-lg font-semibold text-white">Coverage profile</p>
             <p className="mt-2 text-sm leading-7 text-slate-400">A compact view of how the latest audit was distributed across hardening surfaces.</p>
@@ -128,18 +124,18 @@ function ReportPage() {
             <CoverageRow label="Guided remediation paths" value={report ? report.results.filter((result) => result.remediation_kind === 'guided').length : 0} total={report?.results.length ?? 0} />
           </div>
 
-          <div className="mt-6 rounded-[24px] border border-white/8 bg-white/4 p-5 text-sm leading-7 text-slate-300">
+          <div className="mt-6 rounded-md border border-white/8 bg-white/4 p-4 text-sm leading-7 text-slate-300">
             <p className="font-medium text-white">Operator note</p>
             <p className="mt-2">
               Dokuru is intentionally strongest at Docker hardening and remediation workflow. CVE and image-package visibility remain complementary integrations rather than the product core.
             </p>
           </div>
-        </motion.div>
+        </div>
       </section>
 
-      <motion.section className="glass-card panel-outline rounded-[28px] p-6" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }}>
+      <section className="neo-card p-4">
         <div className="flex items-start gap-3">
-          <span className="rounded-2xl border border-sky-400/18 bg-sky-400/10 p-2.5 text-sky-200">
+          <span className="rounded-md border border-sky-400/18 bg-sky-400/10 p-2 text-sky-200">
             <ShieldAlert className="h-5 w-5" />
           </span>
           <div>
@@ -155,12 +151,12 @@ function ReportPage() {
             value={imageRef}
             onChange={(event) => setImageRef(event.target.value)}
             placeholder="nginx:latest"
-            className="h-12 flex-1 rounded-full border border-white/10 bg-white/5 px-5 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-300/30"
+            className="h-10 flex-1 rounded border border-white/10 bg-white/5 px-4 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-300/30"
           />
           <Button
             onClick={handleTrivyScan}
             disabled={isPending || imageRef.trim().length === 0}
-            className="rounded-full bg-[linear-gradient(135deg,#38BDF8,#6366F1)] px-5 py-6 text-sm font-semibold text-slate-950 hover:opacity-95"
+            className="rounded bg-zinc-200 px-4 py-2 text-sm font-semibold text-black hover:bg-zinc-300"
           >
             <Search className="mr-2 h-4 w-4" />
             {isPending ? 'Scanning image...' : 'Scan image'}
@@ -168,7 +164,7 @@ function ReportPage() {
         </div>
 
         {trivyError ? (
-          <div className="mt-5 rounded-[24px] border border-rose-400/16 bg-rose-400/10 px-5 py-4 text-sm text-rose-100">
+          <div className="mt-5 rounded-md border border-rose-400/16 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
             {trivyError}
           </div>
         ) : null}
@@ -183,17 +179,17 @@ function ReportPage() {
               <SeverityCard label="Total" value={trivyReport.summary.total} tone="neutral" />
             </div>
 
-            <div className="rounded-[26px] border border-white/8 bg-white/4">
-              <div className="border-b border-white/8 px-5 py-4">
+            <div className="rounded-md border border-white/8 bg-white/4">
+              <div className="border-b border-white/8 px-4 py-3">
                 <p className="text-sm font-medium text-white">Top findings for {trivyReport.image}</p>
                 <p className="mt-1 text-xs text-slate-400">Showing up to 10 vulnerabilities sorted by severity.</p>
               </div>
               <div className="divide-y divide-white/6">
                 {trivyReport.findings.length === 0 ? (
-                  <div className="px-5 py-6 text-sm text-slate-400">No vulnerabilities were reported by Trivy for this image.</div>
+                  <div className="px-4 py-4 text-sm text-slate-400">No vulnerabilities were reported by Trivy for this image.</div>
                 ) : (
                   trivyReport.findings.slice(0, 10).map((finding) => (
-                    <div key={`${finding.target}-${finding.vulnerability_id}-${finding.package_name}`} className="px-5 py-4">
+                    <div key={`${finding.target}-${finding.vulnerability_id}-${finding.package_name}`} className="px-4 py-3">
                       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                         <div>
                           <p className="text-sm font-semibold text-white">{finding.vulnerability_id} • {finding.package_name}</p>
@@ -209,7 +205,7 @@ function ReportPage() {
             </div>
           </div>
         ) : null}
-      </motion.section>
+      </section>
     </div>
   )
 }
@@ -228,7 +224,7 @@ function ReportMetric({
   const toneClass = tone === 'danger' ? 'text-rose-300' : 'text-white'
 
   return (
-    <div className="rounded-[24px] border border-white/10 bg-white/5 px-5 py-4">
+    <div className="rounded-md border border-white/10 bg-white/5 px-4 py-3">
       <p className="text-xs uppercase tracking-[0.24em] text-slate-500">{label}</p>
       <p className={`mt-3 text-3xl font-semibold ${toneClass}`}>{value}</p>
       <p className="mt-2 text-sm text-slate-400">{detail}</p>
@@ -240,7 +236,7 @@ function CoverageRow({ label, value, total }: { label: string; value: number; to
   const width = total > 0 ? Math.max((value / total) * 100, 6) : 0
 
   return (
-    <div className="rounded-[24px] border border-white/8 bg-white/4 p-4">
+    <div className="rounded-md border border-white/8 bg-white/4 p-3">
       <div className="flex items-center justify-between gap-4">
         <span className="text-sm text-slate-300">{label}</span>
         <span className="text-sm font-medium text-white">{value}</span>
@@ -270,7 +266,7 @@ function SeverityCard({
   }[tone]
 
   return (
-    <div className={`rounded-[24px] border px-4 py-4 ${toneClass}`}>
+    <div className={`rounded-md border px-3 py-3 ${toneClass}`}>
       <p className="text-xs font-medium uppercase tracking-[0.24em] opacity-80">{label}</p>
       <p className="mt-3 text-3xl font-semibold">{value}</p>
     </div>
