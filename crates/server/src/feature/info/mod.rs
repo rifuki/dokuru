@@ -42,7 +42,9 @@ pub async fn get_info(State(state): State<AppState>) -> ApiResult<EnvironmentInf
     let cpu_count = sys.ncpu.unwrap_or(0) as i64;
     let memory_total = sys.mem_total.unwrap_or(0);
     let docker_version = sys.server_version.unwrap_or_else(|| "unknown".to_string());
-    let os = sys.operating_system.unwrap_or_else(|| "unknown".to_string());
+    let os = sys
+        .operating_system
+        .unwrap_or_else(|| "unknown".to_string());
     let architecture = sys.architecture.unwrap_or_else(|| "unknown".to_string());
 
     // Containers
@@ -73,10 +75,10 @@ pub async fn get_info(State(state): State<AppState>) -> ApiResult<EnvironmentInf
             healthy += 1;
         }
         // Detect compose stacks via label
-        if let Some(labels) = &c.labels {
-            if let Some(project) = labels.get("com.docker.compose.project") {
-                stack_names.insert(project.clone());
-            }
+        if let Some(labels) = &c.labels
+            && let Some(project) = labels.get("com.docker.compose.project")
+        {
+            stack_names.insert(project.clone());
         }
     }
 
