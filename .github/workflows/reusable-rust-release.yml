@@ -14,9 +14,6 @@ on:
         type: boolean
         default: false
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
-
 permissions:
   contents: read
 
@@ -26,10 +23,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Download web dist artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: web-dist
           path: web/dist
@@ -63,7 +60,7 @@ jobs:
         run: cp target/${{ inputs.target }}/release/dokuru ${{ inputs.artifact_name }}
 
       - name: Upload binary artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.artifact_name }}
           path: ${{ inputs.artifact_name }}
