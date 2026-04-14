@@ -1,44 +1,98 @@
 use eyre::{Result, WrapErr};
+use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct Config {
+    pub server: ServerConfig,
+    pub docker: DockerConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ServerConfig {
     pub port: u16,
     pub host: String,
     pub cors_origins: Vec<String>,
-    pub docker_socket: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DockerConfig {
+    pub socket: String,
+}
+
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self {
+            port: 3939,
+            host: "0.0.0.0".to_string(),
+            cors_origins: vec!["*".to_string()],
+        }
+    }
+}
+
+impl Default for DockerConfig {
+    fn default() -> Self {
+        Self {
+            socket: "/var/run/docker.sock".to_string(),
+        }
+    }
+}
+
+pub fn config_path_in(config_dir: &Path) -> PathBuf {
+    config_dir.join("config.toml")
+}
+
+pub fn resolve_config_path() -> PathBuf {
+    if let Ok(path) = std::env::var("DOKURU_CONFIG") {
+        return PathBuf::from(path);
+    }
+
+    let production = config_path_in(Path::new("/etc/dokuru"));
+    if production.exists() {
+        return production;
+    }
+
+    if let Ok(current_dir) = std::env::current_dir() {
+        let local = current_dir.join("config.toml");
+        if local.exists() {
+            return local;
+        }
+    }
+
+    production
 }
 
 impl Config {
     pub fn load() -> Result<Self> {
-        // Fallbacks that can be overridden by env vars
-        // When running as daemon, /etc/dokuru/.env handles this.
-        let port = std::env::var("PORT")
-            .unwrap_or_else(|_| "3939".to_string())
-            .parse()
-            .wrap_err("PORT must be a valid port number")?;
+        Self::load_from_path(resolve_config_path())
+    }
 
-        let host = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
+    pub fn load_from_path(path: impl AsRef<Path>) -> Result<Self> {
+        let path = path.as_ref();
+        let path_string = path.to_string_lossy().to_string();
 
-        let cors_origins: Vec<String> = std::env::var("CORS_ORIGINS")
-            .unwrap_or_else(|_| "*".to_string())
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .collect();
+        let settings = config::Config::builder()
+            .add_source(config::File::new(&path_string, config::FileFormat::Toml).required(false))
+            .add_source(
+                config::Environment::with_prefix("DOKURU")
+                    .separator("__")
+                    .list_separator(",")
+                    .with_list_parse_key("server.cors_origins"),
+            )
+            .build()
+            .wrap_err_with(|| format!("Failed to load Dokuru config from {}", path.display()))?;
 
-        let docker_socket =
-            std::env::var("DOCKER_SOCKET").unwrap_or_else(|_| "/var/run/docker.sock".to_string());
-
-        Ok(Self {
-            port,
-            host,
-            cors_origins,
-            docker_socket,
-        })
+        settings
+            .try_deserialize::<Self>()
+            .wrap_err_with(|| format!("Failed to parse Dokuru config from {}", path.display()))
     }
 
     pub fn server_addr(&self) -> Result<SocketAddr> {
-        let addr = format!("{}:{}", self.host, self.port);
+        let addr = format!("{}:{}", self.server.host, self.server.port);
         addr.parse()
             .wrap_err_with(|| format!("Invalid host:port combination: {}", addr))
     }

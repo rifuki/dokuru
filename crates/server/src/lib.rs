@@ -10,12 +10,11 @@ pub mod state;
 
 pub async fn serve() -> eyre::Result<()> {
     let _ = color_eyre::install();
-    infrastructure::env::load();
     let (subscriber, _reload_handle) = infrastructure::logging::setup();
     subscriber.init();
 
     let config = infrastructure::config::Config::load()?;
-    let docker = Docker::connect_with_unix(&config.docker_socket, 120, API_DEFAULT_VERSION)?;
+    let docker = Docker::connect_with_unix(&config.docker.socket, 120, API_DEFAULT_VERSION)?;
 
     // Load persisted environments from disk
     let environments = feature::environments::load_environments().await;
@@ -32,9 +31,9 @@ pub async fn serve() -> eyre::Result<()> {
 
     let listener = infrastructure::server::create_listener(config.server_addr()?).await?;
     info!(
-        host = %config.host,
-        port = config.port,
-        docker_socket = %config.docker_socket,
+        host = %config.server.host,
+        port = config.server.port,
+        docker_socket = %config.docker.socket,
         "Dokuru agent API listening"
     );
 

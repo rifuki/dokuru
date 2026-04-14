@@ -39,13 +39,22 @@ enum Commands {
 async fn main() -> eyre::Result<()> {
     // Install eyre panic handler
     color_eyre::install()?;
-    dokuru_server::infrastructure::env::load();
 
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::Setup(args) => setup::run(setup::SetupMode::Setup, args.clone())?,
-        Commands::Configure(args) => setup::run(setup::SetupMode::Configure, args.clone())?,
+        Commands::Setup(args) => {
+            if let Err(err) = setup::run(setup::SetupMode::Setup, args.clone()) {
+                eprintln!("\n[dokuru] {err}");
+                std::process::exit(1);
+            }
+        }
+        Commands::Configure(args) => {
+            if let Err(err) = setup::run(setup::SetupMode::Configure, args.clone()) {
+                eprintln!("\n[dokuru] {err}");
+                std::process::exit(1);
+            }
+        }
         Commands::Doctor(args) => setup::run_doctor(args.clone())?,
         Commands::Update(args) => setup::run_update(args.clone())?,
         Commands::Uninstall(args) => setup::run_uninstall(args.clone())?,

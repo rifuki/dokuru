@@ -1,12 +1,15 @@
 use clap::Args;
 use dialoguer::{theme::ColorfulTheme, Confirm, Input};
+use dokuru_server::infrastructure::config::{
+    config_path_in, Config as RuntimeConfig, DockerConfig, ServerConfig,
+};
 use eyre::{bail, Result, WrapErr};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::fs;
 use std::io::{stderr, stdout, IsTerminal};
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::time::Duration;
 
 const REPO_URL: &str = "https://github.com/rifuki/dokuru";
@@ -165,7 +168,9 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         })?;
     }
 
-    run_step("Writing Dokuru configuration", || write_env_file(&config))?;
+    run_step("Writing Dokuru configuration", || {
+        write_config_file(&config)
+    })?;
 
     if !config.skip_service {
         run_step("Writing systemd unit", || {
@@ -201,10 +206,10 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
 pub fn run_doctor(args: DoctorArgs) -> Result<()> {
     let config = resolve_shared_config(&args.shared, args.docker_socket)?;
     let preflight = collect_preflight(&config);
-    let env_path = env_path(&config);
+    let config_path = runtime_config_path(&config);
     let service_path = service_unit_path(&config);
     let binary_exists = config.install_path.exists();
-    let config_exists = env_path.exists();
+    let config_exists = config_path.exists();
     let service_exists = service_path.exists();
     let service_enabled =
         service_exists && command_success("systemctl", &["is-enabled", &config.service_name]);
@@ -231,7 +236,7 @@ pub fn run_doctor(args: DoctorArgs) -> Result<()> {
             fail_prefix()
         },
         "Config",
-        &env_path.display().to_string(),
+        &config_path.display().to_string(),
     );
     print_item(
         if preflight.docker_socket_exists {
@@ -394,7 +399,7 @@ pub fn run_uninstall(args: UninstallArgs) -> Result<()> {
     let config = resolve_shared_config(&args.shared, None)?;
     let preflight = collect_preflight(&config);
     let unit_path = service_unit_path(&config);
-    let env_path = env_path(&config);
+    let config_path = runtime_config_path(&config);
 
     println!();
     println!("  {} {}", bold("dokuru"), dim("uninstall"));
@@ -409,7 +414,7 @@ pub fn run_uninstall(args: UninstallArgs) -> Result<()> {
         "Binary",
         &config.install_path.display().to_string(),
     );
-    print_item(step_prefix(), "Config", &env_path.display().to_string());
+    print_item(step_prefix(), "Config", &config_path.display().to_string());
     print_item(
         step_prefix(),
         "Service unit",
@@ -547,26 +552,12 @@ fn resolve_shared_config(
         .service_name
         .clone()
         .unwrap_or_else(|| "dokuru".to_string());
-    let env_values = load_env_values(&config_dir)?;
+    let saved_config = load_saved_runtime_config(&config_dir)?;
 
-    let port = env_values
-        .get("PORT")
-        .and_then(|value| value.parse::<u16>().ok())
-        .unwrap_or(3939);
-
-    let host = env_values
-        .get("HOST")
-        .cloned()
-        .unwrap_or_else(|| "0.0.0.0".to_string());
-
-    let docker_socket = docker_socket_override
-        .or_else(|| env_values.get("DOCKER_SOCKET").cloned())
-        .unwrap_or_else(|| "/var/run/docker.sock".to_string());
-
-    let cors_origins = env_values
-        .get("CORS_ORIGINS")
-        .cloned()
-        .unwrap_or_else(|| "*".to_string());
+    let port = saved_config.server.port;
+    let host = saved_config.server.host;
+    let docker_socket = docker_socket_override.unwrap_or(saved_config.docker.socket);
+    let cors_origins = saved_config.server.cors_origins.join(",");
 
     Ok(InstallerConfig {
         yes: shared.yes,
@@ -582,27 +573,8 @@ fn resolve_shared_config(
     })
 }
 
-fn load_env_values(config_dir: &Path) -> Result<std::collections::BTreeMap<String, String>> {
-    let env_path = config_dir.join(".env");
-    if !env_path.exists() {
-        return Ok(std::collections::BTreeMap::new());
-    }
-
-    let content = fs::read_to_string(&env_path)
-        .wrap_err_with(|| format!("Failed to read {}", env_path.display()))?;
-    let mut values = std::collections::BTreeMap::new();
-
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            continue;
-        }
-        if let Some((key, value)) = trimmed.split_once('=') {
-            values.insert(key.trim().to_string(), value.trim().to_string());
-        }
-    }
-
-    Ok(values)
+fn load_saved_runtime_config(config_dir: &Path) -> Result<RuntimeConfig> {
+    RuntimeConfig::load_from_path(config_path_in(config_dir))
 }
 
 fn collect_preflight(config: &InstallerConfig) -> Preflight {
@@ -708,18 +680,26 @@ fn install_binary(source: &Path, destination: &Path) -> Result<()> {
     Ok(())
 }
 
-fn write_env_file(config: &InstallerConfig) -> Result<()> {
+fn write_config_file(config: &InstallerConfig) -> Result<()> {
     fs::create_dir_all(&config.config_dir)
         .wrap_err_with(|| format!("Failed to create {}", config.config_dir.display()))?;
 
-    let env_path = config.config_dir.join(".env");
-    let env_content = format!(
-        "PORT={}\nHOST={}\nDOCKER_SOCKET={}\nCORS_ORIGINS={}\n",
-        config.port, config.host, config.docker_socket, config.cors_origins
-    );
+    let config_path = runtime_config_path(config);
+    let runtime_config = RuntimeConfig {
+        server: ServerConfig {
+            port: config.port,
+            host: config.host.clone(),
+            cors_origins: parse_cors_origins(&config.cors_origins),
+        },
+        docker: DockerConfig {
+            socket: config.docker_socket.clone(),
+        },
+    };
+    let toml_content = toml::to_string_pretty(&runtime_config)
+        .wrap_err("Failed to serialize Dokuru config to TOML")?;
 
-    fs::write(&env_path, env_content)
-        .wrap_err_with(|| format!("Failed to write {}", env_path.display()))
+    fs::write(&config_path, toml_content)
+        .wrap_err_with(|| format!("Failed to write {}", config_path.display()))
 }
 
 fn write_systemd_unit(config: &InstallerConfig, preflight: &Preflight) -> Result<()> {
@@ -743,11 +723,11 @@ fn write_systemd_unit(config: &InstallerConfig, preflight: &Preflight) -> Result
         .join(format!("{}.service", config.service_name));
 
     let unit_content = format!(
-        "[Unit]\nDescription=Dokuru Docker Hardening Agent\nDocumentation={}\nAfter={}\nWants={}\n\n[Service]\nType=simple\nEnvironmentFile=-{}/.env\nExecStart={} serve\nRestart=on-failure\nRestartSec=5s\nStandardOutput=journal\nStandardError=journal\nSyslogIdentifier={}\nNoNewPrivileges=yes\nProtectSystem=strict\nReadWritePaths={} /etc/docker\n\n[Install]\nWantedBy=multi-user.target\n",
+        "[Unit]\nDescription=Dokuru Docker Hardening Agent\nDocumentation={}\nAfter={}\nWants={}\n\n[Service]\nType=simple\nEnvironment=DOKURU_CONFIG={}\nExecStart={} serve\nRestart=on-failure\nRestartSec=5s\nStandardOutput=journal\nStandardError=journal\nSyslogIdentifier={}\nNoNewPrivileges=yes\nProtectSystem=strict\nReadWritePaths={} /etc/docker\n\n[Install]\nWantedBy=multi-user.target\n",
         REPO_URL,
         after_targets,
         wants_targets,
-        config.config_dir.display(),
+        runtime_config_path(config).display(),
         config.install_path.display(),
         config.service_name,
         config.config_dir.display(),
@@ -955,8 +935,17 @@ fn service_unit_path(config: &InstallerConfig) -> PathBuf {
         .join(format!("{}.service", config.service_name))
 }
 
-fn env_path(config: &InstallerConfig) -> PathBuf {
-    config.config_dir.join(".env")
+fn runtime_config_path(config: &InstallerConfig) -> PathBuf {
+    config_path_in(&config.config_dir)
+}
+
+fn parse_cors_origins(cors_origins: &str) -> Vec<String> {
+    cors_origins
+        .split(',')
+        .map(str::trim)
+        .filter(|origin| !origin.is_empty())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
 }
 
 fn run_command(program: &str, args: &[&str]) -> Result<()> {
@@ -1078,7 +1067,7 @@ fn print_plan(config: &InstallerConfig, preflight: &Preflight) {
     print_item(
         step_prefix(),
         "Config",
-        &config.config_dir.join(".env").display().to_string(),
+        &runtime_config_path(config).display().to_string(),
     );
     print_item(step_prefix(), "Port", &config.port.to_string());
     print_item(step_prefix(), "Host", &config.host);
@@ -1112,7 +1101,7 @@ fn print_summary(config: &InstallerConfig, service_started: bool) {
     print_item(
         ok_prefix(),
         "Config",
-        &config.config_dir.join(".env").display().to_string(),
+        &runtime_config_path(config).display().to_string(),
     );
 
     if config.skip_service {
@@ -1147,6 +1136,8 @@ fn command_exists(program: &str) -> bool {
 fn has_systemd_unit(unit: &str) -> bool {
     Command::new("systemctl")
         .args(["cat", unit])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .status()
         .map(|status| status.success())
         .unwrap_or(false)

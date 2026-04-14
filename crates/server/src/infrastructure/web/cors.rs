@@ -1,10 +1,10 @@
-use axum::http::{Method, header};
+use axum::http::{header, Method};
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::infrastructure::config::Config;
 
 pub fn build_cors_layer(config: &Config) -> CorsLayer {
-    let origins = &config.cors_origins;
+    let origins = &config.server.cors_origins;
     let allow_any_origin = origins.len() == 1 && origins[0] == "*";
 
     if allow_any_origin {
