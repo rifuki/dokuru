@@ -269,6 +269,11 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         cliclack::log::info("→ Created system user 'dokuru' for service isolation")?;
     }
 
+    run_step("Creating log directory", setup_log_directory)?;
+    if stderr().is_terminal() {
+        cliclack::log::info("→ /var/log/dokuru")?;
+    }
+
     run_step("Writing Dokuru configuration", || {
         write_config_file(&config)
     })?;
@@ -1160,6 +1165,23 @@ fn setup_dokuru_user() -> Result<()> {
     {
         run_command("usermod", &["-aG", "dokuru", &current_user])?;
     }
+
+    Ok(())
+}
+
+fn setup_log_directory() -> Result<()> {
+    let log_dir = Path::new("/var/log/dokuru");
+
+    // Create log directory if it doesn't exist
+    if !log_dir.exists() {
+        run_command("mkdir", &["-p", "/var/log/dokuru"])?;
+    }
+
+    // Set ownership to dokuru:dokuru
+    run_command("chown", &["dokuru:dokuru", "/var/log/dokuru"])?;
+
+    // Set permissions to 755
+    run_command("chmod", &["755", "/var/log/dokuru"])?;
 
     Ok(())
 }
