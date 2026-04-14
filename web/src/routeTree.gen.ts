@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ReportRouteImport } from './routes/report'
 import { Route as FixRouteImport } from './routes/fix'
+import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as AuditRouteImport } from './routes/audit'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -22,6 +23,11 @@ const ReportRoute = ReportRouteImport.update({
 const FixRoute = FixRouteImport.update({
   id: '/fix',
   path: '/fix',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuditRoute = AuditRouteImport.update({
@@ -38,12 +44,14 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/audit': typeof AuditRoute
+  '/dashboard': typeof DashboardRoute
   '/fix': typeof FixRoute
   '/report': typeof ReportRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/audit': typeof AuditRoute
+  '/dashboard': typeof DashboardRoute
   '/fix': typeof FixRoute
   '/report': typeof ReportRoute
 }
@@ -51,20 +59,22 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/audit': typeof AuditRoute
+  '/dashboard': typeof DashboardRoute
   '/fix': typeof FixRoute
   '/report': typeof ReportRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/audit' | '/fix' | '/report'
+  fullPaths: '/' | '/audit' | '/dashboard' | '/fix' | '/report'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/audit' | '/fix' | '/report'
-  id: '__root__' | '/' | '/audit' | '/fix' | '/report'
+  to: '/' | '/audit' | '/dashboard' | '/fix' | '/report'
+  id: '__root__' | '/' | '/audit' | '/dashboard' | '/fix' | '/report'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuditRoute: typeof AuditRoute
+  DashboardRoute: typeof DashboardRoute
   FixRoute: typeof FixRoute
   ReportRoute: typeof ReportRoute
 }
@@ -83,6 +93,13 @@ declare module '@tanstack/react-router' {
       path: '/fix'
       fullPath: '/fix'
       preLoaderRoute: typeof FixRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/audit': {
@@ -105,6 +122,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuditRoute: AuditRoute,
+  DashboardRoute: DashboardRoute,
   FixRoute: FixRoute,
   ReportRoute: ReportRoute,
 }

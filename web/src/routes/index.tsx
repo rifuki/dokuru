@@ -1,290 +1,215 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
-// import { motion } from 'framer-motion'
-import {
-  Activity,
-  ArrowRight,
-  CheckCircle2,
-  Cpu,
-  Shield,
-  ShieldAlert,
-  Sparkles,
-  Wrench,
-} from 'lucide-react'
-
-import { DokuruEmblem } from '@/components/brand/DokuruEmblem'
-import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
-import { useAudit } from '@/features/audit/hooks/use-audit'
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
+import { Activity, Server, Settings, Terminal, Shield, RefreshCw, HardDrive, Cpu, Edit, Trash2, CheckCircle2, ChevronDown, ListFilter, Play, Settings2, Layers, Box } from 'lucide-react'
 import { useHealth } from '@/features/health/hooks/use-health'
+import { Button } from '@/components/ui/button'
+import { useAudit } from '@/features/audit/hooks/use-audit'
 
 export const Route = createFileRoute('/')({
-  component: DashboardPage,
+  component: EnvironmentsPage,
 })
 
-function DashboardPage() {
-  const { data: health } = useHealth()
-  const { data: report, isLoading } = useAudit(true)
-
-  const failedRules = report?.results.filter((result) => result.status === 'Fail') ?? []
-  const highlighted = report?.results.slice(0, 5) ?? []
-  const daemonRules = report?.results.filter((result) => result.rule.section === 'Daemon') ?? []
-  const runtimeRules = report?.results.filter((result) => result.rule.section !== 'Daemon') ?? []
+function EnvironmentsPage() {
+  const { data: health, isLoading } = useHealth()
+  const { data: report } = useAudit()
+  const navigate = useNavigate()
 
   return (
     <div className="space-y-6 pb-8">
-      <section className="neo-card relative overflow-hidden px-4 py-4 md:px-5">
-        <div className="relative grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
-          <div>
-            <div className="section-kicker">
-              <Sparkles className="h-3.5 w-3.5" />
-              Host Security Overview
-            </div>
-            <div className="mt-5 flex flex-wrap items-center gap-3">
-              <h2 className="text-2xl font-semibold tracking-tight text-white md:text-3xl">
-                Docker hardening, made visible.
-              </h2>
-            </div>
-            <p className="mt-5 max-w-2xl text-base leading-8 text-slate-300 md:text-lg">
-              Dokuru combines CIS Docker auditing, guided remediation, and runtime visibility into one lightweight console for VPS and self-hosted Docker hosts.
-            </p>
-
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link
-                to="/audit"
-                className="inline-flex items-center gap-2 rounded-md bg-white px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-zinc-200"
-              >
-                Run live audit
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-              <Link
-                to="/fix"
-                className="inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-white/10"
-              >
-                Open remediation hub
-                <Wrench className="h-4 w-4" />
-              </Link>
-            </div>
-
-            <div className="mt-7 flex flex-wrap gap-3 text-sm text-slate-300">
-              <StatusPill tone={health?.docker_connected ? 'ok' : 'danger'}>
-                {health?.docker_connected ? `Docker Engine ${health.docker_version}` : 'Docker disconnected'}
-              </StatusPill>
-              <StatusPill tone="neutral">
-                {report ? `${report.hostname} • ${report.total_containers} containers` : 'Awaiting host telemetry'}
-              </StatusPill>
-            </div>
-          </div>
-
-          <div className="neo-card-subtle p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-[0.3em] text-sky-200/80">Security score</p>
-                <div className="mt-4 flex items-end gap-3">
-                  <span className="text-6xl font-semibold text-white">{report?.score ?? '--'}</span>
-                  <span className="pb-2 text-lg text-slate-400">/ 100</span>
-                </div>
-              </div>
-              <div className="rounded-[24px] border border-white/10 bg-slate-950/40 p-3">
-                <DokuruEmblem className="h-14 w-14" />
-              </div>
-            </div>
-
-            <div className="mt-6">
-              <Progress value={report?.score ?? 0} className="h-2.5 bg-white/10 [&_[data-slot=progress-indicator]]:bg-sky-400" />
-            </div>
-
-            <div className="mt-6 grid gap-4 sm:grid-cols-3">
-              <MetricMini label="Passed" value={report?.passed ?? 0} tone="success" />
-              <MetricMini label="Failed" value={report?.failed ?? 0} tone="danger" />
-              <MetricMini label="Daemon rules" value={daemonRules.length} tone="info" />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-        <div className="neo-card p-4">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-medium text-slate-200">Risk focus</p>
-              <p className="mt-2 text-sm leading-7 text-slate-400">What needs attention right now across daemon and runtime controls.</p>
-            </div>
-            <Badge variant="outline" className="border-white/10 bg-white/8 px-3 py-1 text-slate-100">Live posture</Badge>
-          </div>
-
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
-            <MetricCard
-              icon={<ShieldAlert className="h-5 w-5 text-rose-300" />}
-              title="Open remediations"
-              value={failedRules.length}
-              description={failedRules.length > 0 ? 'Controls currently failing CIS checks' : 'No failing controls detected'}
-              tone="danger"
-            />
-            <MetricCard
-              icon={<Shield className="h-5 w-5 text-sky-300" />}
-              title="Daemon coverage"
-              value={daemonRules.length}
-              description="Docker daemon and host-facing controls"
-              tone="info"
-            />
-            <MetricCard
-              icon={<Cpu className="h-5 w-5 text-emerald-300" />}
-              title="Runtime coverage"
-              value={runtimeRules.length}
-              description="Container runtime and cgroup isolation rules"
-              tone="success"
-            />
-          </div>
-        </div>
-
-        <div className="neo-card p-4">
-          <div className="flex items-center gap-3">
-            <span className="rounded-2xl border border-white/10 bg-white/5 p-2.5 text-sky-200">
-              <Activity className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="text-sm font-medium text-slate-200">Host telemetry</p>
-              <p className="text-sm text-slate-400">Identity and runtime state from the active Docker host.</p>
-            </div>
-          </div>
-
-          <div className="mt-6 space-y-3">
-            <TelemetryRow label="Hostname" value={report?.hostname ?? 'Loading...'} />
-            <TelemetryRow label="Docker version" value={report?.docker_version ? `v${report.docker_version}` : 'Loading...'} />
-            <TelemetryRow label="Rules evaluated" value={report ? String(report.results.length) : 'Loading...'} />
-            <TelemetryRow label="Last audit" value={report?.timestamp ? formatRelative(report.timestamp) : isLoading ? 'Running...' : 'Not yet available'} />
-          </div>
-        </div>
-      </section>
-
-      <section className="neo-card p-4">
-        <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="text-lg font-semibold text-white">Signal timeline</p>
-            <p className="mt-2 text-sm leading-7 text-slate-400">Recent rule outcomes with the strongest operator impact surfaced first.</p>
-          </div>
-          <Link to="/report" className="inline-flex items-center gap-2 text-sm font-medium text-sky-200 transition hover:text-white">
-            Open executive report
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
-
-        {highlighted.length > 0 ? (
-          <div className="mt-6 space-y-3">
-            {highlighted.map((result) => (
-              <div
-                key={`${result.rule.id}-${result.status}`}
-                className="rounded-md border border-white/5 bg-white/[0.02] p-3 neo-interactive"
-              >
-                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold text-white">Rule {result.rule.id}</span>
-                      <StatusPill tone={statusTone(result.status)}>{result.status}</StatusPill>
-                      <Badge variant="outline" className="border-white/10 bg-white/8 text-slate-200">{result.rule.section}</Badge>
-                    </div>
-                    <p className="mt-3 text-base font-medium text-slate-100">{result.rule.title}</p>
-                    <p className="mt-2 text-sm leading-7 text-slate-400">{result.message}</p>
-                    {result.affected.length > 0 ? (
-                      <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500">
-                        Affected: {result.affected.join(', ')}
-                      </p>
-                    ) : null}
-                  </div>
-
-                  <div className="rounded-2xl border border-white/8 bg-slate-950/40 px-3 py-2 text-xs uppercase tracking-[0.18em] text-slate-300">
-                    {result.remediation_kind}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="mt-8 flex items-center gap-3 rounded-[24px] border border-white/8 bg-white/5 px-5 py-6 text-slate-400">
-            <CheckCircle2 className="h-5 w-5 text-emerald-300" />
-            Audit data is still loading. Once available, the newest CIS signals will appear here.
-          </div>
-        )}
-      </section>
-    </div>
-  )
-}
-
-function MetricCard({
-  icon,
-  title,
-  value,
-  description,
-  tone,
-}: {
-  icon: React.ReactNode
-  title: string
-  value: number
-  description: string
-  tone: 'success' | 'danger' | 'info'
-}) {
-  const toneClass = {
-    success: 'border-emerald-500/20 bg-emerald-500/5 text-emerald-100',
-    danger: 'border-rose-500/20 bg-rose-500/5 text-rose-100',
-    info: 'border-sky-500/20 bg-sky-500/5 text-sky-100',
-  }[tone]
-
-  return (
-    <div className={`rounded-md border ${toneClass} p-4`}>
-      <div className="flex items-center justify-between gap-4">
+      {/* Header */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between border-b border-white/5 pb-4">
         <div>
-          <p className="text-sm text-slate-300">{title}</p>
-          <p className="mt-3 text-4xl font-semibold text-white">{value}</p>
+          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+             <div className="bg-[#252830] p-1.5 rounded-md border border-white/5 text-slate-300">
+                <HardDrive className="w-5 h-5" />
+             </div>
+             Environments
+          </h1>
+          <p className="text-sm text-slate-400 mt-1">Select an environment to manage.</p>
         </div>
-        <div className="rounded-lg border border-white/5 bg-black/40 p-3">{icon}</div>
+        <div className="flex items-center gap-3">
+           <Button variant="outline" className="h-9 px-4 rounded border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white cursor-pointer">
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Refresh
+           </Button>
+           <Button className="h-9 px-4 rounded bg-[#3BA5EF] text-white hover:bg-[#3BA5EF]/90 border-none cursor-pointer font-medium text-[13px]">
+              Add environment
+           </Button>
+        </div>
       </div>
-      <p className="mt-4 text-sm leading-7 text-slate-400">{description}</p>
+
+      {/* Toolbar */}
+      <div className="bg-[#252830]/30 p-2 rounded-md border border-white/5 flex items-center justify-between gap-4">
+         <div className="flex items-center gap-2">
+            <FilterDropdown label="Connection" />
+            <FilterDropdown label="Status" />
+            <FilterDropdown label="Agent Version" />
+            <button className="text-[13px] font-medium text-white hover:underline ml-2 cursor-pointer">Clear all</button>
+         </div>
+
+         <div className="flex items-center gap-3 flex-1 max-w-2xl">
+             <div className="relative flex-1">
+                 <SearchIcon className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                 <input type="text" placeholder="Search by name, status, URL..." className="h-9 w-full bg-[#1E2125] border border-white/10 rounded pl-9 pr-3 text-[13px] text-white placeholder:text-slate-500 focus:outline-none focus:border-[#3BA5EF]/50 focus:ring-1 focus:ring-[#3BA5EF]/50 transition-all font-mono" />
+             </div>
+             
+             <div className="flex items-center gap-2 text-[13px] text-slate-300">
+                 <span className="whitespace-nowrap">Sort By</span>
+                 <FilterDropdown label="Name" className="min-w-[100px]" />
+                 <Button variant="ghost" size="icon" className="h-9 w-9 text-slate-400 hover:text-white shrink-0 border border-transparent hover:border-white/10 hover:bg-white/5 cursor-pointer">
+                    <ArrowDownUp className="w-4 h-4" />
+                 </Button>
+             </div>
+         </div>
+      </div>
+
+      {/* Environment List */}
+      <div className="bg-[#23282D] rounded-md border border-white/5 flex">
+          <div 
+             className="flex-1 p-4 cursor-pointer hover:bg-white/[0.02] transition-colors flex items-center gap-6"
+             onClick={() => navigate({ to: '/dashboard' })}
+          >
+              <div className="w-14 items-center flex justify-center text-[#3BA5EF]">
+                  <DockerIcon className="w-14 h-14" />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3">
+                      <span className="text-base font-bold text-white tracking-tight">local</span>
+                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border ${health?.docker_connected ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' : 'border-rose-500/30 bg-rose-500/10 text-rose-400'} text-[11px] font-semibold uppercase`}>
+                        <CheckCircle2 className="w-3 h-3" />
+                        {health?.docker_connected ? 'UP' : 'DOWN'}
+                      </span>
+                      <span className="text-[12px] text-slate-400 flex items-center gap-1.5 font-mono">
+                          <Activity className="w-3.5 h-3.5" />
+                          {new Date().toLocaleString('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute:'2-digit', second:'2-digit', hour12: false}).replace(',','')}
+                      </span>
+                      <span className="text-[12px] text-slate-300 font-mono font-medium ml-2">Standalone {health?.docker_version ?? 'Loading...'}</span>
+                      <span className="text-[12px] text-slate-400 font-mono">/var/run/docker.sock</span>
+                  </div>
+
+                  <div className="flex items-center gap-4 mt-2 text-[12px] text-slate-400">
+                      <div className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-300">Group:</span> Unassigned
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                          <Tag className="w-3.5 h-3.5" /> No tags
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                          <Zap className="w-3.5 h-3.5" /> Local
+                      </div>
+                  </div>
+
+                  {/* Resource metrics similar to Portainer */}
+                  <div className="flex items-center gap-6 mt-4 text-[13px] font-medium text-slate-200">
+                      <div className="flex items-center gap-2">
+                         <Layers className="w-4 h-4 text-slate-400" />
+                         <span>5 stacks</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                         <Box className="w-4 h-4 text-slate-400" />
+                         <span className="flex items-center gap-1.5 text-slate-300">
+                            {report?.total_containers ?? 0} containers 
+                            <span className="text-emerald-400 flex items-center ml-1">{report?.total_containers ?? 0} <Play size={10} className="ml-0.5 fill-current"/></span>
+                            <span className="text-rose-400 flex items-center">0 <Square size={10} className="ml-0.5 fill-current"/></span>
+                         </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                         <HardDrive className="w-4 h-4 text-slate-400" />
+                         <span>1 volume</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                         <ListFilter className="w-4 h-4 text-slate-400" />
+                         <span>35 images</span>
+                      </div>
+                      <div className="flex items-center gap-2 ml-4">
+                         <Cpu className="w-4 h-4 text-slate-400" />
+                         <span>2 CPU</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                         <Server className="w-4 h-4 text-slate-400" />
+                         <span>2 GB RAM</span>
+                      </div>
+                  </div>
+              </div>
+          </div>
+          
+          <div className="w-[200px] border-l border-white/5 flex flex-col justify-center gap-2 px-4 py-2 bg-black/10">
+              <button className="flex items-center justify-center gap-2 h-8 w-full bg-[#383C41] hover:bg-[#43484D] text-slate-300 text-sm rounded font-medium transition-colors border border-white/5">
+                 <Settings2 className="w-4 h-4" /> Disconnect
+              </button>
+              <button 
+                 className="flex items-center justify-center gap-2 h-8 w-full bg-[#203D33] text-emerald-400 text-sm rounded font-medium transition-colors border border-emerald-500/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] cursor-pointer hover:bg-[#254A3E]"
+                 onClick={() => navigate({ to: '/dashboard' })}
+              >
+                 <span className="w-2 h-2 rounded-full bg-emerald-400"></span> Connected
+              </button>
+          </div>
+          
+          <div className="w-12 border-l border-white/5 flex flex-col items-center justify-start py-4 bg-black/10">
+              <button className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white rounded hover:bg-white/5 transition-colors group cursor-pointer" title="Edit environment">
+                 <Edit className="w-4 h-4 group-hover:scale-110 transition-transform" />
+              </button>
+              <button className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-rose-400 rounded hover:bg-white/5 transition-colors group cursor-pointer" title="Delete environment">
+                 <Trash2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
+              </button>
+          </div>
+      </div>
+      
+      {/* Footer controls */}
+      <div className="flex items-center justify-end gap-3 text-sm text-slate-300">
+         <span>Items per page</span>
+         <div className="relative">
+            <FilterDropdown label="10" className="min-w-[70px]" />
+         </div>
+      </div>
+
     </div>
   )
 }
 
-function MetricMini({ label, value, tone }: { label: string; value: number; tone: 'success' | 'danger' | 'info' }) {
-  const toneClass = {
-    success: 'text-emerald-300',
-    danger: 'text-rose-300',
-    info: 'text-sky-300',
-  }[tone]
-
+function DockerIcon({ className }: { className?: string }) {
   return (
-    <div className="rounded-md border border-white/5 bg-white/[0.02] px-4 py-3">
-      <p className="text-xs uppercase tracking-[0.24em] text-slate-400">{label}</p>
-      <p className={`mt-3 text-2xl font-semibold ${toneClass}`}>{value}</p>
-    </div>
+    <svg viewBox="0 0 340 268" fill="currentColor" className={className}>
+       <path d="M334,110.1c-8.3-5.6-30.2-8-46.1-3.7-.9-15.8-9-29.2-24-40.8l-5.5-3.7-3.7,5.6c-7.2,11-10.3,25.7-9.2,39,.8,8.2,3.7,17.4,9.2,24.1-20.7,12-39.8,9.3-124.3,9.3H0c-.4,19.1,2.7,55.8,26,85.6,2.6,3.3,5.4,6.5,8.5,9.6,19,19,47.6,32.9,90.5,33,65.4,0,121.4-35.3,155.5-120.8,11.2.2,40.8,2,55.3-26,.4-.5,3.7-7.4,3.7-7.4l-5.5-3.7h0ZM85.2,92.7h-36.7v36.7h36.7v-36.7ZM132.6,92.7h-36.7v36.7h36.7v-36.7ZM179.9,92.7h-36.7v36.7h36.7v-36.7ZM227.3,92.7h-36.7v36.7h36.7v-36.7ZM37.8,92.7H1.1v36.7h36.7v-36.7ZM85.2,46.3h-36.7v36.7h36.7v-36.7ZM132.6,46.3h-36.7v36.7h36.7v-36.7ZM179.9,46.3h-36.7v36.7h36.7v-36.7ZM179.9,0h-36.7v36.7h36.7V0Z" />
+    </svg>
   )
 }
 
-function TelemetryRow({ label, value }: { label: string; value: string }) {
+function SearchIcon({ className }: { className?: string }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-md border border-white/5 bg-white/[0.02] px-4 py-3">
-      <span className="text-sm text-slate-400">{label}</span>
-      <span className="text-sm font-medium text-slate-100">{value}</span>
-    </div>
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
   )
 }
 
-function StatusPill({ children, tone }: { children: React.ReactNode; tone: 'ok' | 'danger' | 'neutral' | 'Pass' | 'Fail' | 'Error' }) {
-  const toneClass = {
-    ok: 'border-emerald-400/20 bg-emerald-400/12 text-emerald-100',
-    danger: 'border-rose-400/20 bg-rose-400/12 text-rose-100',
-    neutral: 'border-white/10 bg-white/8 text-slate-200',
-    Pass: 'border-emerald-400/20 bg-emerald-400/12 text-emerald-100',
-    Fail: 'border-rose-400/20 bg-rose-400/12 text-rose-100',
-    Error: 'border-amber-400/20 bg-amber-400/12 text-amber-100',
-  }[tone]
-
-  return <span className={`status-chip ${toneClass}`}>{children}</span>
+function ArrowDownUp({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="m21 8-4-4-4 4"/><path d="M17 4v16"/></svg>
+  )
 }
 
-function statusTone(status: 'Pass' | 'Fail' | 'Error') {
-  return status
+function Tag({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.707 8.707a2 2 0 0 0 2.828 0l7.172-7.172a2 2 0 0 0 0-2.828z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></svg>
+  )
 }
 
-function formatRelative(timestamp: string) {
-  const value = new Date(timestamp)
-  return value.toLocaleString()
+function Zap({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+  )
+}
+
+function Square({ className, size }: { className?: string, size?: number }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size ?? 24} height={size ?? 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
+  )
+}
+
+function FilterDropdown({ label, className = '' }: { label: string, className?: string }) {
+  return (
+    <button className={`flex items-center justify-between bg-[#252830] border border-white/10 text-slate-300 text-[13px] font-medium rounded h-9 px-3 hover:bg-[#2A2E35] hover:border-white/20 transition-all focus:outline-none focus:ring-1 focus:ring-[#3BA5EF]/50 ${className}`}>
+      <span>{label}</span>
+      <ChevronDown className="w-3.5 h-3.5 ml-2 text-slate-400" />
+    </button>
+  )
 }

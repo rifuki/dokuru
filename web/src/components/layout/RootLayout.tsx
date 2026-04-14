@@ -1,252 +1,201 @@
 import { Link, Outlet, useLocation } from '@tanstack/react-router';
-import { Activity, FileText, Menu, Shield, Wrench, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import gsap from 'gsap';
+import {
+  Activity,
+  BookOpen,
+  FileText,
+  Home,
+  Menu,
+  Settings,
+  Shield,
+  Terminal,
+  Wrench,
+  X,
+  ChevronDown,
+} from 'lucide-react';
+import { useState } from 'react';
 
-import { DokuruEmblem } from '@/components/brand/DokuruEmblem';
 import { Button } from '@/components/ui/button';
 
-const MENU_ITEMS = [
-  { path: '/', label: 'Dashboard', icon: Activity },
+const DockerIcon = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg viewBox="0 0 340 268" fill="currentColor" className={className}>
+    <path d="M334,110.1c-8.3-5.6-30.2-8-46.1-3.7-.9-15.8-9-29.2-24-40.8l-5.5-3.7-3.7,5.6c-7.2,11-10.3,25.7-9.2,39,.8,8.2,3.7,17.4,9.2,24.1-20.7,12-39.8,9.3-124.3,9.3H0c-.4,19.1,2.7,55.8,26,85.6,2.6,3.3,5.4,6.5,8.5,9.6,19,19,47.6,32.9,90.5,33,65.4,0,121.4-35.3,155.5-120.8,11.2.2,40.8,2,55.3-26,.4-.5,3.7-7.4,3.7-7.4l-5.5-3.7h0ZM85.2,92.7h-36.7v36.7h36.7v-36.7ZM132.6,92.7h-36.7v36.7h36.7v-36.7ZM179.9,92.7h-36.7v36.7h36.7v-36.7ZM227.3,92.7h-36.7v36.7h36.7v-36.7ZM37.8,92.7H1.1v36.7h36.7v-36.7ZM85.2,46.3h-36.7v36.7h36.7v-36.7ZM132.6,46.3h-36.7v36.7h36.7v-36.7ZM179.9,46.3h-36.7v36.7h36.7v-36.7ZM179.9,0h-36.7v36.7h36.7V0Z" />
+  </svg>
+);
+
+const ENV_MENU_ITEMS = [
+  { path: '/dashboard', label: 'Dashboard', icon: Activity },
   { path: '/audit', label: 'Live Audit', icon: Shield },
   { path: '/fix', label: 'Remediation', icon: Wrench },
   { path: '/report', label: 'Report', icon: FileText },
 ];
 
+const ADMIN_ITEMS = [
+  { label: 'Engine Logs', icon: Terminal },
+  { label: 'Rules Library', icon: BookOpen },
+  { label: 'Settings', icon: Settings },
+];
+
 export function RootLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isEnvDropdownOpen, setIsEnvDropdownOpen] = useState(true);
+  const [isEnvOpen, setIsEnvOpen] = useState(true);
   const location = useLocation();
-  const orbARef = useRef<HTMLDivElement | null>(null);
-  const orbBRef = useRef<HTMLDivElement | null>(null);
-  const orbCRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const animations = [
-      gsap.to(orbARef.current, {
-        y: 36,
-        x: 20,
-        scale: 1.05,
-        duration: 9,
-        repeat: -1,
-        yoyo: true,
-        ease: 'sine.inOut',
-      }),
-      gsap.to(orbBRef.current, {
-        y: -24,
-        x: -30,
-        scale: 0.92,
-        duration: 11,
-        repeat: -1,
-        yoyo: true,
-        ease: 'sine.inOut',
-      }),
-      gsap.to(orbCRef.current, {
-        y: 28,
-        x: -16,
-        scale: 1.08,
-        duration: 12,
-        repeat: -1,
-        yoyo: true,
-        ease: 'sine.inOut',
-      }),
-    ];
-
-    return () => {
-      for (const animation of animations) {
-        animation.kill();
-      }
-    };
-  }, []);
 
   const isActivePath = (path: string) => {
-    if (path === '/') {
-      return location.pathname === '/';
-    }
-
+    if (path === '/') return location.pathname === '/';
     return location.pathname.startsWith(path);
   };
 
+  const isHome = location.pathname === '/';
+
   return (
-    <div className="app-shell">
-      {/* Background Orbs Removed for flat aesthetic */}
-      <div className="dashboard-grid pointer-events-none absolute inset-0 opacity-60" />
+    <div className="flex min-h-screen bg-[#212529]">
+      {/* ─── Sidebar ─── */}
+      <aside className="hidden xl:flex w-[250px] shrink-0 h-screen sticky top-0 flex-col bg-[#1A1D21] border-r border-[#2D3239]">
+        {/* Brand */}
+        <div className="px-4 h-14 flex items-center border-b border-[#2D3239]">
+          <span className="text-[15px] font-bold tracking-tight text-white">DOKURU</span>
+        </div>
 
-      <div className="relative flex min-h-screen">
-          {/* Sidebar */}
-          <div className="flex w-[260px] shrink-0 h-screen flex-col border-r border-[#2C313B] bg-[#16171A]">
-            <div className="flex flex-col flex-1 px-4 py-6 overflow-y-auto">
-              {/* Top Home Link */}
-              <Link to="/" className="flex items-center gap-3 px-3 py-2 mb-4 text-[#C1C3C6] hover:bg-white/[0.04] hover:text-white rounded transition-colors">
-                <DokuruEmblem className="h-4 w-4" />
-                <span className="font-medium text-[13px]">Home</span>
-              </Link>
+        <nav className="flex-1 overflow-y-auto py-2 px-2">
+          {/* Home */}
+          <Link
+            to="/"
+            className={`flex items-center gap-2.5 px-3 py-2 rounded text-[13px] cursor-pointer transition-colors ${isHome
+                ? 'bg-[#3BA5EF]/10 text-[#3BA5EF]'
+                : 'text-[#9CA3AF] hover:bg-white/[0.04] hover:text-white'
+              }`}
+          >
+            <Home className="w-4 h-4" />
+            <span className="font-medium">Home</span>
+          </Link>
 
-              {/* Environment Accordion Header */}
-              <button 
-                  onClick={() => setIsEnvDropdownOpen(!isEnvDropdownOpen)}
-                  className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-t-md bg-[#252830] border-b border-black/20 text-[#C1C3C6]"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="text-[#3BA5EF]">
-                      <svg viewBox="0 0 340 268" fill="currentColor" className="w-[16px] h-[16px]">
-                        <path d="M334,110.1c-8.3-5.6-30.2-8-46.1-3.7-.9-15.8-9-29.2-24-40.8l-5.5-3.7-3.7,5.6c-7.2,11-10.3,25.7-9.2,39,.8,8.2,3.7,17.4,9.2,24.1-20.7,12-39.8,9.3-124.3,9.3H0c-.4,19.1,2.7,55.8,26,85.6,2.6,3.3,5.4,6.5,8.5,9.6,19,19,47.6,32.9,90.5,33,65.4,0,121.4-35.3,155.5-120.8,11.2.2,40.8,2,55.3-26,.4-.5,3.7-7.4,3.7-7.4l-5.5-3.7h0ZM85.2,92.7h-36.7v36.7h36.7v-36.7ZM132.6,92.7h-36.7v36.7h36.7v-36.7ZM179.9,92.7h-36.7v36.7h36.7v-36.7ZM227.3,92.7h-36.7v36.7h36.7v-36.7ZM37.8,92.7H1.1v36.7h36.7v-36.7ZM85.2,46.3h-36.7v36.7h36.7v-36.7ZM132.6,46.3h-36.7v36.7h36.7v-36.7ZM179.9,46.3h-36.7v36.7h36.7v-36.7ZM179.9,0h-36.7v36.7h36.7V0Z"/>
-                      </svg>
-                    </div>
-                    <span className="font-medium text-[13px] text-[#C1C3C6]">local</span>
-                  </div>
-                  <X className={`w-3.5 h-3.5 text-[#C1C3C6] ${isEnvDropdownOpen ? 'rotate-45' : ''}`} style={{ transition: 'transform 0.2s', transform: isEnvDropdownOpen ? 'rotate(0)' : 'rotate(-45deg)' }} />
-                </button>
-                
-              <div className={`mt-0.5 bg-[#252830]/50 rounded-b-md ${isEnvDropdownOpen ? 'block' : 'hidden'}`}>
-                <nav className="space-y-[2px]">
-                  {MENU_ITEMS.map((item) => {
-                    const Icon = item.icon;
-                    const active = isActivePath(item.path);
+          {/* Environment Section */}
+          <div className="mt-3">
+            <button
+              onClick={() => setIsEnvOpen(!isEnvOpen)}
+              className={`w-full flex items-center justify-between px-3 py-2 cursor-pointer text-[13px] text-white transition-colors ${isEnvOpen ? 'bg-[#252830] rounded-t-md border-x border-t border-white/5' : 'hover:bg-white/[0.04] rounded'
+                }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <DockerIcon className="w-4 h-4 text-[#3BA5EF]" />
+                <span className="font-medium">local</span>
+              </div>
+              <ChevronDown className={`w-3.5 h-3.5 text-[#6B7280] transition-transform ${isEnvOpen ? '' : '-rotate-90'}`} />
+            </button>
 
-                    return (
-                      <Link
-                        key={item.path}
-                        to={item.path}
-                        className={`group flex items-center gap-3 px-3 py-2 transition-all ${
-                          active
-                            ? 'bg-white/5 text-white border-l-2 border-[#3BA5EF]'
-                            : 'text-[#C1C3C6] hover:bg-white/[0.04] hover:text-white border-l-2 border-transparent'
+            {isEnvOpen && (
+              <div className="bg-[#252830]/60 rounded-b-md border-x border-b border-white/5 pb-1">
+                {ENV_MENU_ITEMS.map((item) => {
+                  const Icon = item.icon;
+                  const active = !isHome && isActivePath(item.path);
+
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      className={`flex items-center gap-2.5 pl-7 pr-3 py-[7px] text-[13px] cursor-pointer transition-colors ${active
+                          ? 'bg-[#3BA5EF]/10 text-[#3BA5EF] border-l-2 border-[#3BA5EF] -ml-[2px] pl-[26px]'
+                          : 'text-[#9CA3AF] hover:bg-white/[0.04] hover:text-white'
                         }`}
-                      >
-                        <Icon strokeWidth={2} className="h-3.5 w-3.5 text-inherit" />
-                        <span className="font-regular text-[13px]">{item.label}</span>
-                      </Link>
-                    );
-                  })}
-                </nav>
+                    >
+                      <Icon className="w-3.5 h-3.5" strokeWidth={1.8} />
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
               </div>
-
-              <div className="mt-8 flex-1">
-                <div className="px-2 mb-3">
-                  <span className="text-[10px] font-bold tracking-widest uppercase text-slate-600">Administration</span>
-                </div>
-                <nav className="space-y-[2px]">
-                  <button className="w-full flex items-center gap-3 rounded-lg px-3 py-[10px] text-slate-400 hover:bg-white/[0.04] hover:text-white transition-all text-left">
-                    <Activity strokeWidth={2.5} className="h-4 w-4 text-slate-500" />
-                    <span className="font-medium text-[13px]">Engine Logs</span>
-                  </button>
-                  <button className="w-full flex items-center gap-3 rounded-lg px-3 py-[10px] text-slate-400 hover:bg-white/[0.04] hover:text-white transition-all text-left">
-                    <Shield strokeWidth={2.5} className="h-4 w-4 text-slate-500" />
-                    <span className="font-medium text-[13px]">Rules Library</span>
-                  </button>
-                  <button className="w-full flex items-center gap-3 rounded-lg px-3 py-[10px] text-slate-400 hover:bg-white/[0.04] hover:text-white transition-all text-left">
-                    <Wrench strokeWidth={2.5} className="h-4 w-4 text-slate-500" />
-                    <span className="font-medium text-[13px]">Settings</span>
-                  </button>
-                </nav>
-              </div>
-
-              {/* Status at the bottom */}
-              <div className="rounded-xl border border-white/[0.04] bg-white/[0.01] p-3 text-[11px] text-slate-400 mt-auto flex items-center gap-3">
-                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-emerald-500/10 text-[10px] font-bold text-emerald-500">
-                  OK
-                </div>
-                <div>
-                  <span className="block font-semibold text-slate-200">System Active</span>
-                  <span className="block text-slate-500">v0.1.0-stable</span>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
 
-        <div className="flex min-h-screen flex-1 flex-col px-4 pb-6 pt-4 md:px-5 xl:pl-0">
-          <header className="neo-card flex items-center justify-between px-4 py-3 xl:hidden">
-            <div className="flex items-center gap-3">
-              <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-2">
-                <DokuruEmblem className="h-9 w-9" />
-              </div>
-              <div>
-                <span className="block text-xl font-semibold text-white">Dokuru</span>
-                <span className="block text-xs text-slate-400">Docker Hardening Agent</span>
-              </div>
-            </div>
-            <Button variant="ghost" size="icon" className="border border-white/10 bg-white/5 text-slate-100 hover:bg-white/10 hover:text-white" onClick={() => setIsMobileMenuOpen(true)}>
-              <Menu className="h-5 w-5" />
-            </Button>
-          </header>
-
-          <AnimatePresence>
-            {isMobileMenuOpen ? (
-              <motion.div
-                className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm xl:hidden"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-              >
-                <motion.aside
-                  className="neo-card absolute inset-y-4 left-4 w-[min(86vw,360px)] p-5"
-                  initial={{ x: -32, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  exit={{ x: -32, opacity: 0 }}
+          {/* Administration */}
+          <div className="mt-6">
+            <p className="px-3 mb-2 text-[10px] font-semibold tracking-widest uppercase text-[#6B7280]">Administration</p>
+            {ADMIN_ITEMS.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.label}
+                  className="w-full flex items-center gap-2.5 px-3 py-[7px] rounded text-[13px] text-[#9CA3AF] hover:bg-white/[0.04] hover:text-white cursor-pointer transition-colors text-left"
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <DokuruEmblem className="h-10 w-10" />
-                      <div>
-                        <span className="block text-lg font-semibold text-white">Dokuru</span>
-                        <span className="block text-xs text-slate-400">Hardening Console</span>
-                      </div>
-                    </div>
-                    <Button variant="ghost" size="icon" className="border border-white/10 bg-white/5 text-slate-100 hover:bg-white/10 hover:text-white" onClick={() => setIsMobileMenuOpen(false)}>
-                      <X className="h-5 w-5" />
-                    </Button>
-                  </div>
+                  <Icon className="w-3.5 h-3.5" strokeWidth={1.8} />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </nav>
 
-                  <nav className="mt-8 space-y-2">
-                    {MENU_ITEMS.map((item) => {
-                      const Icon = item.icon;
-                      const active = isActivePath(item.path);
-
-                      return (
-                        <Link
-                          key={item.path}
-                          to={item.path}
-                          onClick={() => setIsMobileMenuOpen(false)}
-                          className={`flex items-center gap-3 rounded-md px-4 py-3 transition-all ${active ? 'bg-[#1D1D20] text-white' : 'text-zinc-400 hover:bg-[#1D1D20] hover:text-white'}`}
-                        >
-                          <span className="rounded-xl border border-white/8 bg-white/5 p-2"><Icon className="h-4 w-4" /></span>
-                          <div>
-                            <p className="font-medium">{item.label}</p>
-                            <p className="text-xs text-slate-400">{menuMeta(item.path)}</p>
-                          </div>
-                        </Link>
-                      )
-                    })}
-                  </nav>
-                </motion.aside>
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
-
-          <main className="relative flex-1 py-4 md:py-5">
-            <div className="mx-auto max-w-7xl">
-              <Outlet />
-            </div>
-          </main>
+        {/* Bottom status */}
+        <div className="px-3 py-3 border-t border-[#2D3239] text-[11px] text-[#6B7280]">
+          <span>Dokuru</span>
         </div>
+      </aside>
+
+      {/* ─── Main content ─── */}
+      <div className="flex-1 flex flex-col min-h-screen">
+        {/* Mobile header */}
+        <header className="xl:hidden flex items-center justify-between px-4 h-12 bg-[#1A1D21] border-b border-[#2D3239]">
+          <span className="text-sm font-bold text-white">DOKURU</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-[#9CA3AF] hover:text-white cursor-pointer"
+            onClick={() => setIsMobileMenuOpen(true)}
+          >
+            <Menu className="w-5 h-5" />
+          </Button>
+        </header>
+
+        {/* Mobile menu overlay */}
+        {isMobileMenuOpen && (
+          <div className="fixed inset-0 z-50 xl:hidden">
+            <div
+              className="absolute inset-0 bg-black/60"
+              onClick={() => setIsMobileMenuOpen(false)}
+            />
+            <aside className="absolute left-0 top-0 bottom-0 w-[260px] bg-[#1A1D21] border-r border-[#2D3239] p-4">
+              <div className="flex items-center justify-between mb-6">
+                <span className="text-sm font-bold text-white">DOKURU</span>
+                <button
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="text-[#9CA3AF] hover:text-white cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <nav className="space-y-1">
+                <Link
+                  to="/"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="flex items-center gap-2.5 px-3 py-2 rounded text-[13px] text-[#9CA3AF] hover:bg-white/[0.04] hover:text-white cursor-pointer"
+                >
+                  <Home className="w-4 h-4" />
+                  <span className="font-medium">Home</span>
+                </Link>
+                {ENV_MENU_ITEMS.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="flex items-center gap-2.5 px-3 py-2 rounded text-[13px] text-[#9CA3AF] hover:bg-white/[0.04] hover:text-white cursor-pointer"
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </nav>
+            </aside>
+          </div>
+        )}
+
+        {/* Page content */}
+        <main className="flex-1 p-4 md:p-6">
+          <Outlet />
+        </main>
       </div>
     </div>
   );
-}
-
-function menuMeta(path: string) {
-  switch (path) {
-    case '/':
-      return 'Posture, score, host state';
-    case '/audit':
-      return 'Run and inspect CIS checks';
-    case '/fix':
-      return 'Apply or preview remediations';
-    case '/report':
-      return 'Executive summary and scans';
-    default:
-      return 'Control plane';
-  }
 }
