@@ -142,7 +142,14 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
     intro(format!("🐳 Dokuru  {}", effective_mode.heading()))?;
 
     if matches!(mode, SetupMode::Onboard) && matches!(effective_mode, SetupMode::Configure) {
-        cliclack::log::warning("Already installed on this host — switching to configure mode")?;
+        let reason = if config.install_path.exists() && runtime_config_path(&config).exists() {
+            "Dokuru binary and configuration found"
+        } else if config.install_path.exists() {
+            "Dokuru binary found (configuration will be recreated)"
+        } else {
+            "Dokuru installation detected"
+        };
+        cliclack::log::warning(format!("{} — switching to configure mode", reason))?;
     }
 
     if matches!(effective_mode, SetupMode::Onboard) {
