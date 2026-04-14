@@ -110,6 +110,8 @@ struct Preflight {
     arch: &'static str,
     running_as_root: bool,
     has_systemd: bool,
+    docker_installed: bool,
+    docker_group_exists: bool,
     docker_socket_exists: bool,
     docker_service_exists: bool,
 }
@@ -153,6 +155,52 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
             effective_mode.command_name()
         ))?;
         bail!("root privileges required");
+    }
+
+    // Validate Docker installation
+    if !preflight.docker_installed {
+        if offer_docker_installation(&config)? {
+            run_step("Installing Docker", install_docker)?;
+            run_step("Starting Docker service", || {
+                run_command("systemctl", &["start", "docker"])
+            })?;
+
+            // Re-collect preflight after Docker installation
+            let preflight = collect_preflight(&config);
+            if !preflight.docker_installed || !preflight.docker_group_exists {
+                outro_cancel("Docker installation verification failed")?;
+                bail!("Docker installation failed");
+            }
+            cliclack::log::success("Docker is ready")?;
+        } else {
+            config.skip_service = true;
+            cliclack::log::warning("Continuing without Docker - service will not start")?;
+        }
+    }
+
+    // Offer to add current user to docker group
+    if preflight.docker_group_exists
+        && !config.yes
+        && let Ok(current_user) = std::env::var("SUDO_USER").or_else(|_| std::env::var("USER"))
+        && !current_user.is_empty()
+        && current_user != "root"
+        && !user_in_docker_group(&current_user)?
+        && confirm(format!(
+            "Add user '{}' to docker group? (recommended)",
+            current_user
+        ))
+        .initial_value(true)
+        .interact()?
+    {
+        run_command("usermod", &["-aG", "docker", &current_user])?;
+        cliclack::log::success(format!(
+            "User '{}' added to docker group",
+            current_user
+        ))?;
+        note(
+            "Important",
+            "Log out and back in (or run 'newgrp docker') for group changes to take effect",
+        )?;
     }
 
     config = prompt_for_config(effective_mode, config)?;
@@ -567,12 +615,116 @@ fn load_saved_runtime_config(config_dir: &Path) -> Result<RuntimeConfig> {
     RuntimeConfig::load_from_path(config_path_in(config_dir))
 }
 
+fn offer_docker_installation(config: &InstallerConfig) -> Result<bool> {
+    cliclack::log::warning("Docker is not installed")?;
+
+    note(
+        "Docker Installation",
+        "Dokuru will run the official Docker installation script:\n\
+         curl -fsSL https://get.docker.com | sh\n\n\
+         This script will:\n\
+         • Detect your Linux distribution\n\
+         • Add Docker's official repository\n\
+         • Install Docker Engine\n\
+         • Start and enable the Docker service",
+    )?;
+
+    if config.yes {
+        cliclack::log::info("Non-interactive mode: skipping Docker installation")?;
+        return Ok(false);
+    }
+
+    #[derive(Clone, Eq, PartialEq)]
+    enum DockerChoice {
+        Install,
+        Manual,
+        Skip,
+    }
+
+    let choice = select("What would you like to do?")
+        .item(
+            DockerChoice::Install,
+            "Install Docker now",
+            "Run official Docker install script",
+        )
+        .item(
+            DockerChoice::Manual,
+            "Install manually",
+            "Exit and install Docker yourself",
+        )
+        .item(
+            DockerChoice::Skip,
+            "Skip (dev mode)",
+            "Continue without Docker",
+        )
+        .interact()?;
+
+    match choice {
+        DockerChoice::Install => Ok(true),
+        DockerChoice::Manual => {
+            note(
+                "Manual installation",
+                "Install Docker using:\n\
+                 curl -fsSL https://get.docker.com | sh\n\n\
+                 Then re-run: dokuru onboard",
+            )?;
+            bail!("Docker installation required");
+        }
+        DockerChoice::Skip => {
+            cliclack::log::warning("Continuing without Docker - service will not start")?;
+            Ok(false)
+        }
+    }
+}
+
+fn install_docker() -> Result<()> {
+    let script_path = "/tmp/get-docker.sh";
+
+    // Download script
+    run_command(
+        "curl",
+        &["-fsSL", "https://get.docker.com", "-o", script_path],
+    )?;
+
+    // Show script size for transparency
+    if let Ok(metadata) = fs::metadata(script_path) {
+        cliclack::log::info(format!("Downloaded script: {} bytes", metadata.len()))?;
+    }
+
+    // Execute
+    run_command("sh", &[script_path])?;
+
+    // Cleanup
+    fs::remove_file(script_path).ok();
+
+    Ok(())
+}
+
+fn user_in_docker_group(username: &str) -> Result<bool> {
+    let output = Command::new("groups")
+        .arg(username)
+        .output()
+        .wrap_err("Failed to check user groups")?;
+
+    if !output.status.success() {
+        return Ok(false);
+    }
+
+    let groups = String::from_utf8_lossy(&output.stdout);
+    Ok(groups.contains("docker"))
+}
+
 fn collect_preflight(config: &InstallerConfig) -> Preflight {
+    let docker_installed = command_exists("docker");
+    let docker_group_exists = command_success("getent", &["group", "docker"]);
+
     Preflight {
         os: std::env::consts::OS,
         arch: std::env::consts::ARCH,
         running_as_root: nix_like_is_root(),
         has_systemd: command_exists("systemctl"),
+        docker_installed,
+        docker_group_exists,
         docker_socket_exists: is_socket(Path::new(&config.docker_socket)),
         docker_service_exists: command_exists("systemctl") && has_systemd_unit("docker.service"),
     }
@@ -745,6 +897,22 @@ fn show_preflight(config: &InstallerConfig, preflight: &Preflight) -> Result<()>
                 "systemd ✓"
             } else {
                 "systemd not found"
+            }
+        ),
+        format!(
+            "Docker:         {}",
+            if preflight.docker_installed {
+                "installed ✓"
+            } else {
+                "not installed ✗"
+            }
+        ),
+        format!(
+            "Docker group:   {}",
+            if preflight.docker_group_exists {
+                "exists ✓"
+            } else {
+                "not found ✗"
             }
         ),
         format!(
@@ -977,27 +1145,35 @@ fn setup_dokuru_user() -> Result<()> {
         run_command("groupadd", &["--system", "dokuru"])?;
     }
 
+    // Check if docker group exists before adding user
+    let has_docker_group = command_success("getent", &["group", "docker"]);
+
     // Create dokuru user if it doesn't exist
     if !command_success("getent", &["passwd", "dokuru"]) {
-        run_command(
-            "useradd",
-            &[
-                "--system",
-                "--gid",
-                "dokuru",
-                "--groups",
-                "docker",
-                "--no-create-home",
-                "--shell",
-                "/usr/sbin/nologin",
-                "--comment",
-                "Dokuru service account",
-                "dokuru",
-            ],
-        )?;
+        let mut args = vec![
+            "--system",
+            "--gid",
+            "dokuru",
+            "--no-create-home",
+            "--shell",
+            "/usr/sbin/nologin",
+            "--comment",
+            "Dokuru service account",
+        ];
+
+        // Only add to docker group if it exists
+        if has_docker_group {
+            args.insert(3, "docker");
+            args.insert(3, "--groups");
+        }
+
+        args.push("dokuru");
+        run_command("useradd", &args)?;
     } else {
-        // User exists, ensure it's in docker group
-        run_command("usermod", &["-aG", "docker", "dokuru"])?;
+        // User exists, add to docker group if it exists
+        if has_docker_group {
+            run_command("usermod", &["-aG", "docker", "dokuru"])?;
+        }
     }
 
     // Add current user to dokuru group for config access
