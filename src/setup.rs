@@ -176,6 +176,8 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         })?;
     }
 
+    run_step("Setting up dokuru user and group", setup_dokuru_user)?;
+
     run_step("Writing Dokuru configuration", || {
         write_config_file(&config)
     })?;
@@ -891,13 +893,19 @@ fn write_config_file(config: &InstallerConfig) -> Result<()> {
     fs::create_dir_all(&config.config_dir)
         .wrap_err_with(|| format!("Failed to create {}", config.config_dir.display()))?;
 
-    // Set directory permission to 755 (readable by all users)
+    // Set directory permission to 775 with dokuru group
     let mut dir_permissions = fs::metadata(&config.config_dir)
         .wrap_err_with(|| format!("Failed to stat {}", config.config_dir.display()))?
         .permissions();
-    dir_permissions.set_mode(0o755);
+    dir_permissions.set_mode(0o775);
     fs::set_permissions(&config.config_dir, dir_permissions)
         .wrap_err_with(|| format!("Failed to chmod {}", config.config_dir.display()))?;
+
+    // Set group ownership to dokuru
+    run_command(
+        "chgrp",
+        &["dokuru", &config.config_dir.display().to_string()],
+    )?;
 
     let config_path = runtime_config_path(config);
     let runtime_config = RuntimeConfig {
@@ -916,13 +924,16 @@ fn write_config_file(config: &InstallerConfig) -> Result<()> {
     fs::write(&config_path, toml_content)
         .wrap_err_with(|| format!("Failed to write {}", config_path.display()))?;
 
-    // Set file permission to 644 (readable by all users, writable by owner)
+    // Set file permission to 664 (group writable)
     let mut file_permissions = fs::metadata(&config_path)
         .wrap_err_with(|| format!("Failed to stat {}", config_path.display()))?
         .permissions();
-    file_permissions.set_mode(0o644);
+    file_permissions.set_mode(0o664);
     fs::set_permissions(&config_path, file_permissions)
         .wrap_err_with(|| format!("Failed to chmod {}", config_path.display()))?;
+
+    // Set group ownership to dokuru
+    run_command("chgrp", &["dokuru", &config_path.display().to_string()])?;
 
     Ok(())
 }
@@ -948,7 +959,7 @@ fn write_systemd_unit(config: &InstallerConfig, preflight: &Preflight) -> Result
         .join(format!("{}.service", config.service_name));
 
     let unit_content = format!(
-        "[Unit]\nDescription=Dokuru Docker Hardening Agent\nDocumentation={}\nAfter={}\nWants={}\n\n[Service]\nType=simple\nEnvironment=DOKURU_CONFIG={}\nExecStart={} serve\nRestart=on-failure\nRestartSec=5s\nStandardOutput=journal\nStandardError=journal\nSyslogIdentifier={}\nNoNewPrivileges=yes\nProtectSystem=strict\nReadWritePaths={} /etc/docker\n\n[Install]\nWantedBy=multi-user.target\n",
+        "[Unit]\nDescription=Dokuru Docker Hardening Agent\nDocumentation={}\nAfter={}\nWants={}\n\n[Service]\nType=simple\nUser=dokuru\nGroup=dokuru\nSupplementaryGroups=docker\nEnvironment=DOKURU_CONFIG={}\nExecStart={} serve\nRestart=on-failure\nRestartSec=5s\nStandardOutput=journal\nStandardError=journal\nSyslogIdentifier={}\nNoNewPrivileges=yes\nProtectSystem=strict\nReadWritePaths={} /etc/docker\n\n[Install]\nWantedBy=multi-user.target\n",
         REPO_URL,
         after_targets,
         wants_targets,
@@ -960,6 +971,46 @@ fn write_systemd_unit(config: &InstallerConfig, preflight: &Preflight) -> Result
 
     fs::write(&unit_path, unit_content)
         .wrap_err_with(|| format!("Failed to write {}", unit_path.display()))
+}
+
+fn setup_dokuru_user() -> Result<()> {
+    // Create dokuru group if it doesn't exist
+    if !command_success("getent", &["group", "dokuru"]) {
+        run_command("groupadd", &["--system", "dokuru"])?;
+    }
+
+    // Create dokuru user if it doesn't exist
+    if !command_success("getent", &["passwd", "dokuru"]) {
+        run_command(
+            "useradd",
+            &[
+                "--system",
+                "--gid",
+                "dokuru",
+                "--groups",
+                "docker",
+                "--no-create-home",
+                "--shell",
+                "/usr/sbin/nologin",
+                "--comment",
+                "Dokuru service account",
+                "dokuru",
+            ],
+        )?;
+    } else {
+        // User exists, ensure it's in docker group
+        run_command("usermod", &["-aG", "docker", "dokuru"])?;
+    }
+
+    // Add current user to dokuru group for config access
+    if let Ok(current_user) = std::env::var("SUDO_USER").or_else(|_| std::env::var("USER"))
+        && !current_user.is_empty()
+        && current_user != "root"
+    {
+        run_command("usermod", &["-aG", "dokuru", &current_user])?;
+    }
+
+    Ok(())
 }
 
 fn reload_systemd() -> Result<()> {

@@ -138,15 +138,21 @@ async fn persist_environments(envs: &[Environment]) {
     if let Ok(json) = serde_json::to_string_pretty(envs)
         && tokio::fs::write(&path, json).await.is_ok()
     {
-        // Set file permission to 644 (readable by all users)
+        // Set file permission to 664 (group writable)
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             if let Ok(metadata) = tokio::fs::metadata(&path).await {
                 let mut perms = metadata.permissions();
-                perms.set_mode(0o644);
+                perms.set_mode(0o664);
                 let _ = tokio::fs::set_permissions(&path, perms).await;
             }
+
+            // Set group ownership to dokuru
+            let _ = tokio::process::Command::new("chgrp")
+                .args(["dokuru", &path.display().to_string()])
+                .output()
+                .await;
         }
     }
 }
