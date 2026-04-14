@@ -103,11 +103,11 @@ function DashboardPage() {
       {/* Portainer Style Resource Overview */}
       <h2 className="text-sm font-medium text-slate-200 mt-6 mb-3">Resource Overview</h2>
       <div className="grid gap-3 grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
-         <StatsBox icon={Layers} label="Stacks" value="5" color="text-indigo-400" bgColor="bg-indigo-400/10" borderColor="border-indigo-400/20" />
-         <StatsBox icon={Box} label="Containers" value={report?.total_containers?.toString() ?? '0'} color="text-sky-400" bgColor="bg-sky-400/10" borderColor="border-sky-400/20" />
-         <StatsBox icon={HardDrive} label="Images" value="35" color="text-amber-400" bgColor="bg-amber-400/10" borderColor="border-amber-400/20" />
-         <StatsBox icon={Activity} label="Volumes" value="1" color="text-emerald-400" bgColor="bg-emerald-400/10" borderColor="border-emerald-400/20" />
-         <StatsBox icon={Network} label="Networks" value="3" color="text-purple-400" bgColor="bg-purple-400/10" borderColor="border-purple-400/20" />
+         <StatsBox icon={Layers} label="Stacks" value="5" color="text-indigo-400" bgColor="bg-indigo-400/10" />
+         <StatsBox icon={Box} label="Containers" value={report?.total_containers?.toString() ?? '0'} color="text-sky-400" bgColor="bg-sky-400/10" />
+         <StatsBox icon={HardDrive} label="Images" value="35" color="text-amber-400" bgColor="bg-amber-400/10" />
+         <StatsBox icon={Activity} label="Volumes" value="1" color="text-emerald-400" bgColor="bg-emerald-400/10" />
+         <StatsBox icon={Network} label="Networks" value="3" color="text-purple-400" bgColor="bg-purple-400/10" />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 mt-2">
@@ -140,7 +140,7 @@ function DashboardPage() {
   )
 }
 
-function StatsBox({ icon: Icon, label, value, color, bgColor, borderColor }: any) {
+function StatsBox({ icon: Icon, label, value, color, bgColor }: any) {
     return (
         <div className="bg-[#23282D] rounded-md border border-white/5 p-3 flex flex-col items-center justify-center cursor-pointer hover:bg-white/[0.04] transition-colors relative overflow-hidden group">
            <div className={`absolute -right-2 -top-2 w-12 h-12 rounded-full ${bgColor} blur-xl group-hover:bg-opacity-80 transition-all`} />

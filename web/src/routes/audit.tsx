@@ -83,7 +83,7 @@ function AuditPage() {
 
       {loading && !report ? (
         <section className="grid gap-4 xl:grid-cols-2">
-          {Array.from({ length: 4 }).map((_, index) => (
+          {Array.from({ length: 4 }, (_, index) => index).map((index) => (
             <div key={index} className="neo-card p-5 neo-interactive">
               <div className="h-5 w-32 animate-pulse rounded-full bg-white/10" />
               <div className="mt-5 h-8 w-56 animate-pulse rounded-full bg-white/10" />

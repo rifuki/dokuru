@@ -190,22 +190,6 @@ function Tag({ className }: { className?: string }) {
   )
 }
 
-function Zap({ className }: { className?: string }) {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _ = className;
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-  )
-}
-
-function Square({ className, size }: { className?: string, size?: number }) {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _ = { className, size };
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={size ?? 24} height={size ?? 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
-  )
-}
-
 function FilterDropdown({ label, className = '' }: { label: string, className?: string }) {
   return (
     <button className={`flex items-center justify-between bg-[#252830] border border-white/10 text-slate-300 text-[13px] font-medium rounded h-9 px-3 hover:bg-[#2A2E35] hover:border-white/20 transition-all focus:outline-none focus:ring-1 focus:ring-[#3BA5EF]/50 ${className}`}>
