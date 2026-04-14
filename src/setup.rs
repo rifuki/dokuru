@@ -863,10 +863,17 @@ fn confirm_install(mode: SetupMode, config: &InstallerConfig) -> Result<bool> {
     }
 
     let prompt = match mode {
-        SetupMode::Onboard => format!(
-            "Apply these settings and install Dokuru to {}?",
-            config.install_path.display()
-        ),
+        SetupMode::Onboard => {
+            let source_binary = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("dokuru"));
+            if source_binary == config.install_path {
+                "Apply these settings?".to_string()
+            } else {
+                format!(
+                    "Apply these settings and install Dokuru to {}?",
+                    config.install_path.display()
+                )
+            }
+        }
         SetupMode::Configure => format!("Apply changes to {}?", config.config_dir.display()),
     };
 
