@@ -46,22 +46,22 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::R
     loop {
         terminal.draw(|f| ui::ui(f, app))?;
 
-        if event::poll(std::time::Duration::from_millis(50))? {
-            if let Event::Key(key) = event::read()? {
-                match key.code {
-                    KeyCode::Char('q') => {
-                        app.quit();
-                    }
-                    KeyCode::Right | KeyCode::Tab => app.next_tab(),
-                    KeyCode::Left => app.prev_tab(),
-                    KeyCode::Char('a') => {
-                        app.run_audit().await;
-                    }
-                    KeyCode::Enter => {
-                        app.apply_fix().await;
-                    }
-                    _ => {}
+        if event::poll(std::time::Duration::from_millis(50))?
+            && let Event::Key(key) = event::read()?
+        {
+            match key.code {
+                KeyCode::Char('q') => {
+                    app.quit();
                 }
+                KeyCode::Right | KeyCode::Tab => app.next_tab(),
+                KeyCode::Left => app.prev_tab(),
+                KeyCode::Char('a') => {
+                    app.run_audit().await;
+                }
+                KeyCode::Enter => {
+                    app.apply_fix().await;
+                }
+                _ => {}
             }
         }
 

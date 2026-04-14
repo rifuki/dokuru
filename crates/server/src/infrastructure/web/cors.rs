@@ -1,4 +1,4 @@
-use axum::http::{header, Method};
+use axum::http::{Method, header};
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::infrastructure::config::Config;

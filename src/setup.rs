@@ -1,11 +1,11 @@
 use clap::Args;
 use cliclack::{confirm, input, intro, note, outro, outro_cancel, select, spinner};
 use dokuru_server::infrastructure::config::{
-    config_path_in, Config as RuntimeConfig, DockerConfig, ServerConfig,
+    Config as RuntimeConfig, DockerConfig, ServerConfig, config_path_in,
 };
-use eyre::{bail, Result, WrapErr};
+use eyre::{Result, WrapErr, bail};
 use std::fs;
-use std::io::{stderr, IsTerminal};
+use std::io::{IsTerminal, stderr};
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -142,9 +142,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
     intro(format!("🐳 Dokuru  {}", effective_mode.heading()))?;
 
     if matches!(mode, SetupMode::Onboard) && matches!(effective_mode, SetupMode::Configure) {
-        cliclack::log::warning(
-            "Already installed on this host — switching to configure mode",
-        )?;
+        cliclack::log::warning("Already installed on this host — switching to configure mode")?;
     }
 
     if matches!(effective_mode, SetupMode::Onboard) {
@@ -163,9 +161,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
     show_plan(&config, &preflight)?;
 
     if !config.skip_service && !preflight.has_systemd {
-        cliclack::log::warning(
-            "systemd not detected — continuing without a managed service",
-        )?;
+        cliclack::log::warning("systemd not detected — continuing without a managed service")?;
         config.skip_service = true;
     }
 
@@ -180,7 +176,9 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         })?;
     }
 
-    run_step("Writing Dokuru configuration", || write_config_file(&config))?;
+    run_step("Writing Dokuru configuration", || {
+        write_config_file(&config)
+    })?;
 
     if !config.skip_service {
         run_step("Writing systemd unit", || {
@@ -192,11 +190,8 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         })?;
 
         if !preflight.docker_socket_exists {
-            cliclack::log::warning(&format!(
-                "Docker is not ready on {}",
-                config.docker_socket
-            ))?;
-            cliclack::log::info(&format!(
+            cliclack::log::warning(format!("Docker is not ready on {}", config.docker_socket))?;
+            cliclack::log::info(format!(
                 "Start Docker first, then: systemctl restart {}",
                 config.service_name
             ))?;
@@ -209,10 +204,8 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         }) {
             Ok(_) => show_summary(&config, true)?,
             Err(err) => {
-                cliclack::log::warning(&format!(
-                    "Service installed but failed to start: {err}"
-                ))?;
-                cliclack::log::info(&format!(
+                cliclack::log::warning(format!("Service installed but failed to start: {err}"))?;
+                cliclack::log::info(format!(
                     "Inspect logs: journalctl -u {} -f",
                     config.service_name
                 ))?;
@@ -246,14 +239,18 @@ pub fn run_doctor(args: DoctorArgs) -> Result<()> {
     // Status section
     let log_item = |ok: bool, label: &str, value: &str| -> Result<()> {
         if ok {
-            cliclack::log::success(&format!("{:<16} {}", label, value))?;
+            cliclack::log::success(format!("{:<16} {}", label, value))?;
         } else {
-            cliclack::log::warning(&format!("{:<16} {}", label, value))?;
+            cliclack::log::warning(format!("{:<16} {}", label, value))?;
         }
         Ok(())
     };
 
-    log_item(binary_exists, "Binary", &config.install_path.display().to_string())?;
+    log_item(
+        binary_exists,
+        "Binary",
+        &config.install_path.display().to_string(),
+    )?;
     log_item(config_exists, "Config", &config_path.display().to_string())?;
     log_item(
         preflight.docker_socket_exists,
@@ -269,10 +266,22 @@ pub fn run_doctor(args: DoctorArgs) -> Result<()> {
             "not detected"
         },
     )?;
-    log_item(service_exists, "Service unit", &service_path.display().to_string())?;
+    log_item(
+        service_exists,
+        "Service unit",
+        &service_path.display().to_string(),
+    )?;
     if service_exists {
-        log_item(service_enabled, "Service enabled", if service_enabled { "yes" } else { "no" })?;
-        log_item(service_active, "Service active", if service_active { "yes" } else { "no" })?;
+        log_item(
+            service_enabled,
+            "Service enabled",
+            if service_enabled { "yes" } else { "no" },
+        )?;
+        log_item(
+            service_active,
+            "Service active",
+            if service_active { "yes" } else { "no" },
+        )?;
     }
 
     // Config note
@@ -289,14 +298,12 @@ pub fn run_doctor(args: DoctorArgs) -> Result<()> {
             }
         ),
     ];
-    if binary_exists {
-        if let Some(version) = binary_version(&config.install_path) {
-            config_lines.push(format!("Version:        {}", version));
-        }
+    if binary_exists && let Some(version) = binary_version(&config.install_path) {
+        config_lines.push(format!("Version:        {}", version));
     }
     note("Configuration", config_lines.join("\n"))?;
 
-    cliclack::log::info(&format!(
+    cliclack::log::info(format!(
         "Run `dokuru update --install-path {}` to refresh the binary.",
         config.install_path.display()
     ))?;
@@ -374,7 +381,7 @@ pub fn run_update(args: UpdateArgs) -> Result<()> {
     }
     note("Update complete", result_lines.join("\n"))?;
 
-    cliclack::log::info(&format!("Dashboard: http://<your-host>:{}", config.port))?;
+    cliclack::log::info(format!("Dashboard: http://<your-host>:{}", config.port))?;
     outro("Dokuru updated successfully.")?;
     Ok(())
 }
@@ -390,9 +397,7 @@ pub fn run_uninstall(args: UninstallArgs) -> Result<()> {
     intro("🐳 Dokuru  uninstall")?;
 
     if !preflight.running_as_root {
-        outro_cancel(
-            "Root privileges required. Re-run with: sudo dokuru uninstall",
-        )?;
+        outro_cancel("Root privileges required. Re-run with: sudo dokuru uninstall")?;
         bail!("root privileges required");
     }
 
@@ -434,7 +439,10 @@ pub fn run_uninstall(args: UninstallArgs) -> Result<()> {
         remove_dir_if_present(&config.config_dir)
     })?;
 
-    let mut removed = vec!["Binary:  removed".to_string(), "Config:  removed".to_string()];
+    let mut removed = vec![
+        "Binary:  removed".to_string(),
+        "Config:  removed".to_string(),
+    ];
     if preflight.has_systemd {
         removed.push("Service: removed".to_string());
     }
@@ -586,7 +594,11 @@ fn prompt_for_config(mode: SetupMode, mut config: InstallerConfig) -> Result<Ins
                     config.port,
                     config.host,
                     config.docker_socket,
-                    if config.skip_service { "disabled" } else { "enabled" },
+                    if config.skip_service {
+                        "disabled"
+                    } else {
+                        "enabled"
+                    },
                 ),
             )?;
             configure_server_section(&mut config)?;
@@ -601,7 +613,11 @@ fn prompt_for_config(mode: SetupMode, mut config: InstallerConfig) -> Result<Ins
                     config.host,
                     config.port,
                     config.docker_socket,
-                    if config.skip_service { "disabled" } else { &config.service_name },
+                    if config.skip_service {
+                        "disabled"
+                    } else {
+                        &config.service_name
+                    },
                 ),
             )?;
             run_configure_sections(&mut config)?;
@@ -622,7 +638,11 @@ enum ConfigSection {
 fn run_configure_sections(config: &mut InstallerConfig) -> Result<()> {
     loop {
         let section = select("Select section to configure")
-            .item(ConfigSection::Server, "Server", "bind address, port, and CORS")
+            .item(
+                ConfigSection::Server,
+                "Server",
+                "bind address, port, and CORS",
+            )
             .item(ConfigSection::Docker, "Docker", "socket path")
             .item(ConfigSection::Service, "Service", "systemd service")
             .item(ConfigSection::Done, "Continue", "finish and apply")
@@ -708,31 +728,41 @@ fn confirm_action(yes: bool, prompt: &str) -> Result<bool> {
 // ─── Display Helpers ──────────────────────────────────────────────────────────
 
 fn show_preflight(config: &InstallerConfig, preflight: &Preflight) -> Result<()> {
-    let lines = vec![
-        format!(
-            "OS:             {}",
-            preflight.os
-        ),
-        format!(
-            "Architecture:   {}",
-            preflight.arch
-        ),
+    let lines = [
+        format!("OS:             {}", preflight.os),
+        format!("Architecture:   {}", preflight.arch),
         format!(
             "Privileges:     {}",
-            if preflight.running_as_root { "root ✓" } else { "not root ✗" }
+            if preflight.running_as_root {
+                "root ✓"
+            } else {
+                "not root ✗"
+            }
         ),
         format!(
             "Init system:    {}",
-            if preflight.has_systemd { "systemd ✓" } else { "systemd not found" }
+            if preflight.has_systemd {
+                "systemd ✓"
+            } else {
+                "systemd not found"
+            }
         ),
         format!(
             "Docker socket:  {} {}",
             config.docker_socket,
-            if preflight.docker_socket_exists { "✓" } else { "(not found)" }
+            if preflight.docker_socket_exists {
+                "✓"
+            } else {
+                "(not found)"
+            }
         ),
         format!(
             "docker.service: {}",
-            if preflight.docker_service_exists { "detected ✓" } else { "not detected" }
+            if preflight.docker_service_exists {
+                "detected ✓"
+            } else {
+                "not detected"
+            }
         ),
     ];
     note("Preflight", lines.join("\n"))?;
@@ -789,17 +819,14 @@ fn show_summary(config: &InstallerConfig, service_started: bool) -> Result<()> {
     )?;
 
     if config.skip_service {
-        cliclack::log::info(&format!(
+        cliclack::log::info(format!(
             "Run manually: {} serve",
             config.install_path.display()
         ))?;
     } else if service_started {
-        cliclack::log::info(&format!(
-            "Logs: journalctl -u {} -f",
-            config.service_name
-        ))?;
+        cliclack::log::info(format!("Logs: journalctl -u {} -f", config.service_name))?;
     }
-    cliclack::log::info(&format!("Dashboard: http://<your-host>:{}", config.port))?;
+    cliclack::log::info(format!("Dashboard: http://<your-host>:{}", config.port))?;
 
     outro("Dokuru is ready.")?;
     Ok(())
@@ -820,7 +847,7 @@ where
                 Ok(value)
             }
             Err(err) => {
-                sp.error(&err.to_string());
+                sp.error(err.to_string());
                 Err(err)
             }
         }
@@ -864,6 +891,14 @@ fn write_config_file(config: &InstallerConfig) -> Result<()> {
     fs::create_dir_all(&config.config_dir)
         .wrap_err_with(|| format!("Failed to create {}", config.config_dir.display()))?;
 
+    // Set directory permission to 755 (readable by all users)
+    let mut dir_permissions = fs::metadata(&config.config_dir)
+        .wrap_err_with(|| format!("Failed to stat {}", config.config_dir.display()))?
+        .permissions();
+    dir_permissions.set_mode(0o755);
+    fs::set_permissions(&config.config_dir, dir_permissions)
+        .wrap_err_with(|| format!("Failed to chmod {}", config.config_dir.display()))?;
+
     let config_path = runtime_config_path(config);
     let runtime_config = RuntimeConfig {
         server: ServerConfig {
@@ -879,7 +914,17 @@ fn write_config_file(config: &InstallerConfig) -> Result<()> {
         .wrap_err("Failed to serialize Dokuru config to TOML")?;
 
     fs::write(&config_path, toml_content)
-        .wrap_err_with(|| format!("Failed to write {}", config_path.display()))
+        .wrap_err_with(|| format!("Failed to write {}", config_path.display()))?;
+
+    // Set file permission to 644 (readable by all users, writable by owner)
+    let mut file_permissions = fs::metadata(&config_path)
+        .wrap_err_with(|| format!("Failed to stat {}", config_path.display()))?
+        .permissions();
+    file_permissions.set_mode(0o644);
+    fs::set_permissions(&config_path, file_permissions)
+        .wrap_err_with(|| format!("Failed to chmod {}", config_path.display()))?;
+
+    Ok(())
 }
 
 fn write_systemd_unit(config: &InstallerConfig, preflight: &Preflight) -> Result<()> {
@@ -1188,4 +1233,3 @@ fn same_path(left: &Path, right: &Path) -> bool {
     let right = right.canonicalize().unwrap_or_else(|_| right.to_path_buf());
     left == right
 }
-

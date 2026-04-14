@@ -43,12 +43,11 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
     let rules = dokuru_core::get_all_rules();
 
     for rule in rules {
-        if let Ok(result) = checker.check_single_rule(&rule.id).await {
-            if let Ok(msg) = serde_json::to_string(&result) {
-                if socket.send(Message::Text(msg.into())).await.is_err() {
-                    break;
-                }
-            }
+        if let Ok(result) = checker.check_single_rule(&rule.id).await
+            && let Ok(msg) = serde_json::to_string(&result)
+            && socket.send(Message::Text(msg.into())).await.is_err()
+        {
+            break;
         }
         // Small delay to make the websocket UI effect visible
         tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;

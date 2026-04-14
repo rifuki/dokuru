@@ -2,7 +2,7 @@ use crate::state::AppState;
 use axum::{
     body::Body,
     extract::{Path, Request, State},
-    http::{header, HeaderMap, HeaderName, HeaderValue, StatusCode},
+    http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
 
@@ -55,10 +55,10 @@ pub async fn proxy_to_environment(
     );
 
     // Forward Content-Type if present
-    if let Some(ct) = original_headers.get(header::CONTENT_TYPE) {
-        if let Ok(ct_str) = ct.to_str() {
-            rq = rq.header(reqwest::header::CONTENT_TYPE, ct_str);
-        }
+    if let Some(ct) = original_headers.get(header::CONTENT_TYPE)
+        && let Ok(ct_str) = ct.to_str()
+    {
+        rq = rq.header(reqwest::header::CONTENT_TYPE, ct_str);
     }
 
     if !body_bytes.is_empty() {

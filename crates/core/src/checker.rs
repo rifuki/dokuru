@@ -119,7 +119,7 @@ impl Checker {
             }
             "5.26" => {
                 self.check_container_rule(rule, containers, |config| {
-                    config.security_opt.as_ref().map_or(false, |opts| {
+                    config.security_opt.as_ref().is_some_and(|opts| {
                         opts.iter().any(|opt| {
                             opt == "no-new-privileges" || opt == "no-new-privileges=true"
                         })
@@ -214,15 +214,13 @@ impl Checker {
         let mut affected = Vec::new();
 
         for container in containers {
-            if let Some(id) = &container.id {
-                if let Ok(details) = self.docker.inspect_container(id, None).await {
-                    if let Some(host_config) = details.host_config {
-                        if !check_fn(&host_config) {
-                            let name = details.name.unwrap_or_else(|| String::from("unknown"));
-                            affected.push(name.trim_start_matches('/').to_string());
-                        }
-                    }
-                }
+            if let Some(id) = &container.id
+                && let Ok(details) = self.docker.inspect_container(id, None).await
+                && let Some(host_config) = details.host_config
+                && !check_fn(&host_config)
+            {
+                let name = details.name.unwrap_or_else(|| String::from("unknown"));
+                affected.push(name.trim_start_matches('/').to_string());
             }
         }
 
