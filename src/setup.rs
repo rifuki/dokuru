@@ -213,30 +213,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         config.skip_service = true;
     }
 
-    // Show summary and confirm
-    let mut summary_lines = vec![
-        format!("Binary:  {}", config.install_path.display()),
-        format!("Config:  {}", runtime_config_path(&config).display()),
-        format!("Port:    {}", config.port),
-        format!("Bind:    {}", config.host),
-        format!("Docker:  {}", config.docker_socket),
-        format!("CORS:    {}", config.cors_origins),
-    ];
-
-    if config.skip_service {
-        summary_lines.push("Service: skipped".to_string());
-    } else if preflight.has_systemd {
-        summary_lines.push(format!(
-            "Service: {}",
-            config
-                .systemd_dir
-                .join(format!("{}.service", config.service_name))
-                .display()
-        ));
-    }
-
-    note("Configuration summary", summary_lines.join("\n"))?;
-
+    // Confirm before applying
     let prompt = match effective_mode {
         SetupMode::Onboard => {
             let source_binary = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("dokuru"));
