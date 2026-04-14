@@ -1369,6 +1369,8 @@ fn binary_version(path: &Path) -> Option<String> {
 fn command_success(program: &str, args: &[&str]) -> bool {
     Command::new(program)
         .args(args)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .status()
         .map(|status| status.success())
         .unwrap_or(false)
