@@ -216,7 +216,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         bail!("cancelled");
     }
 
-    if effective_mode.should_install_binary() {
+    if effective_mode.should_install_binary() && source_binary != config.install_path {
         run_step("Installing Dokuru binary", || {
             install_binary(&source_binary, &config.install_path)
         })?;
