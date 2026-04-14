@@ -1,4 +1,5 @@
 use clap::Args;
+use dialoguer::console::Style;
 use dialoguer::{theme::ColorfulTheme, Confirm, Input, Select};
 use dokuru_server::infrastructure::config::{
     config_path_in, Config as RuntimeConfig, DockerConfig, ServerConfig,
@@ -607,7 +608,7 @@ fn prompt_for_config(_mode: SetupMode, mut config: InstallerConfig) -> Result<In
         return Ok(config);
     }
 
-    let theme = ColorfulTheme::default();
+    let theme = prompt_theme();
 
     match _mode {
         SetupMode::Onboard => {
@@ -755,12 +756,13 @@ fn print_quickstart_box(config: &InstallerConfig) {
 
 fn print_box(title: &str, lines: &[String]) {
     println!();
-    println!("  {} {}", bullet_prefix(), title);
-    println!("  │");
+    let title = format!("{} {}", bullet_prefix(), accent(title));
+    println!("  {title}");
+    println!("  {}", panel_top());
     for line in lines {
-        println!("  │  {}", line);
+        println!("  {}  {}", panel_side(), muted(line));
     }
-    println!("  │");
+    println!("  {}", panel_bottom());
 }
 
 fn confirm_install(mode: SetupMode, config: &InstallerConfig) -> Result<bool> {
@@ -1136,13 +1138,13 @@ where
 
 fn print_banner(mode: SetupMode) {
     println!();
-    println!("  {} {}", bold("dokuru"), dim(mode.heading()));
+    println!("  {} {}", accent("🐳 Dokuru"), muted(mode.heading()));
     println!("  {}", dim("Docker hardening agent installer"));
 }
 
 fn print_preflight(config: &InstallerConfig, preflight: &Preflight) {
     println!();
-    println!("  {}", bold("Preflight"));
+    println!("  {}", accent("Preflight"));
     print_item(ok_prefix(), "OS", preflight.os);
     print_item(ok_prefix(), "Architecture", preflight.arch);
     print_item(
@@ -1197,7 +1199,7 @@ fn print_preflight(config: &InstallerConfig, preflight: &Preflight) {
 
 fn print_plan(config: &InstallerConfig, preflight: &Preflight) {
     println!();
-    println!("  {}", bold("Plan"));
+    println!("  {}", accent("Plan"));
     print_item(
         step_prefix(),
         "Binary",
@@ -1230,11 +1232,14 @@ fn print_plan(config: &InstallerConfig, preflight: &Preflight) {
 
 fn print_summary(config: &InstallerConfig, service_started: bool) {
     println!();
-    println!("  {}", bold("Configuration saved to:"));
-    println!("    {}", runtime_config_path(config).display());
+    println!("  {}", accent("Configuration saved to:"));
+    println!(
+        "    {}",
+        muted(&runtime_config_path(config).display().to_string())
+    );
 
     println!();
-    println!("  {}", bold("Quick summary:"));
+    println!("  {}", accent("Quick summary:"));
     print_summary_item(
         "⚙",
         "Config",
@@ -1264,7 +1269,7 @@ fn print_summary(config: &InstallerConfig, service_started: bool) {
 
 fn print_docker_missing_hint(socket_path: &str) {
     println!();
-    println!("  {} {}", paint("38;5;45", "🐳"), bold("Docker Required"));
+    println!("  {} {}", paint("38;5;45", "🐳"), accent("Docker Required"));
     println!(
         "  {} Docker daemon is not ready on {}",
         warn_prefix(),
@@ -1278,11 +1283,37 @@ fn print_docker_missing_hint(socket_path: &str) {
 }
 
 fn print_item(status: String, label: &str, value: &str) {
-    println!("    {:<6} {:<16} {}", status, label, value);
+    println!("    {:<6} {:<16} {}", status, muted(label), value);
 }
 
 fn print_summary_item(icon: &str, label: &str, value: &str) {
-    println!("    {} {:<12} {}", icon, format!("{}:", label), value);
+    println!(
+        "    {} {:<12} {}",
+        icon,
+        muted(&format!("{}:", label)),
+        value
+    );
+}
+
+fn prompt_theme() -> ColorfulTheme {
+    let mut theme = ColorfulTheme::default();
+    theme.prompt_style = Style::new().color256(215).bold();
+    theme.prompt_prefix = Style::new().color256(151).apply_to("◇".to_string());
+    theme.prompt_suffix = Style::new().color256(147).apply_to("›".to_string());
+    theme.success_prefix = Style::new().color256(121).apply_to("✔".to_string());
+    theme.success_suffix = Style::new().color256(147).apply_to("·".to_string());
+    theme.active_item_prefix = Style::new().color256(121).apply_to("❯".to_string());
+    theme.inactive_item_prefix = Style::new().color256(244).apply_to(" ".to_string());
+    theme.active_item_style = Style::new().color256(121).bold();
+    theme.inactive_item_style = Style::new().color256(252);
+    theme.values_style = Style::new().color256(189);
+    theme.hint_style = Style::new().color256(245);
+    theme.defaults_style = Style::new().color256(245);
+    theme.error_prefix = Style::new().color256(203).apply_to("✗".to_string());
+    theme.error_style = Style::new().color256(203).bold();
+    theme.checked_item_prefix = Style::new().color256(121).apply_to("◉".to_string());
+    theme.unchecked_item_prefix = Style::new().color256(244).apply_to("◯".to_string());
+    theme
 }
 
 fn command_exists(program: &str) -> bool {
@@ -1357,6 +1388,14 @@ fn dim(text: &str) -> String {
     paint("2", text)
 }
 
+fn accent(text: &str) -> String {
+    paint("38;5;215;1", text)
+}
+
+fn muted(text: &str) -> String {
+    paint("38;5;245", text)
+}
+
 fn ok_prefix() -> String {
     paint("38;5;83", "[ok]")
 }
@@ -1375,6 +1414,24 @@ fn step_prefix() -> String {
 
 fn bullet_prefix() -> String {
     paint("38;5;45", "◇")
+}
+
+fn panel_side() -> String {
+    paint("38;5;60", "│")
+}
+
+fn panel_top() -> String {
+    paint(
+        "38;5;60",
+        "╭──────────────────────────────────────────────╮",
+    )
+}
+
+fn panel_bottom() -> String {
+    paint(
+        "38;5;60",
+        "╰──────────────────────────────────────────────╯",
+    )
 }
 
 fn log_step(message: &str) {
