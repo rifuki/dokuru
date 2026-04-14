@@ -29,15 +29,15 @@ pub fn setup() -> (impl SubscriberInitExt, ReloadFilterHandle) {
 
     // File layer (daily rotation, no ANSI)
     let prod_log_dir = PathBuf::from("/var/log/dokuru");
-    let log_dir = if prod_log_dir.exists() {
+    let log_dir = if create_dir_all(&prod_log_dir).is_ok() {
         prod_log_dir
     } else {
-        std::env::current_dir().unwrap_or_default().join("logs")
+        let fallback = std::env::temp_dir().join("dokuru");
+        if let Err(e) = create_dir_all(&fallback) {
+            eprintln!("Failed to create log directory: {e}");
+        }
+        fallback
     };
-
-    if let Err(e) = create_dir_all(&log_dir) {
-        eprintln!("Failed to create log directory: {e}");
-    }
     println!("Logs will be written to: {}", log_dir.display());
 
     let file_appender = RollingFileAppender::new(Rotation::DAILY, log_dir, "backend.log");

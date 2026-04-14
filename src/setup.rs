@@ -234,7 +234,12 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         ));
     }
 
-    note("Configuration", summary_lines.join("\n"))?;
+    // Show configuration summary with filled diamond (important info)
+    println!("\n◆ Configuration ────────────────────────────────╮");
+    for line in &summary_lines {
+        println!("│ {}", line);
+    }
+    println!("├────────────────────────────────────────────────╯\n");
 
     // Confirm before applying
     let prompt = match effective_mode {
