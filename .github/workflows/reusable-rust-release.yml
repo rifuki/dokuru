@@ -36,18 +36,18 @@ jobs:
         with:
           targets: ${{ inputs.target }}
 
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-${{ inputs.target }}
+
       - name: Setup Zig
-        uses: goto-bus-stop/setup-zig@v2
+        uses: mlugg/setup-zig@v2
         with:
           version: 0.13.0
 
       - name: Install cargo-zigbuild
         run: cargo install cargo-zigbuild --locked
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: release-${{ inputs.target }}
 
       - name: Build release binary
         run: cargo zigbuild --release --target ${{ inputs.target }}
@@ -65,3 +65,4 @@ jobs:
           name: ${{ inputs.artifact_name }}
           path: ${{ inputs.artifact_name }}
           retention-days: 1
+          compression-level: 0

@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - '**/*.md'
+      - 'LICENSE'
+      - '.gitignore'
   workflow_dispatch:
 
 permissions:
@@ -63,7 +67,7 @@ jobs:
         run: gh release delete latest --yes --cleanup-tag || true
 
       - name: Publish latest release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: latest
           target_commitish: ${{ github.sha }}
