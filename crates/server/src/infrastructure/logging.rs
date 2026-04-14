@@ -15,12 +15,17 @@ pub fn setup() -> (impl SubscriberInitExt, ReloadFilterHandle) {
 
     let (filter_layer, reload_handle) = reload::Layer::new(env_filter);
 
-    // Terminal layer (colored, compact)
+    // Detect if stdout is a terminal
+    let is_terminal = std::io::IsTerminal::is_terminal(&std::io::stdout());
+
+    // Terminal layer - colored if terminal, plain if not
     let terminal_layer = fmt::layer()
         .with_writer(std::io::stdout)
-        .with_ansi(true)
+        .with_ansi(is_terminal)
         .with_target(true)
-        .compact();
+        .with_level(true)
+        .with_thread_ids(false)
+        .with_thread_names(false);
 
     // File layer (daily rotation, no ANSI)
     let prod_log_dir = PathBuf::from("/var/log/dokuru");
@@ -41,8 +46,7 @@ pub fn setup() -> (impl SubscriberInitExt, ReloadFilterHandle) {
         .with_ansi(false)
         .with_target(true)
         .with_file(true)
-        .with_line_number(true)
-        .compact();
+        .with_line_number(true);
 
     let subscriber = tracing_subscriber::registry()
         .with(filter_layer)
