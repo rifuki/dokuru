@@ -235,7 +235,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         ));
     }
 
-    note("Install plan", summary_lines.join("\n"))?;
+    note("Configuration summary", summary_lines.join("\n"))?;
 
     let prompt = match effective_mode {
         SetupMode::Onboard => {
