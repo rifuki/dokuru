@@ -207,16 +207,34 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
     }
 
     config = prompt_for_config(effective_mode, config)?;
-    show_plan(&config, &preflight)?;
+
+    // Show summary of what will be applied
+    let mut summary_lines = vec![
+        format!("Binary:  {}", config.install_path.display()),
+        format!("Config:  {}", runtime_config_path(&config).display()),
+        format!("Port:    {}", config.port),
+        format!("Bind:    {}", config.host),
+        format!("Docker:  {}", config.docker_socket),
+        format!("CORS:    {}", config.cors_origins),
+    ];
+
+    if config.skip_service {
+        summary_lines.push("Service: skipped".to_string());
+    } else if preflight.has_systemd {
+        summary_lines.push(format!(
+            "Service: {}",
+            config
+                .systemd_dir
+                .join(format!("{}.service", config.service_name))
+                .display()
+        ));
+    }
+
+    note("Install plan", summary_lines.join("\n"))?;
 
     if !config.skip_service && !preflight.has_systemd {
         cliclack::log::warning("systemd not detected — continuing without a managed service")?;
         config.skip_service = true;
-    }
-
-    if !confirm_install(effective_mode, &config)? {
-        outro_cancel("Configuration cancelled.")?;
-        bail!("cancelled");
     }
 
     if effective_mode.should_install_binary() && source_binary != config.install_path {
@@ -749,20 +767,6 @@ fn prompt_for_config(mode: SetupMode, mut config: InstallerConfig) -> Result<Ins
 
     match mode {
         SetupMode::Onboard => {
-            note(
-                "QuickStart defaults",
-                format!(
-                    "Port:    {}\nBind:    {}\nDocker:  {}\nService: {}",
-                    config.port,
-                    config.host,
-                    config.docker_socket,
-                    if config.skip_service {
-                        "disabled"
-                    } else {
-                        "enabled"
-                    },
-                ),
-            )?;
             configure_server_section(&mut config)?;
             configure_docker_section(&mut config)?;
             configure_service_section(&mut config)?;
@@ -857,32 +861,6 @@ fn configure_service_section(config: &mut InstallerConfig) -> Result<()> {
     Ok(())
 }
 
-fn confirm_install(mode: SetupMode, config: &InstallerConfig) -> Result<bool> {
-    if config.yes || !stderr().is_terminal() {
-        return Ok(true);
-    }
-
-    let prompt = match mode {
-        SetupMode::Onboard => {
-            let source_binary = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("dokuru"));
-            if source_binary == config.install_path {
-                "Apply these settings?".to_string()
-            } else {
-                format!(
-                    "Apply these settings and install Dokuru to {}?",
-                    config.install_path.display()
-                )
-            }
-        }
-        SetupMode::Configure => format!("Apply changes to {}?", config.config_dir.display()),
-    };
-
-    confirm(prompt)
-        .initial_value(true)
-        .interact()
-        .map_err(Into::into)
-}
-
 fn confirm_action(yes: bool, prompt: &str) -> Result<bool> {
     if yes || !stderr().is_terminal() {
         return Ok(true);
@@ -951,32 +929,6 @@ fn show_preflight(config: &InstallerConfig, preflight: &Preflight) -> Result<()>
         ),
     ];
     note("Preflight", lines.join("\n"))?;
-    Ok(())
-}
-
-fn show_plan(config: &InstallerConfig, preflight: &Preflight) -> Result<()> {
-    let mut lines = vec![
-        format!("Binary:  {}", config.install_path.display()),
-        format!("Config:  {}", runtime_config_path(config).display()),
-        format!("Port:    {}", config.port),
-        format!("Bind:    {}", config.host),
-        format!("Docker:  {}", config.docker_socket),
-        format!("CORS:    {}", config.cors_origins),
-    ];
-
-    if config.skip_service {
-        lines.push("Service: skipped".to_string());
-    } else if preflight.has_systemd {
-        lines.push(format!(
-            "Service: {}",
-            config
-                .systemd_dir
-                .join(format!("{}.service", config.service_name))
-                .display()
-        ));
-    }
-
-    note("Install plan", lines.join("\n"))?;
     Ok(())
 }
 
