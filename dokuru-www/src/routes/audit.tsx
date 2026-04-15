@@ -52,7 +52,15 @@ function AuditPage() {
   }, [results, statusFilter, severityFilter, sortKey])
 
   const toggle = (id: string) =>
-    setExpanded((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+    setExpanded((prev) => {
+      const s = new Set(prev);
+      if (s.has(id)) {
+        s.delete(id);
+      } else {
+        s.add(id);
+      }
+      return s;
+    });
 
   const cycleSort = () =>
     setSortKey((k) => k === 'id' ? 'severity' : k === 'severity' ? 'status' : 'id')

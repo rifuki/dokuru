@@ -244,7 +244,13 @@ function DashboardPage() {
   )
 }
 
-function StatsBox({ icon: Icon, label, value, color, bgColor }: any) {
+function StatsBox({ icon: Icon, label, value, color, bgColor }: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: number | string;
+  color: string;
+  bgColor: string;
+}) {
   return (
     <div className="bg-[#23282D] rounded-md border border-white/5 p-3 flex flex-col items-center justify-center cursor-pointer hover:bg-white/[0.04] transition-colors relative overflow-hidden group">
       <div className={`absolute -right-2 -top-2 w-12 h-12 rounded-full ${bgColor} blur-xl group-hover:bg-opacity-80 transition-all`} />

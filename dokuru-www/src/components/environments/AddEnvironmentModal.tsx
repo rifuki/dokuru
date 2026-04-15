@@ -60,8 +60,9 @@ export function AddEnvironmentModal({ isOpen, onClose }: AddEnvironmentModalProp
       setUrl('');
       setType('docker_standalone');
       onClose();
-    } catch (err: any) {
-      setError(err.message || 'Failed to connect to the remote environment');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to connect to the remote environment';
+      setError(message);
     } finally {
       setLoading(false);
     }
