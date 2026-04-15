@@ -1,0 +1,35 @@
+name: Deploy to Parallels
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy Agent
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Deploy to Parallels VM
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -e
+            echo "🔄 Updating Dokuru..."
+            
+            # Update using dokuru's built-in update command
+            if command -v dokuru &> /dev/null; then
+              sudo dokuru update -y
+            else
+              # Fresh install
+              curl -fsSL https://raw.githubusercontent.com/rifuki/dokuru/main/install.sh | sudo bash -s -- -y
+            fi
+            
+            echo "✅ Deployment complete"
+            sudo systemctl status dokuru --no-pager

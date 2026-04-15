@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   web-build:
-    name: Web Build
+    name: Web Build & Lint
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -32,11 +32,14 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Lint
+        run: bun run lint
+
       - name: Build frontend
         run: bun run build
 
   rust-check:
-    name: Rust Check
+    name: Rust Check & Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -49,6 +52,18 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: dokuru-agent
+
+      - name: Format check
+        working-directory: dokuru-agent
+        run: cargo fmt --check
+
+      - name: Clippy
+        working-directory: dokuru-agent
+        run: cargo clippy -- -D warnings -W clippy::pedantic -W clippy::nursery
+
+      - name: Test
+        working-directory: dokuru-agent
+        run: cargo test
 
       - name: Check workspace
         working-directory: dokuru-agent
