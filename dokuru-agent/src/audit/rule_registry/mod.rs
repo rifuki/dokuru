@@ -86,9 +86,10 @@ impl RuleRegistry {
     pub fn new() -> Self {
         let mut rules = HashMap::new();
 
-        // Register Section 2 rules
-        rules.insert("2.10".into(), section2::rule_2_10());
-        rules.insert("2.11".into(), section2::rule_2_11());
+        // Register all sections
+        for rule in section2::Section2::rules() {
+            rules.insert(rule.id.clone(), rule);
+        }
 
         Self { rules }
     }
