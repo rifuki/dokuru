@@ -8,7 +8,6 @@ import {
   Settings,
   Shield,
   Terminal,
-  Wrench,
   X,
   ChevronDown,
 } from 'lucide-react';
@@ -26,7 +25,6 @@ const DockerIcon = ({ className = 'w-4 h-4' }: { className?: string }) => (
 const ENV_MENU_ITEMS = [
   { path: '/dashboard', label: 'Dashboard', icon: Activity },
   { path: '/audit', label: 'Live Audit', icon: Shield },
-  { path: '/fix', label: 'Remediation', icon: Wrench },
   { path: '/report', label: 'Report', icon: FileText },
 ];
 

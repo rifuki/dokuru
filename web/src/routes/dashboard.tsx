@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
-import { Activity, Shield, Server, Box, Layers, Network, HardDrive, AlertTriangle, CheckCircle2, Play, Wrench, Clock, TrendingUp } from 'lucide-react'
+import { Activity, Shield, Server, Box, Layers, Network, HardDrive, AlertTriangle, CheckCircle2, Play, Clock, TrendingUp } from 'lucide-react'
 
 import { useAudit } from '@/features/audit/hooks/use-audit'
 import { useHealth } from '@/features/health/hooks/use-health'
@@ -178,11 +178,11 @@ function DashboardPage() {
                 )}
               </Button>
               <Link
-                to="/fix"
+                to="/audit"
                 className="flex w-full items-center justify-start gap-2 rounded-md border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10"
               >
-                <Wrench className="h-4 w-4" />
-                Remediation
+                <Shield className="h-4 w-4" />
+                Live Audit
               </Link>
             </div>
           </section>
