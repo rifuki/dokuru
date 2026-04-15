@@ -21,33 +21,64 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-web:
-    name: Build Web Dist
-    uses: ./.github/workflows/reusable-web-dist.yml
+  build:
+    name: Build ${{ matrix.artifact_name }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            artifact_name: dokuru-linux-amd64
+            strip_binary: true
+          - target: aarch64-unknown-linux-musl
+            artifact_name: dokuru-linux-arm64
+            strip_binary: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  build-linux-amd64:
-    name: Build Linux AMD64
-    needs: build-web
-    uses: ./.github/workflows/reusable-rust-release.yml
-    with:
-      target: x86_64-unknown-linux-musl
-      artifact_name: dokuru-linux-amd64
-      strip_binary: true
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
-  build-linux-arm64:
-    name: Build Linux ARM64
-    needs: build-web
-    uses: ./.github/workflows/reusable-rust-release.yml
-    with:
-      target: aarch64-unknown-linux-musl
-      artifact_name: dokuru-linux-arm64
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: dokuru-agent
+          shared-key: release-${{ matrix.target }}
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Install cargo-zigbuild
+        run: cargo install cargo-zigbuild --locked
+
+      - name: Build release binary
+        working-directory: dokuru-agent
+        run: cargo zigbuild --release --target ${{ matrix.target }}
+
+      - name: Strip binary
+        if: matrix.strip_binary
+        run: strip dokuru-agent/target/${{ matrix.target }}/release/dokuru
+
+      - name: Rename binary
+        run: cp dokuru-agent/target/${{ matrix.target }}/release/dokuru ${{ matrix.artifact_name }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_name }}
+          retention-days: 1
+          compression-level: 0
 
   publish-latest:
     name: Publish Rolling Latest Release
     runs-on: ubuntu-latest
-    needs:
-      - build-linux-amd64
-      - build-linux-arm64
+    needs: build
     steps:
       - name: Download release artifacts
         uses: actions/download-artifact@v8
@@ -56,7 +87,7 @@ jobs:
           merge-multiple: true
 
       - name: Generate checksums
-        run: sha256sum dokuru-linux-amd64 dokuru-linux-arm64 > SHA256SUMS
+        run: sha256sum dokuru-linux-* > SHA256SUMS
 
       - name: Compute release metadata
         id: meta
@@ -93,4 +124,5 @@ jobs:
             SHA256SUMS
           draft: false
           prerelease: true
+          make_latest: true
           generate_release_notes: false
