@@ -57,15 +57,12 @@ pub fn resolve_config(args: SetupArgs) -> InstallerConfig {
         .service_name
         .unwrap_or_else(|| "dokuru".to_string());
 
-    let port = args.port.map_or_else(
-        || {
-            std::env::var("PORT")
-                .ok()
-                .and_then(|value| value.parse::<u16>().ok())
-                .unwrap_or(3939)
-        },
-        |port| port,
-    );
+    let port = args.port.unwrap_or_else(|| {
+        std::env::var("PORT")
+            .ok()
+            .and_then(|value| value.parse::<u16>().ok())
+            .unwrap_or(3939)
+    });
 
     let host = args
         .host

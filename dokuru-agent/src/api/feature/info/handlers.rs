@@ -39,7 +39,7 @@ pub async fn get_info(State(state): State<AppState>) -> ApiResult<EnvironmentInf
         .await
         .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
-    let cpu_count = sys.ncpu.unwrap_or(0) as i64;
+    let cpu_count = sys.ncpu.unwrap_or(0);
     let memory_total = sys.mem_total.unwrap_or(0);
     let docker_version = sys.server_version.unwrap_or_else(|| "unknown".to_string());
     let os = sys

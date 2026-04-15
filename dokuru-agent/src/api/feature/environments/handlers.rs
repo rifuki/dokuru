@@ -13,19 +13,14 @@ use crate::api::{
 
 // ─── Model ────────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum EnvironmentType {
+    #[default]
     DockerStandalone,
     DockerSwarm,
     Podman,
     Other,
-}
-
-impl Default for EnvironmentType {
-    fn default() -> Self {
-        Self::DockerStandalone
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
