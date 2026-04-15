@@ -16,7 +16,38 @@ pub fn rule_2_10() -> RuleDefinition {
         scored: true,
 
         audit_command: Some("docker info --format '{{ .SecurityOptions }}'".into()),
-        check_fn: check_2_10,
+        check_fn: |docker, _containers| {
+            let docker = docker.clone();
+            Box::pin(async move {
+                let info = docker.info().await?;
+                let enabled = info
+                    .security_options
+                    .as_ref()
+                    .is_some_and(|opts| opts.iter().any(|opt| opt.contains("userns")));
+
+                Ok(CheckResult {
+                    rule: CisRule {
+                        id: "2.10".into(),
+                        title: "Ensure that user namespace support is enabled".into(),
+                        category: RuleCategory::Namespace,
+                        severity: Severity::High,
+                        section: "Daemon Configuration".into(),
+                        description: "User namespace support".into(),
+                        remediation: "Enable userns-remap in daemon.json".into(),
+                    },
+                    status: if enabled { CheckStatus::Pass } else { CheckStatus::Fail },
+                    message: if enabled {
+                        "User namespace is enabled".into()
+                    } else {
+                        "User namespace is not enabled".into()
+                    },
+                    affected: if enabled { vec![] } else { vec!["Docker daemon".into()] },
+                    remediation_kind: RemediationKind::Guided,
+                    audit_command: Some("docker info --format '{{ .SecurityOptions }}'".into()),
+                    raw_output: info.security_options.map(|opts| opts.join(", ")),
+                })
+            })
+        },
 
         remediation_kind: RemediationKind::Guided,
         fix_fn: None,
@@ -29,7 +60,8 @@ pub fn rule_2_10() -> RuleDefinition {
    sudo systemctl restart docker
 
 3. Verify:
-   docker info | grep userns"#.into(),
+   docker info | grep userns"#
+            .into(),
         requires_restart: true,
         requires_elevation: true,
 
@@ -43,50 +75,6 @@ pub fn rule_2_10() -> RuleDefinition {
     }
 }
 
-fn check_2_10(
-    docker: &Docker,
-    _containers: &[bollard::models::ContainerSummary],
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<CheckResult>> + Send>> {
-    let docker = docker.clone();
-    Box::pin(async move {
-        let info = docker.info().await?;
-        let enabled = info
-            .security_options
-            .as_ref()
-            .is_some_and(|opts| opts.iter().any(|opt| opt.contains("userns")));
-
-        Ok(CheckResult {
-            rule: CisRule {
-                id: "2.10".into(),
-                title: "Ensure that user namespace support is enabled".into(),
-                category: RuleCategory::Namespace,
-                severity: Severity::High,
-                section: "Daemon Configuration".into(),
-                description: "User namespace support".into(),
-                remediation: "Enable userns-remap in daemon.json".into(),
-            },
-            status: if enabled {
-                CheckStatus::Pass
-            } else {
-                CheckStatus::Fail
-            },
-            message: if enabled {
-                "User namespace is enabled".into()
-            } else {
-                "User namespace is not enabled".into()
-            },
-            affected: if enabled {
-                vec![]
-            } else {
-                vec!["Docker daemon".into()]
-            },
-            remediation_kind: RemediationKind::Guided,
-            audit_command: Some("docker info --format '{{ .SecurityOptions }}'".into()),
-            raw_output: info.security_options.map(|opts| opts.join(", ")),
-        })
-    })
-}
-
 pub fn rule_2_11() -> RuleDefinition {
     RuleDefinition {
         id: "2.11".into(),
@@ -94,12 +82,54 @@ pub fn rule_2_11() -> RuleDefinition {
         title: "Ensure that cgroup usage is confirmed".into(),
         description: "Cgroup v2 provides better resource management and security isolation.".into(),
 
-        category: RuleCategory::Namespace,
+        category: RuleCategory::Cgroup,
         severity: Severity::Medium,
         scored: true,
 
         audit_command: Some("docker info --format '{{ .CgroupVersion }}'".into()),
-        check_fn: check_2_11,
+        check_fn: |docker, _containers| {
+            let docker = docker.clone();
+            Box::pin(async move {
+                let info = docker.info().await?;
+                let cgroup_v2 = info
+                    .cgroup_version
+                    .as_ref()
+                    .map(|v| format!("{:?}", v).contains("V2"))
+                    .unwrap_or(false);
+
+                let raw_output = info.cgroup_version.as_ref().map(|v| format!("{:?}", v));
+
+                Ok(CheckResult {
+                    rule: CisRule {
+                        id: "2.11".into(),
+                        title: "Ensure that cgroup usage is confirmed".into(),
+                        category: RuleCategory::Cgroup,
+                        severity: Severity::Medium,
+                        section: "Daemon Configuration".into(),
+                        description: "Cgroup v2 usage".into(),
+                        remediation: "Upgrade to cgroup v2".into(),
+                    },
+                    status: if cgroup_v2 {
+                        CheckStatus::Pass
+                    } else {
+                        CheckStatus::Fail
+                    },
+                    message: if cgroup_v2 {
+                        "cgroup v2 is in use".into()
+                    } else {
+                        "cgroup v2 is not in use".into()
+                    },
+                    affected: if cgroup_v2 {
+                        vec![]
+                    } else {
+                        vec!["Docker daemon".into()]
+                    },
+                    remediation_kind: RemediationKind::Manual,
+                    audit_command: Some("docker info --format '{{ .CgroupVersion }}'".into()),
+                    raw_output,
+                })
+            })
+        },
 
         remediation_kind: RemediationKind::Manual,
         fix_fn: None,
@@ -116,51 +146,4 @@ pub fn rule_2_11() -> RuleDefinition {
         impact: "Requires kernel upgrade if not already on cgroup v2.".into(),
         tags: vec!["cgroup".into(), "resource-management".into()],
     }
-}
-
-fn check_2_11(
-    docker: &Docker,
-    _containers: &[bollard::models::ContainerSummary],
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<CheckResult>> + Send>> {
-    let docker = docker.clone();
-    Box::pin(async move {
-        let info = docker.info().await?;
-        let cgroup_v2 = info
-            .cgroup_version
-            .as_ref()
-            .map(|v| format!("{:?}", v).contains("V2"))
-            .unwrap_or(false);
-
-        let raw_output = info.cgroup_version.as_ref().map(|v| format!("{:?}", v));
-
-        Ok(CheckResult {
-            rule: CisRule {
-                id: "2.11".into(),
-                title: "Ensure that cgroup usage is confirmed".into(),
-                category: RuleCategory::Cgroup,
-                severity: Severity::Medium,
-                section: "Daemon Configuration".into(),
-                description: "Cgroup v2 usage".into(),
-                remediation: "Upgrade to cgroup v2".into(),
-            },
-            status: if cgroup_v2 {
-                CheckStatus::Pass
-            } else {
-                CheckStatus::Fail
-            },
-            message: if cgroup_v2 {
-                "cgroup v2 is in use".into()
-            } else {
-                "cgroup v2 is not in use".into()
-            },
-            affected: if cgroup_v2 {
-                vec![]
-            } else {
-                vec!["Docker daemon".into()]
-            },
-            remediation_kind: RemediationKind::Manual,
-            audit_command: Some("docker info --format '{{ .CgroupVersion }}'".into()),
-            raw_output,
-        })
-    })
 }
