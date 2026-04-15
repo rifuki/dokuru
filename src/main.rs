@@ -2,6 +2,7 @@ use bollard::{API_DEFAULT_VERSION, Docker};
 use clap::{Parser, Subcommand};
 use dokuru_core::{Checker, Fixer};
 
+mod agent;
 mod setup;
 
 /// Dokuru 0.1.0 - Docker Security Hardening Agent (CIS Benchmark v1.8.0)
@@ -33,6 +34,15 @@ enum Commands {
     Tui,
     /// Start the API daemon (Axum server)
     Serve,
+    /// Run as agent and connect to server
+    Agent {
+        /// Server WebSocket URL (e.g., wss://api.dokuru.rifuki.dev/ws/agent)
+        #[arg(long)]
+        server: String,
+        /// API token for authentication
+        #[arg(long)]
+        token: String,
+    },
 }
 
 #[tokio::main]
@@ -88,6 +98,10 @@ async fn main() -> eyre::Result<()> {
         Commands::Serve => {
             println!("API Server starting...");
             dokuru_server::serve().await?;
+        }
+        Commands::Agent { server, token } => {
+            println!("Starting agent mode...");
+            agent::run_agent(server.clone(), token.clone()).await?;
         }
     }
 

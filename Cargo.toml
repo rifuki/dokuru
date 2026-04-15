@@ -42,3 +42,9 @@ color-eyre.workspace = true
 tracing.workspace = true
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 bollard.workspace = true
+tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+futures-util = "0.3"
+serde.workspace = true
+serde_json.workspace = true
+uuid = { version = "1", features = ["v4", "serde"] }
+hostname = "0.4"

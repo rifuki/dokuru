@@ -1,3 +1,20 @@
+
+/// Run audit and return results (for agent mode)
+pub async fn run_audit() -> eyre::Result<Vec<dokuru_core::CheckResult>> {
+    use bollard::{API_DEFAULT_VERSION, Docker};
+    use dokuru_core::Checker;
+
+    let socket = std::env::var("DOCKER_SOCKET")
+        .unwrap_or_else(|_| "/var/run/docker.sock".to_string());
+    
+    let docker = Docker::connect_with_unix(&socket, 120, API_DEFAULT_VERSION)
+        .map_err(|e| eyre::eyre!(e))?;
+    
+    let checker = Checker::new(docker);
+    let report = checker.run_audit().await?;
+    
+    Ok(report.results)
+}
 use clap::Args;
 use cliclack::{confirm, input, intro, note, outro, outro_cancel, select, spinner};
 use dokuru_server::infrastructure::config::{
