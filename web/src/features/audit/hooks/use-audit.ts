@@ -12,5 +12,6 @@ export function useAudit(enabled: boolean = true) {
     queryFn: getAudit,
     enabled: enabled && !!activeId,
     staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 }

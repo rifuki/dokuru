@@ -34,7 +34,9 @@ export const apiClient = {
       : undefined;
     try {
       const res = await client.get<ApiSuccess<T>>(resolvePath(path), { params: filtered });
-      return res.data.data as T;
+      const data = res.data.data;
+      if (data === undefined) throw new HttpError('Empty response from server', res.status);
+      return data as T;
     } catch (err) {
       throw toHttpError(err);
     }
@@ -43,7 +45,9 @@ export const apiClient = {
   async post<T>(path: string, body?: unknown): Promise<T> {
     try {
       const res = await client.post<ApiSuccess<T>>(resolvePath(path), body);
-      return res.data.data as T;
+      const data = res.data.data;
+      if (data === undefined) throw new HttpError('Empty response from server', res.status);
+      return data as T;
     } catch (err) {
       throw toHttpError(err);
     }
