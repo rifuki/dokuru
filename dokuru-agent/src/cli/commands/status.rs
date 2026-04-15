@@ -88,7 +88,7 @@ pub fn run_status() -> Result<()> {
         )?;
     }
 
-    log::info(format!("Agent: http://{host_ip}:{port}"))?;
+    log::info(format!("Agent: {host_ip}:{port}"))?;
     outro("Done.")?;
     Ok(())
 }

@@ -271,7 +271,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         })
         .map_or_else(|_| "localhost".to_string(), |a| a.ip().to_string());
     next_steps.push(format!(
-        "Agent URL: http://{host_ip}:{}\n           → Add this as a new environment in your Dokuru dashboard",
+        "Agent URL: {host_ip}:{}\n           → Add this as a new environment in your Dokuru dashboard",
         config.port
     ));
 

@@ -93,7 +93,7 @@ pub fn run_update(args: &UpdateArgs) -> Result<()> {
             s.local_addr()
         })
         .map_or_else(|_| "localhost".to_string(), |a| a.ip().to_string());
-    cliclack::log::info(format!("Agent: http://{host_ip}:{}", config.port))?;
+    cliclack::log::info(format!("Agent: {host_ip}:{}", config.port))?;
     outro("Dokuru updated successfully.")?;
     Ok(())
 }
