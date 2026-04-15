@@ -15,7 +15,7 @@ export const Route = createFileRoute('/dashboard')({
 function DashboardPage() {
   const navigate = useNavigate()
   const { data: health } = useHealth()
-  const { data: report, refetch, isFetching } = useAudit(true)
+  const { data: report, refetch, isFetching } = useAudit(false)
   const { data: info } = useEnvInfo()
 
   const environments = useEnvironmentStore((s) => s.environments)
