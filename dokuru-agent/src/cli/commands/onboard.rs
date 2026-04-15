@@ -178,7 +178,19 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
             cliclack::log::info(format!("→ {}", service_unit_path(&config).display()))?;
         }
 
+        note(
+            "Files written",
+            format!(
+                "Config:   {}\nService:  {}\nLogs:     /var/log/dokuru",
+                runtime_config_path(&config).display(),
+                service_unit_path(&config).display(),
+            ),
+        )?;
+
         run_step("Reloading systemd", reload_systemd)?;
+        if stderr().is_terminal() {
+            cliclack::log::info("→ systemctl daemon-reload")?;
+        }
 
         run_step("Enabling Dokuru service", || {
             enable_service(&config.service_name)
@@ -202,6 +214,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         }) {
             Ok(()) => {
                 if stderr().is_terminal() {
+                    cliclack::log::info(format!("→ systemctl start {}", config.service_name))?;
                     cliclack::log::success("✓ Active and running")?;
                 }
             }
