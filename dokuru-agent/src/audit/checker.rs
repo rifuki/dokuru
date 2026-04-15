@@ -3,16 +3,21 @@ use chrono::Utc;
 use serde_json::Value;
 use std::{fs, path::Path, path::PathBuf};
 
+use super::checks::SectionRegistry;
 use super::rules::{get_all_rules, get_rule_by_id};
 use super::types::*;
 
 pub struct Checker {
     docker: Docker,
+    registry: SectionRegistry,
 }
 
 impl Checker {
     pub fn new(docker: Docker) -> Self {
-        Self { docker }
+        Self {
+            docker,
+            registry: SectionRegistry::new(),
+        }
     }
 
     pub async fn run_audit(&self) -> eyre::Result<AuditReport> {
@@ -67,6 +72,12 @@ impl Checker {
         rule: &CisRule,
         containers: &[bollard::models::ContainerSummary],
     ) -> eyre::Result<CheckResult> {
+        // Dispatch to appropriate section via registry
+        if let Some(section) = self.registry.find_section(&rule.id) {
+            return section.check(rule, &self.docker, containers).await;
+        }
+
+        // Fallback for rules not yet migrated to sections
         match rule.id.as_str() {
             // ── Section 2: Daemon Configuration ──────────────────────────────
             "2.10" => self.check_2_10(rule).await,

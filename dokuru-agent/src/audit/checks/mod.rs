@@ -1,10 +1,40 @@
 // CIS Docker Benchmark checks organized by section
 //
-// TODO: Extract from checker.rs
-// - section2.rs: Daemon Configuration (2.10, 2.11)
-// - section3.rs: Docker Daemon Configuration Files (3.1-3.24)
-// - section5.rs: Container Runtime (5.1-5.31)
-// - utils.rs: Shared check utilities
+// Architecture: Strategy Pattern + Registry
+// - Each section implements CheckSection trait
+// - Registry dispatches rules to appropriate section
+// - Sections are self-contained (checks + fixes + metadata)
 
-// For now, keep all checks in checker.rs
-// This module will be populated during future refactoring
+mod section_trait;
+pub mod section2;
+// TODO: Implement section3, section5
+
+pub use section_trait::CheckSection;
+use std::sync::Arc;
+
+/// Registry of all CIS sections
+pub struct SectionRegistry {
+    sections: Vec<Arc<dyn CheckSection>>,
+}
+
+impl SectionRegistry {
+    pub fn new() -> Self {
+        Self {
+            sections: vec![
+                Arc::new(section2::Section2),
+                // TODO: Add Section3, Section5
+            ],
+        }
+    }
+
+    /// Find section that handles the given rule ID
+    pub fn find_section(&self, rule_id: &str) -> Option<&Arc<dyn CheckSection>> {
+        self.sections.iter().find(|s| s.handles(rule_id))
+    }
+}
+
+impl Default for SectionRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
