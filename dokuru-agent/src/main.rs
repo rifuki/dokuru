@@ -49,7 +49,7 @@ async fn main() -> eyre::Result<()> {
             cli::run_configure(args.clone())?;
         }
         Commands::Doctor(args) => cli::run_doctor(args.clone())?,
-        Commands::Status => cli::run_status(),
+        Commands::Status => cli::run_status()?,
         Commands::Update(args) => cli::run_update(args)?,
         Commands::Uninstall(args) => cli::run_uninstall(args)?,
         Commands::Serve => {

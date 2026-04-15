@@ -738,12 +738,15 @@ pub fn create_temp_dir(prefix: &str) -> Result<PathBuf> {
 
 pub fn download_file(url: &str, output: &Path) -> Result<()> {
     let mut command = Command::new("curl");
-    command.args(["--fail", "--location", "--retry", "3", "--retry-delay", "1"]);
-    if stderr().is_terminal() {
-        command.arg("--progress-bar");
-    } else {
-        command.arg("--silent");
-    }
+    command.args([
+        "--fail",
+        "--location",
+        "--retry",
+        "3",
+        "--retry-delay",
+        "1",
+        "--progress-bar",
+    ]);
     let status = command
         .arg("-o")
         .arg(output)
