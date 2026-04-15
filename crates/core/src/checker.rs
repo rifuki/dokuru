@@ -236,16 +236,20 @@ impl Checker {
                 && let Ok(details) = self.docker.inspect_container(id, None).await
                 && let Some(host_config) = details.host_config.clone()
             {
-                let name = details.name.clone().unwrap_or_else(|| String::from("unknown"));
+                let name = details
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| String::from("unknown"));
                 inspected_configs.push((name.clone(), host_config.clone()));
-                
+
                 if !check_fn(&host_config) {
                     affected.push(name.trim_start_matches('/').to_string());
                 }
             }
         }
 
-        let audit_command = format!("docker inspect $(docker ps -q) --format '{{{{json .HostConfig}}}}'");
+        let audit_command =
+            "docker inspect $(docker ps -q) --format '{{json .HostConfig}}'".to_string();
         let raw_output = serde_json::to_string_pretty(&inspected_configs).unwrap_or_default();
 
         let passed = affected.is_empty();
