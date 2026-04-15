@@ -4,7 +4,6 @@ use clap::{Parser, Subcommand};
 mod api;
 mod audit;
 mod cli;
-mod client;
 
 /// Dokuru 0.1.0 - Docker Security Hardening Agent (CIS Benchmark v1.8.0)
 #[derive(Parser)]
@@ -29,15 +28,6 @@ enum Commands {
     Uninstall(cli::UninstallArgs),
     /// Start the local API server (standalone mode)
     Serve,
-    /// Run as agent and connect to server (daemon mode)
-    Agent {
-        /// Server WebSocket URL (e.g., wss://api.dokuru.rifuki.dev/ws/agent)
-        #[arg(long)]
-        server: String,
-        /// API token for authentication
-        #[arg(long)]
-        token: String,
-    },
 }
 
 #[tokio::main]
@@ -62,9 +52,6 @@ async fn main() -> eyre::Result<()> {
         Commands::Uninstall(args) => cli::run_uninstall(args.clone())?,
         Commands::Serve => {
             cli::run_serve().await?;
-        }
-        Commands::Agent { server, token } => {
-            cli::run_agent(server.clone(), token.clone()).await?;
         }
     }
 
