@@ -39,7 +39,7 @@ tracing-appender = "0.2"
 bollard = "0.18"
 
 # WebSocket (agent mode)
-tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
 
 # Web server (local API mode)
 axum = { version = "0.8", features = ["ws", "macros"] }
