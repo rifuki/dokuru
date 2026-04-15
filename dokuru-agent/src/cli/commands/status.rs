@@ -9,9 +9,10 @@ pub fn run_status() -> Result<()> {
     let config_dir = default_config_dir();
     let saved = load_saved_runtime_config(&config_dir);
     let port = saved.as_ref().map(|c| c.server.port).unwrap_or(3939);
-    let docker_socket = saved
-        .as_ref()
-        .map_or_else(|_| "/var/run/docker.sock".to_string(), |c| c.docker.socket.clone());
+    let docker_socket = saved.as_ref().map_or_else(
+        |_| "/var/run/docker.sock".to_string(),
+        |c| c.docker.socket.clone(),
+    );
 
     let binary_path = Path::new("/usr/local/bin/dokuru");
     let version = binary_version(binary_path).unwrap_or_else(|| "unknown".to_string());
@@ -61,7 +62,11 @@ pub fn run_status() -> Result<()> {
     item(
         api_healthy,
         "API",
-        if api_healthy { "healthy" } else { "unreachable" },
+        if api_healthy {
+            "healthy"
+        } else {
+            "unreachable"
+        },
     )?;
 
     if api_healthy
@@ -73,22 +78,22 @@ pub fn run_status() -> Result<()> {
         && let Ok(json) = serde_json::from_str::<serde_json::Value>(&text)
         && let Some(summary) = json.get("data").and_then(|d| d.get("summary"))
     {
-            let score = summary
-                .get("score")
-                .and_then(serde_json::Value::as_u64)
-                .unwrap_or(0);
-            let passed = summary
-                .get("passed")
-                .and_then(serde_json::Value::as_u64)
-                .unwrap_or(0);
-            let failed = summary
-                .get("failed")
-                .and_then(serde_json::Value::as_u64)
-                .unwrap_or(0);
-            note(
-                "Last Audit",
-                format!("Score   {score}%\nPassed  {passed}\nFailed  {failed}"),
-            )?;
+        let score = summary
+            .get("score")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0);
+        let passed = summary
+            .get("passed")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0);
+        let failed = summary
+            .get("failed")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0);
+        note(
+            "Last Audit",
+            format!("Score   {score}%\nPassed  {passed}\nFailed  {failed}"),
+        )?;
     }
 
     let host_ip = std::net::UdpSocket::bind("0.0.0.0:0")
