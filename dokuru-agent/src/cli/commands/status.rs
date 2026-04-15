@@ -10,7 +10,7 @@ pub fn run_status() {
     let service_enabled = command_success("systemctl", &["is-enabled", "dokuru"]);
 
     // Check Docker
-    let docker_running = command_success("docker", &["info"]);
+    let docker_running = Path::new("/var/run/docker.sock").exists();
 
     // Check API health
     let api_healthy = reqwest::blocking::Client::new()
