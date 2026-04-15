@@ -1,5 +1,5 @@
 // Section 2: Docker Daemon Configuration
-use crate::audit::rule_definition::RuleDefinition;
+use super::RuleDefinition;
 use crate::audit::types::*;
 use bollard::Docker;
 use eyre::Result;

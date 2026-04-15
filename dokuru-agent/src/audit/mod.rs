@@ -5,13 +5,11 @@
 // - RuleRegistry = STORAGE + EXECUTOR
 // - That's it!
 
-mod rule_definition;
 mod rule_registry;
 mod types;
 
 // Public API
-pub use rule_definition::RuleDefinition;
-pub use rule_registry::RuleRegistry;
+pub use rule_registry::{RuleDefinition, RuleRegistry};
 pub use types::*;
 
 use bollard::{API_DEFAULT_VERSION, Docker};
