@@ -27,46 +27,38 @@ pub fn run_status() -> Result<()> {
         .send()
         .is_ok();
 
+    let host_ip = std::net::UdpSocket::bind("0.0.0.0:0")
+        .and_then(|s| {
+            s.connect("8.8.8.8:80")?;
+            s.local_addr()
+        })
+        .map_or_else(|_| "localhost".to_string(), |a| a.ip().to_string());
+
     intro("🐳 Dokuru  status")?;
 
-    let item = |ok: bool, label: &str, value: &str| -> Result<()> {
-        if ok {
-            log::success(format!("{label:<12} {value}"))?;
-        } else {
-            log::error(format!("{label:<12} {value}"))?;
-        }
-        Ok(())
+    let service_status = if service_active && service_enabled {
+        "active (enabled)"
+    } else if service_active {
+        "active (disabled)"
+    } else {
+        "inactive"
+    };
+    let docker_status = if docker_running {
+        "running"
+    } else {
+        "not running"
+    };
+    let api_status = if api_healthy {
+        "healthy"
+    } else {
+        "unreachable"
     };
 
-    item(true, "Version", &version)?;
-    item(
-        service_active,
-        "Service",
-        if service_active && service_enabled {
-            "active (enabled)"
-        } else if service_active {
-            "active (disabled)"
-        } else {
-            "inactive"
-        },
-    )?;
-    item(
-        docker_running,
-        "Docker",
-        if docker_running {
-            "running"
-        } else {
-            "not running"
-        },
-    )?;
-    item(
-        api_healthy,
-        "API",
-        if api_healthy {
-            "healthy"
-        } else {
-            "unreachable"
-        },
+    note(
+        "Status",
+        format!(
+            "Version   {version}\nService   {service_status}\nDocker    {docker_status}\nAPI       {api_status}"
+        ),
     )?;
 
     if api_healthy
@@ -96,13 +88,7 @@ pub fn run_status() -> Result<()> {
         )?;
     }
 
-    let host_ip = std::net::UdpSocket::bind("0.0.0.0:0")
-        .and_then(|s| {
-            s.connect("8.8.8.8:80")?;
-            s.local_addr()
-        })
-        .map_or_else(|_| "localhost".to_string(), |a| a.ip().to_string());
-    log::info(format!("Dashboard: http://{host_ip}:{port}"))?;
+    log::info(format!("Agent: http://{host_ip}:{port}"))?;
     outro("Done.")?;
     Ok(())
 }

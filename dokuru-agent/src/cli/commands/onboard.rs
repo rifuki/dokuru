@@ -225,7 +225,16 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
             config.service_name
         ));
     }
-    next_steps.push(format!("Dashboard: http://<your-host>:{}", config.port));
+    let host_ip = std::net::UdpSocket::bind("0.0.0.0:0")
+        .and_then(|s| {
+            s.connect("8.8.8.8:80")?;
+            s.local_addr()
+        })
+        .map_or_else(|_| "localhost".to_string(), |a| a.ip().to_string());
+    next_steps.push(format!(
+        "Agent URL: http://{host_ip}:{}\n           → Add this as a new environment in your Dokuru dashboard",
+        config.port
+    ));
 
     note("Next steps", next_steps.join("\n"))?;
     outro("Dokuru is ready.")?;

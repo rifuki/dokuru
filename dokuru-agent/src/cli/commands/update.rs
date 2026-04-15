@@ -1,10 +1,11 @@
 use super::super::helpers::{
-    LATEST_RELEASE_BASE_URL, binary_version, collect_preflight, confirm_action, create_temp_dir,
-    detect_checksum_tool, download_file, ensure_command, install_binary, release_asset_name,
-    resolve_shared_config, restart_service, run_step, service_unit_path, verify_download_checksum,
+    ChecksumTool, LATEST_RELEASE_BASE_URL, binary_version, collect_preflight, confirm_action,
+    create_temp_dir, detect_checksum_tool, download_file, ensure_command, install_binary,
+    release_asset_name, resolve_shared_config, restart_service, run_step, service_unit_path,
+    verify_download_checksum,
 };
 use super::super::types::UpdateArgs;
-use cliclack::{intro, note, outro, outro_cancel};
+use cliclack::{intro, log, note, outro, outro_cancel};
 use eyre::{Result, bail};
 
 pub fn run_update(args: &UpdateArgs) -> Result<()> {
@@ -49,24 +50,35 @@ pub fn run_update(args: &UpdateArgs) -> Result<()> {
             &binary_path,
         )
     })?;
+    log::info(format!("→ {LATEST_RELEASE_BASE_URL}/{asset_name}"))?;
+
     run_step("Downloading release checksums", || {
         download_file(
             &format!("{LATEST_RELEASE_BASE_URL}/SHA256SUMS"),
             &checksum_path,
         )
     })?;
+    log::info(format!("→ {LATEST_RELEASE_BASE_URL}/SHA256SUMS"))?;
+
     run_step("Verifying release checksum", || {
         verify_download_checksum(&checksum_path, &binary_path, asset_name, checksum_tool)
     })?;
+    let tool_name = match checksum_tool {
+        ChecksumTool::Sha256sum => "sha256sum",
+        ChecksumTool::Shasum => "shasum -a 256",
+    };
+    log::info(format!("→ {tool_name}: {asset_name} OK"))?;
 
     run_step("Installing updated Dokuru binary", || {
         install_binary(&binary_path, &config.install_path)
     })?;
+    log::info(format!("→ {}", config.install_path.display()))?;
 
     if service_unit_path(&config).exists() && preflight.has_systemd {
         run_step("Restarting Dokuru service", || {
             restart_service(&config.service_name)
         })?;
+        log::info(format!("→ systemctl restart {}", config.service_name))?;
     }
 
     let mut result_lines = vec![format!("Binary:  {}", config.install_path.display())];
@@ -75,7 +87,13 @@ pub fn run_update(args: &UpdateArgs) -> Result<()> {
     }
     note("Update complete", result_lines.join("\n"))?;
 
-    cliclack::log::info(format!("Dashboard: http://<your-host>:{}", config.port))?;
+    let host_ip = std::net::UdpSocket::bind("0.0.0.0:0")
+        .and_then(|s| {
+            s.connect("8.8.8.8:80")?;
+            s.local_addr()
+        })
+        .map_or_else(|_| "localhost".to_string(), |a| a.ip().to_string());
+    cliclack::log::info(format!("Agent: http://{host_ip}:{}", config.port))?;
     outro("Dokuru updated successfully.")?;
     Ok(())
 }
