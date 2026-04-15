@@ -1,6 +1,6 @@
 use crate::api::infrastructure::web::response::{ApiError, ApiResult, ApiSuccess};
 use crate::api::state::AppState;
-use crate::audit::{FixOutcome, Fixer};
+use crate::audit::{FixOutcome, RuleRegistry};
 use axum::{Json, extract::State};
 use serde::Deserialize;
 
@@ -13,9 +13,9 @@ pub async fn apply_fix(
     State(state): State<AppState>,
     Json(payload): Json<FixRequest>,
 ) -> ApiResult<FixOutcome> {
-    let fixer = Fixer::new(state.docker.clone());
+    let registry = RuleRegistry::new();
 
-    match fixer.apply_fix(&payload.rule_id).await {
+    match registry.fix_rule(&payload.rule_id, &state.docker).await {
         Ok(outcome) => Ok(ApiSuccess::default()
             .with_message("Remediation handled")
             .with_data(outcome)),

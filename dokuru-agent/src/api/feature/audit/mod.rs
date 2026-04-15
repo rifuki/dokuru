@@ -1,6 +1,6 @@
 use crate::api::infrastructure::web::response::{ApiError, ApiResult, ApiSuccess};
 use crate::api::state::AppState;
-use crate::audit::{AuditReport, CheckResult, Checker};
+use crate::audit::{AuditReport, CheckResult, RuleRegistry};
 use axum::{
     extract::{
         Path, State,
@@ -11,8 +11,8 @@ use axum::{
 use futures::sink::SinkExt;
 
 pub async fn run_full_audit(State(state): State<AppState>) -> ApiResult<AuditReport> {
-    let checker = Checker::new(state.docker.clone());
-    match checker.run_audit().await {
+    let registry = RuleRegistry::new();
+    match registry.run_audit(&state.docker).await {
         Ok(report) => Ok(ApiSuccess::default().with_data(report)),
         Err(e) => Err(ApiError::default().with_message(e.to_string())),
     }
@@ -22,8 +22,8 @@ pub async fn run_single_audit(
     Path(rule_id): Path<String>,
     State(state): State<AppState>,
 ) -> ApiResult<CheckResult> {
-    let checker = Checker::new(state.docker.clone());
-    match checker.check_single_rule(&rule_id).await {
+    let registry = RuleRegistry::new();
+    match registry.check_rule(&rule_id, &state.docker).await {
         Ok(result) => Ok(ApiSuccess::default().with_data(result)),
         Err(e) => Err(ApiError::default()
             .with_code(axum::http::StatusCode::NOT_FOUND)
@@ -39,11 +39,11 @@ pub async fn ws_audit_handler(
 }
 
 async fn handle_socket(mut socket: WebSocket, state: AppState) {
-    let checker = Checker::new(state.docker.clone());
-    let rules = crate::audit::get_all_rules();
+    let registry = RuleRegistry::new();
+    let rules = registry.all();
 
     for rule in rules {
-        if let Ok(result) = checker.check_single_rule(&rule.id).await
+        if let Ok(result) = registry.check_rule(&rule.id, &state.docker).await
             && let Ok(msg) = serde_json::to_string(&result)
             && socket.send(Message::Text(msg.into())).await.is_err()
         {

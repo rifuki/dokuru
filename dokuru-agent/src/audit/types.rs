@@ -69,9 +69,15 @@ pub struct AuditReport {
     pub docker_version: String,
     pub total_containers: usize,
     pub results: Vec<CheckResult>,
-    pub score: u8, // 0-100
+    pub summary: AuditSummary,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditSummary {
+    pub total: usize,
     pub passed: usize,
     pub failed: usize,
+    pub score: u8, // 0-100
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

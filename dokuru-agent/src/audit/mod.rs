@@ -1,27 +1,19 @@
 // Audit module - CIS Docker Benchmark implementation
 //
-// Architecture: Data-driven with RuleDefinition
-// - Each rule is self-contained struct with metadata + logic
-// - RuleRegistry stores all rules
-// - Checker is just an executor
+// Architecture: Data-driven (SIMPLE!)
+// - RuleDefinition = DATA (metadata + check_fn + fix_fn)
+// - RuleRegistry = STORAGE + EXECUTOR
+// - That's it!
 
-// Internal modules
-mod checker;
-mod fixer;
 mod rule_definition;
 mod rule_registry;
-mod rules;
 mod types;
 
-// Public API - expose what's needed
-pub use checker::Checker;
-pub use fixer::Fixer;
+// Public API
 pub use rule_definition::RuleDefinition;
 pub use rule_registry::RuleRegistry;
-pub use rules::get_all_rules;
-pub use types::{AuditReport, CheckResult, CheckStatus, CisRule, FixOutcome, FixStatus};
+pub use types::*;
 
-// Internal use
 use bollard::{API_DEFAULT_VERSION, Docker};
 
 /// Run audit and return results (for agent mode)
@@ -32,8 +24,8 @@ pub async fn run_audit_report() -> eyre::Result<Vec<CheckResult>> {
     let docker =
         Docker::connect_with_unix(&socket, 120, API_DEFAULT_VERSION).map_err(|e| eyre::eyre!(e))?;
 
-    let checker = Checker::new(docker);
-    let report = checker.run_audit().await?;
+    let registry = RuleRegistry::new();
+    let report = registry.run_audit(&docker).await?;
 
     Ok(report.results)
 }
