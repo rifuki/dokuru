@@ -19,29 +19,27 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: web
+        working-directory: dokuru-www
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: web/package-lock.json
+          bun-version: latest
 
       - name: Install dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Build frontend
-        run: npm run build
+        run: bun run build
 
       - name: Upload web dist artifact
         uses: actions/upload-artifact@v7
         with:
           name: web-dist
-          path: web/dist
+          path: dokuru-www/dist
           retention-days: 1
 
   rust-check:
@@ -63,6 +61,9 @@ jobs:
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: dokuru-agent
 
       - name: Check workspace
-        run: cargo check --workspace --all-targets
+        working-directory: dokuru-agent
+        run: cargo check --all-targets
