@@ -58,6 +58,9 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
             run_step("Starting Docker service", || {
                 run_command("systemctl", &["start", "docker"])
             })?;
+            if stderr().is_terminal() {
+                cliclack::log::info("→ systemctl start docker")?;
+            }
 
             // Re-collect preflight after Docker installation
             preflight = collect_preflight(&config);
