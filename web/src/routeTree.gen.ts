@@ -12,7 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as ReportRouteImport } from './routes/report'
 import { Route as FixRouteImport } from './routes/fix'
 import { Route as DashboardRouteImport } from './routes/dashboard'
-import { Route as AuditOldRouteImport } from './routes/audit-old'
+import { Route as AuditBadRouteImport } from './routes/audit-bad'
 import { Route as AuditRouteImport } from './routes/audit'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -31,9 +31,9 @@ const DashboardRoute = DashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuditOldRoute = AuditOldRouteImport.update({
-  id: '/audit-old',
-  path: '/audit-old',
+const AuditBadRoute = AuditBadRouteImport.update({
+  id: '/audit-bad',
+  path: '/audit-bad',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuditRoute = AuditRouteImport.update({
@@ -50,7 +50,7 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/audit': typeof AuditRoute
-  '/audit-old': typeof AuditOldRoute
+  '/audit-bad': typeof AuditBadRoute
   '/dashboard': typeof DashboardRoute
   '/fix': typeof FixRoute
   '/report': typeof ReportRoute
@@ -58,7 +58,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/audit': typeof AuditRoute
-  '/audit-old': typeof AuditOldRoute
+  '/audit-bad': typeof AuditBadRoute
   '/dashboard': typeof DashboardRoute
   '/fix': typeof FixRoute
   '/report': typeof ReportRoute
@@ -67,21 +67,21 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/audit': typeof AuditRoute
-  '/audit-old': typeof AuditOldRoute
+  '/audit-bad': typeof AuditBadRoute
   '/dashboard': typeof DashboardRoute
   '/fix': typeof FixRoute
   '/report': typeof ReportRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/audit' | '/audit-old' | '/dashboard' | '/fix' | '/report'
+  fullPaths: '/' | '/audit' | '/audit-bad' | '/dashboard' | '/fix' | '/report'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/audit' | '/audit-old' | '/dashboard' | '/fix' | '/report'
+  to: '/' | '/audit' | '/audit-bad' | '/dashboard' | '/fix' | '/report'
   id:
     | '__root__'
     | '/'
     | '/audit'
-    | '/audit-old'
+    | '/audit-bad'
     | '/dashboard'
     | '/fix'
     | '/report'
@@ -90,7 +90,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuditRoute: typeof AuditRoute
-  AuditOldRoute: typeof AuditOldRoute
+  AuditBadRoute: typeof AuditBadRoute
   DashboardRoute: typeof DashboardRoute
   FixRoute: typeof FixRoute
   ReportRoute: typeof ReportRoute
@@ -119,11 +119,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/audit-old': {
-      id: '/audit-old'
-      path: '/audit-old'
-      fullPath: '/audit-old'
-      preLoaderRoute: typeof AuditOldRouteImport
+    '/audit-bad': {
+      id: '/audit-bad'
+      path: '/audit-bad'
+      fullPath: '/audit-bad'
+      preLoaderRoute: typeof AuditBadRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/audit': {
@@ -146,7 +146,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuditRoute: AuditRoute,
-  AuditOldRoute: AuditOldRoute,
+  AuditBadRoute: AuditBadRoute,
   DashboardRoute: DashboardRoute,
   FixRoute: FixRoute,
   ReportRoute: ReportRoute,
