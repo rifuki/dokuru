@@ -13,8 +13,9 @@ mod utils;
 
 // Public API - only expose what main.rs needs
 pub use commands::{
-    run, run_configure, run_doctor, run_serve, run_status, run_uninstall, run_update,
+    run, run_configure, run_doctor, run_serve, run_status, run_token_rotate, run_token_show,
+    run_uninstall, run_update,
 };
-pub use types::{DoctorArgs, SetupArgs, SetupMode, UninstallArgs, UpdateArgs};
+pub use types::{DoctorArgs, SetupArgs, SetupMode, SharedArgs, UninstallArgs, UpdateArgs};
 
 // Internal use only

@@ -1,5 +1,3 @@
-mod auth;
 mod http_trace;
 
-pub use auth::agent_auth_middleware;
 pub use http_trace::http_trace_middleware;

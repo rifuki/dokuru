@@ -23,12 +23,25 @@ enum Commands {
     Doctor(cli::DoctorArgs),
     /// Show Dokuru service and Docker status
     Status,
+    /// Manage agent authentication token
+    Token {
+        #[command(subcommand)]
+        action: TokenAction,
+    },
     /// Update Dokuru from the rolling latest release
     Update(cli::UpdateArgs),
     /// Remove Dokuru from this host
     Uninstall(cli::UninstallArgs),
     /// Start the local API server (standalone mode)
     Serve,
+}
+
+#[derive(Subcommand)]
+enum TokenAction {
+    /// Display current token information
+    Show(cli::SharedArgs),
+    /// Generate and apply a new token
+    Rotate(cli::SharedArgs),
 }
 
 #[tokio::main]
@@ -50,6 +63,10 @@ async fn main() -> eyre::Result<()> {
         }
         Commands::Doctor(args) => cli::run_doctor(args.clone())?,
         Commands::Status => cli::run_status()?,
+        Commands::Token { action } => match action {
+            TokenAction::Show(shared) => cli::run_token_show(shared)?,
+            TokenAction::Rotate(shared) => cli::run_token_rotate(shared)?,
+        },
         Commands::Update(args) => cli::run_update(args)?,
         Commands::Uninstall(args) => cli::run_uninstall(args)?,
         Commands::Serve => {

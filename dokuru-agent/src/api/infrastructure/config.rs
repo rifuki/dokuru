@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 pub struct Config {
     pub server: ServerConfig,
     pub docker: DockerConfig,
+    pub auth: AuthConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,6 +23,12 @@ pub struct ServerConfig {
 #[serde(default)]
 pub struct DockerConfig {
     pub socket: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct AuthConfig {
+    pub token_hash: String,
 }
 
 impl Default for ServerConfig {

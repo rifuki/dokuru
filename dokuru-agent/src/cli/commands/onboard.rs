@@ -1,8 +1,9 @@
 use super::super::helpers::{
-    collect_preflight, enable_service, install_binary, install_docker, offer_docker_installation,
-    prompt_for_config, reload_systemd, resolve_config, restart_service, run_command, run_step,
-    runtime_config_path, service_unit_path, setup_dokuru_user, setup_log_directory, show_preflight,
-    user_in_docker_group, write_config_file, write_systemd_unit,
+    collect_preflight, enable_service, generate_agent_token, hash_token, install_binary,
+    install_docker, offer_docker_installation, prompt_for_config, reload_systemd, resolve_config,
+    restart_service, run_command, run_step, runtime_config_path, service_unit_path,
+    setup_dokuru_user, setup_log_directory, show_preflight, user_in_docker_group,
+    write_config_file, write_systemd_unit,
 };
 use super::super::types::{SetupArgs, SetupMode};
 use cliclack::{confirm, intro, note, outro, outro_cancel};
@@ -189,8 +190,12 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         cliclack::log::info("→ /var/log/dokuru")?;
     }
 
+    // Generate agent token
+    let agent_token = generate_agent_token();
+    let token_hash = hash_token(&agent_token);
+
     run_step("Writing Dokuru configuration", || {
-        write_config_file(&config)
+        write_config_file(&config, Some(token_hash))
     })?;
     if stderr().is_terminal() {
         cliclack::log::info(format!("→ {}", runtime_config_path(&config).display()))?;
@@ -273,6 +278,9 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
     next_steps.push(format!(
         "Agent URL: {host_ip}:{}\n           → Add this as a new environment in your Dokuru dashboard",
         config.port
+    ));
+    next_steps.push(format!(
+        "Token:     {agent_token}\n           → Copy this token (shown once only)"
     ));
 
     note("Next steps", next_steps.join("\n"))?;

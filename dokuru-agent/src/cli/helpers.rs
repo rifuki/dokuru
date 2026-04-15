@@ -1,7 +1,8 @@
 use super::types::{SetupArgs, SetupMode, SharedArgs};
-use crate::api::{Config as RuntimeConfig, DockerConfig, ServerConfig, config_path_in};
+use crate::api::{AuthConfig, Config as RuntimeConfig, DockerConfig, ServerConfig, config_path_in};
 use cliclack::{confirm, input, note, select, spinner};
 use eyre::{Result, WrapErr, bail};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{IsTerminal, stderr};
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
@@ -502,7 +503,7 @@ pub fn install_binary(source: &Path, destination: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn write_config_file(config: &InstallerConfig) -> Result<()> {
+pub fn write_config_file(config: &InstallerConfig, token_hash: Option<String>) -> Result<()> {
     fs::create_dir_all(&config.config_dir)
         .wrap_err_with(|| format!("Failed to create {}", config.config_dir.display()))?;
 
@@ -521,6 +522,7 @@ pub fn write_config_file(config: &InstallerConfig) -> Result<()> {
     )?;
 
     let config_path = runtime_config_path(config);
+
     let runtime_config = RuntimeConfig {
         server: ServerConfig {
             port: config.port,
@@ -529,6 +531,9 @@ pub fn write_config_file(config: &InstallerConfig) -> Result<()> {
         },
         docker: DockerConfig {
             socket: config.docker_socket.clone(),
+        },
+        auth: AuthConfig {
+            token_hash: token_hash.unwrap_or_default(),
         },
     };
     let toml_content = toml::to_string_pretty(&runtime_config)
@@ -936,4 +941,19 @@ pub fn parse_cors_origins(cors_origins: &str) -> Vec<String> {
         .filter(|origin| !origin.is_empty())
         .map(ToString::to_string)
         .collect::<Vec<_>>()
+}
+
+// ─── Token Generation ────────────────────────────────────────────────────────
+
+/// Generate a new agent token: dok_<64 hex chars>
+pub fn generate_agent_token() -> String {
+    let random_bytes: [u8; 32] = rand::random();
+    format!("dok_{}", hex::encode(random_bytes))
+}
+
+/// Hash a token with SHA-256
+pub fn hash_token(token: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    hex::encode(hasher.finalize())
 }
