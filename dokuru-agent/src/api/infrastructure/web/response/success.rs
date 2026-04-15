@@ -1,6 +1,6 @@
 use axum::{
     body::Body,
-    http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header},
+    http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use chrono::Utc;
@@ -32,11 +32,6 @@ impl<T: Serialize> Default for ApiSuccess<T> {
 }
 
 impl<T: Serialize> ApiSuccess<T> {
-    pub fn with_code(mut self, code: StatusCode) -> Self {
-        self.code = code.as_u16();
-        self
-    }
-
     pub fn with_data(mut self, data: T) -> Self {
         self.data = Some(data);
         self
@@ -44,13 +39,6 @@ impl<T: Serialize> ApiSuccess<T> {
 
     pub fn with_message(mut self, message: impl Into<String>) -> Self {
         self.message = message.into();
-        self
-    }
-
-    pub fn with_header(mut self, key: HeaderName, value: &str) -> Self {
-        if let Ok(val) = HeaderValue::from_str(value) {
-            self.headers.insert(key, val);
-        }
         self
     }
 }

@@ -16,5 +16,3 @@ pub use commands::{run, run_configure, run_doctor, run_serve, run_uninstall, run
 pub use types::{DoctorArgs, SetupArgs, SetupMode, UninstallArgs, UpdateArgs};
 
 // Internal use only
-pub(crate) use helpers::*;
-pub(crate) use utils::*;

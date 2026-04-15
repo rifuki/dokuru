@@ -1,8 +1,7 @@
 use super::super::helpers::*;
 use super::super::types::*;
-use cliclack::{confirm, intro, note, outro, outro_cancel};
+use cliclack::{intro, note, outro, outro_cancel};
 use eyre::{Result, bail};
-use std::io::{IsTerminal, stderr};
 
 pub fn run_uninstall(args: UninstallArgs) -> Result<()> {
     let config = resolve_shared_config(&args.shared, None)?;

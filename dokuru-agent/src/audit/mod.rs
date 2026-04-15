@@ -9,12 +9,13 @@ mod rule_registry;
 mod types;
 
 // Public API
-pub use rule_registry::{RuleDefinition, RuleRegistry};
+pub use rule_registry::RuleRegistry;
 pub use types::*;
 
 use bollard::{API_DEFAULT_VERSION, Docker};
 
 /// Run audit and return results (for agent mode)
+#[allow(dead_code)]
 pub async fn run_audit_report() -> eyre::Result<Vec<CheckResult>> {
     let socket =
         std::env::var("DOCKER_SOCKET").unwrap_or_else(|_| "/var/run/docker.sock".to_string());

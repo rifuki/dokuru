@@ -1,4 +1,3 @@
-use bollard::{API_DEFAULT_VERSION, Docker};
 use clap::{Parser, Subcommand};
 
 mod api;

@@ -1,8 +1,6 @@
 // Section 2: Docker Daemon Configuration
 use super::RuleDefinition;
 use crate::audit::types::*;
-use bollard::Docker;
-use eyre::Result;
 
 /// Section 2: Docker Daemon Configuration
 /// CIS Docker Benchmark v1.8.0

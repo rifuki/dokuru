@@ -6,6 +6,7 @@ use tokio::sync::RwLock;
 
 #[derive(Clone)]
 pub struct AppState {
+    #[allow(dead_code)]
     pub config: Arc<Config>,
     pub docker: Docker,
     /// Registry of remote environments (persisted to disk)

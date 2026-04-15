@@ -18,6 +18,7 @@ pub type CheckFn = fn(
 pub type FixFn = fn(&Docker) -> Pin<Box<dyn Future<Output = Result<FixOutcome>> + Send>>;
 
 /// Self-contained rule definition with metadata + logic
+#[allow(dead_code)]
 pub struct RuleDefinition {
     // Identity
     pub id: String,
@@ -102,6 +103,7 @@ impl RuleRegistry {
         self.rules.values().collect()
     }
 
+    #[allow(dead_code)]
     pub fn by_section(&self, section: u8) -> Vec<&RuleDefinition> {
         self.rules
             .values()
@@ -109,6 +111,7 @@ impl RuleRegistry {
             .collect()
     }
 
+    #[allow(dead_code)]
     pub fn by_severity(&self, severity: Severity) -> Vec<&RuleDefinition> {
         self.rules
             .values()

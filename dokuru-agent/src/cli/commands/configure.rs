@@ -1,9 +1,5 @@
-use super::super::helpers::*;
 use super::super::types::*;
-use cliclack::{confirm, intro, note, outro, outro_cancel};
-use eyre::{Result, WrapErr, bail};
-use std::io::{IsTerminal, stderr};
-use std::path::PathBuf;
+use eyre::Result;
 
 pub fn run_configure(args: SetupArgs) -> Result<()> {
     // Configure is just onboard with Configure mode

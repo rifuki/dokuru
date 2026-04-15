@@ -1,6 +1,6 @@
 use super::types::*;
 use crate::api::{Config as RuntimeConfig, DockerConfig, ServerConfig, config_path_in};
-use cliclack::{confirm, input, intro, note, outro, outro_cancel, select, spinner};
+use cliclack::{confirm, input, note, select, spinner};
 use eyre::{Result, WrapErr, bail};
 use std::fs;
 use std::io::{IsTerminal, stderr};

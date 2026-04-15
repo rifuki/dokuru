@@ -48,11 +48,6 @@ impl ApiError {
         self
     }
 
-    pub fn log_only(self, details: impl Display) -> Self {
-        error!(target: "api_error", details = %details, "Error occurred");
-        self
-    }
-
     pub fn with_debug(mut self, details: impl Into<String> + Display) -> Self {
         let details_str = details.to_string();
         error!(target: "api_error", details = %details_str, "Error occurred");
