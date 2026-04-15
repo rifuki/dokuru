@@ -1,0 +1,17 @@
+[Unit]
+Description=Dokuru Security Agent
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/dokuru agent --server wss://api.dokuru.rifuki.dev/ws/agent --token YOUR_TOKEN_HERE
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,61 @@
+services:
+  dokuru-db:
+    image: postgres:16-alpine
+    container_name: dokuru-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dokuru
+      POSTGRES_USER: dokuru
+      POSTGRES_PASSWORD: ${DOKURU_DB_PASSWORD:-secret}
+    volumes:
+      - dokuru_pg_data:/var/lib/postgresql/data
+    networks:
+      - dokuru-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dokuru"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  dokuru-server:
+    image: ghcr.io/rifuki/dokuru-server:${VERSION:-latest}
+    container_name: dokuru-server
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dokuru-api.rule=Host(`api.dokuru.rifuki.dev`)"
+      - "traefik.http.routers.dokuru-api.entrypoints=websecure"
+      - "traefik.http.routers.dokuru-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.dokuru-server.loadbalancer.server.port=9393"
+    env_file: ./dokuru-server/.env
+    depends_on:
+      dokuru-db:
+        condition: service_healthy
+    networks:
+      - dokuru-internal
+      - traefik-public
+
+  dokuru-www:
+    image: ghcr.io/rifuki/dokuru-www:${VERSION:-latest}
+    container_name: dokuru-www
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dokuru-web.rule=Host(`dokuru.rifuki.dev`)"
+      - "traefik.http.routers.dokuru-web.entrypoints=websecure"
+      - "traefik.http.routers.dokuru-web.tls.certresolver=letsencrypt"
+      - "traefik.http.services.dokuru-web.loadbalancer.server.port=80"
+    networks:
+      - traefik-public
+
+networks:
+  dokuru-internal:
+    name: dokuru-internal
+    driver: bridge
+  traefik-public:
+    name: traefik-public
+    external: true
+
+volumes:
+  dokuru_pg_data:
+    name: dokuru_pg_data
