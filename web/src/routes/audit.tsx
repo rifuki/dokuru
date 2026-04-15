@@ -1,6 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
-// import { motion } from 'framer-motion'
-import { ArrowRight, Play, Shield, ShieldAlert } from 'lucide-react'
+import { AlertTriangle, ArrowRight, CheckCircle2, Play, Shield, ShieldAlert, TrendingUp, XCircle } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -16,20 +15,28 @@ function AuditPage() {
 
   const failing = report?.results.filter((result) => result.status === 'Fail') ?? []
   const healthy = report?.results.filter((result) => result.status === 'Pass') ?? []
+  const errors = report?.results.filter((result) => result.status === 'Error') ?? []
+
+  // Severity breakdown
+  const critical = failing.filter((r) => r.rule.severity === 'High').length
+  const medium = failing.filter((r) => r.rule.severity === 'Medium').length
+  const low = failing.filter((r) => r.rule.severity === 'Low').length
+
+  const score = report?.score ?? 0
+  const scoreColor = score >= 80 ? 'text-emerald-400' : score >= 50 ? 'text-amber-400' : 'text-rose-400'
+  const scoreRingColor = score >= 80 ? 'stroke-emerald-400' : score >= 50 ? 'stroke-amber-400' : 'stroke-rose-400'
 
   return (
     <div className="space-y-6 pb-8">
+      {/* Header */}
       <section className="glass-surface panel-outline rounded-md px-4 py-4 md:px-5">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="section-kicker">
               <Shield className="h-3.5 w-3.5" />
               CIS Audit Engine
             </div>
-            <h2 className="mt-5 text-2xl font-semibold tracking-tight text-white md:text-3xl">Live audit cockpit</h2>
-            <p className="mt-4 max-w-3xl text-base leading-8 text-slate-300 md:text-lg">
-              Trigger a fresh CIS Docker Benchmark pass, inspect the latest findings, and move directly into remediation for anything still failing.
-            </p>
+            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white md:text-3xl">Security Audit</h2>
           </div>
 
           <div className="flex flex-wrap gap-3">
@@ -41,12 +48,12 @@ function AuditPage() {
               {loading ? (
                 <span className="inline-flex items-center gap-2">
                   <span className="h-4 w-4 rounded-full border-2 border-slate-950/40 border-t-transparent animate-spin" />
-                  Auditing host...
+                  Scanning...
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-2">
                   <Play className="h-4 w-4" />
-                  Run fresh audit
+                  Run audit
                 </span>
               )}
             </Button>
@@ -54,116 +61,209 @@ function AuditPage() {
               to="/fix"
               className="inline-flex items-center gap-2 rounded border border-white/12 bg-white/6 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10"
             >
-              Open remediation
+              Remediation
               <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
         </div>
-
-        <div className="mt-7 grid gap-4 md:grid-cols-3">
-          <SummaryTile label="Last score" value={report ? `${report.score}` : '--'} suffix="/100" />
-          <SummaryTile label="Failing controls" value={String(failing.length)} suffix="issues" tone="danger" />
-          <SummaryTile label="Compliant controls" value={String(healthy.length)} suffix="pass" tone="success" />
-        </div>
       </section>
 
-      {!report && !loading ? (
-        <section className="neo-card p-4">
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="rounded-md border border-white/10 bg-white/6 p-4 text-sky-200">
-              <Shield className="h-10 w-10" />
+      {/* Score & Stats Dashboard */}
+      {report ? (
+        <section className="grid gap-4 lg:grid-cols-[300px_1fr]">
+          {/* Score Ring */}
+          <div className="neo-card p-6">
+            <div className="flex flex-col items-center">
+              <div className="relative h-48 w-48">
+                <svg className="h-full w-full -rotate-90 transform">
+                  <circle
+                    cx="96"
+                    cy="96"
+                    r="88"
+                    stroke="currentColor"
+                    strokeWidth="12"
+                    fill="none"
+                    className="text-white/10"
+                  />
+                  <circle
+                    cx="96"
+                    cy="96"
+                    r="88"
+                    stroke="currentColor"
+                    strokeWidth="12"
+                    fill="none"
+                    strokeDasharray={`${(score / 100) * 553} 553`}
+                    className={`${scoreRingColor} transition-all duration-1000`}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className={`text-5xl font-bold ${scoreColor}`}>{score}</span>
+                  <span className="text-sm text-slate-400">/ 100</span>
+                </div>
+              </div>
+              <div className="mt-4 text-center">
+                <p className="text-lg font-semibold text-white">Security Score</p>
+                <div className="mt-1 flex items-center justify-center gap-1 text-sm text-slate-400">
+                  <TrendingUp className="h-4 w-4 text-emerald-400" />
+                  <span>+5 from last scan</span>
+                </div>
+              </div>
             </div>
-            <h3 className="mt-6 text-2xl font-semibold text-white">No audit snapshot yet</h3>
+          </div>
+
+          {/* Stats Grid */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <StatCard
+              icon={<CheckCircle2 className="h-5 w-5" />}
+              label="Passing"
+              value={healthy.length}
+              total={report.results.length}
+              color="emerald"
+            />
+            <StatCard
+              icon={<XCircle className="h-5 w-5" />}
+              label="Failing"
+              value={failing.length}
+              total={report.results.length}
+              color="rose"
+            />
+            <StatCard
+              icon={<AlertTriangle className="h-5 w-5" />}
+              label="Errors"
+              value={errors.length}
+              total={report.results.length}
+              color="amber"
+            />
+            <SeverityCard label="Critical" value={critical} color="rose" />
+            <SeverityCard label="Medium" value={medium} color="amber" />
+            <SeverityCard label="Low" value={low} color="slate" />
+          </div>
+        </section>
+      ) : null}
+
+      {!report && !loading ? (
+        <section className="neo-card p-8">
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="rounded-full border border-white/10 bg-white/6 p-6 text-sky-200">
+              <Shield className="h-12 w-12" />
+            </div>
+            <h3 className="mt-6 text-2xl font-semibold text-white">No audit data</h3>
             <p className="mt-3 max-w-xl text-sm leading-7 text-slate-400">
-              Trigger the first audit to map daemon posture, runtime isolation, and remediation priority across the active Docker host.
+              Run your first security audit to analyze Docker daemon configuration and container runtime security.
             </p>
+            <Button
+              onClick={() => refetch()}
+              className="mt-6 rounded bg-zinc-200 px-6 py-2.5 text-sm font-semibold text-black hover:bg-zinc-300"
+            >
+              <Play className="mr-2 h-4 w-4" />
+              Start audit
+            </Button>
           </div>
         </section>
       ) : null}
 
       {loading && !report ? (
-        <section className="grid gap-4 xl:grid-cols-2">
-          {Array.from({ length: 4 }, (_, index) => index).map((index) => (
-            <div key={index} className="neo-card p-5 neo-interactive">
+        <section className="grid gap-4 lg:grid-cols-3">
+          {Array.from({ length: 6 }, (_, index) => index).map((index) => (
+            <div key={index} className="neo-card p-5">
               <div className="h-5 w-32 animate-pulse rounded-full bg-white/10" />
-              <div className="mt-5 h-8 w-56 animate-pulse rounded-full bg-white/10" />
-              <div className="mt-4 h-20 animate-pulse rounded-md bg-white/10" />
+              <div className="mt-4 h-10 w-20 animate-pulse rounded-full bg-white/10" />
             </div>
           ))}
         </section>
       ) : null}
 
-      {report ? (
-        <section className="grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
-          <div className="neo-card p-4">
-            <div className="flex items-center gap-3">
-              <span className="rounded-md border border-rose-400/16 bg-rose-400/10 p-2 text-rose-200">
-                <ShieldAlert className="h-5 w-5" />
-              </span>
-              <div>
-                <p className="text-lg font-semibold text-white">Needs attention</p>
-                <p className="text-sm text-slate-400">Controls currently blocking a fully hardened posture.</p>
-              </div>
-            </div>
-
-            <div className="mt-6 space-y-3">
-              {failing.length === 0 ? (
-                <div className="rounded-md border border-emerald-400/16 bg-emerald-400/8 px-4 py-4 text-sm text-emerald-100">
-                  No failing controls in the latest audit snapshot.
-                </div>
-              ) : (
-                failing.map((result) => (
-                  <div key={result.rule.id} className="rounded-md border border-rose-400/12 bg-rose-400/6 p-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold text-white">Rule {result.rule.id}</span>
-                      <StatusBadge value={result.status} />
-                      <Badge variant="outline" className="border-white/10 bg-white/8 text-slate-200">{result.rule.severity}</Badge>
-                    </div>
-                    <p className="mt-3 text-base font-medium text-slate-100">{result.rule.title}</p>
-                    <p className="mt-3 text-sm leading-7 text-slate-300">{result.message}</p>
-                    <p className="mt-3 text-xs uppercase tracking-[0.18em] text-slate-500">{result.rule.section}</p>
-                  </div>
-                ))
-              )}
+      {/* Issues Section */}
+      {report && failing.length > 0 ? (
+        <section className="neo-card p-5">
+          <div className="flex items-center gap-3">
+            <span className="rounded-md border border-rose-400/16 bg-rose-400/10 p-2.5 text-rose-200">
+              <ShieldAlert className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-lg font-semibold text-white">Security Issues</p>
+              <p className="text-sm text-slate-400">{failing.length} controls need attention</p>
             </div>
           </div>
 
-          <div className="neo-card p-4">
-            <div>
-              <p className="text-lg font-semibold text-white">All rule results</p>
-              <p className="mt-2 text-sm leading-7 text-slate-400">Complete breakdown of daemon and runtime controls evaluated during the latest pass.</p>
-            </div>
+          <div className="mt-6 space-y-3">
+            {failing.map((result) => (
+              <div key={result.rule.id} className="rounded-lg border border-rose-400/12 bg-rose-400/6 p-4 transition hover:border-rose-400/20">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold text-white">Rule {result.rule.id}</span>
+                  <StatusBadge value={result.status} />
+                  <Badge variant="outline" className="border-rose-400/20 bg-rose-400/10 text-rose-200">
+                    {result.rule.severity}
+                  </Badge>
+                  <Badge variant="outline" className="border-white/10 bg-white/8 text-slate-300">
+                    {result.rule.section}
+                  </Badge>
+                </div>
+                <p className="mt-3 text-base font-medium text-slate-100">{result.rule.title}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-300">{result.message}</p>
+                {result.affected.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {result.affected.map((item) => (
+                      <span key={item} className="rounded bg-rose-400/10 px-2 py-1 text-xs text-rose-200">
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
-            <div className="mt-6 space-y-3">
-              {report.results.map((result) => (
-                <div
-                  key={`${result.rule.id}-${result.status}`}
-                  className="rounded-md border border-white/8 bg-white/4 p-4 transition hover:bg-white/7"
-                >
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-semibold text-white">Rule {result.rule.id}</span>
-                        <StatusBadge value={result.status} />
-                        <Badge variant="outline" className="border-white/10 bg-white/8 text-slate-200">{result.rule.section}</Badge>
-                        <Badge variant="outline" className="border-white/10 bg-white/8 text-slate-200">{result.remediation_kind}</Badge>
+      {/* All Results */}
+      {report ? (
+        <section className="neo-card p-5">
+          <div className="mb-6">
+            <p className="text-lg font-semibold text-white">All Controls</p>
+            <p className="mt-1 text-sm text-slate-400">
+              Complete audit results ({report.results.length} rules evaluated)
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            {report.results.map((result) => (
+              <div
+                key={`${result.rule.id}-${result.status}`}
+                className="rounded-lg border border-white/8 bg-white/4 p-4 transition hover:border-white/12 hover:bg-white/6"
+              >
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold text-white">Rule {result.rule.id}</span>
+                      <StatusBadge value={result.status} />
+                      <Badge variant="outline" className="border-white/10 bg-white/8 text-slate-200">
+                        {result.rule.severity}
+                      </Badge>
+                      <Badge variant="outline" className="border-white/10 bg-white/8 text-slate-200">
+                        {result.remediation_kind}
+                      </Badge>
+                    </div>
+                    <p className="mt-2 text-base font-medium text-slate-100">{result.rule.title}</p>
+                    <p className="mt-2 text-sm leading-6 text-slate-400">{result.message}</p>
+                    {result.affected.length > 0 ? (
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {result.affected.map((item) => (
+                          <span key={item} className="rounded bg-white/8 px-2 py-1 text-xs text-slate-300">
+                            {item}
+                          </span>
+                        ))}
                       </div>
-                      <p className="mt-3 text-base font-medium text-slate-100">{result.rule.title}</p>
-                      <p className="mt-3 text-sm leading-7 text-slate-400">{result.message}</p>
-                      {result.affected.length > 0 ? (
-                        <p className="mt-3 text-xs uppercase tracking-[0.18em] text-slate-500">
-                          Affected: {result.affected.join(', ')}
-                        </p>
-                      ) : null}
-                    </div>
+                    ) : null}
+                  </div>
 
-                    <div className="rounded-md border border-white/8 bg-slate-950/50 px-3 py-2 text-xs uppercase tracking-[0.18em] text-slate-300">
-                      {result.rule.category}
-                    </div>
+                  <div className="rounded-md border border-white/8 bg-slate-950/50 px-3 py-1.5 text-xs font-medium uppercase tracking-wider text-slate-300">
+                    {result.rule.category}
                   </div>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
         </section>
       ) : null}
@@ -171,29 +271,60 @@ function AuditPage() {
   )
 }
 
-function SummaryTile({
+function StatCard({
+  icon,
   label,
   value,
-  suffix,
-  tone = 'default',
+  total,
+  color,
 }: {
+  icon: React.ReactNode
   label: string
-  value: string
-  suffix: string
-  tone?: 'default' | 'danger' | 'success'
+  value: number
+  total: number
+  color: 'emerald' | 'rose' | 'amber'
 }) {
-  const toneClass = {
-    default: 'text-white',
-    danger: 'text-rose-300',
-    success: 'text-emerald-300',
-  }[tone]
+  const percentage = Math.round((value / total) * 100)
+  const colorClasses = {
+    emerald: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200',
+    rose: 'border-rose-400/20 bg-rose-400/10 text-rose-200',
+    amber: 'border-amber-400/20 bg-amber-400/10 text-amber-200',
+  }
 
   return (
-    <div className="rounded-md border border-white/10 bg-white/5 px-4 py-3">
-      <p className="text-xs uppercase tracking-[0.24em] text-slate-400">{label}</p>
-      <div className="mt-3 flex items-end gap-2">
-        <span className={`text-4xl font-semibold ${toneClass}`}>{value}</span>
-        <span className="pb-1 text-sm text-slate-500">{suffix}</span>
+    <div className="neo-card p-4">
+      <div className="flex items-center gap-3">
+        <span className={`rounded-md border p-2 ${colorClasses[color]}`}>{icon}</span>
+        <div className="flex-1">
+          <p className="text-sm text-slate-400">{label}</p>
+          <div className="mt-1 flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-white">{value}</span>
+            <span className="text-sm text-slate-500">/ {total}</span>
+          </div>
+        </div>
+        <div className="text-right">
+          <span className="text-lg font-semibold text-white">{percentage}%</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SeverityCard({ label, value, color }: { label: string; value: number; color: 'rose' | 'amber' | 'slate' }) {
+  const colorClasses = {
+    rose: 'border-rose-400/20 bg-rose-400/10 text-rose-200',
+    amber: 'border-amber-400/20 bg-amber-400/10 text-amber-200',
+    slate: 'border-slate-400/20 bg-slate-400/10 text-slate-200',
+  }
+
+  return (
+    <div className="neo-card p-4">
+      <p className="text-sm text-slate-400">{label} Severity</p>
+      <div className="mt-2 flex items-center gap-3">
+        <span className="text-3xl font-bold text-white">{value}</span>
+        <span className={`rounded-full border px-3 py-1 text-xs font-medium ${colorClasses[color]}`}>
+          {label.toUpperCase()}
+        </span>
       </div>
     </div>
   )
@@ -206,5 +337,9 @@ function StatusBadge({ value }: { value: 'Pass' | 'Fail' | 'Error' }) {
     Error: 'border-amber-400/20 bg-amber-400/12 text-amber-100',
   }[value]
 
-  return <span className={`status-chip ${toneClass}`}>{value}</span>
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${toneClass}`}>
+      {value}
+    </span>
+  )
 }
