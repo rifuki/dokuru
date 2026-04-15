@@ -66,8 +66,8 @@ export function RootLayout() {
           <Link
             to="/"
             className={`flex items-center gap-2.5 px-3 py-2 rounded text-[13px] cursor-pointer transition-colors ${isHome
-                ? 'bg-[#3BA5EF]/10 text-[#3BA5EF]'
-                : 'text-[#9CA3AF] hover:bg-white/[0.04] hover:text-white'
+              ? 'bg-[#3BA5EF]/10 text-[#3BA5EF]'
+              : 'text-[#9CA3AF] hover:bg-white/[0.04] hover:text-white'
               }`}
           >
             <Home className="w-4 h-4" />
@@ -99,8 +99,8 @@ export function RootLayout() {
                       key={item.path}
                       to={item.path}
                       className={`flex items-center gap-2.5 pl-7 pr-3 py-[7px] text-[13px] cursor-pointer transition-colors ${active
-                          ? 'bg-[#3BA5EF]/10 text-[#3BA5EF] border-l-2 border-[#3BA5EF] -ml-[2px] pl-[26px]'
-                          : 'text-[#9CA3AF] hover:bg-white/[0.04] hover:text-white'
+                        ? 'bg-[#3BA5EF]/10 text-[#3BA5EF] border-l-2 border-[#3BA5EF] -ml-[2px] pl-[26px]'
+                        : 'text-[#9CA3AF] hover:bg-white/[0.04] hover:text-white'
                         }`}
                     >
                       <Icon className="w-3.5 h-3.5" strokeWidth={1.8} />
@@ -129,11 +129,6 @@ export function RootLayout() {
             })}
           </div>
         </nav>
-
-        {/* Bottom status */}
-        <div className="px-3 py-3 border-t border-[#2D3239] text-[11px] text-[#6B7280]">
-          <span>Dokuru</span>
-        </div>
       </aside>
 
       {/* ─── Main content ─── */}

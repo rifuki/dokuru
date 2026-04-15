@@ -56,6 +56,10 @@ pub struct CheckResult {
     pub message: String,       // "userns-remap is NOT configured"
     pub affected: Vec<String>, // ["/nginx", "/postgres"] or []
     pub remediation_kind: RemediationKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audit_command: Option<String>, // Command executed for this check
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_output: Option<String>,    // Raw command output
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

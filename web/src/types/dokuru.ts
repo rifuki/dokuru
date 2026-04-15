@@ -24,6 +24,8 @@ export interface CheckResult {
   message: string;
   affected: string[];
   remediation_kind: RemediationKind;
+  audit_command?: string;
+  raw_output?: string;
 }
 
 export interface AuditReport {
