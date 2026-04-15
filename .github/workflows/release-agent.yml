@@ -1,4 +1,4 @@
-name: Latest Release
+name: Release Dokuru Agent
 
 on:
   push:
