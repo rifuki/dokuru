@@ -1,0 +1,25 @@
+#!/bin/bash
+
+set -e
+
+echo "🔍 Running pre-push checks..."
+
+echo "📝 Formatting code..."
+cargo fmt --check || {
+    echo "❌ Code is not formatted. Run: cargo fmt"
+    exit 1
+}
+
+echo "🔧 Running clippy..."
+cargo clippy -- -D warnings -W clippy::pedantic -W clippy::nursery || {
+    echo "❌ Clippy checks failed"
+    exit 1
+}
+
+echo "🧪 Running tests..."
+cargo test || {
+    echo "❌ Tests failed"
+    exit 1
+}
+
+echo "✅ All checks passed!"

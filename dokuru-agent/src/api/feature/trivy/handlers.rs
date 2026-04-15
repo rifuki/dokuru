@@ -111,7 +111,7 @@ pub async fn scan_image(
             _ => ApiError::default()
                 .with_code(axum::http::StatusCode::INTERNAL_SERVER_ERROR)
                 .with_message("Failed to start Trivy scan")
-                .with_debug(err.to_string()),
+                .with_debug(&err.to_string()),
         })?;
 
     if !output.status.success() {
@@ -130,7 +130,7 @@ pub async fn scan_image(
         ApiError::default()
             .with_code(axum::http::StatusCode::BAD_GATEWAY)
             .with_message("Failed to parse Trivy output")
-            .with_debug(err.to_string())
+            .with_debug(&err.to_string())
     })?;
 
     let mut summary = TrivySeveritySummary::default();

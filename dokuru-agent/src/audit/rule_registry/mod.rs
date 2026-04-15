@@ -1,5 +1,8 @@
 // Registry for all CIS Docker Benchmark rules
-use super::types::*;
+use super::types::{
+    AuditReport, AuditSummary, CheckResult, CheckStatus, FixOutcome, FixStatus, RemediationKind,
+    RuleCategory, Severity,
+};
 use bollard::Docker;
 use chrono::Utc;
 use eyre::Result;
@@ -112,10 +115,10 @@ impl RuleRegistry {
     }
 
     #[allow(dead_code)]
-    pub fn by_severity(&self, severity: Severity) -> Vec<&RuleDefinition> {
+    pub fn by_severity(&self, severity: &Severity) -> Vec<&RuleDefinition> {
         self.rules
             .values()
-            .filter(|r| r.severity == severity)
+            .filter(|r| &r.severity == severity)
             .collect()
     }
 
@@ -142,7 +145,14 @@ impl RuleRegistry {
         let score = if results.is_empty() {
             0
         } else {
-            ((passed as f64 / results.len() as f64) * 100.0) as u8
+            #[allow(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                clippy::cast_precision_loss
+            )]
+            {
+                ((passed as f64 / results.len() as f64) * 100.0) as u8
+            }
         };
 
         Ok(AuditReport {

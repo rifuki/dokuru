@@ -1,9 +1,13 @@
-use super::super::helpers::*;
-use super::super::types::*;
+use super::super::helpers::{
+    LATEST_RELEASE_BASE_URL, binary_version, collect_preflight, confirm_action, create_temp_dir,
+    detect_checksum_tool, download_file, ensure_command, install_binary, release_asset_name,
+    resolve_shared_config, restart_service, run_step, service_unit_path, verify_download_checksum,
+};
+use super::super::types::UpdateArgs;
 use cliclack::{intro, note, outro, outro_cancel};
 use eyre::{Result, bail};
 
-pub fn run_update(args: UpdateArgs) -> Result<()> {
+pub fn run_update(args: &UpdateArgs) -> Result<()> {
     let config = resolve_shared_config(&args.shared, None)?;
     let preflight = collect_preflight(&config);
 
@@ -67,7 +71,7 @@ pub fn run_update(args: UpdateArgs) -> Result<()> {
 
     let mut result_lines = vec![format!("Binary:  {}", config.install_path.display())];
     if let Some(version) = binary_version(&config.install_path) {
-        result_lines.push(format!("Version: {}", version));
+        result_lines.push(format!("Version: {version}"));
     }
     note("Update complete", result_lines.join("\n"))?;
 

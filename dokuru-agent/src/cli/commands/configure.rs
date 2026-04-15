@@ -1,4 +1,4 @@
-use super::super::types::*;
+use super::super::types::{SetupArgs, SetupMode};
 use eyre::Result;
 
 pub fn run_configure(args: SetupArgs) -> Result<()> {

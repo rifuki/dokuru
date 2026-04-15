@@ -1,6 +1,8 @@
 // Section 2: Docker Daemon Configuration
 use super::RuleDefinition;
-use crate::audit::types::*;
+use crate::audit::types::{
+    CheckResult, CheckStatus, CisRule, RemediationKind, RuleCategory, Severity,
+};
 
 /// Section 2: Docker Daemon Configuration
 /// CIS Docker Benchmark v1.8.0
@@ -109,10 +111,9 @@ impl Section2 {
                     let cgroup_v2 = info
                         .cgroup_version
                         .as_ref()
-                        .map(|v| format!("{:?}", v).contains("V2"))
-                        .unwrap_or(false);
+                        .is_some_and(|v| format!("{v:?}").contains("V2"));
 
-                    let raw_output = info.cgroup_version.as_ref().map(|v| format!("{:?}", v));
+                    let raw_output = info.cgroup_version.as_ref().map(|v| format!("{v:?}"));
 
                     Ok(CheckResult {
                         rule: CisRule {

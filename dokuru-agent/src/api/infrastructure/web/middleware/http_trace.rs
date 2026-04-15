@@ -23,10 +23,10 @@ struct ClientInfo {
 }
 
 impl ClientInfo {
-    fn extract(req: &Request) -> ClientInfo {
+    fn extract(req: &Request) -> Self {
         let headers = req.headers();
 
-        ClientInfo {
+        Self {
             user_agent: headers
                 .get("user-agent")
                 .and_then(|v| v.to_str().ok())
@@ -35,29 +35,26 @@ impl ClientInfo {
             x_forwarded_for: headers
                 .get("x-forwarded-for")
                 .and_then(|v| v.to_str().ok())
-                .map(|s| s.to_string()),
+                .map(std::string::ToString::to_string),
             x_real_ip: headers
                 .get("x-real-ip")
                 .and_then(|v| v.to_str().ok())
-                .map(|s| s.to_string()),
+                .map(std::string::ToString::to_string),
         }
     }
 }
 
-fn log_level_for_status(status: StatusCode) -> Level {
+const fn log_level_for_status(status: StatusCode) -> Level {
     match status.as_u16() {
         100..=199 => Level::Debug,
-        200..=299 => Level::Info,
-        300..=399 => Level::Info,
         400..=499 => Level::Warn,
         500..=599 => Level::Error,
         _ => Level::Info,
     }
 }
 
-fn log_emoji_for_status(status: StatusCode) -> &'static str {
+const fn log_emoji_for_status(status: StatusCode) -> &'static str {
     match status.as_u16() {
-        100..=199 => "ℹ️",
         200..=299 => "✅",
         300..=399 => "🔄",
         400..=499 => {

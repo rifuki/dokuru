@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 // Internal only - used by other Args structs
 #[derive(Args, Debug, Clone, Default)]
-pub(crate) struct SharedArgs {
+pub struct SharedArgs {
     /// Skip interactive prompts and use detected defaults
     #[arg(long, short = 'y')]
     pub yes: bool,
@@ -80,21 +80,21 @@ pub enum SetupMode {
 }
 
 impl SetupMode {
-    pub fn heading(self) -> &'static str {
+    pub const fn heading(self) -> &'static str {
         match self {
             Self::Onboard => "onboard",
             Self::Configure => "configure",
         }
     }
 
-    pub fn command_name(self) -> &'static str {
+    pub const fn command_name(self) -> &'static str {
         match self {
             Self::Onboard => "onboard",
             Self::Configure => "configure",
         }
     }
 
-    pub fn should_install_binary(self) -> bool {
+    pub const fn should_install_binary(self) -> bool {
         matches!(self, Self::Onboard)
     }
 }

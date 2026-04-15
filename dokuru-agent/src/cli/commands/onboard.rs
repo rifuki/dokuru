@@ -1,12 +1,18 @@
-use super::super::helpers::*;
-use super::super::types::*;
+use super::super::helpers::{
+    collect_preflight, enable_service, install_binary, install_docker, offer_docker_installation,
+    prompt_for_config, reload_systemd, resolve_config, restart_service, run_command, run_step,
+    runtime_config_path, service_unit_path, setup_dokuru_user, setup_log_directory, show_preflight,
+    user_in_docker_group, write_config_file, write_systemd_unit,
+};
+use super::super::types::{SetupArgs, SetupMode};
 use cliclack::{confirm, intro, note, outro, outro_cancel};
 use eyre::{Result, WrapErr, bail};
 use std::io::{IsTerminal, stderr};
 use std::path::PathBuf;
 
+#[allow(clippy::cognitive_complexity, clippy::too_many_lines)]
 pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
-    let mut config = resolve_config(args)?;
+    let mut config = resolve_config(args);
     let source_binary =
         std::env::current_exe().wrap_err("Failed to resolve current Dokuru binary path")?;
 
@@ -67,17 +73,13 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
                 let in_group = user_in_docker_group(&current_user)?;
                 if !in_group
                     && confirm(format!(
-                        "Add user '{}' to docker group? (recommended)",
-                        current_user
+                        "Add user '{current_user}' to docker group? (recommended)"
                     ))
                     .initial_value(true)
                     .interact()?
                 {
                     run_command("usermod", &["-aG", "docker", &current_user])?;
-                    cliclack::log::success(format!(
-                        "User '{}' added to docker group",
-                        current_user
-                    ))?;
+                    cliclack::log::success(format!("User '{current_user}' added to docker group"))?;
                     cliclack::log::warning(
                         "Log out and back in (or run 'newgrp docker') for group changes to take effect",
                     )?;
@@ -191,7 +193,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         match run_step("Starting Dokuru service", || {
             restart_service(&config.service_name)
         }) {
-            Ok(_) => {
+            Ok(()) => {
                 if stderr().is_terminal() {
                     cliclack::log::success("✓ Active and running")?;
                 }

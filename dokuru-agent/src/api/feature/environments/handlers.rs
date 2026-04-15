@@ -32,7 +32,7 @@ impl Default for EnvironmentType {
 pub struct Environment {
     pub id: String,
     pub name: String,
-    /// The base URL of the remote dokuru agent, e.g. "http://1.2.3.4:3939"
+    /// The base URL of the remote dokuru agent, e.g. `<http://1.2.3.4:3939>`
     pub url: String,
     #[serde(rename = "type")]
     pub env_type: EnvironmentType,
@@ -67,7 +67,7 @@ pub async fn add_environment(
     }
 
     // Test connectivity to remote agent
-    let test_url = format!("{}/health", url);
+    let test_url = format!("{url}/health");
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
@@ -76,7 +76,7 @@ pub async fn add_environment(
     client.get(&test_url).send().await.map_err(|e| {
         ApiError::default()
             .with_code(StatusCode::BAD_GATEWAY)
-            .with_message(format!("Cannot reach remote agent at {}: {}", url, e))
+            .with_message(format!("Cannot reach remote agent at {url}: {e}"))
     })?;
 
     let env = Environment {
@@ -87,11 +87,10 @@ pub async fn add_environment(
         added_at: Utc::now().to_rfc3339(),
     };
 
-    let mut envs = state.environments.write().await;
-    envs.push(env.clone());
+    state.environments.write().await.push(env.clone());
 
     // Persist to disk
-    persist_environments(&envs).await;
+    persist_environments(&state.environments.read().await).await;
 
     Ok(ApiSuccess::default().with_data(env))
 }
@@ -105,12 +104,14 @@ pub async fn remove_environment(
     envs.retain(|e| e.id != id);
 
     if envs.len() == before {
+        drop(envs);
         return Err(ApiError::default()
             .with_code(StatusCode::NOT_FOUND)
-            .with_message(format!("Environment '{}' not found", id)));
+            .with_message(format!("Environment '{id}' not found")));
     }
 
     persist_environments(&envs).await;
+    drop(envs);
     Ok(ApiSuccess::default())
 }
 
@@ -119,7 +120,7 @@ pub async fn remove_environment(
 pub fn environments_file_path() -> std::path::PathBuf {
     // Prefer /etc/dokuru/, fallback to current dir
     let prod = std::path::Path::new("/etc/dokuru/environments.json");
-    if prod.parent().map(|p| p.exists()).unwrap_or(false) {
+    if prod.parent().is_some_and(std::path::Path::exists) {
         return prod.to_path_buf();
     }
     std::path::PathBuf::from("environments.json")
@@ -127,10 +128,10 @@ pub fn environments_file_path() -> std::path::PathBuf {
 
 pub async fn load_environments() -> Vec<Environment> {
     let path = environments_file_path();
-    match tokio::fs::read_to_string(&path).await {
-        Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
-        Err(_) => Vec::new(),
-    }
+    (tokio::fs::read_to_string(&path).await).map_or_else(
+        |_| Vec::new(),
+        |content| serde_json::from_str(&content).unwrap_or_default(),
+    )
 }
 
 async fn persist_environments(envs: &[Environment]) {

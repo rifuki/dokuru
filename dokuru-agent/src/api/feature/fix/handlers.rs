@@ -21,6 +21,6 @@ pub async fn apply_fix(
             .with_data(outcome)),
         Err(e) => Err(ApiError::default()
             .with_message("Failed to process remediation request")
-            .with_debug(e.to_string())),
+            .with_debug(&e.to_string())),
     }
 }

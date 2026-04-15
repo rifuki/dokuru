@@ -7,7 +7,7 @@ use chrono::Utc;
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
-pub struct ApiSuccess<T: Serialize> {
+pub struct ApiSuccess<T> {
     success: bool,
     code: u16,
     pub data: Option<T>,
@@ -18,7 +18,10 @@ pub struct ApiSuccess<T: Serialize> {
     headers: HeaderMap,
 }
 
-impl<T: Serialize> Default for ApiSuccess<T> {
+impl<T> Default for ApiSuccess<T>
+where
+    T: Serialize,
+{
     fn default() -> Self {
         Self {
             success: true,

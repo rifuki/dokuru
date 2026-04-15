@@ -33,7 +33,7 @@ impl Default for ApiError {
 }
 
 impl ApiError {
-    pub fn with_code(mut self, code: StatusCode) -> Self {
+    pub const fn with_code(mut self, code: StatusCode) -> Self {
         self.code = code.as_u16();
         self
     }
@@ -48,7 +48,7 @@ impl ApiError {
         self
     }
 
-    pub fn with_debug(mut self, details: impl Into<String> + Display) -> Self {
+    pub fn with_debug(mut self, details: &(impl Into<String> + Display)) -> Self {
         let details_str = details.to_string();
         error!(target: "api_error", details = %details_str, "Error occurred");
 

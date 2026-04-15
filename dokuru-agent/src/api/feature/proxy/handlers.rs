@@ -9,7 +9,7 @@ use axum::{
 /// Generic reverse proxy: forwards any request to the target environment's agent
 /// and streams the response back to the caller.
 ///
-/// Route pattern: /api/v1/remote/{env_id}/{*path}
+/// Route pattern: `/api/v1/remote/{env_id}/{*path}`
 pub async fn proxy_to_environment(
     Path((env_id, tail)): Path<(String, String)>,
     State(state): State<AppState>,
@@ -17,30 +17,26 @@ pub async fn proxy_to_environment(
 ) -> Response {
     // Look up the environment
     let envs = state.environments.read().await;
-    let env = match envs.iter().find(|e| e.id == env_id) {
-        Some(e) => e.clone(),
-        None => {
-            drop(envs);
-            return (
-                StatusCode::NOT_FOUND,
-                format!("Environment '{}' not found", env_id),
-            )
-                .into_response();
-        }
+    let env = if let Some(e) = envs.iter().find(|e| e.id == env_id) {
+        e.clone()
+    } else {
+        drop(envs);
+        return (
+            StatusCode::NOT_FOUND,
+            format!("Environment '{env_id}' not found"),
+        )
+            .into_response();
     };
     drop(envs);
 
     // Build target URL
-    let target_url = format!("{}/{}", env.url.trim_end_matches('/'), tail);
+    let target_url = format!("{}/{tail}", env.url.trim_end_matches('/'));
 
     // Read body bytes
     let method = req.method().clone();
     let original_headers = req.headers().clone();
-    let body_bytes = match axum::body::to_bytes(req.into_body(), usize::MAX).await {
-        Ok(b) => b,
-        Err(_) => {
-            return (StatusCode::BAD_REQUEST, "Failed to read request body").into_response();
-        }
+    let Ok(body_bytes) = axum::body::to_bytes(req.into_body(), usize::MAX).await else {
+        return (StatusCode::BAD_REQUEST, "Failed to read request body").into_response();
     };
 
     // Build reqwest request
@@ -96,9 +92,9 @@ pub async fn proxy_to_environment(
             let msg = if e.is_timeout() {
                 format!("Remote agent at '{}' timed out", env.url)
             } else if e.is_connect() {
-                format!("Cannot connect to remote agent at '{}': {}", env.url, e)
+                format!("Cannot connect to remote agent at '{}': {e}", env.url)
             } else {
-                format!("Proxy error: {}", e)
+                format!("Proxy error: {e}")
             };
             (StatusCode::BAD_GATEWAY, msg).into_response()
         }

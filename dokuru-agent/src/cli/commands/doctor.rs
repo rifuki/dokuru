@@ -1,5 +1,8 @@
-use super::super::helpers::*;
-use super::super::types::*;
+use super::super::helpers::{
+    binary_version, collect_preflight, command_success, resolve_shared_config, runtime_config_path,
+    service_unit_path,
+};
+use super::super::types::DoctorArgs;
 use cliclack::{intro, note, outro};
 use eyre::Result;
 
@@ -21,9 +24,9 @@ pub fn run_doctor(args: DoctorArgs) -> Result<()> {
     // Status section
     let log_item = |ok: bool, label: &str, value: &str| -> Result<()> {
         if ok {
-            cliclack::log::success(format!("{:<16} {}", label, value))?;
+            cliclack::log::success(format!("{label:<16} {value}"))?;
         } else {
-            cliclack::log::warning(format!("{:<16} {}", label, value))?;
+            cliclack::log::warning(format!("{label:<16} {value}"))?;
         }
         Ok(())
     };
@@ -81,7 +84,7 @@ pub fn run_doctor(args: DoctorArgs) -> Result<()> {
         ),
     ];
     if binary_exists && let Some(version) = binary_version(&config.install_path) {
-        config_lines.push(format!("Version:        {}", version));
+        config_lines.push(format!("Version:        {version}"));
     }
     note("Configuration", config_lines.join("\n"))?;
 

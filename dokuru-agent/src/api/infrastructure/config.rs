@@ -94,6 +94,6 @@ impl Config {
     pub fn server_addr(&self) -> Result<SocketAddr> {
         let addr = format!("{}:{}", self.server.host, self.server.port);
         addr.parse()
-            .wrap_err_with(|| format!("Invalid host:port combination: {}", addr))
+            .wrap_err_with(|| format!("Invalid host:port combination: {addr}"))
     }
 }

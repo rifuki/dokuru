@@ -1,4 +1,4 @@
-use super::types::*;
+use super::types::{SetupArgs, SetupMode, SharedArgs};
 use crate::api::{Config as RuntimeConfig, DockerConfig, ServerConfig, config_path_in};
 use cliclack::{confirm, input, note, select, spinner};
 use eyre::{Result, WrapErr, bail};
@@ -8,12 +8,12 @@ use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-pub(crate) const REPO_URL: &str = "https://github.com/rifuki/dokuru";
-pub(crate) const LATEST_RELEASE_BASE_URL: &str =
+pub const REPO_URL: &str = "https://github.com/rifuki/dokuru";
+pub const LATEST_RELEASE_BASE_URL: &str =
     "https://github.com/rifuki/dokuru/releases/download/latest";
 
 #[derive(Debug)]
-pub(crate) struct InstallerConfig {
+pub struct InstallerConfig {
     pub yes: bool,
     pub install_path: PathBuf,
     pub config_dir: PathBuf,
@@ -26,8 +26,9 @@ pub(crate) struct InstallerConfig {
     pub skip_service: bool,
 }
 
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug)]
-pub(crate) struct Preflight {
+pub struct Preflight {
     pub distro: String,
     pub arch: &'static str,
     pub running_as_root: bool,
@@ -39,12 +40,12 @@ pub(crate) struct Preflight {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum ChecksumTool {
+pub enum ChecksumTool {
     Sha256sum,
     Shasum,
 }
 
-pub(crate) fn resolve_config(args: SetupArgs) -> Result<InstallerConfig> {
+pub fn resolve_config(args: SetupArgs) -> InstallerConfig {
     let install_path = args
         .shared
         .install_path
@@ -56,13 +57,15 @@ pub(crate) fn resolve_config(args: SetupArgs) -> Result<InstallerConfig> {
         .service_name
         .unwrap_or_else(|| "dokuru".to_string());
 
-    let port = match args.port {
-        Some(port) => port,
-        None => std::env::var("PORT")
-            .ok()
-            .and_then(|value| value.parse::<u16>().ok())
-            .unwrap_or(3939),
-    };
+    let port = args.port.map_or_else(
+        || {
+            std::env::var("PORT")
+                .ok()
+                .and_then(|value| value.parse::<u16>().ok())
+                .unwrap_or(3939)
+        },
+        |port| port,
+    );
 
     let host = args
         .host
@@ -79,7 +82,7 @@ pub(crate) fn resolve_config(args: SetupArgs) -> Result<InstallerConfig> {
         .or_else(|| std::env::var("CORS_ORIGINS").ok())
         .unwrap_or_else(|| "*".to_string());
 
-    Ok(InstallerConfig {
+    InstallerConfig {
         yes: args.shared.yes,
         install_path,
         config_dir,
@@ -90,10 +93,10 @@ pub(crate) fn resolve_config(args: SetupArgs) -> Result<InstallerConfig> {
         docker_socket,
         cors_origins,
         skip_service: args.skip_service,
-    })
+    }
 }
 
-pub(crate) fn resolve_shared_config(
+pub fn resolve_shared_config(
     shared: &SharedArgs,
     docker_socket_override: Option<String>,
 ) -> Result<InstallerConfig> {
@@ -131,23 +134,23 @@ pub(crate) fn resolve_shared_config(
     })
 }
 
-pub(crate) fn load_saved_runtime_config(config_dir: &Path) -> Result<RuntimeConfig> {
+pub fn load_saved_runtime_config(config_dir: &Path) -> Result<RuntimeConfig> {
     RuntimeConfig::load_from_path(config_path_in(config_dir))
 }
 
-pub(crate) fn offer_docker_installation(config: &InstallerConfig) -> Result<bool> {
+#[derive(Clone, Eq, PartialEq)]
+enum DockerChoice {
+    Install,
+    Manual,
+    Skip,
+}
+
+pub fn offer_docker_installation(config: &InstallerConfig) -> Result<bool> {
     cliclack::log::warning("Docker is not installed")?;
 
     if config.yes {
         cliclack::log::info("Non-interactive mode: skipping Docker installation")?;
         return Ok(false);
-    }
-
-    #[derive(Clone, Eq, PartialEq)]
-    enum DockerChoice {
-        Install,
-        Manual,
-        Skip,
     }
 
     let choice = select("What would you like to do?")
@@ -195,7 +198,7 @@ pub(crate) fn offer_docker_installation(config: &InstallerConfig) -> Result<bool
     }
 }
 
-pub(crate) fn install_docker() -> Result<()> {
+pub fn install_docker() -> Result<()> {
     let script_path = "/tmp/get-docker.sh";
 
     // Download script
@@ -227,7 +230,7 @@ pub(crate) fn install_docker() -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn user_in_docker_group(username: &str) -> Result<bool> {
+pub fn user_in_docker_group(username: &str) -> Result<bool> {
     let output = Command::new("groups")
         .arg(username)
         .output()
@@ -241,7 +244,7 @@ pub(crate) fn user_in_docker_group(username: &str) -> Result<bool> {
     Ok(groups.contains("docker"))
 }
 
-pub(crate) fn collect_preflight(config: &InstallerConfig) -> Preflight {
+pub fn collect_preflight(config: &InstallerConfig) -> Preflight {
     let docker_installed = command_exists("docker");
     let docker_group_exists = command_success("getent", &["group", "docker"]);
 
@@ -259,10 +262,7 @@ pub(crate) fn collect_preflight(config: &InstallerConfig) -> Preflight {
 
 // ─── Interactive Prompts ──────────────────────────────────────────────────────
 
-pub(crate) fn prompt_for_config(
-    mode: SetupMode,
-    mut config: InstallerConfig,
-) -> Result<InstallerConfig> {
+pub fn prompt_for_config(mode: SetupMode, mut config: InstallerConfig) -> Result<InstallerConfig> {
     if config.yes || !stderr().is_terminal() {
         return Ok(config);
     }
@@ -303,7 +303,7 @@ enum ConfigSection {
     Done,
 }
 
-pub(crate) fn run_configure_sections(config: &mut InstallerConfig) -> Result<()> {
+pub fn run_configure_sections(config: &mut InstallerConfig) -> Result<()> {
     loop {
         let section = select("Select section to configure")
             .item(
@@ -326,7 +326,7 @@ pub(crate) fn run_configure_sections(config: &mut InstallerConfig) -> Result<()>
     Ok(())
 }
 
-pub(crate) fn configure_server_section(config: &mut InstallerConfig) -> Result<()> {
+pub fn configure_server_section(config: &mut InstallerConfig) -> Result<()> {
     let port_default = config.port.to_string();
     config.port = input("Dokuru port")
         .default_input(&port_default)
@@ -347,7 +347,7 @@ pub(crate) fn configure_server_section(config: &mut InstallerConfig) -> Result<(
     Ok(())
 }
 
-pub(crate) fn configure_docker_section(config: &mut InstallerConfig) -> Result<()> {
+pub fn configure_docker_section(config: &mut InstallerConfig) -> Result<()> {
     let socket_default = config.docker_socket.clone();
     config.docker_socket = input("Docker socket path")
         .default_input(&socket_default)
@@ -355,7 +355,7 @@ pub(crate) fn configure_docker_section(config: &mut InstallerConfig) -> Result<(
     Ok(())
 }
 
-pub(crate) fn configure_service_section(config: &mut InstallerConfig) -> Result<()> {
+pub fn configure_service_section(config: &mut InstallerConfig) -> Result<()> {
     let want_service = confirm("Install and manage Dokuru as a systemd service?")
         .initial_value(!config.skip_service)
         .interact()?;
@@ -363,7 +363,7 @@ pub(crate) fn configure_service_section(config: &mut InstallerConfig) -> Result<
     Ok(())
 }
 
-pub(crate) fn confirm_action(yes: bool, prompt: &str) -> Result<bool> {
+pub fn confirm_action(yes: bool, prompt: &str) -> Result<bool> {
     if yes || !stderr().is_terminal() {
         return Ok(true);
     }
@@ -376,7 +376,7 @@ pub(crate) fn confirm_action(yes: bool, prompt: &str) -> Result<bool> {
 
 // ─── Display Helpers ──────────────────────────────────────────────────────────
 
-pub(crate) fn show_preflight(config: &InstallerConfig, preflight: &Preflight) -> Result<()> {
+pub fn show_preflight(config: &InstallerConfig, preflight: &Preflight) -> Result<()> {
     let lines = [
         format!("Distribution:   {}", preflight.distro),
         format!("Architecture:   {}", preflight.arch),
@@ -436,7 +436,7 @@ pub(crate) fn show_preflight(config: &InstallerConfig, preflight: &Preflight) ->
 
 // ─── Step Runner ─────────────────────────────────────────────────────────────
 
-pub(crate) fn run_step<T, F>(label: &str, action: F) -> Result<T>
+pub fn run_step<T, F>(label: &str, action: F) -> Result<T>
 where
     F: FnOnce() -> Result<T>,
 {
@@ -460,7 +460,7 @@ where
 
 // ─── System Operations ────────────────────────────────────────────────────────
 
-pub(crate) fn install_binary(source: &Path, destination: &Path) -> Result<()> {
+pub fn install_binary(source: &Path, destination: &Path) -> Result<()> {
     if source == destination {
         return Ok(());
     }
@@ -502,7 +502,7 @@ pub(crate) fn install_binary(source: &Path, destination: &Path) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn write_config_file(config: &InstallerConfig) -> Result<()> {
+pub fn write_config_file(config: &InstallerConfig) -> Result<()> {
     fs::create_dir_all(&config.config_dir)
         .wrap_err_with(|| format!("Failed to create {}", config.config_dir.display()))?;
 
@@ -551,7 +551,7 @@ pub(crate) fn write_config_file(config: &InstallerConfig) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn write_systemd_unit(config: &InstallerConfig, preflight: &Preflight) -> Result<()> {
+pub fn write_systemd_unit(config: &InstallerConfig, preflight: &Preflight) -> Result<()> {
     fs::create_dir_all(&config.systemd_dir)
         .wrap_err_with(|| format!("Failed to create {}", config.systemd_dir.display()))?;
 
@@ -586,7 +586,7 @@ pub(crate) fn write_systemd_unit(config: &InstallerConfig, preflight: &Preflight
         .wrap_err_with(|| format!("Failed to write {}", unit_path.display()))
 }
 
-pub(crate) fn setup_dokuru_user() -> Result<()> {
+pub fn setup_dokuru_user() -> Result<()> {
     // Create dokuru group if it doesn't exist
     if !command_success("getent", &["group", "dokuru"]) {
         run_command("groupadd", &["--system", "dokuru"])?;
@@ -596,7 +596,12 @@ pub(crate) fn setup_dokuru_user() -> Result<()> {
     let has_docker_group = command_success("getent", &["group", "docker"]);
 
     // Create dokuru user if it doesn't exist
-    if !command_success("getent", &["passwd", "dokuru"]) {
+    if command_success("getent", &["passwd", "dokuru"]) {
+        // User exists, add to docker group if it exists
+        if has_docker_group {
+            run_command("usermod", &["-aG", "docker", "dokuru"])?;
+        }
+    } else {
         let mut args = vec![
             "--system",
             "--gid",
@@ -616,11 +621,6 @@ pub(crate) fn setup_dokuru_user() -> Result<()> {
 
         args.push("dokuru");
         run_command("useradd", &args)?;
-    } else {
-        // User exists, add to docker group if it exists
-        if has_docker_group {
-            run_command("usermod", &["-aG", "docker", "dokuru"])?;
-        }
     }
 
     // Add current user to dokuru group for config access
@@ -634,7 +634,7 @@ pub(crate) fn setup_dokuru_user() -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn setup_log_directory() -> Result<()> {
+pub fn setup_log_directory() -> Result<()> {
     let log_dir = Path::new("/var/log/dokuru");
 
     // Create log directory if it doesn't exist
@@ -651,40 +651,40 @@ pub(crate) fn setup_log_directory() -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn reload_systemd() -> Result<()> {
+pub fn reload_systemd() -> Result<()> {
     run_command("systemctl", &["daemon-reload"])
 }
 
-pub(crate) fn enable_service(service_name: &str) -> Result<()> {
+pub fn enable_service(service_name: &str) -> Result<()> {
     run_command("systemctl", &["enable", service_name])
 }
 
-pub(crate) fn restart_service(service_name: &str) -> Result<()> {
+pub fn restart_service(service_name: &str) -> Result<()> {
     run_command("systemctl", &["restart", service_name])
 }
 
-pub(crate) fn stop_service_if_present(service_name: &str) -> Result<()> {
+pub fn stop_service_if_present(service_name: &str) -> Result<()> {
     if command_success("systemctl", &["is-active", service_name]) {
         run_command("systemctl", &["stop", service_name])?;
     }
     Ok(())
 }
 
-pub(crate) fn disable_service_if_present(service_name: &str) -> Result<()> {
+pub fn disable_service_if_present(service_name: &str) -> Result<()> {
     if command_success("systemctl", &["is-enabled", service_name]) {
         run_command("systemctl", &["disable", service_name])?;
     }
     Ok(())
 }
 
-pub(crate) fn remove_file_if_present(path: &Path) -> Result<()> {
+pub fn remove_file_if_present(path: &Path) -> Result<()> {
     if path.exists() {
         fs::remove_file(path).wrap_err_with(|| format!("Failed to remove {}", path.display()))?;
     }
     Ok(())
 }
 
-pub(crate) fn remove_dir_if_present(path: &Path) -> Result<()> {
+pub fn remove_dir_if_present(path: &Path) -> Result<()> {
     if path.exists() {
         fs::remove_dir_all(path)
             .wrap_err_with(|| format!("Failed to remove {}", path.display()))?;
@@ -692,7 +692,7 @@ pub(crate) fn remove_dir_if_present(path: &Path) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn ensure_command(program: &str) -> Result<()> {
+pub fn ensure_command(program: &str) -> Result<()> {
     if command_exists(program) {
         Ok(())
     } else {
@@ -700,7 +700,7 @@ pub(crate) fn ensure_command(program: &str) -> Result<()> {
     }
 }
 
-pub(crate) fn detect_checksum_tool() -> Result<ChecksumTool> {
+pub fn detect_checksum_tool() -> Result<ChecksumTool> {
     if command_exists("sha256sum") {
         return Ok(ChecksumTool::Sha256sum);
     }
@@ -710,7 +710,7 @@ pub(crate) fn detect_checksum_tool() -> Result<ChecksumTool> {
     bail!("Neither sha256sum nor shasum is available")
 }
 
-pub(crate) fn release_asset_name() -> Result<&'static str> {
+pub fn release_asset_name() -> Result<&'static str> {
     match std::env::consts::ARCH {
         "x86_64" => Ok("dokuru-linux-amd64"),
         "aarch64" => Ok("dokuru-linux-arm64"),
@@ -721,7 +721,7 @@ pub(crate) fn release_asset_name() -> Result<&'static str> {
     }
 }
 
-pub(crate) fn create_temp_dir(prefix: &str) -> Result<PathBuf> {
+pub fn create_temp_dir(prefix: &str) -> Result<PathBuf> {
     let unique = format!(
         "{}-{}-{}",
         prefix,
@@ -736,7 +736,7 @@ pub(crate) fn create_temp_dir(prefix: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
-pub(crate) fn download_file(url: &str, output: &Path) -> Result<()> {
+pub fn download_file(url: &str, output: &Path) -> Result<()> {
     let mut command = Command::new("curl");
     command.args(["--fail", "--location", "--retry", "3", "--retry-delay", "1"]);
     if stderr().is_terminal() {
@@ -756,7 +756,7 @@ pub(crate) fn download_file(url: &str, output: &Path) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn verify_download_checksum(
+pub fn verify_download_checksum(
     checksum_path: &Path,
     binary_path: &Path,
     asset_name: &str,
@@ -797,11 +797,11 @@ pub(crate) fn verify_download_checksum(
     Ok(())
 }
 
-pub(crate) fn command_output(program: &str, args: &[&str]) -> Result<String> {
+pub fn command_output(program: &str, args: &[&str]) -> Result<String> {
     let output = Command::new(program)
         .args(args)
         .output()
-        .wrap_err_with(|| format!("Failed to execute {}", program))?;
+        .wrap_err_with(|| format!("Failed to execute {program}"))?;
     if !output.status.success() {
         bail!(
             "{} {:?} exited with status {}",
@@ -815,7 +815,7 @@ pub(crate) fn command_output(program: &str, args: &[&str]) -> Result<String> {
         .map_err(|err| eyre::eyre!(err))
 }
 
-pub(crate) fn binary_version(path: &Path) -> Option<String> {
+pub fn binary_version(path: &Path) -> Option<String> {
     let output = Command::new(path).arg("--version").output().ok()?;
     if !output.status.success() {
         return None;
@@ -823,7 +823,7 @@ pub(crate) fn binary_version(path: &Path) -> Option<String> {
     Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
-pub(crate) fn command_success(program: &str, args: &[&str]) -> bool {
+pub fn command_success(program: &str, args: &[&str]) -> bool {
     Command::new(program)
         .args(args)
         .stdout(Stdio::null())
@@ -833,13 +833,13 @@ pub(crate) fn command_success(program: &str, args: &[&str]) -> bool {
         .unwrap_or(false)
 }
 
-pub(crate) fn run_command(program: &str, args: &[&str]) -> Result<()> {
+pub fn run_command(program: &str, args: &[&str]) -> Result<()> {
     let status = Command::new(program)
         .args(args)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
-        .wrap_err_with(|| format!("Failed to execute {}", program))?;
+        .wrap_err_with(|| format!("Failed to execute {program}"))?;
 
     if !status.success() {
         bail!("{} {:?} exited with status {}", program, args, status);
@@ -850,15 +850,15 @@ pub(crate) fn run_command(program: &str, args: &[&str]) -> Result<()> {
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
-pub(crate) fn command_exists(program: &str) -> bool {
+pub fn command_exists(program: &str) -> bool {
     Command::new("sh")
-        .args(["-c", &format!("command -v {} >/dev/null 2>&1", program)])
+        .args(["-c", &format!("command -v {program} >/dev/null 2>&1")])
         .status()
         .map(|status| status.success())
         .unwrap_or(false)
 }
 
-pub(crate) fn has_systemd_unit(unit: &str) -> bool {
+pub fn has_systemd_unit(unit: &str) -> bool {
     Command::new("systemctl")
         .args(["cat", unit])
         .stdout(Stdio::null())
@@ -868,17 +868,17 @@ pub(crate) fn has_systemd_unit(unit: &str) -> bool {
         .unwrap_or(false)
 }
 
-pub(crate) fn is_socket(path: &Path) -> bool {
+pub fn is_socket(path: &Path) -> bool {
     fs::metadata(path)
         .map(|metadata| metadata.file_type().is_socket())
         .unwrap_or(false)
 }
 
-pub(crate) fn nix_like_is_root() -> bool {
+pub fn nix_like_is_root() -> bool {
     matches!(std::env::var("USER"), Ok(user) if user == "root") || uid_via_id() == Some(0)
 }
 
-pub(crate) fn uid_via_id() -> Option<u32> {
+pub fn uid_via_id() -> Option<u32> {
     let output = Command::new("id").arg("-u").output().ok()?;
     if !output.status.success() {
         return None;
@@ -890,7 +890,7 @@ pub(crate) fn uid_via_id() -> Option<u32> {
         .ok()
 }
 
-pub(crate) fn detect_distro() -> String {
+pub fn detect_distro() -> String {
     // Try /etc/os-release first (standard)
     if let Ok(content) = fs::read_to_string("/etc/os-release") {
         for line in content.lines() {
@@ -904,29 +904,29 @@ pub(crate) fn detect_distro() -> String {
     format!("{} (unknown distro)", std::env::consts::OS)
 }
 
-pub(crate) fn default_install_path() -> PathBuf {
+pub fn default_install_path() -> PathBuf {
     PathBuf::from("/usr/local/bin/dokuru")
 }
 
-pub(crate) fn default_config_dir() -> PathBuf {
+pub fn default_config_dir() -> PathBuf {
     PathBuf::from("/etc/dokuru")
 }
 
-pub(crate) fn default_systemd_dir() -> PathBuf {
+pub fn default_systemd_dir() -> PathBuf {
     PathBuf::from("/etc/systemd/system")
 }
 
-pub(crate) fn service_unit_path(config: &InstallerConfig) -> PathBuf {
+pub fn service_unit_path(config: &InstallerConfig) -> PathBuf {
     config
         .systemd_dir
         .join(format!("{}.service", config.service_name))
 }
 
-pub(crate) fn runtime_config_path(config: &InstallerConfig) -> PathBuf {
+pub fn runtime_config_path(config: &InstallerConfig) -> PathBuf {
     config_path_in(&config.config_dir)
 }
 
-pub(crate) fn parse_cors_origins(cors_origins: &str) -> Vec<String> {
+pub fn parse_cors_origins(cors_origins: &str) -> Vec<String> {
     cors_origins
         .split(',')
         .map(str::trim)
