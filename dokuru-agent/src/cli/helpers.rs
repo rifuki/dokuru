@@ -738,7 +738,16 @@ pub fn create_temp_dir(prefix: &str) -> Result<PathBuf> {
 
 pub fn download_file(url: &str, output: &Path) -> Result<()> {
     let status = Command::new("curl")
-        .args(["--fail", "--location", "--retry", "3", "--retry-delay", "1"])
+        .args([
+            "--fail",
+            "--silent",
+            "--show-error",
+            "--location",
+            "--retry",
+            "3",
+            "--retry-delay",
+            "1",
+        ])
         .arg("-o")
         .arg(output)
         .arg(url)
