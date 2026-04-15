@@ -21,6 +21,8 @@ enum Commands {
     Configure(cli::SetupArgs),
     /// Inspect Dokuru installation and host readiness
     Doctor(cli::DoctorArgs),
+    /// Show Dokuru service and Docker status
+    Status,
     /// Update Dokuru from the rolling latest release
     Update(cli::UpdateArgs),
     /// Remove Dokuru from this host
@@ -47,6 +49,7 @@ async fn main() -> eyre::Result<()> {
             cli::run_configure(args.clone())?;
         }
         Commands::Doctor(args) => cli::run_doctor(args.clone())?,
+        Commands::Status => cli::run_status(),
         Commands::Update(args) => cli::run_update(args)?,
         Commands::Uninstall(args) => cli::run_uninstall(args)?,
         Commands::Serve => {

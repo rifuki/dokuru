@@ -51,7 +51,7 @@ mime_guess = "2"
 config = { version = "0.15", default-features = false, features = ["toml"] }
 
 # HTTP client
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "blocking"] }
 
 # Utils
 chrono = { version = "0.4", features = ["serde"] }
