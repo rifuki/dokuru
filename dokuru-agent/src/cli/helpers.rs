@@ -24,6 +24,7 @@ pub struct InstallerConfig {
     pub docker_socket: String,
     pub cors_origins: String,
     pub skip_service: bool,
+    pub install_docker: bool,
 }
 
 #[allow(clippy::struct_excessive_bools)]
@@ -90,6 +91,7 @@ pub fn resolve_config(args: SetupArgs) -> InstallerConfig {
         docker_socket,
         cors_origins,
         skip_service: args.skip_service,
+        install_docker: args.install_docker,
     }
 }
 
@@ -128,6 +130,7 @@ pub fn resolve_shared_config(
         docker_socket,
         cors_origins,
         skip_service: false,
+        install_docker: false,
     })
 }
 

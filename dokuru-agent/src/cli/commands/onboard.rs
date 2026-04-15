@@ -46,7 +46,14 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
 
     // Validate Docker installation
     if !preflight.docker_installed {
-        if offer_docker_installation(&config)? {
+        let should_install = if config.install_docker && config.yes {
+            // Auto-install in non-interactive mode with flag
+            true
+        } else {
+            offer_docker_installation(&config)?
+        };
+
+        if should_install {
             run_step("Installing Docker", install_docker)?;
             run_step("Starting Docker service", || {
                 run_command("systemctl", &["start", "docker"])

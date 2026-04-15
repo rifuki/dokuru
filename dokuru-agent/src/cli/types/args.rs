@@ -49,6 +49,10 @@ pub struct SetupArgs {
     /// Skip writing and starting a systemd unit
     #[arg(long = "skip-service")]
     pub skip_service: bool,
+
+    /// Automatically install Docker if not present (non-interactive mode only)
+    #[arg(long = "install-docker")]
+    pub install_docker: bool,
 }
 
 #[derive(Args, Debug, Clone, Default)]
