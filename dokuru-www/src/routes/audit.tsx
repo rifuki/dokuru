@@ -29,7 +29,7 @@ function AuditPage() {
   const [sortKey, setSortKey] = useState<SortKey>('severity')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
-  const results = report?.results ?? []
+  const results = useMemo(() => report?.results ?? [], [report?.results])
   const total = results.length
   const passing = results.filter((r) => r.status === 'Pass').length
   const failing = results.filter((r) => r.status === 'Fail').length

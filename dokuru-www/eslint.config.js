@@ -21,9 +21,24 @@ export default defineConfig([
     },
     rules: {
       'react-refresh/only-export-components': [
-        'warn',
-        { allowConstantExport: true },
+        'error',
+        { 
+          allowExportNames: ['Route', 'loader', 'action', 'meta'],
+          allowConstantExport: true,
+        },
       ],
+    },
+  },
+  {
+    files: ['src/components/ui/**/*.{ts,tsx}'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
+  {
+    files: ['src/routes/**/*.{ts,tsx}'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
     },
   },
 ])
