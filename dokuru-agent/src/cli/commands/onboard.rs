@@ -55,6 +55,29 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
 
         if should_install {
             run_step("Installing Docker", install_docker)?;
+            if stderr().is_terminal() {
+                use std::process::Command;
+                let engine = Command::new("docker")
+                    .args(["version", "--format", "{{.Server.Version}}"])
+                    .output()
+                    .ok()
+                    .and_then(|o| String::from_utf8(o.stdout).ok())
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| "unknown".to_string());
+                let client = Command::new("docker")
+                    .args(["version", "--format", "{{.Client.Version}}"])
+                    .output()
+                    .ok()
+                    .and_then(|o| String::from_utf8(o.stdout).ok())
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| "unknown".to_string());
+                cliclack::note(
+                    "Docker installed",
+                    format!("Engine:  {engine}\nClient:  {client}"),
+                )?;
+            }
             run_step("Starting Docker service", || {
                 run_command("systemctl", &["start", "docker"])
             })?;
