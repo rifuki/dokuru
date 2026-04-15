@@ -3,21 +3,16 @@ use chrono::Utc;
 use serde_json::Value;
 use std::{fs, path::Path, path::PathBuf};
 
-use super::checks::SectionRegistry;
 use super::rules::{get_all_rules, get_rule_by_id};
 use super::types::*;
 
 pub struct Checker {
     docker: Docker,
-    registry: SectionRegistry,
 }
 
 impl Checker {
     pub fn new(docker: Docker) -> Self {
-        Self {
-            docker,
-            registry: SectionRegistry::new(),
-        }
+        Self { docker }
     }
 
     pub async fn run_audit(&self) -> eyre::Result<AuditReport> {
@@ -72,12 +67,6 @@ impl Checker {
         rule: &CisRule,
         containers: &[bollard::models::ContainerSummary],
     ) -> eyre::Result<CheckResult> {
-        // Dispatch to appropriate section via registry
-        if let Some(section) = self.registry.find_section(&rule.id) {
-            return section.check(rule, &self.docker, containers).await;
-        }
-
-        // Fallback for rules not yet migrated to sections
         match rule.id.as_str() {
             // ── Section 2: Daemon Configuration ──────────────────────────────
             "2.10" => self.check_2_10(rule).await,
@@ -86,7 +75,14 @@ impl Checker {
             // ── Section 3: Docker Daemon Configuration Files ──────────────────
             "3.1" => {
                 let path = find_docker_service_path();
-                Ok(check_ownership_rule(rule, path.as_deref(), 0, 0, "root", "root"))
+                Ok(check_ownership_rule(
+                    rule,
+                    path.as_deref(),
+                    0,
+                    0,
+                    "root",
+                    "root",
+                ))
             }
             "3.2" => {
                 let path = find_docker_service_path();
@@ -156,18 +152,18 @@ impl Checker {
             "5.2" => {
                 self.check_container_rule(rule, containers, |config| {
                     config.security_opt.as_ref().is_some_and(|opts| {
-                        opts.iter().any(|opt| {
-                            opt.starts_with("apparmor=") && opt != "apparmor=unconfined"
-                        })
+                        opts.iter()
+                            .any(|opt| opt.starts_with("apparmor=") && opt != "apparmor=unconfined")
                     })
                 })
                 .await
             }
             "5.3" => {
                 self.check_container_rule(rule, containers, |config| {
-                    config.security_opt.as_ref().is_some_and(|opts| {
-                        opts.iter().any(|opt| opt.starts_with("label="))
-                    })
+                    config
+                        .security_opt
+                        .as_ref()
+                        .is_some_and(|opts| opts.iter().any(|opt| opt.starts_with("label=")))
                 })
                 .await
             }
@@ -217,10 +213,8 @@ impl Checker {
                 .await
             }
             "5.11" => {
-                self.check_container_rule(rule, containers, |config| {
-                    config.memory.unwrap_or(0) > 0
-                })
-                .await
+                self.check_container_rule(rule, containers, |config| config.memory.unwrap_or(0) > 0)
+                    .await
             }
             "5.12" => {
                 self.check_container_rule(rule, containers, |config| {
@@ -255,9 +249,10 @@ impl Checker {
             }
             "5.22" => {
                 self.check_container_rule(rule, containers, |config| {
-                    config.security_opt.as_ref().is_none_or(|opts| {
-                        !opts.iter().any(|opt| opt == "seccomp=unconfined")
-                    })
+                    config
+                        .security_opt
+                        .as_ref()
+                        .is_none_or(|opts| !opts.iter().any(|opt| opt == "seccomp=unconfined"))
                 })
                 .await
             }
@@ -293,9 +288,9 @@ impl Checker {
             "5.32" => {
                 self.check_container_rule(rule, containers, |config| {
                     let binds = config.binds.as_deref().unwrap_or(&[]);
-                    !binds.iter().any(|bind| {
-                        bind.split(':').next().unwrap_or("") == "/var/run/docker.sock"
-                    })
+                    !binds
+                        .iter()
+                        .any(|bind| bind.split(':').next().unwrap_or("") == "/var/run/docker.sock")
                 })
                 .await
             }
@@ -371,8 +366,7 @@ impl Checker {
             ),
             None => (
                 CheckStatus::Pass,
-                "Default cgroup-parent is in use (no custom cgroup-parent configured)."
-                    .to_string(),
+                "Default cgroup-parent is in use (no custom cgroup-parent configured).".to_string(),
                 vec![],
             ),
         };
@@ -459,10 +453,7 @@ impl Checker {
                     .name
                     .clone()
                     .unwrap_or_else(|| "unknown".to_string());
-                let healthcheck = details
-                    .config
-                    .as_ref()
-                    .and_then(|c| c.healthcheck.as_ref());
+                let healthcheck = details.config.as_ref().and_then(|c| c.healthcheck.as_ref());
 
                 let has_healthcheck = healthcheck.is_some_and(|h| {
                     h.test.as_ref().is_some_and(|t| {

@@ -1,6 +1,6 @@
-use cliclack::{confirm, input, intro, note, outro, outro_cancel, select, spinner};
-use crate::api::{Config as RuntimeConfig, DockerConfig, ServerConfig, config_path_in};
 use super::types::*;
+use crate::api::{Config as RuntimeConfig, DockerConfig, ServerConfig, config_path_in};
+use cliclack::{confirm, input, intro, note, outro, outro_cancel, select, spinner};
 use eyre::{Result, WrapErr, bail};
 use std::fs;
 use std::io::{IsTerminal, stderr};
@@ -9,7 +9,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 pub(crate) const REPO_URL: &str = "https://github.com/rifuki/dokuru";
-pub(crate) const LATEST_RELEASE_BASE_URL: &str = "https://github.com/rifuki/dokuru/releases/download/latest";
+pub(crate) const LATEST_RELEASE_BASE_URL: &str =
+    "https://github.com/rifuki/dokuru/releases/download/latest";
 
 #[derive(Debug)]
 pub(crate) struct InstallerConfig {
@@ -258,7 +259,10 @@ pub(crate) fn collect_preflight(config: &InstallerConfig) -> Preflight {
 
 // ─── Interactive Prompts ──────────────────────────────────────────────────────
 
-pub(crate) fn prompt_for_config(mode: SetupMode, mut config: InstallerConfig) -> Result<InstallerConfig> {
+pub(crate) fn prompt_for_config(
+    mode: SetupMode,
+    mut config: InstallerConfig,
+) -> Result<InstallerConfig> {
     if config.yes || !stderr().is_terminal() {
         return Ok(config);
     }

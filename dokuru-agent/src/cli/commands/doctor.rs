@@ -1,6 +1,6 @@
-use cliclack::{intro, note, outro};
-use super::super::types::*;
 use super::super::helpers::*;
+use super::super::types::*;
+use cliclack::{intro, note, outro};
 use eyre::Result;
 
 pub fn run_doctor(args: DoctorArgs) -> Result<()> {
@@ -95,4 +95,3 @@ pub fn run_doctor(args: DoctorArgs) -> Result<()> {
 }
 
 // ─── Update ──────────────────────────────────────────────────────────────────
-

@@ -2,7 +2,7 @@ mod protocol;
 mod ws_client;
 
 use eyre::Result;
-use tokio::time::{interval, Duration};
+use tokio::time::{Duration, interval};
 use tracing::{error, info};
 
 use self::{
@@ -15,9 +15,7 @@ pub async fn run_agent(server_url: String, token: String) -> Result<()> {
     info!("Server: {}", server_url);
 
     // Get system info
-    let hostname = hostname::get()
-        .ok()
-        .and_then(|h| h.into_string().ok());
+    let hostname = hostname::get().ok().and_then(|h| h.into_string().ok());
 
     let docker_version = get_docker_version().await;
 
@@ -32,7 +30,10 @@ pub async fn run_agent(server_url: String, token: String) -> Result<()> {
     };
     tx.send(agent_info)?;
 
-    info!("Agent info sent: hostname={:?}, docker_version={:?}", hostname, docker_version);
+    info!(
+        "Agent info sent: hostname={:?}, docker_version={:?}",
+        hostname, docker_version
+    );
 
     // Heartbeat task
     let tx_heartbeat = tx.clone();
@@ -51,7 +52,7 @@ pub async fn run_agent(server_url: String, token: String) -> Result<()> {
         match msg {
             ServerMessage::AuditStart { audit_id } => {
                 info!("Received audit request: {}", audit_id);
-                
+
                 // Run audit in background
                 let tx_clone = tx.clone();
                 tokio::spawn(async move {
@@ -90,14 +91,20 @@ async fn run_audit(
 
     // Calculate score (percentage of passed checks)
     let total = results.len();
-    let passed = results.iter().filter(|r| r.status == crate::audit::CheckStatus::Pass).count();
+    let passed = results
+        .iter()
+        .filter(|r| r.status == crate::audit::CheckStatus::Pass)
+        .count();
     let score = if total > 0 {
         ((passed as f64 / total as f64) * 100.0) as i32
     } else {
         0
     };
 
-    info!("Audit completed: score={}, total={}, passed={}", score, total, passed);
+    info!(
+        "Audit completed: score={}, total={}, passed={}",
+        score, total, passed
+    );
 
     // Send results to server
     let results_json = serde_json::to_value(&results)?;

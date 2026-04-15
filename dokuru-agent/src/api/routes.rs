@@ -45,8 +45,8 @@ pub fn build_router(state: AppState) -> Router {
         // WebSocket for live audit progress
         .route("/ws/audit", get(audit::ws_audit_handler))
         .with_state(state)
-        // TODO: Enable when web/dist is available
-        // .fallback(static_handler)
+    // TODO: Enable when web/dist is available
+    // .fallback(static_handler)
 }
 
 // TODO: Enable when web/dist is available

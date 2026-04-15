@@ -1,5 +1,6 @@
 use crate::api::infrastructure::web::response::{ApiError, ApiResult, ApiSuccess};
 use crate::api::state::AppState;
+use crate::audit::{AuditReport, CheckResult, Checker};
 use axum::{
     extract::{
         Path, State,
@@ -7,7 +8,6 @@ use axum::{
     },
     response::IntoResponse,
 };
-use crate::audit::{AuditReport, CheckResult, Checker};
 use futures::sink::SinkExt;
 
 pub async fn run_full_audit(State(state): State<AppState>) -> ApiResult<AuditReport> {

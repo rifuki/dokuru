@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 pub const REPO_URL: &str = "https://github.com/rifuki/dokuru";
-pub const LATEST_RELEASE_BASE_URL: &str = "https://github.com/rifuki/dokuru/releases/download/latest";
+pub const LATEST_RELEASE_BASE_URL: &str =
+    "https://github.com/rifuki/dokuru/releases/download/latest";
 
 pub fn run_command(cmd: &str, args: &[&str]) -> Result<()> {
     let status = Command::new(cmd)
@@ -11,7 +12,7 @@ pub fn run_command(cmd: &str, args: &[&str]) -> Result<()> {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()?;
-    
+
     if !status.success() {
         eyre::bail!("Command failed: {} {}", cmd, args.join(" "));
     }

@@ -1,6 +1,6 @@
-use cliclack::{confirm, intro, note, outro, outro_cancel};
-use super::super::types::*;
 use super::super::helpers::*;
+use super::super::types::*;
+use cliclack::{confirm, intro, note, outro, outro_cancel};
 use eyre::{Result, bail};
 use std::io::{IsTerminal, stderr};
 
@@ -70,6 +70,4 @@ pub fn run_uninstall(args: UninstallArgs) -> Result<()> {
 
 // ─── SetupMode ───────────────────────────────────────────────────────────────
 
-
 // ─── Config Resolution ───────────────────────────────────────────────────────
-

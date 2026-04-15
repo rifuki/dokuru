@@ -1,10 +1,10 @@
 use bollard::{API_DEFAULT_VERSION, Docker};
 use clap::{Parser, Subcommand};
 
-mod audit;
 mod api;
-mod client;
+mod audit;
 mod cli;
+mod client;
 
 /// Dokuru 0.1.0 - Docker Security Hardening Agent (CIS Benchmark v1.8.0)
 #[derive(Parser)]

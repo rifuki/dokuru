@@ -1,6 +1,6 @@
-use cliclack::{confirm, intro, note, outro, outro_cancel};
-use super::super::types::*;
 use super::super::helpers::*;
+use super::super::types::*;
+use cliclack::{confirm, intro, note, outro, outro_cancel};
 use eyre::{Result, WrapErr, bail};
 use std::io::{IsTerminal, stderr};
 use std::path::PathBuf;
@@ -225,4 +225,3 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
 }
 
 // ─── Doctor ──────────────────────────────────────────────────────────────────
-
