@@ -7,7 +7,8 @@
 
 mod section_trait;
 pub mod section2;
-// TODO: Implement section3, section5
+pub mod section3;
+pub mod section5;
 
 pub use section_trait::CheckSection;
 use std::sync::Arc;
@@ -22,7 +23,8 @@ impl SectionRegistry {
         Self {
             sections: vec![
                 Arc::new(section2::Section2),
-                // TODO: Add Section3, Section5
+                Arc::new(section3::Section3),
+                Arc::new(section5::Section5),
             ],
         }
     }
