@@ -308,21 +308,21 @@ function AgentDetail() {
                             <div className="flex items-center gap-2 p-3 rounded-lg bg-green-500/10">
                                 <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
                                 <div>
-                                    <p className="text-2xl font-bold">{auditResults.passed}</p>
+                                    <p className="text-2xl font-bold">{auditResults.summary.passed}</p>
                                     <p className="text-xs text-muted-foreground">Passed</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10">
                                 <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
                                 <div>
-                                    <p className="text-2xl font-bold">{auditResults.failed}</p>
+                                    <p className="text-2xl font-bold">{auditResults.summary.failed}</p>
                                     <p className="text-xs text-muted-foreground">Failed</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2 p-3 rounded-lg bg-yellow-500/10">
                                 <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
                                 <div>
-                                    <p className="text-2xl font-bold">{auditResults.warned}</p>
+                                    <p className="text-2xl font-bold">{auditResults.summary.failed}</p>
                                     <p className="text-xs text-muted-foreground">Warnings</p>
                                 </div>
                             </div>
@@ -331,27 +331,27 @@ function AgentDetail() {
                         <div className="space-y-2 max-h-96 overflow-y-auto">
                             {auditResults.results.map((result) => (
                                 <div
-                                    key={result.rule_id}
+                                    key={result.rule.id}
                                     className={`p-3 rounded-lg border ${
-                                        result.status === "pass"
+                                        result.status === "Pass"
                                             ? "bg-green-500/5 border-green-500/20"
-                                            : result.status === "fail"
+                                            : result.status === "Fail"
                                             ? "bg-red-500/5 border-red-500/20"
                                             : "bg-yellow-500/5 border-yellow-500/20"
                                     }`}
                                 >
                                     <div className="flex items-start gap-2">
-                                        {result.status === "pass" ? (
+                                        {result.status === "Pass" ? (
                                             <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5" />
-                                        ) : result.status === "fail" ? (
+                                        ) : result.status === "Fail" ? (
                                             <XCircle className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5" />
                                         ) : (
                                             <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mt-0.5" />
                                         )}
                                         <div className="flex-1">
-                                            <p className="text-sm font-medium">{result.title}</p>
+                                            <p className="text-sm font-medium">{result.rule.title}</p>
                                             <p className="text-xs text-muted-foreground mt-1">
-                                                {result.rule_id} • {result.message}
+                                                {result.rule.id} • {result.message}
                                             </p>
                                         </div>
                                     </div>
