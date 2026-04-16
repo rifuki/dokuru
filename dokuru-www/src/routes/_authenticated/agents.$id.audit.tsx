@@ -283,29 +283,30 @@ function RuleCard({ result, agentUrl, token }: {
                         <Zap className="h-4 w-4 text-blue-500" />
                         Apply Auto Fix — Rule {rule.id}
                     </AlertDialogTitle>
-                    <AlertDialogDescription className="space-y-3">
-                        <span className="block">
-                            The following system-level changes will be applied automatically:
-                        </span>
-                        <ul className="space-y-1.5 mt-2">
-                            {steps.map((s, i) => (
-                                <li key={i} className="flex items-start gap-2 text-xs text-foreground/80">
-                                    <ListChecks className="h-3.5 w-3.5 shrink-0 mt-0.5 text-blue-500" />
-                                    {s.replace("…", "")}
-                                </li>
-                            ))}
-                        </ul>
-                        {needsRestart && (
-                            <div className="flex items-start gap-2 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-600 dark:text-yellow-400 mt-2">
-                                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                                <span>
-                                    <strong>Docker daemon will be restarted.</strong> Running containers
-                                    may be briefly interrupted.
-                                </span>
-                            </div>
-                        )}
+                    <AlertDialogDescription>
+                        The following system-level changes will be applied automatically:
                     </AlertDialogDescription>
                 </AlertDialogHeader>
+
+                {/* Steps list — outside <p> to avoid nesting error */}
+                <ul className="space-y-1.5">
+                    {steps.map((s, i) => (
+                        <li key={i} className="flex items-start gap-2 text-xs text-foreground/80">
+                            <ListChecks className="h-3.5 w-3.5 shrink-0 mt-0.5 text-blue-500" />
+                            {s.replace("…", "")}
+                        </li>
+                    ))}
+                </ul>
+                {needsRestart && (
+                    <div className="flex items-start gap-2 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-600 dark:text-yellow-400">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                        <span>
+                            <strong>Docker daemon will be restarted.</strong> Running containers
+                            may be briefly interrupted.
+                        </span>
+                    </div>
+                )}
+
                 <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction
