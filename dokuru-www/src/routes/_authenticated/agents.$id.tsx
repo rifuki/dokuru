@@ -1,10 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { agentApi } from "@/lib/api/agent";
-import { agentDirectApi, type DockerInfo } from "@/lib/api/agent-direct";
+import { agentDirectApi, type DockerInfo, type AuditResponse } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Server, Trash2, Container, Image, HardDrive, Network } from "lucide-react";
+import { ArrowLeft, Server, Trash2, Container, Image, HardDrive, Network, Play, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { useAgentStore } from "@/stores/use-agent-store";
 import { toast } from "sonner";
 
@@ -18,8 +18,10 @@ function AgentDetail() {
     const { deleteAgent } = useAgentStore();
     const [agent, setAgent] = useState<Agent | null>(null);
     const [dockerInfo, setDockerInfo] = useState<DockerInfo | null>(null);
+    const [auditResults, setAuditResults] = useState<AuditResponse | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isLoadingDocker, setIsLoadingDocker] = useState(false);
+    const [isRunningAudit, setIsRunningAudit] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
 
     useEffect(() => {
@@ -59,6 +61,21 @@ function AgentDetail() {
         } catch {
             toast.error("Failed to delete agent");
             setIsDeleting(false);
+        }
+    };
+
+    const handleRunAudit = async () => {
+        if (!agent) return;
+
+        setIsRunningAudit(true);
+        try {
+            const results = await agentDirectApi.runAudit(agent.url);
+            setAuditResults(results);
+            toast.success("Audit completed successfully");
+        } catch {
+            toast.error("Failed to run audit");
+        } finally {
+            setIsRunningAudit(false);
         }
     };
 
@@ -209,6 +226,84 @@ function AgentDetail() {
                     </p>
                 </div>
             )}
+
+            {/* Audit Section */}
+            <div className="rounded-lg border bg-card p-6">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold">Security Audit</h3>
+                    <Button
+                        onClick={handleRunAudit}
+                        disabled={isRunningAudit || !dockerInfo}
+                        size="sm"
+                    >
+                        <Play className={`h-4 w-4 mr-2 ${isRunningAudit ? 'animate-spin' : ''}`} />
+                        {isRunningAudit ? "Running..." : "Run Audit"}
+                    </Button>
+                </div>
+
+                {auditResults ? (
+                    <div className="space-y-4">
+                        <div className="grid grid-cols-3 gap-4">
+                            <div className="flex items-center gap-2 p-3 rounded-lg bg-green-500/10">
+                                <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                                <div>
+                                    <p className="text-2xl font-bold">{auditResults.passed}</p>
+                                    <p className="text-xs text-muted-foreground">Passed</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10">
+                                <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                                <div>
+                                    <p className="text-2xl font-bold">{auditResults.failed}</p>
+                                    <p className="text-xs text-muted-foreground">Failed</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 p-3 rounded-lg bg-yellow-500/10">
+                                <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                                <div>
+                                    <p className="text-2xl font-bold">{auditResults.warned}</p>
+                                    <p className="text-xs text-muted-foreground">Warnings</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                            {auditResults.results.map((result) => (
+                                <div
+                                    key={result.rule_id}
+                                    className={`p-3 rounded-lg border ${
+                                        result.status === "pass"
+                                            ? "bg-green-500/5 border-green-500/20"
+                                            : result.status === "fail"
+                                            ? "bg-red-500/5 border-red-500/20"
+                                            : "bg-yellow-500/5 border-yellow-500/20"
+                                    }`}
+                                >
+                                    <div className="flex items-start gap-2">
+                                        {result.status === "pass" ? (
+                                            <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5" />
+                                        ) : result.status === "fail" ? (
+                                            <XCircle className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5" />
+                                        ) : (
+                                            <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mt-0.5" />
+                                        )}
+                                        <div className="flex-1">
+                                            <p className="text-sm font-medium">{result.title}</p>
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                {result.rule_id} • {result.message}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ) : (
+                    <p className="text-sm text-muted-foreground text-center py-8">
+                        Click "Run Audit" to start CIS Docker Benchmark security audit
+                    </p>
+                )}
+            </div>
         </div>
     );
 }
