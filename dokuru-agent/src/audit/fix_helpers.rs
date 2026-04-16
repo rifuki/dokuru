@@ -43,13 +43,13 @@ pub fn blocked(rule_id: &str, msg: &str) -> FixOutcome {
 /// value must be a valid JSON value string, e.g. `"\"default\""` or `"true"`.
 pub fn merge_daemon_json(key: &str, value: serde_json::Value) -> eyre::Result<()> {
     let path = "/etc/docker/daemon.json";
-    let mut obj: serde_json::Map<String, serde_json::Value> =
-        if std::path::Path::new(path).exists() {
-            let content = std::fs::read_to_string(path)?;
-            serde_json::from_str(&content).unwrap_or_default()
-        } else {
-            serde_json::Map::new()
-        };
+    let mut obj: serde_json::Map<String, serde_json::Value> = if std::path::Path::new(path).exists()
+    {
+        let content = std::fs::read_to_string(path)?;
+        serde_json::from_str(&content).unwrap_or_default()
+    } else {
+        serde_json::Map::new()
+    };
 
     obj.insert(key.to_string(), value);
 

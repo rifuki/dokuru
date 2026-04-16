@@ -1,6 +1,10 @@
 // Section 1: Host Configuration
 // CIS Docker Benchmark v1.8.0
-#![allow(clippy::too_many_lines, clippy::option_if_let_else, clippy::single_match_else)]
+#![allow(
+    clippy::too_many_lines,
+    clippy::option_if_let_else,
+    clippy::single_match_else
+)]
 use super::RuleDefinition;
 use crate::audit::{
     fix_helpers,
@@ -297,10 +301,17 @@ impl Section1 {
             fix_fn: Some(|_docker| {
                 Box::pin(async move {
                     match fix_helpers::ensure_audit_rule("-w /run/containerd -p rwxa -k docker") {
-                        Err(e) => Ok(fix_helpers::blocked("1.1.4", &format!("Failed to write audit rule: {e}"))),
+                        Err(e) => Ok(fix_helpers::blocked(
+                            "1.1.4",
+                            &format!("Failed to write audit rule: {e}"),
+                        )),
                         Ok(_) => {
                             let _ = fix_helpers::run_cmd("service", &["auditd", "reload"]).await;
-                            Ok(fix_helpers::applied("1.1.4", "Audit rule added for /run/containerd", false))
+                            Ok(fix_helpers::applied(
+                                "1.1.4",
+                                "Audit rule added for /run/containerd",
+                                false,
+                            ))
                         }
                     }
                 })
@@ -390,10 +401,17 @@ impl Section1 {
             fix_fn: Some(|_docker| {
                 Box::pin(async move {
                     match fix_helpers::ensure_audit_rule("-w /etc/docker -p rwxa -k docker") {
-                        Err(e) => Ok(fix_helpers::blocked("1.1.6", &format!("Failed to write audit rule: {e}"))),
+                        Err(e) => Ok(fix_helpers::blocked(
+                            "1.1.6",
+                            &format!("Failed to write audit rule: {e}"),
+                        )),
                         Ok(_) => {
                             let _ = fix_helpers::run_cmd("service", &["auditd", "reload"]).await;
-                            Ok(fix_helpers::applied("1.1.6", "Audit rule added for /etc/docker", false))
+                            Ok(fix_helpers::applied(
+                                "1.1.6",
+                                "Audit rule added for /etc/docker",
+                                false,
+                            ))
                         }
                     }
                 })

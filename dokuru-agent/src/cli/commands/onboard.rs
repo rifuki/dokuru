@@ -275,7 +275,10 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         .ok()
         .and_then(|c| {
             // AWS/DigitalOcean
-            if c.get("http://169.254.169.254/latest/meta-data/").send().is_ok() {
+            if c.get("http://169.254.169.254/latest/meta-data/")
+                .send()
+                .is_ok()
+            {
                 return Some(());
             }
             // GCP
@@ -297,7 +300,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
             None
         })
         .is_some();
-    
+
     let host_ip = if is_cloud {
         reqwest::blocking::get("https://api.ipify.org")
             .and_then(reqwest::blocking::Response::text)

@@ -439,8 +439,15 @@ impl Section3 {
             fix_fn: Some(|_docker| {
                 Box::pin(async move {
                     match fix_helpers::run_cmd("chmod", &["755", "/etc/docker"]).await {
-                        Ok((_, _, true)) => Ok(fix_helpers::applied("3.6", "/etc/docker permissions set to 755", false)),
-                        Ok((_, stderr, _)) => Ok(fix_helpers::blocked("3.6", &format!("chmod failed: {stderr}"))),
+                        Ok((_, _, true)) => Ok(fix_helpers::applied(
+                            "3.6",
+                            "/etc/docker permissions set to 755",
+                            false,
+                        )),
+                        Ok((_, stderr, _)) => Ok(fix_helpers::blocked(
+                            "3.6",
+                            &format!("chmod failed: {stderr}"),
+                        )),
                         Err(e) => Ok(fix_helpers::blocked("3.6", &format!("chmod error: {e}"))),
                     }
                 })
@@ -485,11 +492,23 @@ impl Section3 {
             fix_fn: Some(|_docker| {
                 Box::pin(async move {
                     if !std::path::Path::new("/etc/docker/daemon.json").exists() {
-                        return Ok(fix_helpers::blocked("3.17", "/etc/docker/daemon.json does not exist"));
+                        return Ok(fix_helpers::blocked(
+                            "3.17",
+                            "/etc/docker/daemon.json does not exist",
+                        ));
                     }
-                    match fix_helpers::run_cmd("chown", &["root:root", "/etc/docker/daemon.json"]).await {
-                        Ok((_, _, true)) => Ok(fix_helpers::applied("3.17", "/etc/docker/daemon.json ownership set to root:root", false)),
-                        Ok((_, stderr, _)) => Ok(fix_helpers::blocked("3.17", &format!("chown failed: {stderr}"))),
+                    match fix_helpers::run_cmd("chown", &["root:root", "/etc/docker/daemon.json"])
+                        .await
+                    {
+                        Ok((_, _, true)) => Ok(fix_helpers::applied(
+                            "3.17",
+                            "/etc/docker/daemon.json ownership set to root:root",
+                            false,
+                        )),
+                        Ok((_, stderr, _)) => Ok(fix_helpers::blocked(
+                            "3.17",
+                            &format!("chown failed: {stderr}"),
+                        )),
                         Err(e) => Ok(fix_helpers::blocked("3.17", &format!("chown error: {e}"))),
                     }
                 })

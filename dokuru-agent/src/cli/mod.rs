@@ -9,7 +9,6 @@
 mod commands;
 mod helpers;
 mod types;
-mod utils;
 
 // Public API - only expose what main.rs needs
 pub use commands::{
