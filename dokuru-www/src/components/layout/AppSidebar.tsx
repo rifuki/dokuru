@@ -116,13 +116,13 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
-                  isActive={isActive(isAdmin ? "/admin" : "/")}
-                  tooltip="Overview"
-                  className="text-base! bg-red-500 data-[active=true]:bg-miku-primary/15 data-[active=true]:text-white data-[active=true]:font-semibold"
+                  isActive={isActive(isAdmin ? "/admin" : "/agents")}
+                  tooltip={isAdmin ? "Overview" : "Agents"}
+                  className="text-base! py-2.5! data-[active=true]:bg-miku-primary/15 data-[active=true]:text-white data-[active=true]:font-semibold"
                 >
-                  <Link to={isAdmin ? "/admin" : "/"}>
+                  <Link to={isAdmin ? "/admin" : "/agents"}>
                     <LayoutDashboard className="size-4" />
-                    <span>Overview</span>
+                    <span>{isAdmin ? "Overview" : "Agents"}</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

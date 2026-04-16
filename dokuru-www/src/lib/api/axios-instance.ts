@@ -30,7 +30,7 @@ function getAccessToken(): string | null {
 
 function handleLogout() {
   useAuthStore.getState().actions.logout();
-  window.location.href = "/app/login";
+  window.location.href = "/login";
 }
 
 apiClient.interceptors.response.use(
