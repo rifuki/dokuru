@@ -81,12 +81,19 @@ export function RegisterForm() {
                 className="h-11 pr-10 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                {/* Show X if < 3 chars */}
+                {username.length > 0 && username.length < 3 && (
+                  <XCircle className="h-4 w-4 text-red-500" />
+                )}
+                {/* Show loading spinner while checking */}
                 {usernameCheck.isLoading && username.length >= 3 && (
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 )}
+                {/* Show checkmark if available */}
                 {showUsernameStatus && usernameCheck.data.available && (
                   <CheckCircle2 className="h-4 w-4 text-green-500" />
                 )}
+                {/* Show X if taken */}
                 {showUsernameStatus && !usernameCheck.data.available && (
                   <XCircle className="h-4 w-4 text-red-500" />
                 )}
