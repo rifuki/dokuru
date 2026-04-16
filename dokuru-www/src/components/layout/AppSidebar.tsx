@@ -118,7 +118,7 @@ export function AppSidebar() {
                   asChild
                   isActive={isActive(isAdmin ? "/admin" : "/")}
                   tooltip="Overview"
-                  className="text-base! py-2.5!"
+                  className="text-base! bg-red-500 data-[active=true]:bg-miku-primary/15 data-[active=true]:text-white data-[active=true]:font-semibold"
                 >
                   <Link to={isAdmin ? "/admin" : "/"}>
                     <LayoutDashboard className="size-4" />
@@ -145,7 +145,6 @@ export function AppSidebar() {
                       asChild
                       isActive={isActive(item.href)}
                       tooltip={item.title}
-                      className="text-base! py-2.5!"
                     >
                       <Link to={item.href}>
                         <item.icon className="size-4" />
@@ -159,11 +158,28 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
+        {/* Agents — empty state */}
+        {!isAdmin && agents.length === 0 && !isIconMode && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Agents</SidebarGroupLabel>
+            <div className="px-2">
+              <Link
+                to="/"
+                className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-sidebar-border bg-sidebar-accent/20 text-sm text-sidebar-foreground/60 hover:bg-sidebar-accent/35 transition-colors"
+              >
+                <span className="font-medium text-sidebar-foreground/80">Agent:</span>
+                <span className="text-sidebar-foreground/40">/</span>
+                <span>None selected</span>
+              </Link>
+            </div>
+          </SidebarGroup>
+        )}
+
         {/* Agents — card per agent */}
         {!isAdmin && agents.length > 0 && (
           <SidebarGroup>
             <SidebarGroupLabel>Agents</SidebarGroupLabel>
-            <div className={isIconMode ? "space-y-1" : "px-2 space-y-1.5"}>
+            <div className={isIconMode ? "" : "px-2"}>
               {agents.map((agent) => {
                 const isAgentActive = location.pathname.startsWith(`/agents/${agent.id}`);
                 return (
@@ -180,8 +196,8 @@ export function AppSidebar() {
                             ? ""
                             : `rounded-lg border overflow-hidden transition-colors ${
                                 isAgentActive
-                                  ? "border-sidebar-primary/30 bg-sidebar-accent/50"
-                                  : "border-sidebar-border bg-sidebar-accent/20"
+                                  ? "border-sidebar-primary/40"
+                                  : "border-sidebar-border"
                               }`
                         }
                       >
@@ -195,7 +211,7 @@ export function AppSidebar() {
                               type="button"
                               className={`w-full flex items-center gap-3 px-3 py-2.5 text-base font-semibold rounded-none transition-colors ${
                                 isAgentActive
-                                  ? "text-sidebar-primary"
+                                  ? "text-blue-400"
                                   : "text-sidebar-foreground hover:bg-sidebar-accent/40"
                               }`}
                             >
@@ -219,10 +235,10 @@ export function AppSidebar() {
                                   <Link
                                     key={item.href}
                                     to={item.href}
-                                    className={`flex items-center gap-3 px-3 py-2 mx-1.5 rounded-md text-sm transition-colors ${
+                                    className={`flex items-center gap-3 py-2 text-sm transition-colors ${
                                       active
-                                        ? "bg-sidebar-primary/15 text-sidebar-primary font-medium"
-                                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                                        ? "px-3 mx-0 rounded-none border-l-[3px] border-blue-400 bg-miku-primary/20 text-blue-300 font-semibold"
+                                        : "px-3 mx-1.5 rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
                                     }`}
                                   >
                                     <item.icon className="size-4 shrink-0" />

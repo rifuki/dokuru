@@ -62,7 +62,7 @@ function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void
 
                         {loading ? (
                             <div className="flex items-center gap-2 mt-3">
-                                <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-[#3BA5EF]" />
+                                <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-miku-primary" />
                                 <span className="text-[12px] text-slate-400">Loading...</span>
                             </div>
                         ) : info ? (
@@ -111,11 +111,11 @@ function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void
                     className={`flex items-center justify-center gap-2 h-9 w-full rounded text-sm font-semibold transition-all cursor-pointer ${
                         isOnline
                             ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 ring-1 ring-emerald-500/20"
-                            : "bg-[#1E4A8A]/40 border border-[#3BA5EF]/20 text-[#3BA5EF] hover:bg-[#1E4A8A]/60"
+                            : "bg-miku-primary/10 border border-miku-primary/30 text-miku-primary hover:bg-miku-primary/20"
                     }`}
                     onClick={onClick}
                 >
-                    <span className={`w-2 h-2 rounded-full ${isOnline ? "bg-emerald-400 animate-pulse" : "bg-[#3BA5EF]"}`}></span>
+                    <span className={`w-2 h-2 rounded-full ${isOnline ? "bg-emerald-400 animate-pulse" : "bg-miku-primary"}`}></span>
                     {isOnline ? "Connected" : "Connect"}
                 </button>
             </div>
@@ -261,7 +261,7 @@ function Dashboard() {
                                 Agent Version
                                 <ChevronDown className="w-4 h-4" />
                             </button>
-                            <button className="px-3 py-1.5 text-sm text-[#3BA5EF] hover:text-[#3BA5EF]/80">
+                            <button className="px-3 py-1.5 text-sm text-miku-primary hover:text-miku-primary/80">
                                 Clear all
                             </button>
                             <div className="flex-1 min-w-[300px] relative">
@@ -269,7 +269,7 @@ function Dashboard() {
                                 <input
                                     type="text"
                                     placeholder="Search by name, status, URL..."
-                                    className="w-full pl-10 pr-4 py-1.5 bg-[#1A1E23] border border-white/10 rounded text-sm text-slate-300 placeholder:text-slate-500 focus:outline-none focus:border-[#3BA5EF]/50"
+                                    className="w-full pl-10 pr-4 py-1.5 bg-[#1A1E23] border border-white/10 rounded text-sm text-slate-300 placeholder:text-slate-500 focus:outline-none focus:border-miku-primary/50"
                                 />
                             </div>
                             <div className="flex items-center gap-2 ml-auto">
