@@ -78,7 +78,11 @@ impl Section1 {
                 description: format!("Audit rule for {target}"),
                 remediation: format!("Add auditd rule: -w {target} -p rwxa -k docker"),
             },
-            status: if found { CheckStatus::Pass } else { CheckStatus::Fail },
+            status: if found {
+                CheckStatus::Pass
+            } else {
+                CheckStatus::Fail
+            },
             message: if found {
                 format!("Audit rule found for {target}")
             } else {
@@ -275,18 +279,31 @@ impl Section1 {
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
                     let raw = Section1::read_audit_rules();
-                    let relevant: Vec<&str> = raw.lines().filter(|l| l.contains("/run/containerd")).collect();
+                    let relevant: Vec<&str> = raw
+                        .lines()
+                        .filter(|l| l.contains("/run/containerd"))
+                        .collect();
                     let found = !relevant.is_empty();
-                    Ok(Section1::audit_result("1.1.4", "Ensure that containerd is audited", "/run/containerd", found, relevant))
+                    Ok(Section1::audit_result(
+                        "1.1.4",
+                        "Ensure that containerd is audited",
+                        "/run/containerd",
+                        found,
+                        relevant,
+                    ))
                 })
             },
             remediation_kind: RemediationKind::Guided,
             fix_fn: None,
-            remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /run/containerd -p rwxa -k docker".into(),
+            remediation_guide:
+                "Add to /etc/audit/rules.d/docker.rules:\n  -w /run/containerd -p rwxa -k docker"
+                    .into(),
             requires_restart: false,
             requires_elevation: true,
             references: vec!["CIS Docker Benchmark v1.8.0, Section 1.1.4".into()],
-            rationale: "Containerd socket access should be audited to detect bypasses of Docker daemon.".into(),
+            rationale:
+                "Containerd socket access should be audited to detect bypasses of Docker daemon."
+                    .into(),
             impact: "Minimal performance impact.".into(),
             tags: vec!["audit".into(), "containerd".into()],
         }
@@ -327,7 +344,9 @@ impl Section1 {
             id: "1.1.6".into(),
             section: 1,
             title: "Ensure that /etc/docker is audited".into(),
-            description: "Audit the Docker config directory to detect changes to TLS certs and daemon.json.".into(),
+            description:
+                "Audit the Docker config directory to detect changes to TLS certs and daemon.json."
+                    .into(),
             category: RuleCategory::Files,
             severity: Severity::Medium,
             scored: true,
@@ -335,14 +354,22 @@ impl Section1 {
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
                     let raw = Section1::read_audit_rules();
-                    let relevant: Vec<&str> = raw.lines().filter(|l| l.contains("/etc/docker")).collect();
+                    let relevant: Vec<&str> =
+                        raw.lines().filter(|l| l.contains("/etc/docker")).collect();
                     let found = !relevant.is_empty();
-                    Ok(Section1::audit_result("1.1.6", "Ensure that /etc/docker is audited", "/etc/docker", found, relevant))
+                    Ok(Section1::audit_result(
+                        "1.1.6",
+                        "Ensure that /etc/docker is audited",
+                        "/etc/docker",
+                        found,
+                        relevant,
+                    ))
                 })
             },
             remediation_kind: RemediationKind::Guided,
             fix_fn: None,
-            remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /etc/docker -p rwxa -k docker".into(),
+            remediation_guide:
+                "Add to /etc/audit/rules.d/docker.rules:\n  -w /etc/docker -p rwxa -k docker".into(),
             requires_restart: false,
             requires_elevation: true,
             references: vec!["CIS Docker Benchmark v1.8.0, Section 1.1.6".into()],

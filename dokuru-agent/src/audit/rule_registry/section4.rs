@@ -9,10 +9,7 @@ pub struct Section4;
 
 impl Section4 {
     pub fn rules() -> Vec<RuleDefinition> {
-        vec![
-            Self::rule_4_1(),
-            Self::rule_4_6(),
-        ]
+        vec![Self::rule_4_1(), Self::rule_4_6()]
     }
 
     fn container_name(names: Option<&Vec<String>>, id: &str) -> String {
@@ -22,7 +19,12 @@ impl Section4 {
         )
     }
 
-    fn empty_result(id: &str, title: &str, category: RuleCategory, severity: Severity) -> CheckResult {
+    fn empty_result(
+        id: &str,
+        title: &str,
+        category: RuleCategory,
+        severity: Severity,
+    ) -> CheckResult {
         CheckResult {
             rule: CisRule {
                 id: id.into(),

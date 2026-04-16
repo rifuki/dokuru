@@ -28,7 +28,9 @@ impl Section3 {
     #[cfg(unix)]
     fn file_meta(path: &str) -> Option<(u32, u32, u32)> {
         use std::os::unix::fs::MetadataExt;
-        std::fs::metadata(path).ok().map(|m| (m.uid(), m.gid(), m.mode() & 0o7777))
+        std::fs::metadata(path)
+            .ok()
+            .map(|m| (m.uid(), m.gid(), m.mode() & 0o7777))
     }
 
     #[cfg(not(unix))]
@@ -51,12 +53,7 @@ impl Section3 {
         paths.into_iter().find(|p| std::path::Path::new(p).exists())
     }
 
-    fn ownership_check(
-        id: &str,
-        title: &str,
-        path: &str,
-        audit_cmd: &str,
-    ) -> CheckResult {
+    fn ownership_check(id: &str, title: &str, path: &str, audit_cmd: &str) -> CheckResult {
         match Self::file_meta(path) {
             None => CheckResult {
                 rule: CisRule {
@@ -91,7 +88,11 @@ impl Section3 {
                         description: format!("Ownership check for {path}"),
                         remediation: format!("chown root:root {path}"),
                     },
-                    status: if ok { CheckStatus::Pass } else { CheckStatus::Fail },
+                    status: if ok {
+                        CheckStatus::Pass
+                    } else {
+                        CheckStatus::Fail
+                    },
                     message: if ok {
                         format!("{path} is owned by root:root")
                     } else {
@@ -152,11 +153,17 @@ impl Section3 {
                         description: format!("Permission check for {path}"),
                         remediation: format!("chmod {max_desc} {path}"),
                     },
-                    status: if ok { CheckStatus::Pass } else { CheckStatus::Fail },
+                    status: if ok {
+                        CheckStatus::Pass
+                    } else {
+                        CheckStatus::Fail
+                    },
                     message: if ok {
                         format!("{path} permissions are {mode:04o} (within {max_desc})")
                     } else {
-                        format!("{path} permissions are {mode:04o} (too permissive, max {max_desc})")
+                        format!(
+                            "{path} permissions are {mode:04o} (too permissive, max {max_desc})"
+                        )
                     },
                     affected: if ok { vec![] } else { vec![path.into()] },
                     remediation_kind: RemediationKind::Guided,
@@ -359,7 +366,9 @@ impl Section3 {
         RuleDefinition {
             id: "3.6".into(),
             section: 3,
-            title: "Ensure that /etc/docker directory permissions are set to 755 or more restrictive".into(),
+            title:
+                "Ensure that /etc/docker directory permissions are set to 755 or more restrictive"
+                    .into(),
             description: "/etc/docker permissions should be at most 755.".into(),
             category: RuleCategory::Files,
             severity: Severity::Medium,
@@ -383,7 +392,9 @@ impl Section3 {
             requires_restart: false,
             requires_elevation: true,
             references: vec!["CIS Docker Benchmark v1.8.0, Section 3.6".into()],
-            rationale: "World-writable /etc/docker allows any user to plant malicious TLS certificates.".into(),
+            rationale:
+                "World-writable /etc/docker allows any user to plant malicious TLS certificates."
+                    .into(),
             impact: "None — 755 is the expected default for config directories.".into(),
             tags: vec!["files".into(), "permissions".into(), "config".into()],
         }
@@ -396,7 +407,9 @@ impl Section3 {
             id: "3.17".into(),
             section: 3,
             title: "Ensure that the daemon.json file ownership is set to root:root".into(),
-            description: "daemon.json controls Docker daemon security settings and must be owned by root.".into(),
+            description:
+                "daemon.json controls Docker daemon security settings and must be owned by root."
+                    .into(),
             category: RuleCategory::Files,
             severity: Severity::Medium,
             scored: true,
@@ -417,7 +430,9 @@ impl Section3 {
             requires_restart: false,
             requires_elevation: true,
             references: vec!["CIS Docker Benchmark v1.8.0, Section 3.17".into()],
-            rationale: "daemon.json controls all security features. Non-root ownership allows tampering.".into(),
+            rationale:
+                "daemon.json controls all security features. Non-root ownership allows tampering."
+                    .into(),
             impact: "None.".into(),
             tags: vec!["files".into(), "ownership".into(), "daemon".into()],
         }
