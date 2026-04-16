@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import {
   Play, Shield, ChevronDown, Terminal, BookOpen, ExternalLink,
   Zap, RotateCcw, CheckCircle2, XCircle, AlertTriangle,
@@ -8,9 +8,16 @@ import { useState, useMemo } from 'react'
 
 import { useAudit } from '@/features/audit/hooks/use-audit'
 import { useApplyFix } from '@/features/fix/hooks/use-apply-fix'
+import { useAuthStore } from '@/stores/use-auth-store'
 import type { CheckResult, Severity } from '@/types/dokuru'
 
 export const Route = createFileRoute('/audit')({
+  beforeLoad: () => {
+    const isAuthenticated = useAuthStore.getState().isAuthenticated;
+    if (!isAuthenticated) {
+      throw redirect({ to: '/login' });
+    }
+  },
   component: AuditPage,
 })
 

@@ -1,12 +1,19 @@
 import React, { useState, useEffect } from 'react'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, useNavigate, redirect } from '@tanstack/react-router'
 import { Server, RefreshCw, Database, ChevronDown, Cpu, Edit, Trash2, Activity, Layers, Box, List, HardDrive } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useEnvironmentStore, Environment } from '@/stores/environment-store'
+import { useAuthStore } from '@/stores/use-auth-store'
 import { AddEnvironmentModal } from '@/components/environments/AddEnvironmentModal'
 import { getEnvInfo, EnvironmentInfo } from '@/features/environments/api/get-env-info'
 
 export const Route = createFileRoute('/')({
+  beforeLoad: () => {
+    const isAuthenticated = useAuthStore.getState().isAuthenticated;
+    if (!isAuthenticated) {
+      throw redirect({ to: '/login' });
+    }
+  },
   component: EnvironmentsPage,
 })
 

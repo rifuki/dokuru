@@ -1,14 +1,21 @@
-import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
+import { createFileRoute, useNavigate, Link, redirect } from '@tanstack/react-router'
 import { Activity, Shield, Server, Box, Layers, Network, HardDrive, AlertTriangle, CheckCircle2, Play, Clock, TrendingUp } from 'lucide-react'
 
 import { useAudit } from '@/features/audit/hooks/use-audit'
 import { useHealth } from '@/features/health/hooks/use-health'
 import { useEnvInfo } from '@/features/environments/hooks/use-env-info'
 import { useEnvironmentStore } from '@/stores/environment-store'
+import { useAuthStore } from '@/stores/use-auth-store'
 import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
 
 export const Route = createFileRoute('/dashboard')({
+  beforeLoad: () => {
+    const isAuthenticated = useAuthStore.getState().isAuthenticated;
+    if (!isAuthenticated) {
+      throw redirect({ to: '/login' });
+    }
+  },
   component: DashboardPage,
 })
 

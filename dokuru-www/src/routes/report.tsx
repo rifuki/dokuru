@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 // import { motion } from 'framer-motion'
 import { Download, FileText, Search, ShieldAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
@@ -8,9 +8,16 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useAudit } from '@/features/audit/hooks/use-audit'
 import { useTrivyImageScan } from '@/features/trivy/hooks/use-trivy-image-scan'
+import { useAuthStore } from '@/stores/use-auth-store'
 import { HttpError } from '@/lib/api/client'
 
 export const Route = createFileRoute('/report')({
+  beforeLoad: () => {
+    const isAuthenticated = useAuthStore.getState().isAuthenticated;
+    if (!isAuthenticated) {
+      throw redirect({ to: '/login' });
+    }
+  },
   component: ReportPage,
 })
 
