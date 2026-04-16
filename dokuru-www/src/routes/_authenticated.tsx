@@ -106,7 +106,7 @@ function DashboardLayout() {
                                 <DropdownMenuLabel className="flex items-center justify-between">
                                     <span>Notifications</span>
                                     {unreadCount > 0 && (
-                                        <Badge variant="secondary" className="text-xs">
+                                        <Badge variant="secondary" className="text-xs bg-primary/15 text-primary border-primary/30">
                                             {unreadCount} new
                                         </Badge>
                                     )}
@@ -120,7 +120,7 @@ function DashboardLayout() {
                                     notifications.map((notification) => (
                                         <DropdownMenuItem
                                             key={notification.id}
-                                            className="flex flex-col items-start gap-1 p-3 cursor-pointer"
+                                            className="flex flex-col items-start gap-1 p-3 cursor-pointer focus:bg-primary/10 dark:focus:bg-primary/20 focus:text-primary"
                                         >
                                             <div className="flex w-full items-center justify-between">
                                                 <span className="text-sm font-medium">{notification.title}</span>
@@ -136,7 +136,7 @@ function DashboardLayout() {
                                     ))
                                 )}
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem className="justify-center text-sm text-muted-foreground cursor-pointer">
+                                <DropdownMenuItem className="justify-center text-sm text-muted-foreground cursor-pointer focus:bg-primary/10 dark:focus:bg-primary/20 focus:text-primary">
                                     View all notifications
                                 </DropdownMenuItem>
                             </DropdownMenuContent>

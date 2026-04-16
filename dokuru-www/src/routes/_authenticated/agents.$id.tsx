@@ -5,7 +5,7 @@ import { agentDirectApi, type DockerInfo, type AuditResponse } from "@/lib/api/a
 import type { Agent } from "@/types/agent";
 import { getAgentToken } from "@/stores/use-agent-store";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Server, Trash2, Container, Image, HardDrive, Network, Play, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { ArrowLeft, Server, Trash2, Container, Box, HardDrive, Network, Play, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { useAgentStore } from "@/stores/use-agent-store";
 import { toast } from "sonner";
 
@@ -152,13 +152,13 @@ function AgentDetail() {
                         <p className="text-sm font-medium text-muted-foreground">Status</p>
                         <span
                             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium mt-1 ${
-                                agent.status === "online"
+                                dockerInfo
                                     ? "bg-green-500/10 text-green-600 dark:text-green-400"
                                     : "bg-gray-500/10 text-gray-600 dark:text-gray-400"
                             }`}
                         >
                             <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                            {agent.status}
+                            {dockerInfo ? "online" : "offline"}
                         </span>
                     </div>
                     <div>
@@ -172,11 +172,9 @@ function AgentDetail() {
                         </p>
                     </div>
                     <div>
-                        <p className="text-sm font-medium text-muted-foreground">Last Seen</p>
-                        <p className="text-sm mt-1">
-                            {agent.last_seen
-                                ? new Date(agent.last_seen).toLocaleString()
-                                : "Never"}
+                        <p className="text-sm font-medium text-muted-foreground">Docker Version</p>
+                        <p className="text-sm mt-1 font-mono">
+                            {dockerInfo?.docker_version || "N/A"}
                         </p>
                     </div>
                 </div>
@@ -191,45 +189,73 @@ function AgentDetail() {
                     </p>
                 </div>
             ) : dockerInfo ? (
-                <div className="rounded-lg border bg-card p-6">
-                    <h3 className="text-lg font-semibold mb-4">Docker Information</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
-                            <Container className="h-8 w-8 text-primary" />
+                <div className="space-y-6">
+                    {/* System Info */}
+                    <div className="rounded-lg border bg-card p-6">
+                        <h3 className="text-lg font-semibold mb-4">System Information</h3>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <div>
-                                <p className="text-2xl font-bold">{dockerInfo.containers.total}</p>
-                                <p className="text-xs text-muted-foreground">Containers</p>
-                                <p className="text-xs text-green-600 dark:text-green-400">
-                                    {dockerInfo.containers.running} running
+                                <p className="text-sm font-medium text-muted-foreground">Operating System</p>
+                                <p className="text-sm mt-1">{dockerInfo.os}</p>
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-muted-foreground">Architecture</p>
+                                <p className="text-sm mt-1">{dockerInfo.architecture}</p>
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-muted-foreground">CPU Cores</p>
+                                <p className="text-sm mt-1">{dockerInfo.cpu_count}</p>
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-muted-foreground">Total Memory</p>
+                                <p className="text-sm mt-1">
+                                    {(dockerInfo.memory_total / 1024 / 1024 / 1024).toFixed(1)} GB
                                 </p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
-                            <Image className="h-8 w-8 text-primary" />
-                            <div>
-                                <p className="text-2xl font-bold">{dockerInfo.images}</p>
-                                <p className="text-xs text-muted-foreground">Images</p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
-                            <HardDrive className="h-8 w-8 text-primary" />
-                            <div>
-                                <p className="text-2xl font-bold">{dockerInfo.volumes}</p>
-                                <p className="text-xs text-muted-foreground">Volumes</p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
-                            <Network className="h-8 w-8 text-primary" />
-                            <div>
-                                <p className="text-2xl font-bold">{dockerInfo.networks}</p>
-                                <p className="text-xs text-muted-foreground">Networks</p>
-                            </div>
-                        </div>
                     </div>
-                    <div className="mt-4 pt-4 border-t">
-                        <p className="text-sm text-muted-foreground">
-                            Docker Version: <span className="font-mono">{dockerInfo.docker_version}</span>
-                        </p>
+
+                    {/* Docker Resources */}
+                    <div className="rounded-lg border bg-card p-6">
+                        <h3 className="text-lg font-semibold mb-4">Docker Resources</h3>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="p-4 rounded-lg bg-muted/50">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <Container className="h-5 w-5 text-primary" />
+                                    <p className="text-sm font-medium text-muted-foreground">Containers</p>
+                                </div>
+                                <p className="text-2xl font-bold">{dockerInfo.containers.total}</p>
+                                <div className="flex gap-3 mt-2 text-xs">
+                                    <span className="text-green-600 dark:text-green-400">
+                                        {dockerInfo.containers.running} running
+                                    </span>
+                                    <span className="text-muted-foreground">
+                                        {dockerInfo.containers.stopped} stopped
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="p-4 rounded-lg bg-muted/50">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <Box className="h-5 w-5 text-primary" />
+                                    <p className="text-sm font-medium text-muted-foreground">Images</p>
+                                </div>
+                                <p className="text-2xl font-bold">{dockerInfo.images}</p>
+                            </div>
+                            <div className="p-4 rounded-lg bg-muted/50">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <HardDrive className="h-5 w-5 text-primary" />
+                                    <p className="text-sm font-medium text-muted-foreground">Volumes</p>
+                                </div>
+                                <p className="text-2xl font-bold">{dockerInfo.volumes}</p>
+                            </div>
+                            <div className="p-4 rounded-lg bg-muted/50">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <Network className="h-5 w-5 text-primary" />
+                                    <p className="text-sm font-medium text-muted-foreground">Networks</p>
+                                </div>
+                                <p className="text-2xl font-bold">{dockerInfo.networks}</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             ) : (
