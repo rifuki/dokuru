@@ -110,45 +110,49 @@ export function AppSidebar() {
         {/* Platform */}
         <SidebarGroup>
           <SidebarGroupLabel>Platform</SidebarGroupLabel>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                asChild
-                isActive={isActive(isAdmin ? "/admin" : "/")}
-                tooltip="Overview"
-              >
-                <Link to={isAdmin ? "/admin" : "/"}>
-                  <LayoutDashboard className="size-4" />
-                  <span>Overview</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
+          <div className="px-2">
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={isActive(isAdmin ? "/admin" : "/")}
+                  tooltip="Overview"
+                >
+                  <Link to={isAdmin ? "/admin" : "/"}>
+                    <LayoutDashboard className="size-4" />
+                    <span>Overview</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </div>
         </SidebarGroup>
 
         {/* Admin */}
         {isAdmin && (
           <SidebarGroup>
             <SidebarGroupLabel>Admin</SidebarGroupLabel>
-            <SidebarMenu>
-              {[
-                { title: "Users", href: "/admin/users", icon: Users },
-                { title: "API Keys", href: "/admin/api-keys", icon: Key },
-              ].map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActive(item.href)}
-                    tooltip={item.title}
-                  >
-                    <Link to={item.href}>
-                      <item.icon className="size-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
+            <div className="px-2">
+              <SidebarMenu>
+                {[
+                  { title: "Users", href: "/admin/users", icon: Users },
+                  { title: "API Keys", href: "/admin/api-keys", icon: Key },
+                ].map((item) => (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive(item.href)}
+                      tooltip={item.title}
+                    >
+                      <Link to={item.href}>
+                        <item.icon className="size-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </div>
           </SidebarGroup>
         )}
 
@@ -226,22 +230,24 @@ export function AppSidebar() {
         {/* Settings */}
         <SidebarGroup>
           <SidebarGroupLabel>Settings</SidebarGroupLabel>
-          <SidebarMenu>
-            {[
-              { title: "Profile", href: "/settings/profile", icon: User },
-              { title: "Security", href: "/settings/security", icon: Shield },
-              { title: "Sessions", href: "/settings/sessions", icon: MonitorSmartphone },
-            ].map((item) => (
-              <SidebarMenuItem key={item.href}>
-                <SidebarMenuButton asChild isActive={isActive(item.href)} tooltip={item.title}>
-                  <Link to={item.href}>
-                    <item.icon className="size-4" />
-                    <span>{item.title}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
+          <div className="px-2">
+            <SidebarMenu>
+              {[
+                { title: "Profile", href: "/settings/profile", icon: User },
+                { title: "Security", href: "/settings/security", icon: Shield },
+                { title: "Sessions", href: "/settings/sessions", icon: MonitorSmartphone },
+              ].map((item) => (
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton asChild isActive={isActive(item.href)} tooltip={item.title}>
+                    <Link to={item.href}>
+                      <item.icon className="size-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </div>
         </SidebarGroup>
       </SidebarContent>
       <SidebarRail />
