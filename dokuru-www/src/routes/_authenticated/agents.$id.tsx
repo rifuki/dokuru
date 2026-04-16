@@ -145,7 +145,7 @@ function AgentDetail() {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                     <div className="flex items-start gap-2">
                         <Wifi className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
                         <div className="min-w-0">
@@ -202,11 +202,17 @@ function AgentDetail() {
                         </h3>
                         <div className="space-y-2.5">
                             <div className="flex items-center justify-between py-2 border-b border-border/50">
-                                <span className="text-xs text-muted-foreground">Operating System</span>
+                                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                                    <Monitor className="h-3 w-3" />
+                                    Operating System
+                                </span>
                                 <span className="text-sm font-medium text-right">{dockerInfo.os}</span>
                             </div>
                             <div className="flex items-center justify-between py-2 border-b border-border/50">
-                                <span className="text-xs text-muted-foreground">Architecture</span>
+                                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                                    <Cpu className="h-3 w-3" />
+                                    Architecture
+                                </span>
                                 <span className="text-sm font-medium text-right">{dockerInfo.architecture}</span>
                             </div>
                             <div className="flex items-center justify-between py-2 border-b border-border/50">
@@ -241,10 +247,11 @@ function AgentDetail() {
                                     <span className="text-xs text-muted-foreground">Containers</span>
                                 </div>
                                 <p className="text-2xl font-bold mb-1">{dockerInfo.containers.total}</p>
-                                <div className="flex gap-2 text-xs">
+                                <p className="text-xs">
                                     <span className="text-green-600 dark:text-green-400">{dockerInfo.containers.running} up</span>
+                                    {" · "}
                                     <span className="text-muted-foreground">{dockerInfo.containers.stopped} down</span>
-                                </div>
+                                </p>
                             </div>
                             <div className="p-3 rounded-lg bg-muted/50 flex flex-col">
                                 <div className="flex items-center gap-2 mb-2">
