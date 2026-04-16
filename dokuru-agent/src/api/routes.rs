@@ -5,14 +5,13 @@ use axum::{Router, middleware};
 
 pub fn build_router(state: AppState) -> Router {
     // Public routes (no auth)
-    let public_routes = Router::new().merge(health::routes());
+    let public_routes = Router::new().merge(health::routes()).merge(info::routes());
 
     // Protected routes (require auth)
     let protected_routes = Router::new()
         .merge(audit::routes())
         .merge(fix::routes())
         .merge(rules::routes())
-        .merge(info::routes())
         .merge(containers::routes())
         .merge(trivy::routes())
         .merge(environments::routes())
