@@ -3,7 +3,7 @@ import { useAuthUser } from "@/stores/use-auth-store";
 import { useAgentStore } from "@/stores/use-agent-store";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus, RefreshCw, Server, Container, Image, HardDrive, Network } from "lucide-react";
+import { Plus, RefreshCw, Container, Image, HardDrive, Network, Search, ChevronDown, ArrowUpDown } from "lucide-react";
 import { AddAgentModal } from "@/components/agents/AddAgentModal";
 import { agentDirectApi, type DockerInfo } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
@@ -28,8 +28,8 @@ function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void
             onClick={onClick}
         >
             <div className="p-4 flex items-center gap-6">
-                <div className="w-14 flex items-center justify-center text-[#3BA5EF] shrink-0">
-                    <Server className="w-14 h-14" />
+                <div className="w-14 flex items-center justify-center shrink-0">
+                    <img src="/docker.svg" alt="Docker" className="w-14 h-14" />
                 </div>
 
                 <div className="flex-1 min-w-0">
@@ -167,6 +167,45 @@ function Dashboard() {
                 </div>
             </div>
 
+            {/* Filter Bar - Portainer Style */}
+            {agents.length > 0 && (
+                <div className="flex items-center gap-3 flex-wrap">
+                    <button className="px-3 py-1.5 bg-[#23282D] border border-white/10 rounded text-sm text-slate-300 hover:bg-white/[0.02] flex items-center gap-2">
+                        Connection
+                        <ChevronDown className="w-4 h-4" />
+                    </button>
+                    <button className="px-3 py-1.5 bg-[#23282D] border border-white/10 rounded text-sm text-slate-300 hover:bg-white/[0.02] flex items-center gap-2">
+                        Status
+                        <ChevronDown className="w-4 h-4" />
+                    </button>
+                    <button className="px-3 py-1.5 bg-[#23282D] border border-white/10 rounded text-sm text-slate-300 hover:bg-white/[0.02] flex items-center gap-2">
+                        Agent Version
+                        <ChevronDown className="w-4 h-4" />
+                    </button>
+                    <button className="px-3 py-1.5 text-sm text-[#3BA5EF] hover:text-[#3BA5EF]/80">
+                        Clear all
+                    </button>
+                    <div className="flex-1 min-w-[300px] relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                        <input
+                            type="text"
+                            placeholder="Search by name, status, URL..."
+                            className="w-full pl-10 pr-4 py-1.5 bg-[#23282D] border border-white/10 rounded text-sm text-slate-300 placeholder:text-slate-500 focus:outline-none focus:border-[#3BA5EF]/50"
+                        />
+                    </div>
+                    <div className="flex items-center gap-2 ml-auto">
+                        <span className="text-sm text-slate-400">Sort By</span>
+                        <button className="px-3 py-1.5 bg-[#23282D] border border-white/10 rounded text-sm text-slate-300 hover:bg-white/[0.02] flex items-center gap-2">
+                            Name
+                            <ChevronDown className="w-4 h-4" />
+                        </button>
+                        <button className="p-1.5 bg-[#23282D] border border-white/10 rounded text-slate-300 hover:bg-white/[0.02]">
+                            <ArrowUpDown className="w-4 h-4" />
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Agent List */}
             {isLoading && agents.length === 0 ? (
                 <div className="flex justify-center py-16">
@@ -174,7 +213,7 @@ function Dashboard() {
                 </div>
             ) : agents.length === 0 ? (
                 <div className="rounded-xl border border-dashed bg-card/50 p-16 text-center flex flex-col items-center justify-center min-h-[400px]">
-                    <Server className="h-14 w-14 text-muted-foreground/40 mb-4" />
+                    <img src="/docker.svg" alt="Docker" className="w-14 h-14 opacity-40 mb-4" />
                     <h3 className="text-xl font-semibold tracking-tight">No environments</h3>
                     <p className="text-muted-foreground mt-2 max-w-sm text-sm">
                         Add your first Docker agent to start managing and auditing environments.
