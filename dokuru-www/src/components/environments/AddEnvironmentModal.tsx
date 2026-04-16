@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X, Server, Globe, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import axios from 'axios';
-import { useEnvironmentStore, EnvironmentType, Environment } from '@/stores/environment-store';
+import { useEnvironmentStore, type Environment } from '@/stores/environment-store';
 
 interface AddEnvironmentModalProps {
   isOpen: boolean;
@@ -12,7 +12,6 @@ interface AddEnvironmentModalProps {
 export function AddEnvironmentModal({ isOpen, onClose }: AddEnvironmentModalProps) {
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
-  const [type, setType] = useState<EnvironmentType>('docker_standalone');
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +47,7 @@ export function AddEnvironmentModal({ isOpen, onClose }: AddEnvironmentModalProp
       const res = await axios.post<{ data: Environment }>(`${parsedUrl}/api/v1/environments`, {
         name: name.trim(),
         url: parsedUrl,
-        type,
+        // TODO: Add token field when implementing server-backed
       });
       const newEnv = res.data.data;
 
@@ -58,7 +57,6 @@ export function AddEnvironmentModal({ isOpen, onClose }: AddEnvironmentModalProp
       // Reset & Close
       setName('');
       setUrl('');
-      setType('docker_standalone');
       onClose();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to connect to the remote environment';
@@ -118,18 +116,19 @@ export function AddEnvironmentModal({ isOpen, onClose }: AddEnvironmentModalProp
             <p className="text-[12px] text-slate-500">The HTTP address where Dokuru Agent is running on the target machine.</p>
           </div>
 
-          <div className="space-y-1.5">
+          {/* TODO: Add token input field for server-backed environments */}
+          {/* <div className="space-y-1.5">
             <label className="text-sm font-semibold text-slate-300">Environment Type</label>
             <select
               value={type}
-              onChange={(e) => setType(e.target.value as EnvironmentType)}
+              onChange={(e) => setType(e.target.value)}
               className="w-full h-10 bg-[#15171A] border border-white/10 rounded px-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-[#3BA5EF]/50 focus:ring-1 focus:ring-[#3BA5EF]/50 transition-colors cursor-pointer appearance-none"
             >
               <option value="docker_standalone">Docker Standalone</option>
               <option value="docker_swarm">Docker Swarm</option>
               <option value="podman">Podman</option>
             </select>
-          </div>
+          </div> */}
 
           {/* Footer Actions */}
           <div className="flex items-center gap-3 pt-4 border-t border-white/5 mt-2 justify-end">

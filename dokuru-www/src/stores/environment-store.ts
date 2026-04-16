@@ -1,77 +1,57 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { environmentService, type Environment } from '@/lib/api/services/environment-services';
 
-export type EnvironmentType = 'docker_standalone' | 'docker_swarm' | 'podman' | 'other';
-
-export interface Environment {
-  id: string;
-  name: string;
-  url: string;
-  type: EnvironmentType;
-  added_at: string;
-}
+// Re-export Environment type
+export type { Environment } from '@/lib/api/services/environment-services';
 
 interface EnvironmentState {
   environments: Environment[];
   activeEnvironmentId: string | null;
-  // Computed / derived state that is not persisted
-  isConnected: boolean;
+  isLoading: boolean;
 
   // Actions
+  fetchEnvironments: () => Promise<void>;
   addEnvironment: (env: Environment) => void;
   removeEnvironment: (id: string) => void;
   setActiveEnvironment: (id: string) => void;
-  disconnectEnvironment: () => void;
-  setEnvironments: (envs: Environment[]) => void;
-  fetchEnvironments: () => Promise<void>;
+  clearEnvironments: () => void;
 }
 
-export const useEnvironmentStore = create<EnvironmentState>()(
-  persist(
-    (set, get) => ({
-      environments: [],
-      activeEnvironmentId: null,
-      isConnected: false,
+export const useEnvironmentStore = create<EnvironmentState>()((set, get) => ({
+  environments: [],
+  activeEnvironmentId: null,
+  isLoading: false,
 
-      addEnvironment: (env) =>
-        set((state) => ({ environments: [...state.environments, env] })),
-
-      removeEnvironment: (id) =>
-        set((state) => ({
-          environments: state.environments.filter((e) => e.id !== id),
-          activeEnvironmentId: state.activeEnvironmentId === id ? null : state.activeEnvironmentId,
-        })),
-
-      setActiveEnvironment: (id) =>
-        set({ activeEnvironmentId: id }),
-
-      disconnectEnvironment: () =>
-        set({ activeEnvironmentId: null }),
-
-      setEnvironments: (envs) =>
-        set({ environments: envs }),
-
-      fetchEnvironments: async () => {
-        const state = get();
-        // If no environments exist, user needs to add one manually
-        if (state.environments.length === 0) {
-          console.log('No environments configured. Please add an environment.');
-          return;
-        }
-        
-        // Set first environment as active if none selected
-        if (!state.activeEnvironmentId && state.environments.length > 0) {
-          set({ activeEnvironmentId: state.environments[0].id });
-        }
-      },
-    }),
-    {
-      name: 'dokuru-environments',
-      // Only persist configuration, not runtime connection status
-      partialize: (state) => ({
-        environments: state.environments,
-        activeEnvironmentId: state.activeEnvironmentId,
-      }),
+  fetchEnvironments: async () => {
+    set({ isLoading: true });
+    try {
+      const envs = await environmentService.list();
+      set({ environments: envs });
+      
+      // Set first as active if none selected
+      const state = get();
+      if (!state.activeEnvironmentId && envs.length > 0) {
+        set({ activeEnvironmentId: envs[0].id });
+      }
+    } catch (error) {
+      console.error('Failed to fetch environments:', error);
+    } finally {
+      set({ isLoading: false });
     }
-  )
-);
+  },
+
+  addEnvironment: (env) =>
+    set((state) => ({ environments: [...state.environments, env] })),
+
+  removeEnvironment: (id) =>
+    set((state) => ({
+      environments: state.environments.filter((e) => e.id !== id),
+      activeEnvironmentId: state.activeEnvironmentId === id ? null : state.activeEnvironmentId,
+    })),
+
+  setActiveEnvironment: (id) =>
+    set({ activeEnvironmentId: id }),
+
+  clearEnvironments: () =>
+    set({ environments: [], activeEnvironmentId: null }),
+}));

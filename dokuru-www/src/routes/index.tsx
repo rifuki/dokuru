@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { Server, RefreshCw, Database, ChevronDown, Cpu, Edit, Trash2, Activity, Layers, Box, List, Unlink, HardDrive } from 'lucide-react'
+import { Server, RefreshCw, Database, ChevronDown, Cpu, Edit, Trash2, Activity, Layers, Box, List, HardDrive } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useEnvironmentStore, Environment } from '@/stores/environment-store'
 import { AddEnvironmentModal } from '@/components/environments/AddEnvironmentModal'
@@ -17,7 +17,6 @@ function EnvironmentsPage() {
   const fetchEnvironments = useEnvironmentStore((s) => s.fetchEnvironments)
   const activeEnvId = useEnvironmentStore((s) => s.activeEnvironmentId)
   const setActiveEnv = useEnvironmentStore((s) => s.setActiveEnvironment)
-  const disconnectEnv = useEnvironmentStore((s) => s.disconnectEnvironment)
   const removeEnv = useEnvironmentStore((s) => s.removeEnvironment)
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -87,7 +86,6 @@ function EnvironmentsPage() {
               setActiveEnv(env.id);
               navigate({ to: '/dashboard' });
             }}
-            onDisconnect={disconnectEnv}
             onRemove={() => removeEnv(env.id)}
           />
         ))}
@@ -116,13 +114,11 @@ function EnvironmentCard({
   env,
   isActive,
   onConnect,
-  onDisconnect,
   onRemove,
 }: {
   env: Environment;
   isActive: boolean;
   onConnect: () => void;
-  onDisconnect: () => void;
   onRemove: () => void;
 }) {
   const [info, setInfo] = useState<EnvironmentInfo | null>(null);
@@ -222,12 +218,6 @@ function EnvironmentCard({
               : 'bg-[#3BA5EF]'
             }`}></span>
           {isActive && !isDown ? 'Connected' : isActive && isDown ? 'Unreachable' : 'Connect'}
-        </button>
-        <button
-          onClick={onDisconnect}
-          className="flex items-center justify-center gap-1.5 h-9 w-full bg-white/5 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 text-sm rounded font-medium transition-all border border-white/10 hover:border-rose-500/30 cursor-pointer"
-        >
-          <Unlink className="w-3.5 h-3.5" /> Disconnect
         </button>
       </div>
 
