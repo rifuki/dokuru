@@ -43,6 +43,15 @@ export interface AuditResult {
   tags?: string[];
 }
 
+export interface FixOutcome {
+  rule_id: string;
+  status: "Applied" | "Guided" | "Blocked";
+  message: string;
+  requires_restart: boolean;
+  restart_command?: string;
+  requires_elevation: boolean;
+}
+
 export interface AuditSummary {
   total: number;
   passed: number;
@@ -69,6 +78,12 @@ export const agentDirectApi = {
   runAudit: async (agentUrl: string, token?: string): Promise<AuditResponse> => {
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
     const response = await axios.get(`${agentUrl}/audit`, { headers });
+    return response.data.data;
+  },
+
+  applyFix: async (agentUrl: string, ruleId: string, token?: string): Promise<FixOutcome> => {
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const response = await axios.post(`${agentUrl}/fix`, { rule_id: ruleId }, { headers });
     return response.data.data;
   },
 

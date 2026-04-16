@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { agentApi } from "@/lib/api/agent";
-import { agentDirectApi, type AuditResponse, type AuditResult } from "@/lib/api/agent-direct";
+import { agentDirectApi, type AuditResponse, type AuditResult, type FixOutcome } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
 import { getAgentToken } from "@/stores/use-agent-store";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import {
     Play, Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
     Terminal, Wrench, ExternalLink, AlertTriangle, Info, Server,
-    Clock, Cpu, Container, RefreshCw,
+    Clock, Cpu, Container, RefreshCw, Zap, BookOpen, CheckCircle2,
+    RotateCcw, ShieldAlert, XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -83,11 +84,72 @@ function StatusIcon({ status }: { status: "Pass" | "Fail" | "Error" }) {
     return <Shield className="h-5 w-5 text-orange-500 shrink-0" />;
 }
 
+// ── Fix Panel ────────────────────────────────────────────────────────────────
+
+function FixPanel({ outcome, onDismiss }: { outcome: FixOutcome; onDismiss: () => void }) {
+    const isApplied = outcome.status === "Applied";
+    const isBlocked = outcome.status === "Blocked";
+
+    return (
+        <div className={cn(
+            "rounded-lg border p-4 space-y-3 text-sm",
+            isApplied ? "bg-green-500/10 border-green-500/30"
+            : isBlocked ? "bg-red-500/10 border-red-500/30"
+            : "bg-amber-500/10 border-amber-500/30"
+        )}>
+            <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2">
+                    {isApplied
+                        ? <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                        : isBlocked
+                        ? <XCircle className="h-4 w-4 text-red-500 shrink-0" />
+                        : <BookOpen className="h-4 w-4 text-amber-500 shrink-0" />
+                    }
+                    <span className="font-semibold text-sm">
+                        {isApplied ? "Fix Applied" : isBlocked ? "Fix Blocked" : "Remediation Guide"}
+                    </span>
+                </div>
+                <button onClick={onDismiss} className="text-muted-foreground hover:text-foreground">
+                    <XCircle className="h-4 w-4" />
+                </button>
+            </div>
+
+            <p className="text-muted-foreground text-xs">{outcome.message}</p>
+
+            {(outcome.requires_restart || outcome.requires_elevation) && (
+                <div className="flex flex-wrap gap-2">
+                    {outcome.requires_elevation && (
+                        <span className="inline-flex items-center gap-1 text-[10px] bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/30 px-2 py-0.5 rounded font-semibold">
+                            <ShieldAlert className="h-2.5 w-2.5" /> Requires sudo/elevation
+                        </span>
+                    )}
+                    {outcome.requires_restart && (
+                        <span className="inline-flex items-center gap-1 text-[10px] bg-blue-500/10 text-blue-500 border border-blue-500/30 px-2 py-0.5 rounded font-semibold">
+                            <RotateCcw className="h-2.5 w-2.5" /> Docker restart required
+                        </span>
+                    )}
+                    {outcome.restart_command && (
+                        <code className="block w-full text-xs bg-zinc-900 dark:bg-zinc-950 text-green-400 px-3 py-2 rounded-lg font-mono mt-1">
+                            $ {outcome.restart_command}
+                        </code>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ── Rule Card ────────────────────────────────────────────────────────────────
 
-function RuleCard({ result }: { result: AuditResult }) {
+function RuleCard({ result, agentUrl, token }: {
+    result: AuditResult;
+    agentUrl: string;
+    token?: string;
+}) {
     const [open, setOpen] = useState(false);
-    const { rule, status, message, affected, audit_command, raw_output, references, rationale, impact } = result;
+    const [fixing, setFixing] = useState(false);
+    const [fixOutcome, setFixOutcome] = useState<FixOutcome | null>(null);
+    const { rule, status, message, affected, audit_command, raw_output, references, rationale, impact, remediation_kind } = result;
     const meta = sectionMeta(rule.section);
 
     const borderLeft = status === "Pass"
@@ -96,54 +158,107 @@ function RuleCard({ result }: { result: AuditResult }) {
         ? "border-l-red-500/60"
         : "border-l-orange-500/60";
 
-    const headerBg = status === "Pass"
-        ? "hover:bg-green-500/5"
-        : status === "Fail"
-        ? "hover:bg-red-500/5"
-        : "hover:bg-orange-500/5";
+    const handleFix = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setFixing(true);
+        setFixOutcome(null);
+        try {
+            const outcome = await agentDirectApi.applyFix(agentUrl, rule.id, token);
+            setFixOutcome(outcome);
+            setOpen(true); // expand to show the fix panel
+            if (outcome.status === "Applied") {
+                toast.success(`Fix applied for rule ${rule.id}`);
+            }
+        } catch {
+            toast.error("Failed to apply fix");
+        } finally {
+            setFixing(false);
+        }
+    };
+
+    const fixButtonStyle = remediation_kind === "auto"
+        ? "bg-blue-500 hover:bg-blue-600 text-white border-blue-500"
+        : "bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-400 border-amber-500/40";
 
     return (
         <div className={cn("rounded-xl border border-border bg-card border-l-4 transition-shadow hover:shadow-sm", borderLeft)}>
             {/* Header row */}
-            <button
-                onClick={() => setOpen(v => !v)}
-                className={cn("w-full text-left px-4 py-3.5 flex items-start gap-3 transition-colors rounded-xl", headerBg)}
+            <div
+                className={cn(
+                    "px-4 py-3.5 flex items-start gap-3",
+                    status === "Pass" ? "hover:bg-green-500/5" : status === "Fail" ? "hover:bg-red-500/5" : "hover:bg-orange-500/5",
+                    "rounded-xl transition-colors"
+                )}
             >
-                <StatusIcon status={status} />
-
-                <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-1.5 mb-1">
-                        <span className="font-mono text-[11px] font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                            {rule.id}
-                        </span>
-                        <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded border", meta.bg, meta.color, meta.border)}>
-                            {meta.num} {meta.label}
-                        </span>
-                        <SeverityBadge severity={rule.severity} />
-                        {affected.length > 0 && (
-                            <span className="inline-flex items-center gap-1 text-[10px] bg-orange-500/10 text-orange-500 border border-orange-500/30 px-1.5 py-0.5 rounded font-semibold">
-                                <AlertTriangle className="h-2.5 w-2.5" />
-                                {affected.length} affected
+                {/* Clickable area */}
+                <button onClick={() => setOpen(v => !v)} className="flex items-start gap-3 flex-1 min-w-0 text-left">
+                    <StatusIcon status={status} />
+                    <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                            <span className="font-mono text-[11px] font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                {rule.id}
                             </span>
-                        )}
+                            <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded border", meta.bg, meta.color, meta.border)}>
+                                {meta.num} {meta.label}
+                            </span>
+                            <SeverityBadge severity={rule.severity} />
+                            {affected.length > 0 && (
+                                <span className="inline-flex items-center gap-1 text-[10px] bg-orange-500/10 text-orange-500 border border-orange-500/30 px-1.5 py-0.5 rounded font-semibold">
+                                    <AlertTriangle className="h-2.5 w-2.5" />
+                                    {affected.length} affected
+                                </span>
+                            )}
+                        </div>
+                        <p className="font-medium text-sm leading-snug">{rule.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{message}</p>
                     </div>
-                    <p className="font-medium text-sm leading-snug">{rule.title}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed line-clamp-1">{message}</p>
-                </div>
+                </button>
 
-                <div className="shrink-0 ml-2 mt-0.5">
-                    {open
-                        ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                        : <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                    }
+                {/* Right controls */}
+                <div className="flex items-center gap-2 shrink-0 mt-0.5">
+                    {/* Fix button — only for failed rules */}
+                    {status === "Fail" && (
+                        <button
+                            onClick={handleFix}
+                            disabled={fixing}
+                            className={cn(
+                                "inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-md border transition-all",
+                                fixButtonStyle,
+                                fixing && "opacity-60 cursor-not-allowed"
+                            )}
+                        >
+                            {fixing ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : remediation_kind === "auto" ? (
+                                <Zap className="h-3 w-3" />
+                            ) : (
+                                <Wrench className="h-3 w-3" />
+                            )}
+                            {fixing ? "Fixing…" : remediation_kind === "auto" ? "Auto Fix" : "Fix Guide"}
+                        </button>
+                    )}
+
+                    <button onClick={() => setOpen(v => !v)}>
+                        {open
+                            ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                            : <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        }
+                    </button>
                 </div>
-            </button>
+            </div>
 
             {/* Expanded detail */}
             {open && (
                 <div className="px-4 pb-4 pt-0 border-t border-border/50 space-y-4 text-sm">
+                    {/* Fix outcome panel */}
+                    {fixOutcome && (
+                        <div className="pt-3">
+                            <FixPanel outcome={fixOutcome} onDismiss={() => setFixOutcome(null)} />
+                        </div>
+                    )}
+
                     {/* Message full */}
-                    <div className="pt-3">
+                    <div className={fixOutcome ? "" : "pt-3"}>
                         <p className="text-muted-foreground">{message}</p>
                     </div>
 
@@ -275,18 +390,21 @@ type StatusFilter = "all" | "Pass" | "Fail";
 function AuditPage() {
     const { id } = Route.useParams();
     const [agent, setAgent] = useState<Agent | null>(null);
+    const [token, setToken] = useState<string | undefined>();
     const [auditData, setAuditData] = useState<AuditResponse | null>(null);
     const [isRunning, setIsRunning] = useState(false);
     const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
     const [sectionFilter, setSectionFilter] = useState<string>("all");
 
     useEffect(() => {
-        agentApi.getById(id).then(setAgent).catch(() => toast.error("Failed to load agent"));
+        agentApi.getById(id).then(a => {
+            setAgent(a);
+            setToken(getAgentToken(a.id) ?? undefined);
+        }).catch(() => toast.error("Failed to load agent"));
     }, [id]);
 
     const handleRunAudit = async () => {
         if (!agent) return;
-        const token = getAgentToken(agent.id);
         if (!token) return toast.error("Agent token not found");
         setIsRunning(true);
         try {
@@ -478,11 +596,17 @@ function AuditPage() {
                                         <div className="space-y-2">
                                             {results
                                                 .sort((a, b) => {
-                                                    // Fail first, then by rule id
                                                     if (a.status !== b.status) return a.status === "Fail" ? -1 : 1;
                                                     return a.rule.id.localeCompare(b.rule.id, undefined, { numeric: true });
                                                 })
-                                                .map(r => <RuleCard key={r.rule.id} result={r} />)
+                                                .map(r => (
+                                                    <RuleCard
+                                                        key={r.rule.id}
+                                                        result={r}
+                                                        agentUrl={agent?.url ?? ""}
+                                                        token={token}
+                                                    />
+                                                ))
                                             }
                                         </div>
                                     </div>
