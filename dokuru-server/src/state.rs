@@ -56,6 +56,7 @@ impl AppState {
         self.config.server.port
     }
 
+    #[allow(clippy::cognitive_complexity)]
     pub async fn new(config: Config, log_reload_handle: ReloadFilterHandle) -> eyre::Result<Self> {
         use crate::infrastructure::storage::LocalStorage;
 

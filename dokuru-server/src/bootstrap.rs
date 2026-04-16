@@ -9,6 +9,11 @@ use std::sync::Arc;
 
 /// Bootstrap the application
 /// - Create admin user from env if no admin exists
+///
+/// # Errors
+///
+/// Returns error if database operations fail or admin creation fails.
+#[allow(clippy::cognitive_complexity)]
 pub async fn bootstrap(db: &Database, config: &Config) -> eyre::Result<()> {
     tracing::info!("🚀 Running bootstrap checks...");
 

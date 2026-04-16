@@ -56,6 +56,11 @@ impl AuthService {
     }
 
     /// Register new user with password
+    /// Register a new user
+    ///
+    /// # Errors
+    ///
+    /// Returns `AuthError` if email/username exists, password hashing fails, or database error occurs.
     pub async fn register(
         &self,
         email: &str,
@@ -149,6 +154,7 @@ impl AuthService {
     }
 
     /// Login user with password
+    #[allow(clippy::cognitive_complexity)]
     pub async fn login(
         &self,
         identifier: &str,
@@ -265,6 +271,7 @@ impl AuthService {
 
     /// OAuth login/register
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_lines)]
     pub async fn oauth_login(
         &self,
         provider: AuthProvider,
@@ -456,6 +463,7 @@ impl AuthService {
     }
 
     /// Refresh access token with rotation
+    #[allow(clippy::cognitive_complexity)]
     pub async fn refresh_token(
         &self,
         refresh_token: &str,

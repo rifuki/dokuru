@@ -8,7 +8,7 @@ use chrono::Utc;
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
-pub struct ApiSuccess<T: Serialize> {
+pub struct ApiSuccess<T> {
     success: bool,
     code: u16,
     pub data: Option<T>,
@@ -40,36 +40,42 @@ impl<T: Serialize> Default for ApiSuccess<T> {
 // Builder methods
 impl<T: Serialize> ApiSuccess<T> {
     /// Set HTTP status code
+    #[must_use]
     pub const fn with_code(mut self, code: StatusCode) -> Self {
         self.code = code.as_u16();
         self
     }
 
     /// Attach data payload
+    #[must_use]
     pub fn with_data(mut self, data: T) -> Self {
         self.data = Some(data);
         self
     }
 
     /// Set message
+    #[must_use]
     pub fn with_message(mut self, message: impl Into<String>) -> Self {
         self.message = message.into();
         self
     }
 
     /// Add cookie
+    #[must_use]
     pub fn with_cookie(mut self, cookie: Cookie<'static>) -> Self {
         self.cookie_jar = self.cookie_jar.add(cookie);
         self
     }
 
     /// Attaches a `CookieJar` to the response, for setting multiple cookies.
+    #[must_use]
     pub fn with_jar(mut self, jar: CookieJar) -> Self {
         self.cookie_jar = jar;
         self
     }
 
     /// Add custom header
+    #[must_use]
     pub fn with_header(mut self, key: HeaderName, value: &str) -> Self {
         if let Ok(val) = HeaderValue::from_str(value) {
             self.headers.insert(key, val);

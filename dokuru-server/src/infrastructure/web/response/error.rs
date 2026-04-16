@@ -39,18 +39,22 @@ impl Default for ApiError {
 // Builder methods
 impl ApiError {
     /// Set HTTP status code
+    #[must_use]
     pub const fn with_code(mut self, code: StatusCode) -> Self {
         self.code = code.as_u16();
         self
     }
 
     /// Set structured error code (e.g. AUTH_001)
+    #[must_use]
+    #[allow(clippy::needless_pass_by_value)]
     pub fn with_error_code(mut self, error_code: ErrorCode) -> Self {
         self.error_code = Some(error_code.to_string());
         self
     }
 
     /// Set error message
+    #[must_use]
     pub fn with_message(mut self, message: impl Into<String>) -> Self {
         self.message = message.into();
         self
@@ -59,18 +63,22 @@ impl ApiError {
     /// Add error details
     ///
     /// ⚠️ **WARNING**: May expose sensitive info! Use `log_only()` or `with_debug()` instead.
+    #[must_use]
     pub fn with_details(mut self, details: impl Into<String>) -> Self {
         self.details = Some(details.into());
         self
     }
 
     /// Log error server-side, return generic error to client
+    #[must_use]
     pub fn log_only(self, details: impl Display) -> Self {
         error!(target: "api_error", details = %details, "Error occurred");
         self
     }
 
     /// Add details in debug mode only (safe for production)
+    #[must_use]
+    #[allow(clippy::needless_pass_by_value)]
     pub fn with_debug(mut self, details: impl Into<String> + Display) -> Self {
         let details_str = details.to_string();
         error!(target: "api_error", details = %details_str, "Error occurred");
