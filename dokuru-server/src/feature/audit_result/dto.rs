@@ -24,14 +24,20 @@ pub struct AuditSummaryDto {
 pub struct AuditResultResponse {
     pub id: Uuid,
     pub agent_id: Uuid,
+    pub timestamp: String,
     pub hostname: String,
     pub docker_version: String,
     pub total_containers: i32,
     pub results: serde_json::Value,
-    pub total_rules: i32,
+    pub summary: AuditSummaryResponse,
+    pub ran_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditSummaryResponse {
+    pub total: i32,
     pub passed: i32,
     pub failed: i32,
     pub score: i32,
-    pub ran_at: DateTime<Utc>,
-    pub created_at: DateTime<Utc>,
 }

@@ -4,7 +4,7 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use super::dto::{AuditResultResponse, SaveAuditDto};
+use super::dto::{AuditResultResponse, AuditSummaryResponse, SaveAuditDto};
 use super::entity::AuditResultRecord;
 use super::repository::AuditResultRepository;
 
@@ -72,14 +72,17 @@ impl AuditResultService {
         AuditResultResponse {
             id: record.id,
             agent_id: record.agent_id,
+            timestamp: record.ran_at.to_rfc3339(),
             hostname: record.hostname,
             docker_version: record.docker_version,
             total_containers: record.total_containers,
             results: record.results,
-            total_rules: record.total_rules,
-            passed: record.passed,
-            failed: record.failed,
-            score: record.score,
+            summary: AuditSummaryResponse {
+                total: record.total_rules,
+                passed: record.passed,
+                failed: record.failed,
+                score: record.score,
+            },
             ran_at: record.ran_at,
             created_at: record.created_at,
         }
