@@ -45,4 +45,13 @@ export const agentDirectApi = {
     const response = await axios.get(`${agentUrl}/audit`);
     return response.data.data;
   },
+
+  checkHealth: async (agentUrl: string): Promise<boolean> => {
+    try {
+      await axios.get(`${agentUrl}/health`, { timeout: 5000 });
+      return true;
+    } catch {
+      return false;
+    }
+  },
 };
