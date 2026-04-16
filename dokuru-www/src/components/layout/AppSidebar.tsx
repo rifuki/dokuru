@@ -172,7 +172,7 @@ export function AppSidebar() {
                     open={openAgents[agent.id] ?? false}
                     onOpenChange={() => toggleAgent(agent.id)}
                   >
-                    <SidebarMenuItem>
+                    <div>
                       {/* Card wrapper — only shown when sidebar is expanded */}
                       <div
                         className={
@@ -189,23 +189,16 @@ export function AppSidebar() {
                           <SidebarMenuButton
                             tooltip={agent.name}
                             isActive={isAgentActive}
-                            className={`text-[15px] font-semibold ${isIconMode ? "" : "rounded-none"}`}
+                            className={`text-[15px] font-semibold ${isIconMode ? "" : "rounded-none py-3!"}`}
                           >
                             <Box className="size-4 shrink-0 text-blue-400" />
                             <span className="flex-1 truncate">{agent.name}</span>
                             {!isIconMode && (
-                              <>
-                                <span
-                                  className={`h-2 w-2 rounded-full shrink-0 ${
-                                    agent.status === "online" ? "bg-green-500" : "bg-gray-500"
-                                  }`}
-                                />
-                                <ChevronDown
-                                  className={`size-4 shrink-0 text-sidebar-foreground/50 transition-transform duration-200 ${
-                                    openAgents[agent.id] ? "rotate-180" : ""
-                                  }`}
-                                />
-                              </>
+                              <ChevronDown
+                                className={`size-4 shrink-0 text-sidebar-foreground/50 transition-transform duration-200 ${
+                                  openAgents[agent.id] ? "rotate-180" : ""
+                                }`}
+                              />
                             )}
                           </SidebarMenuButton>
                         </CollapsibleTrigger>
@@ -234,7 +227,7 @@ export function AppSidebar() {
                           </CollapsibleContent>
                         )}
                       </div>
-                    </SidebarMenuItem>
+                    </div>
                   </Collapsible>
                 );
               })}

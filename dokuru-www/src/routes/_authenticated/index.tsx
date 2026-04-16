@@ -21,7 +21,7 @@ type AgentWithInfo = {
 function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void }) {
     const { agent, info, loading } = data;
     const { deleteAgent } = useAgentStore();
-    const isOnline = agent.status === "online";
+    const isOnline = !loading && info !== null; // UP if info successfully fetched
 
     const handleDelete = async (e: React.MouseEvent) => {
         e.stopPropagation();
