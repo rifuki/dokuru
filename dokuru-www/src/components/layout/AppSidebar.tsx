@@ -8,6 +8,7 @@ import {
   Users,
   Key,
   LayoutDashboard,
+  Bot,
   Container,
   Image,
   Network,
@@ -121,7 +122,7 @@ export function AppSidebar() {
                   className="text-base! py-2.5! data-[active=true]:bg-miku-primary/15 data-[active=true]:text-miku-primary data-[active=true]:font-semibold"
                 >
                   <Link to={isAdmin ? "/admin" : "/agents"}>
-                    <LayoutDashboard className="size-4" />
+                    {isAdmin ? <LayoutDashboard className="size-4" /> : <Bot className="size-4" />}
                     <span>{isAdmin ? "Overview" : "Agents"}</span>
                   </Link>
                 </SidebarMenuButton>

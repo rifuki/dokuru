@@ -2,6 +2,16 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useAgentStore, getAgentToken } from "@/stores/use-agent-store";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Plus, RefreshCw, Container, Image, HardDrive, Search, ChevronDown, ArrowUpDown, Edit, Trash2, Cpu, Server } from "lucide-react";
 import { AddAgentModal } from "@/components/agents/AddAgentModal";
 import { agentDirectApi, type DockerInfo } from "@/lib/api/agent-direct";
@@ -21,11 +31,11 @@ function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void
     const { agent, info, loading } = data;
     const { deleteAgent } = useAgentStore();
     const isOnline = !loading && info !== null;
+    const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-    const handleDelete = async (e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (!confirm(`Delete agent "${agent.name}"?`)) return;
+    const handleDelete = async () => {
         await deleteAgent(agent.id);
+        setShowDeleteDialog(false);
     };
 
     return (
@@ -104,7 +114,7 @@ function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void
                 </div>
             </div>
 
-            <div className="w-[180px] border-l border-border flex flex-col justify-center gap-2 px-4 py-3 bg-black/10">
+            <div className="w-[180px] border-l border-border flex flex-col justify-center gap-2 px-4 py-3 bg-muted/30">
                 <button
                     className={`flex items-center justify-center gap-2 h-9 w-full rounded text-sm font-semibold transition-all cursor-pointer ${
                         isOnline
@@ -118,7 +128,7 @@ function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void
                 </button>
             </div>
 
-            <div className="w-12 border-l border-border flex flex-col items-center justify-start py-4 bg-black/10">
+            <div className="w-12 border-l border-border flex flex-col items-center justify-start py-4 bg-muted/30">
                 <button
                     className="w-8 h-8 flex items-center justify-center text-muted-foreground/70 hover:text-foreground rounded hover:bg-muted/50 transition-colors group cursor-pointer"
                     title="Edit agent"
@@ -127,13 +137,33 @@ function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void
                     <Edit className="w-4 h-4 group-hover:scale-110 transition-transform" />
                 </button>
                 <button
-                    onClick={handleDelete}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setShowDeleteDialog(true);
+                    }}
                     className="w-8 h-8 flex items-center justify-center text-muted-foreground/70 hover:text-rose-400 rounded hover:bg-muted/50 transition-colors group cursor-pointer"
                     title="Delete agent"
                 >
                     <Trash2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
                 </button>
             </div>
+
+            <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Agent</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Are you sure you want to delete agent "{agent.name}"? This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }
