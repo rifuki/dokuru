@@ -2,7 +2,7 @@ import { Outlet } from "@tanstack/react-router";
 
 export function SettingsLayout() {
     return (
-        <div className="max-w-4xl mx-auto w-full space-y-8">
+        <div className="max-w-7xl mx-auto w-full space-y-8">
             {/* Header */}
             <div>
                 <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
