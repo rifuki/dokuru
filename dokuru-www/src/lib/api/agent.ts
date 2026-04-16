@@ -1,5 +1,6 @@
 import { apiClient } from "@/lib/api";
 import type { Agent, CreateAgentDto } from "@/types/agent";
+import type { AuditResponse } from "./agent-direct";
 
 export const agentApi = {
   list: async (): Promise<Agent[]> => {
@@ -19,5 +20,14 @@ export const agentApi = {
 
   delete: async (id: string): Promise<void> => {
     await apiClient.delete(`/agents/${id}`);
+  },
+
+  saveAudit: async (id: string, auditData: AuditResponse): Promise<void> => {
+    await apiClient.post(`/agents/${id}/audit`, auditData);
+  },
+
+  listAudits: async (id: string): Promise<AuditResponse[]> => {
+    const response = await apiClient.get(`/agents/${id}/audits`);
+    return response.data.data;
   },
 };

@@ -538,6 +538,7 @@ function AuditPage() {
     const [agent, setAgent] = useState<Agent | null>(null);
     const [token, setToken] = useState<string | undefined>();
     const [auditData, setAuditData] = useState<AuditResponse | null>(null);
+    const [auditHistory, setAuditHistory] = useState<AuditResponse[]>([]);
     const [isRunning, setIsRunning] = useState(false);
     const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
     const [sectionFilter, setSectionFilter] = useState<string>("all");
@@ -546,6 +547,8 @@ function AuditPage() {
         agentApi.getById(id).then(a => {
             setAgent(a);
             setToken(getAgentToken(a.id) ?? undefined);
+            // Load audit history
+            agentApi.listAudits(a.id).then(setAuditHistory).catch(() => {});
         }).catch(() => toast.error("Failed to load agent"));
     }, [id]);
 
@@ -556,6 +559,17 @@ function AuditPage() {
         try {
             const data = await agentDirectApi.runAudit(agent.url, token);
             setAuditData(data);
+            
+            // Save to server
+            try {
+                await agentApi.saveAudit(agent.id, data);
+                // Refresh history
+                const history = await agentApi.listAudits(agent.id);
+                setAuditHistory(history);
+            } catch (err) {
+                console.error("Failed to save audit to server:", err);
+            }
+            
             toast.success(`Audit complete — ${data.summary.score}/100`);
         } catch {
             toast.error("Audit failed");
@@ -762,8 +776,56 @@ function AuditPage() {
                     )}
                 </>
             ) : (
-                /* ── Empty state ──────────────────────────────────── */
-                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed bg-card/50 py-20 px-8 text-center gap-4">
+                <>
+                    {/* ── Audit History ────────────────────────────────── */}
+                    {auditHistory.length > 0 && (
+                        <div className="space-y-3">
+                            <h3 className="text-sm font-semibold">Recent Audits</h3>
+                            <div className="grid gap-2">
+                                {auditHistory.slice(0, 5).map((audit, idx) => (
+                                    <button
+                                        key={idx}
+                                        onClick={() => setAuditData(audit)}
+                                        className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors text-left"
+                                    >
+                                        <div className="flex-shrink-0">
+                                            <div className="relative w-12 h-12">
+                                                <svg width="48" height="48" viewBox="0 0 48 48">
+                                                    <circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" strokeWidth="3"
+                                                        className="text-muted-foreground/10" />
+                                                    <circle cx="24" cy="24" r="20" fill="none" 
+                                                        stroke={audit.summary.score >= 80 ? "#22c55e" : audit.summary.score >= 60 ? "#f59e0b" : "#ef4444"}
+                                                        strokeWidth="3"
+                                                        strokeDasharray={`${2 * Math.PI * 20}`}
+                                                        strokeDashoffset={`${2 * Math.PI * 20 - (audit.summary.score / 100) * 2 * Math.PI * 20}`}
+                                                        strokeLinecap="round" transform="rotate(-90 24 24)"
+                                                    />
+                                                </svg>
+                                                <div className="absolute inset-0 flex items-center justify-center">
+                                                    <span className="text-xs font-bold">{audit.summary.score}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-0.5">
+                                                <span className="text-xs font-medium">{fmtDate(audit.timestamp)}</span>
+                                                <Badge variant="outline" className="text-[10px]">
+                                                    {audit.summary.passed}/{audit.summary.total}
+                                                </Badge>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground truncate">
+                                                {audit.hostname} • Docker {audit.docker_version}
+                                            </p>
+                                        </div>
+                                        <ChevronDown className="h-4 w-4 text-muted-foreground -rotate-90" />
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── Empty state ──────────────────────────────────── */}
+                    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed bg-card/50 py-20 px-8 text-center gap-4">
                     <div className="rounded-full bg-primary/10 p-5">
                         <Shield className="h-10 w-10 text-primary" />
                     </div>
@@ -786,6 +848,7 @@ function AuditPage() {
                         ))}
                     </div>
                 </div>
+                </>
             )}
         </div>
     );

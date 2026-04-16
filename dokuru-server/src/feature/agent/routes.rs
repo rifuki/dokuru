@@ -3,7 +3,11 @@ use axum::{
     routing::{get, post},
 };
 
-use crate::{infrastructure::web::middleware::auth_middleware, state::AppState};
+use crate::{
+    feature::audit_result::handlers as audit_handlers,
+    infrastructure::web::middleware::auth_middleware,
+    state::AppState,
+};
 
 use super::handlers;
 
@@ -14,5 +18,8 @@ pub fn agent_routes() -> Router<AppState> {
             "/{id}",
             get(handlers::get_agent).delete(handlers::delete_agent),
         )
+        .route("/{id}/audit", post(audit_handlers::save_audit))
+        .route("/{id}/audits", get(audit_handlers::list_audits))
+        .route("/{id}/audit/latest", get(audit_handlers::get_latest_audit))
         .layer(middleware::from_fn(auth_middleware))
 }
