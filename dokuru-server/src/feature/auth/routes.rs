@@ -16,7 +16,9 @@ pub fn auth_sensitive_routes() -> Router<AppState> {
 
 /// Remaining auth routes — refresh + protected (global rate limit only)
 pub fn auth_routes() -> Router<AppState> {
-    let public = Router::new().route("/refresh", post(handlers::refresh));
+    let public = Router::new()
+        .route("/refresh", post(handlers::refresh))
+        .route("/check-username", get(handlers::check_username_availability));
 
     let protected = Router::new()
         .route("/logout", post(handlers::logout))

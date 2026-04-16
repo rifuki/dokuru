@@ -3,11 +3,18 @@ import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  ArrowRight,
+  Loader2,
+  CheckCircle2,
+  XCircle,
+} from "lucide-react";
 import { useRegister } from "@/features/auth/hooks/use-register";
+import { useUsernameAvailability } from "@/features/auth/hooks/use-username-availability";
 
 export function RegisterForm() {
-  const [name, setName] = useState(import.meta.env.DEV ? "Test User" : "");
   const [username, setUsername] = useState(
     import.meta.env.DEV ? "testuser" : ""
   );
@@ -20,14 +27,26 @@ export function RegisterForm() {
   const [showPassword, setShowPassword] = useState(false);
   const register = useRegister();
 
+  // Live username availability check with debounce
+  const usernameCheck = useUsernameAvailability(username);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Don't submit if username is taken
+    if (usernameCheck.data && !usernameCheck.data.available) {
+      return;
+    }
+
     try {
-      await register.mutateAsync({ name, username, email, password });
+      await register.mutateAsync({ username, email, password });
     } catch {
       // Error handled by hook
     }
   };
+
+  const showUsernameStatus =
+    username.length >= 3 && !usernameCheck.isLoading && usernameCheck.data;
 
   return (
     <div className="w-full max-w-[400px]">
@@ -44,35 +63,48 @@ export function RegisterForm() {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2">
-            <Label htmlFor="name" className="text-sm font-medium">
-              Full name
-            </Label>
-            <Input
-              id="name"
-              type="text"
-              placeholder="John Doe"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              className="h-11 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"
-            />
-          </div>
-
-          <div className="space-y-2">
             <Label htmlFor="username" className="text-sm font-medium">
-              Username{" "}
-              <span className="text-muted-foreground font-normal">
-                (optional)
-              </span>
+              Username
             </Label>
-            <Input
-              id="username"
-              type="text"
-              placeholder="johndoe"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="h-11 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"
-            />
+            <div className="relative">
+              <Input
+                id="username"
+                type="text"
+                placeholder="johndoe"
+                value={username}
+                onChange={(e) => setUsername(e.target.value.toLowerCase())}
+                required
+                minLength={3}
+                maxLength={30}
+                pattern="[a-z0-9_]+"
+                title="Username can only contain lowercase letters, numbers, and underscores"
+                className="h-11 pr-10 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"
+              />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                {usernameCheck.isLoading && username.length >= 3 && (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                )}
+                {showUsernameStatus && usernameCheck.data.available && (
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                )}
+                {showUsernameStatus && !usernameCheck.data.available && (
+                  <XCircle className="h-4 w-4 text-red-500" />
+                )}
+              </div>
+            </div>
+            {showUsernameStatus && (
+              <p
+                className={`text-xs ${
+                  usernameCheck.data.available
+                    ? "text-green-600 dark:text-green-400"
+                    : "text-red-600 dark:text-red-400"
+                }`}
+              >
+                {usernameCheck.data.available
+                  ? "Username available"
+                  : usernameCheck.data.reason || "Username already taken"}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -122,7 +154,10 @@ export function RegisterForm() {
           <Button
             type="submit"
             className="w-full h-11 bg-gradient-to-r from-miku-primary to-miku-accent hover:opacity-90 transition-opacity text-base font-medium shadow-md hover:shadow-lg"
-            disabled={register.isPending}
+            disabled={
+              register.isPending ||
+              (usernameCheck.data && !usernameCheck.data.available)
+            }
           >
             {register.isPending ? (
               <Loader2 className="h-5 w-5 animate-spin" />
