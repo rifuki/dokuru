@@ -1,15 +1,14 @@
 use super::feature::{audit, containers, environments, fix, health, info, proxy, rules, trivy};
 use super::infrastructure::web::middleware::agent_auth_middleware;
 use super::state::AppState;
-use axum::{Router, middleware, routing::get};
+use axum::{Router, middleware};
 
 pub fn build_router(state: AppState) -> Router {
     // Public routes (no auth)
-    let public_routes = Router::new().route("/health", get(health::health_check));
+    let public_routes = Router::new().merge(health::routes());
 
     // Protected routes (require auth)
     let protected_routes = Router::new()
-        .merge(health::routes())
         .merge(audit::routes())
         .merge(fix::routes())
         .merge(rules::routes())
