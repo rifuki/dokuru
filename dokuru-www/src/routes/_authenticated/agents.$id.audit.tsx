@@ -20,12 +20,12 @@ export const Route = createFileRoute("/_authenticated/agents/$id/audit")({
 
 // ── Section metadata ────────────────────────────────────────────────────────
 
-const SECTION_META: Record<string, { label: string; color: string; bg: string; border: string }> = {
-    "Host Configuration":    { label: "§1 Host",    color: "text-blue-500",   bg: "bg-blue-500/10",   border: "border-blue-500/30" },
-    "Daemon Configuration":  { label: "§2 Daemon",  color: "text-violet-500", bg: "bg-violet-500/10", border: "border-violet-500/30" },
-    "Config File Permissions":{ label: "§3 Files",  color: "text-orange-500", bg: "bg-orange-500/10", border: "border-orange-500/30" },
-    "Container Images":      { label: "§4 Images",  color: "text-teal-500",   bg: "bg-teal-500/10",   border: "border-teal-500/30" },
-    "Container Runtime":     { label: "§5 Runtime", color: "text-indigo-500", bg: "bg-indigo-500/10", border: "border-indigo-500/30" },
+const SECTION_META: Record<string, { label: string; num: string; color: string; bg: string; border: string }> = {
+    "Host Configuration":     { label: "Host",    num: "S1", color: "text-blue-500",   bg: "bg-blue-500/10",   border: "border-blue-500/30" },
+    "Daemon Configuration":   { label: "Daemon",  num: "S2", color: "text-violet-500", bg: "bg-violet-500/10", border: "border-violet-500/30" },
+    "Config File Permissions":{ label: "Files",   num: "S3", color: "text-orange-500", bg: "bg-orange-500/10", border: "border-orange-500/30" },
+    "Container Images":       { label: "Images",  num: "S4", color: "text-teal-500",   bg: "bg-teal-500/10",   border: "border-teal-500/30" },
+    "Container Runtime":      { label: "Runtime", num: "S5", color: "text-indigo-500", bg: "bg-indigo-500/10", border: "border-indigo-500/30" },
 };
 
 function sectionMeta(section: string) {
@@ -117,7 +117,7 @@ function RuleCard({ result }: { result: AuditResult }) {
                             {rule.id}
                         </span>
                         <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded border", meta.bg, meta.color, meta.border)}>
-                            {meta.label}
+                            {meta.num} {meta.label}
                         </span>
                         <SeverityBadge severity={rule.severity} />
                         {affected.length > 0 && (
@@ -255,7 +255,7 @@ function SectionHeader({ section, total, passed }: { section: string; total: num
     return (
         <div className="flex items-center gap-3 py-1">
             <span className={cn("text-xs font-bold px-2 py-1 rounded-md border", meta.bg, meta.color, meta.border)}>
-                {meta.label}
+                {meta.num} {meta.label}
             </span>
             <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
                 <div
@@ -441,7 +441,7 @@ function AuditPage() {
                                             ? cn(meta.bg, meta.color, meta.border)
                                             : "bg-card border-border hover:bg-muted")}
                                 >
-                                    {meta.label}
+                                    {meta.num} {meta.label}
                                 </button>
                             );
                         })}
@@ -468,7 +468,7 @@ function AuditPage() {
                                     <div key={section}>
                                         <div className="flex items-center gap-2 mb-3">
                                             <span className={cn("text-xs font-bold px-2 py-1 rounded-md border", meta.bg, meta.color, meta.border)}>
-                                                {meta.label}
+                                                {meta.num} {meta.label}
                                             </span>
                                             <span className="text-xs text-muted-foreground">{section}</span>
                                             <Badge variant="outline" className="text-[10px] ml-auto font-mono">
