@@ -15,6 +15,7 @@ import {
   Activity,
   ChevronDown,
   Box,
+  ShieldCheck,
 } from "lucide-react";
 
 import {
@@ -40,6 +41,7 @@ import { useAgentStore } from "@/stores/use-agent-store";
 
 const agentNavItems = (agentId: string) => [
   { title: "Dashboard", href: `/agents/${agentId}`, icon: LayoutDashboard },
+  { title: "Audit", href: `/agents/${agentId}/audit`, icon: ShieldCheck },
   { title: "Containers", href: `/agents/${agentId}/containers`, icon: Container },
   { title: "Images", href: `/agents/${agentId}/images`, icon: Box },
   { title: "Networks", href: `/agents/${agentId}/networks`, icon: Network },
