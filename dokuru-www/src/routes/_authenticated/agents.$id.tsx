@@ -37,8 +37,9 @@ function AgentDetail() {
                     setDockerInfo(info);
                 } catch {
                     toast.error("Failed to connect to agent");
+                } finally {
+                    setIsLoadingDocker(false);
                 }
-                setIsLoadingDocker(false);
             } catch {
                 toast.error("Failed to load agent");
                 navigate({ to: "/" });
@@ -212,7 +213,7 @@ function AgentDetail() {
                     </div>
                     <div className="mt-4 pt-4 border-t">
                         <p className="text-sm text-muted-foreground">
-                            Docker Version: <span className="font-mono">{dockerInfo.version}</span>
+                            Docker Version: <span className="font-mono">{dockerInfo.docker_version}</span>
                         </p>
                     </div>
                 </div>

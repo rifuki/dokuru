@@ -1,15 +1,22 @@
 import axios from "axios";
 
 export interface DockerInfo {
-  version: string;
+  docker_version: string;
+  os: string;
+  architecture: string;
   containers: {
     total: number;
     running: number;
     stopped: number;
+    healthy: number;
+    unhealthy: number;
   };
+  stacks: number;
   images: number;
   volumes: number;
   networks: number;
+  cpu_count: number;
+  memory_total: number;
 }
 
 export interface AuditResult {
