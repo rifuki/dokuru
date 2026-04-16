@@ -11,11 +11,11 @@ interface UsernameCheckResponse {
 export function useUsernameAvailability(username: string) {
   const [debouncedUsername, setDebouncedUsername] = useState(username);
 
-  // Debounce username input (500ms)
+  // Debounce username input (1000ms)
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedUsername(username);
-    }, 500);
+    }, 1000);
 
     return () => clearTimeout(timer);
   }, [username]);
