@@ -837,8 +837,7 @@ pub fn command_success(program: &str, args: &[&str]) -> bool {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
+        .is_ok_and(|status| status.success())
 }
 
 pub fn run_command(program: &str, args: &[&str]) -> Result<()> {
@@ -862,8 +861,7 @@ pub fn command_exists(program: &str) -> bool {
     Command::new("sh")
         .args(["-c", &format!("command -v {program} >/dev/null 2>&1")])
         .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
+        .is_ok_and(|status| status.success())
 }
 
 pub fn has_systemd_unit(unit: &str) -> bool {
@@ -872,14 +870,11 @@ pub fn has_systemd_unit(unit: &str) -> bool {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
+        .is_ok_and(|status| status.success())
 }
 
 pub fn is_socket(path: &Path) -> bool {
-    fs::metadata(path)
-        .map(|metadata| metadata.file_type().is_socket())
-        .unwrap_or(false)
+    fs::metadata(path).is_ok_and(|metadata| metadata.file_type().is_socket())
 }
 
 pub fn nix_like_is_root() -> bool {

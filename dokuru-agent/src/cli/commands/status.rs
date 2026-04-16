@@ -8,7 +8,7 @@ use std::path::Path;
 pub fn run_status() -> Result<()> {
     let config_dir = default_config_dir();
     let saved = load_saved_runtime_config(&config_dir);
-    let port = saved.as_ref().map(|c| c.server.port).unwrap_or(3939);
+    let port = saved.as_ref().map_or(3939, |c| c.server.port);
     let docker_socket = saved.as_ref().map_or_else(
         |_| "/var/run/docker.sock".to_string(),
         |c| c.docker.socket.clone(),
