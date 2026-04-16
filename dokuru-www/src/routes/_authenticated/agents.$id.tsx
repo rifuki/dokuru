@@ -1,9 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { agentApi } from "@/lib/api/agent";
+import { agentDirectApi, type DockerInfo } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Server, Trash2 } from "lucide-react";
+import { ArrowLeft, Server, Trash2, Container, Image, HardDrive, Network } from "lucide-react";
 import { useAgentStore } from "@/stores/use-agent-store";
 import { toast } from "sonner";
 
@@ -16,7 +17,9 @@ function AgentDetail() {
     const navigate = useNavigate();
     const { deleteAgent } = useAgentStore();
     const [agent, setAgent] = useState<Agent | null>(null);
+    const [dockerInfo, setDockerInfo] = useState<DockerInfo | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isLoadingDocker, setIsLoadingDocker] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
 
     useEffect(() => {
@@ -24,6 +27,16 @@ function AgentDetail() {
             try {
                 const data = await agentApi.getById(id);
                 setAgent(data);
+                
+                // Fetch Docker info from agent directly
+                setIsLoadingDocker(true);
+                try {
+                    const info = await agentDirectApi.getInfo(data.url);
+                    setDockerInfo(info);
+                } catch {
+                    toast.error("Failed to connect to agent");
+                }
+                setIsLoadingDocker(false);
             } catch {
                 toast.error("Failed to load agent");
                 navigate({ to: "/" });
@@ -136,15 +149,66 @@ function AgentDetail() {
                 </div>
             </div>
 
-            {/* Docker Info - Coming Soon */}
-            <div className="rounded-lg border border-dashed bg-card/50 p-12 text-center">
-                <h3 className="text-lg font-semibold text-foreground/80">
-                    Docker Information
-                </h3>
-                <p className="text-muted-foreground mt-2">
-                    Direct connection to agent coming soon
-                </p>
-            </div>
+            {/* Docker Info */}
+            {isLoadingDocker ? (
+                <div className="rounded-lg border bg-card p-12 text-center">
+                    <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary mx-auto" />
+                    <p className="text-sm text-muted-foreground mt-4">
+                        Connecting to agent...
+                    </p>
+                </div>
+            ) : dockerInfo ? (
+                <div className="rounded-lg border bg-card p-6">
+                    <h3 className="text-lg font-semibold mb-4">Docker Information</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
+                            <Container className="h-8 w-8 text-primary" />
+                            <div>
+                                <p className="text-2xl font-bold">{dockerInfo.containers.total}</p>
+                                <p className="text-xs text-muted-foreground">Containers</p>
+                                <p className="text-xs text-green-600 dark:text-green-400">
+                                    {dockerInfo.containers.running} running
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
+                            <Image className="h-8 w-8 text-primary" />
+                            <div>
+                                <p className="text-2xl font-bold">{dockerInfo.images}</p>
+                                <p className="text-xs text-muted-foreground">Images</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
+                            <HardDrive className="h-8 w-8 text-primary" />
+                            <div>
+                                <p className="text-2xl font-bold">{dockerInfo.volumes}</p>
+                                <p className="text-xs text-muted-foreground">Volumes</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
+                            <Network className="h-8 w-8 text-primary" />
+                            <div>
+                                <p className="text-2xl font-bold">{dockerInfo.networks}</p>
+                                <p className="text-xs text-muted-foreground">Networks</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="mt-4 pt-4 border-t">
+                        <p className="text-sm text-muted-foreground">
+                            Docker Version: <span className="font-mono">{dockerInfo.version}</span>
+                        </p>
+                    </div>
+                </div>
+            ) : (
+                <div className="rounded-lg border border-dashed bg-card/50 p-12 text-center">
+                    <h3 className="text-lg font-semibold text-foreground/80">
+                        Unable to connect to agent
+                    </h3>
+                    <p className="text-muted-foreground mt-2">
+                        Make sure the agent is running and accessible
+                    </p>
+                </div>
+            )}
         </div>
     );
 }
