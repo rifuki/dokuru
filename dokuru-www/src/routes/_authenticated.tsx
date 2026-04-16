@@ -79,7 +79,7 @@ function DashboardLayout() {
             <AppSidebar />
             <SidebarInset>
                 {/* Top Header - Shared for all authenticated users */}
-                <header className="flex h-16 shrink-0 items-center justify-between gap-2 border-b bg-background px-4 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-16">
+                <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center justify-between gap-2 border-b bg-background px-4 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-16">
                     <div className="flex items-center gap-2">
                         <SidebarTrigger className="-ml-1 md:hidden">
                             <Menu className="h-5 w-5" />
