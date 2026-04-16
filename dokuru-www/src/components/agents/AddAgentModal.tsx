@@ -22,22 +22,27 @@ interface AddAgentModalProps {
 export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
     const { createAgent, isLoading } = useAgentStore();
     const [name, setName] = useState("");
-    const [url, setUrl] = useState("");
+    const [host, setHost] = useState("");
+    const [port, setPort] = useState("3939");
     const [token, setToken] = useState("");
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!name.trim() || !url.trim() || !token.trim()) {
+        if (!name.trim() || !host.trim() || !port.trim() || !token.trim()) {
             toast.error("All fields are required");
             return;
         }
 
+        // Auto-generate URL: http://host:port
+        const url = `http://${host.trim()}:${port.trim()}`;
+
         try {
-            await createAgent({ name: name.trim(), url: url.trim(), token: token.trim() });
+            await createAgent({ name: name.trim(), url, token: token.trim() });
             toast.success("Agent added successfully");
             setName("");
-            setUrl("");
+            setHost("");
+            setPort("3939");
             setToken("");
             onOpenChange(false);
         } catch (error) {
@@ -68,21 +73,34 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                         />
                     </div>
 
-                    <div className="space-y-2">
-                        <Label htmlFor="url">Agent URL</Label>
-                        <Input
-                            id="url"
-                            type="url"
-                            placeholder="http://192.168.1.50:3939"
-                            value={url}
-                            onChange={(e) => setUrl(e.target.value)}
-                            disabled={isLoading}
-                            autoComplete="off"
-                        />
-                        <p className="text-xs text-muted-foreground">
-                            The HTTP address where Dokuru Agent is running
-                        </p>
+                    <div className="grid grid-cols-3 gap-4">
+                        <div className="space-y-2 col-span-2">
+                            <Label htmlFor="host">Host / IP Address</Label>
+                            <Input
+                                id="host"
+                                placeholder="192.168.1.50 or agent.example.com"
+                                value={host}
+                                onChange={(e) => setHost(e.target.value)}
+                                disabled={isLoading}
+                                autoComplete="off"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="port">Port</Label>
+                            <Input
+                                id="port"
+                                type="number"
+                                placeholder="3939"
+                                value={port}
+                                onChange={(e) => setPort(e.target.value)}
+                                disabled={isLoading}
+                                autoComplete="off"
+                            />
+                        </div>
                     </div>
+                    <p className="text-xs text-muted-foreground -mt-2">
+                        Agent URL will be: http://{host || "host"}:{port}
+                    </p>
 
                     <div className="space-y-2">
                         <Label htmlFor="token">Agent Token</Label>
