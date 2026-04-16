@@ -117,15 +117,20 @@ function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void
 
       <div className="w-[180px] border-l border-border flex flex-col justify-center gap-2 px-4 py-3 bg-muted/30">
         <button
-          className={`flex items-center justify-center gap-2 h-9 w-full rounded text-sm font-semibold transition-all cursor-pointer ${isOnline
-            ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 ring-1 ring-emerald-500/20"
-            : "bg-gray-500/10 border border-gray-500/30 text-gray-400"
-            }`}
+          className={`flex items-center justify-center gap-2 h-9 w-full rounded text-sm font-semibold transition-all ${
+            loading
+              ? "bg-blue-500/10 border border-blue-500/30 text-blue-400 cursor-wait"
+              : isOnline
+              ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 ring-1 ring-emerald-500/20 cursor-pointer"
+              : "bg-gray-500/10 border border-gray-500/30 text-gray-400 cursor-not-allowed"
+          }`}
           onClick={isOnline ? onClick : undefined}
-          disabled={!isOnline}
+          disabled={!isOnline || loading}
         >
-          <span className={`w-2 h-2 rounded-full ${isOnline ? "bg-emerald-400 animate-pulse" : "bg-gray-400"}`}></span>
-          {isOnline ? "Connected" : "Disconnected"}
+          <span className={`w-2 h-2 rounded-full ${
+            loading ? "bg-blue-400 animate-pulse" : isOnline ? "bg-emerald-400 animate-pulse" : "bg-gray-400"
+          }`}></span>
+          {loading ? "Connecting..." : isOnline ? "Connected" : "Disconnected"}
         </button>
       </div>
 
