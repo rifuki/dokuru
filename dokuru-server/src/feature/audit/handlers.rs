@@ -1,7 +1,7 @@
 use axum::{
+    Extension, Json,
     extract::{Path, State},
     http::StatusCode,
-    Extension, Json,
 };
 use uuid::Uuid;
 

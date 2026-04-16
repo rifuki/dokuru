@@ -53,6 +53,13 @@ impl<T: Serialize> ApiSuccess<T> {
         }
         self
     }
+
+    pub fn with_cookie(mut self, cookie: impl ToString) -> Self {
+        if let Ok(val) = HeaderValue::from_str(&cookie.to_string()) {
+            self.headers.append(header::SET_COOKIE, val);
+        }
+        self
+    }
 }
 
 impl<T: Serialize> ApiSuccess<T> {

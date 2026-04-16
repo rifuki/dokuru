@@ -6,7 +6,7 @@ pub const REFRESH_TOKEN_COOKIE: &str = "refresh_token";
 pub const REFRESH_COOKIE_PATH: &str = "/api/v1/auth";
 
 /// Build httpOnly refresh token cookie
-/// 
+///
 /// Configuration (via environment variables):
 /// - `COOKIE_SAMESITE`: "strict", "lax", or "none" (default: strict in prod, lax in dev)
 /// - `COOKIE_SECURE`: "true" or "false" (default: true in prod, false in dev)
@@ -15,7 +15,7 @@ pub const REFRESH_COOKIE_PATH: &str = "/api/v1/auth";
 /// SECURITY NOTES:
 /// - httpOnly: prevents XSS attacks from reading cookie
 /// - secure: only sent over HTTPS (in production or when explicitly enabled)
-/// - same_site: 
+/// - same_site:
 ///   - Strict: same domain only (most secure)
 ///   - Lax: allows top-level navigation (good for cross-port dev)
 ///   - None: cross-domain with HTTPS (requires Secure=true)
@@ -49,5 +49,3 @@ pub fn create_cleared_cookie(config: &Config) -> Cookie<'static> {
         .max_age(time::Duration::seconds(0))
         .build()
 }
-
-

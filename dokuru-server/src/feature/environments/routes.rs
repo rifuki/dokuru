@@ -1,7 +1,6 @@
 use axum::{
-    middleware,
+    Router, middleware,
     routing::{delete, get},
-    Router,
 };
 
 use crate::{infrastructure::web::middleware::auth_middleware, state::AppState};

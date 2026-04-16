@@ -25,13 +25,16 @@ impl TokenService {
     pub async fn generate(&self, user_id: Uuid, name: &str) -> eyre::Result<TokenResponse> {
         // Generate random token
         let token = Self::generate_token();
-        
+
         // Hash token for storage
         let token_hash = Self::hash_token(&token);
-        
+
         // Store in database
-        let token_record = self.repo.create(&self.db, user_id, name, &token_hash).await?;
-        
+        let token_record = self
+            .repo
+            .create(&self.db, user_id, name, &token_hash)
+            .await?;
+
         Ok(TokenResponse {
             id: token_record.id,
             name: token_record.name,
@@ -44,12 +47,12 @@ impl TokenService {
     pub async fn verify(&self, token: &str) -> eyre::Result<Option<Token>> {
         let token_hash = Self::hash_token(token);
         let token_record = self.repo.find_by_hash(&self.db, &token_hash).await?;
-        
+
         // Update last_used timestamp if token found
         if let Some(ref token) = token_record {
             let _ = self.repo.update_last_used(&self.db, token.id).await;
         }
-        
+
         Ok(token_record)
     }
 

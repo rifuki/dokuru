@@ -35,7 +35,11 @@ pub struct UpdateProfileRequest {
     #[validate(length(min = 3, message = "Name must be at least 3 characters"))]
     pub name: Option<String>,
 
-    #[validate(length(min = 3, max = 50, message = "Username must be between 3 and 50 characters"))]
+    #[validate(length(
+        min = 3,
+        max = 50,
+        message = "Username must be between 3 and 50 characters"
+    ))]
     pub username: Option<String>,
 
     #[validate(email(message = "Invalid email format"))]

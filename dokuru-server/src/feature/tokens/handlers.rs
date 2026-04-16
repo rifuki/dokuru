@@ -1,7 +1,7 @@
 use axum::{
+    Extension, Json,
     extract::{Path, State},
     http::StatusCode,
-    Extension, Json,
 };
 use uuid::Uuid;
 use validator::Validate;
@@ -20,13 +20,12 @@ pub async fn create_token(
     Extension(auth_user): Extension<AuthUser>,
     Json(dto): Json<CreateTokenDto>,
 ) -> ApiResult<super::models::TokenResponse> {
-    dto.validate()
-        .map_err(|e| {
-            ApiError::default()
-                .with_code(StatusCode::BAD_REQUEST)
-                .with_error_code(codes::validation::INVALID_INPUT)
-                .with_message(format!("Validation error: {}", e))
-        })?;
+    dto.validate().map_err(|e| {
+        ApiError::default()
+            .with_code(StatusCode::BAD_REQUEST)
+            .with_error_code(codes::validation::INVALID_INPUT)
+            .with_message(format!("Validation error: {}", e))
+    })?;
 
     let token_response = state
         .token_service
@@ -63,8 +62,7 @@ pub async fn list_tokens(
 
     let token_list: Vec<TokenListItem> = tokens.into_iter().map(Into::into).collect();
 
-    Ok(ApiSuccess::default()
-        .with_data(token_list))
+    Ok(ApiSuccess::default().with_data(token_list))
 }
 
 /// Revoke (delete) a token
@@ -91,6 +89,5 @@ pub async fn revoke_token(
             .with_message("Token not found"));
     }
 
-    Ok(ApiSuccess::default()
-        .with_message("Token revoked successfully"))
+    Ok(ApiSuccess::default().with_message("Token revoked successfully"))
 }

@@ -43,6 +43,11 @@ impl ApiError {
         self
     }
 
+    pub fn with_error_code(mut self, error_code: impl Into<String>) -> Self {
+        self.error_code = Some(error_code.into());
+        self
+    }
+
     pub fn with_details(mut self, details: impl Into<String>) -> Self {
         self.details = Some(details.into());
         self

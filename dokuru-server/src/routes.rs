@@ -1,10 +1,46 @@
-use axum::Router;
+use axum::{Extension, Router, middleware::from_fn};
+use std::time::Duration;
 
-use crate::{feature::health::health_routes, state::AppState};
+use crate::{
+    feature::{audit, auth, environments, health, tokens, ws},
+    infrastructure::web::middleware::{RateLimiter, rate_limit_middleware},
+    state::AppState,
+};
 
 pub fn app_routes(state: AppState) -> Router {
+    // Global: 120 req/min per IP
+    let global_limiter = RateLimiter::new(120, Duration::from_secs(60));
+    // Auth: 10 req/min per IP (anti brute-force)
+    let auth_limiter = RateLimiter::new(10, Duration::from_secs(60));
+
+    // Cleanup expired entries every minute
+    let g = global_limiter.clone();
+    let a = auth_limiter.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+            g.cleanup();
+            a.cleanup();
+        }
+    });
+
+    // login & register: strict rate limit (anti brute-force)
+    let auth_sensitive = auth::auth_sensitive_routes()
+        .layer(from_fn(rate_limit_middleware))
+        .layer(Extension(auth_limiter));
+
+    let api_routes = Router::new()
+        .nest("/auth", auth::auth_routes().merge(auth_sensitive))
+        .nest("/environments", environments::environment_routes())
+        .nest("/tokens", tokens::token_routes())
+        .nest("/audit", audit::audit_routes())
+        .layer(from_fn(rate_limit_middleware))
+        .layer(Extension(global_limiter));
+
     Router::new()
-        .nest("/health", health_routes())
+        .nest("/health", health::health_routes())
+        .nest("/api/v1", api_routes)
+        .nest("/ws", ws::ws_routes())
         .fallback(handle_404)
         .with_state(state)
 }

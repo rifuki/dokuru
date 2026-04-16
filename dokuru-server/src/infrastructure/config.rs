@@ -1,6 +1,6 @@
+use axum_extra::extract::cookie::SameSite;
 use eyre::{Result, WrapErr};
 use std::env;
-use std::collections::HashMap;
 
 fn require_env(key: &str) -> Result<String> {
     env::var(key).wrap_err_with(|| format!("Missing required environment variable: {key}"))
@@ -21,85 +21,97 @@ fn get_rust_env() -> Result<String> {
 pub struct ServerConfig {
     pub port: u16,
     pub cors_allowed_origins: Vec<String>,
-    pub max_sessions: usize,
-}
-
-#[derive(Debug, Clone)]
-pub struct TerminalConfig {
-    pub sandbox_images: HashMap<String, String>,
-    pub memory: String,
-    pub cpus: String,
-    pub pids_limit: u32,
-    pub tmpfs_size: String,
-    pub storage_size: Option<String>,
-}
-
-impl TerminalConfig {
-    fn from_env() -> Result<Self> {
-        let arch_image = require_env("SANDBOX_IMAGE_ARCH")?;
-        let alpine_image = require_env("SANDBOX_IMAGE_ALPINE")?;
-        let debian_image = require_env("SANDBOX_IMAGE_DEBIAN")?;
-
-        let mut sandbox_images = HashMap::new();
-        sandbox_images.insert("arch".to_string(), arch_image);
-        sandbox_images.insert("alpine".to_string(), alpine_image);
-        sandbox_images.insert("debian".to_string(), debian_image);
-
-        let memory = require_env("TERMINAL_MEMORY")?;
-        let cpus = require_env("TERMINAL_CPUS")?;
-        let pids_limit = require_env("TERMINAL_PIDS_LIMIT")?
-            .parse::<u32>()
-            .wrap_err("TERMINAL_PIDS_LIMIT must be a valid u32 integer")?;
-        let tmpfs_size = require_env("TERMINAL_TMPFS_SIZE")?;
-        let storage_size = env::var("TERMINAL_STORAGE_SIZE").ok();
-
-        Ok(Self { 
-            sandbox_images,
-            memory,
-            cpus,
-            pids_limit,
-            tmpfs_size,
-            storage_size,
-        })
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct LastFmConfig {
-    pub api_key: String,
-    pub shared_secret: String,
-    pub username: String,
-}
-
-impl LastFmConfig {
-    fn from_env() -> Result<Self> {
-        Ok(Self {
-            api_key: require_env("LASTFM_API_KEY")?,
-            shared_secret: require_env("LASTFM_SHARED_SECRET")?,
-            username: require_env("LASTFM_USERNAME")?,
-        })
-    }
 }
 
 impl ServerConfig {
-    fn from_env() -> Result<Self> {
-        let port = require_env("PORT")?
-            .parse::<u16>()
-            .wrap_err("PORT must be a valid u16 integer")?;
+    fn from_env() -> Self {
+        let port = env::var("SERVER_PORT")
+            .unwrap_or_else(|_| "9393".to_string())
+            .parse()
+            .unwrap_or(9393);
+
         let cors_allowed_origins = env::var("CORS_ALLOWED_ORIGINS")
             .unwrap_or_else(|_| "*".to_string())
             .split(',')
             .map(|s| s.trim().to_string())
             .collect();
-        let max_sessions = require_env("MAX_SESSIONS")?
-            .parse::<usize>()
-            .wrap_err("MAX_SESSIONS must be a valid usize integer")?;
 
-        Ok(Self {
+        Self {
             port,
             cors_allowed_origins,
-            max_sessions,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DatabaseConfig {
+    pub url: String,
+    pub max_connections: u32,
+    pub min_connections: u32,
+}
+
+impl DatabaseConfig {
+    fn from_env() -> Result<Self> {
+        let url = require_env("DATABASE_URL")?;
+        let max_connections = env::var("DB_MAX_CONNECTIONS")
+            .unwrap_or_else(|_| "10".to_string())
+            .parse()
+            .wrap_err("DB_MAX_CONNECTIONS must be a valid number")?;
+        let min_connections = env::var("DB_MIN_CONNECTIONS")
+            .unwrap_or_else(|_| "1".to_string())
+            .parse()
+            .wrap_err("DB_MIN_CONNECTIONS must be a valid number")?;
+
+        Ok(Self {
+            url,
+            max_connections,
+            min_connections,
         })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CookieConfig {
+    pub same_site: SameSite,
+    pub secure: bool,
+    pub http_only: bool,
+}
+
+impl CookieConfig {
+    fn from_env(is_production: bool) -> Self {
+        let same_site = env::var("COOKIE_SAMESITE")
+            .map(|s| match s.to_lowercase().as_str() {
+                "strict" => SameSite::Strict,
+                "lax" => SameSite::Lax,
+                "none" => SameSite::None,
+                _ => {
+                    eprintln!("Warning: Invalid COOKIE_SAMESITE '{}', using default", s);
+                    Self::default_same_site(is_production)
+                }
+            })
+            .unwrap_or_else(|_| Self::default_same_site(is_production));
+
+        let secure = env::var("COOKIE_SECURE")
+            .map(|s| s.parse().unwrap_or(is_production))
+            .unwrap_or(is_production);
+
+        let http_only = env::var("COOKIE_HTTPONLY")
+            .map(|s| s.parse().unwrap_or(true))
+            .unwrap_or(true);
+
+        Self {
+            same_site,
+            secure,
+            http_only,
+        }
+    }
+
+    fn default_same_site(is_production: bool) -> SameSite {
+        if is_production {
+            SameSite::Strict
+        } else {
+            SameSite::Lax
+        }
     }
 }
 
@@ -108,8 +120,8 @@ pub struct Config {
     pub rust_env: String,
     pub is_production: bool,
     pub server: ServerConfig,
-    pub terminal: TerminalConfig,
-    pub lastfm: LastFmConfig,
+    pub database: DatabaseConfig,
+    pub cookie: CookieConfig,
 }
 
 impl Config {
@@ -117,12 +129,16 @@ impl Config {
         let rust_env = get_rust_env()?;
         let is_production = rust_env == "production";
 
+        // Validate required JWT secrets at startup (fail fast)
+        require_env("JWT_ACCESS_SECRET")?;
+        require_env("JWT_REFRESH_SECRET")?;
+
         Ok(Self {
             rust_env,
             is_production,
-            server: ServerConfig::from_env()?,
-            terminal: TerminalConfig::from_env()?,
-            lastfm: LastFmConfig::from_env()?,
+            server: ServerConfig::from_env(),
+            database: DatabaseConfig::from_env()?,
+            cookie: CookieConfig::from_env(is_production),
         })
     }
 }

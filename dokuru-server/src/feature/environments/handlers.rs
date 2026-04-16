@@ -1,7 +1,7 @@
 use axum::{
+    Extension,
     extract::{Path, State},
     http::StatusCode,
-    Extension,
 };
 use uuid::Uuid;
 

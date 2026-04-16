@@ -2,7 +2,10 @@ use async_trait::async_trait;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use crate::feature::user::{dto::{CreateUser, UpdateUser}, entity::User};
+use crate::feature::user::{
+    dto::{CreateUser, UpdateUser},
+    entity::User,
+};
 
 /// User repository errors (data-layer, not auth-layer)
 #[derive(Debug, thiserror::Error)]
@@ -30,7 +33,11 @@ pub trait UserRepository: Send + Sync {
     ) -> Result<User, UserRepositoryError>;
     async fn find_by_id(&self, pool: &PgPool, id: Uuid) -> Result<Option<User>, sqlx::Error>;
     async fn find_by_email(&self, pool: &PgPool, email: &str) -> Result<Option<User>, sqlx::Error>;
-    async fn find_by_username(&self, pool: &PgPool, username: &str) -> Result<Option<User>, sqlx::Error>;
+    async fn find_by_username(
+        &self,
+        pool: &PgPool,
+        username: &str,
+    ) -> Result<Option<User>, sqlx::Error>;
     async fn list(&self, pool: &PgPool, limit: i64, offset: i64) -> Result<Vec<User>, sqlx::Error>;
     async fn update(
         &self,
@@ -107,7 +114,7 @@ impl UserRepository for UserRepositoryImpl {
                     .bind(username)
                     .fetch_one(pool)
                     .await?;
-            
+
             if username_exists {
                 return Err(UserRepositoryError::UsernameExists);
             }
@@ -186,7 +193,11 @@ impl UserRepository for UserRepositoryImpl {
         }))
     }
 
-    async fn find_by_username(&self, pool: &PgPool, username: &str) -> Result<Option<User>, sqlx::Error> {
+    async fn find_by_username(
+        &self,
+        pool: &PgPool,
+        username: &str,
+    ) -> Result<Option<User>, sqlx::Error> {
         let row = sqlx::query(
             "SELECT id, email, username, name, password_hash, role, avatar_url, created_at, updated_at FROM users WHERE username = $1"
         )
@@ -241,14 +252,13 @@ impl UserRepository for UserRepositoryImpl {
     ) -> Result<Option<User>, sqlx::Error> {
         // Check if username already exists (if updating username)
         if let Some(ref username) = payload.username {
-            let existing: Option<Uuid> = sqlx::query_scalar(
-                "SELECT id FROM users WHERE username = $1 AND id != $2"
-            )
-            .bind(username)
-            .bind(id)
-            .fetch_optional(pool)
-            .await?;
-            
+            let existing: Option<Uuid> =
+                sqlx::query_scalar("SELECT id FROM users WHERE username = $1 AND id != $2")
+                    .bind(username)
+                    .bind(id)
+                    .fetch_optional(pool)
+                    .await?;
+
             if existing.is_some() {
                 return Err(sqlx::Error::RowNotFound); // Or custom error
             }
@@ -256,14 +266,13 @@ impl UserRepository for UserRepositoryImpl {
 
         // Check if email already exists (if updating email)
         if let Some(ref email) = payload.email {
-            let existing: Option<Uuid> = sqlx::query_scalar(
-                "SELECT id FROM users WHERE email = $1 AND id != $2"
-            )
-            .bind(email)
-            .bind(id)
-            .fetch_optional(pool)
-            .await?;
-            
+            let existing: Option<Uuid> =
+                sqlx::query_scalar("SELECT id FROM users WHERE email = $1 AND id != $2")
+                    .bind(email)
+                    .bind(id)
+                    .fetch_optional(pool)
+                    .await?;
+
             if existing.is_some() {
                 return Err(sqlx::Error::RowNotFound); // Or custom error
             }
@@ -374,7 +383,7 @@ impl UserRepository for UserRepositoryImpl {
             "UPDATE users 
              SET password_hash = $1,
                  updated_at = $2
-             WHERE id = $3"
+             WHERE id = $3",
         )
         .bind(password_hash)
         .bind(updated_at)

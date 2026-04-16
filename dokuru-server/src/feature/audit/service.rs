@@ -5,7 +5,7 @@ use dashmap::DashMap;
 use uuid::Uuid;
 
 use crate::{
-    feature::ws::{protocol::ServerMessage, AgentSession},
+    feature::ws::{AgentSession, protocol::ServerMessage},
     infrastructure::persistence::Database,
 };
 

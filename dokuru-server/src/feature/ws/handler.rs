@@ -1,7 +1,7 @@
 use axum::{
     extract::{
-        ws::{Message, WebSocket},
         Query, State, WebSocketUpgrade,
+        ws::{Message, WebSocket},
     },
     response::Response,
 };
@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use crate::state::AppState;
 
-use super::{protocol::{AgentMessage, ServerMessage}, session::AgentSession};
+use super::{protocol::AgentMessage, session::AgentSession};
 
 #[derive(Debug, Deserialize)]
 pub struct WsQuery {
@@ -75,7 +75,11 @@ async fn handle_socket(socket: WebSocket, token: String, state: AppState) {
     let env_id = environment.id;
 
     // Update environment status to online
-    if let Err(e) = state.env_repo.update_status(&state.db, env_id, "online").await {
+    if let Err(e) = state
+        .env_repo
+        .update_status(&state.db, env_id, "online")
+        .await
+    {
         error!("Failed to update environment status: {:?}", e);
     }
 
@@ -108,10 +112,10 @@ async fn handle_socket(socket: WebSocket, token: String, state: AppState) {
         let state = state.clone();
         async move {
             while let Some(Ok(msg)) = receiver.next().await {
-                if let Message::Text(text) = msg {
-                    if let Err(e) = handle_agent_message(&text, env_id, &state).await {
-                        error!("Error handling agent message: {:?}", e);
-                    }
+                if let Message::Text(text) = msg
+                    && let Err(e) = handle_agent_message(&text, env_id, &state).await
+                {
+                    error!("Error handling agent message: {:?}", e);
                 }
             }
         }
@@ -129,18 +133,18 @@ async fn handle_socket(socket: WebSocket, token: String, state: AppState) {
 
     // Cleanup on disconnect
     state.agents.remove(&env_id);
-    if let Err(e) = state.env_repo.update_status(&state.db, env_id, "offline").await {
+    if let Err(e) = state
+        .env_repo
+        .update_status(&state.db, env_id, "offline")
+        .await
+    {
         error!("Failed to update environment status on disconnect: {:?}", e);
     }
 
     info!("Agent disconnected: env_id={}", env_id);
 }
 
-async fn handle_agent_message(
-    text: &str,
-    env_id: Uuid,
-    state: &AppState,
-) -> eyre::Result<()> {
+async fn handle_agent_message(text: &str, env_id: Uuid, state: &AppState) -> eyre::Result<()> {
     let message: AgentMessage = serde_json::from_str(text)?;
 
     match message {
@@ -148,12 +152,20 @@ async fn handle_agent_message(
             hostname,
             docker_version,
         } => {
-            info!("Agent info: hostname={:?}, docker_version={:?}", hostname, docker_version);
-            
+            info!(
+                "Agent info: hostname={:?}, docker_version={:?}",
+                hostname, docker_version
+            );
+
             // Update environment info
             state
                 .env_repo
-                .update_info(&state.db, env_id, hostname.as_deref(), docker_version.as_deref())
+                .update_info(
+                    &state.db,
+                    env_id,
+                    hostname.as_deref(),
+                    docker_version.as_deref(),
+                )
                 .await?;
         }
         AgentMessage::AuditResult {
@@ -161,8 +173,11 @@ async fn handle_agent_message(
             score,
             results,
         } => {
-            info!("Audit result received: audit_id={}, score={}", audit_id, score);
-            
+            info!(
+                "Audit result received: audit_id={}, score={}",
+                audit_id, score
+            );
+
             // Save audit result to database
             if let Err(e) = state
                 .audit_service

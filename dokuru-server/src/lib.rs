@@ -1,3 +1,4 @@
+pub mod bootstrap;
 pub mod feature;
 pub mod infrastructure;
 mod routes;
