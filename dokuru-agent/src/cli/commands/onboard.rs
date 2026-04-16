@@ -269,12 +269,47 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
             config.service_name
         ));
     }
-    let host_ip = std::net::UdpSocket::bind("0.0.0.0:0")
-        .and_then(|s| {
-            s.connect("8.8.8.8:80")?;
-            s.local_addr()
+    let is_cloud = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(1))
+        .build()
+        .ok()
+        .and_then(|c| {
+            // AWS/DigitalOcean
+            if c.get("http://169.254.169.254/latest/meta-data/").send().is_ok() {
+                return Some(());
+            }
+            // GCP
+            if c.get("http://metadata.google.internal/computeMetadata/v1/")
+                .header("Metadata-Flavor", "Google")
+                .send()
+                .is_ok()
+            {
+                return Some(());
+            }
+            // Azure
+            if c.get("http://169.254.169.254/metadata/instance?api-version=2021-02-01")
+                .header("Metadata", "true")
+                .send()
+                .is_ok()
+            {
+                return Some(());
+            }
+            None
         })
-        .map_or_else(|_| "localhost".to_string(), |a| a.ip().to_string());
+        .is_some();
+    
+    let host_ip = if is_cloud {
+        reqwest::blocking::get("https://api.ipify.org")
+            .and_then(reqwest::blocking::Response::text)
+            .unwrap_or_else(|_| "localhost".to_string())
+    } else {
+        std::net::UdpSocket::bind("0.0.0.0:0")
+            .and_then(|s| {
+                s.connect("8.8.8.8:80")?;
+                s.local_addr()
+            })
+            .map_or_else(|_| "localhost".to_string(), |a| a.ip().to_string())
+    };
     next_steps.push(format!(
         "Agent URL: {host_ip}:{}\n           → Add this as a new environment in your Dokuru dashboard",
         config.port

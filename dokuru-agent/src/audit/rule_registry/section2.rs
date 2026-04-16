@@ -1,7 +1,8 @@
 // Section 2: Docker Daemon Configuration
 use super::RuleDefinition;
-use crate::audit::types::{
-    CheckResult, CheckStatus, CisRule, RemediationKind, RuleCategory, Severity,
+use crate::audit::{
+    fix_helpers,
+    types::{CheckResult, CheckStatus, CisRule, RemediationKind, RuleCategory, Severity},
 };
 
 /// Section 2: Docker Daemon Configuration
@@ -68,8 +69,36 @@ impl Section2 {
                 })
             },
 
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|_docker| {
+                Box::pin(async move {
+                    // Create dockremap user (ignore error if already exists)
+                    let _ = fix_helpers::run_cmd("useradd", &["-r", "-s", "/bin/false", "dockremap"]).await;
+                    match fix_helpers::merge_daemon_json(
+                        "userns-remap",
+                        serde_json::Value::String("default".into()),
+                    ) {
+                        Err(e) => Ok(fix_helpers::blocked("2.10", &format!("Failed to update daemon.json: {e}"))),
+                        Ok(()) => {
+                            match fix_helpers::run_cmd("systemctl", &["restart", "docker"]).await {
+                                Ok((_, _, true)) => Ok(fix_helpers::applied(
+                                    "2.10",
+                                    "userns-remap enabled in daemon.json, Docker daemon restarted",
+                                    false,
+                                )),
+                                Ok((_, stderr, _)) => Ok(fix_helpers::blocked(
+                                    "2.10",
+                                    &format!("daemon.json updated but Docker restart failed: {stderr}"),
+                                )),
+                                Err(e) => Ok(fix_helpers::blocked(
+                                    "2.10",
+                                    &format!("daemon.json updated but restart command failed: {e}"),
+                                )),
+                            }
+                        }
+                    }
+                })
+            }),
             remediation_guide: r#"STEP 1: Create sub-UID and sub-GID mappings
    sudo touch /etc/subuid /etc/subgid
    sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 dockremap

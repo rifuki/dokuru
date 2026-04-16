@@ -2,8 +2,9 @@
 // CIS Docker Benchmark v1.8.0
 #![allow(clippy::too_many_lines)]
 use super::RuleDefinition;
-use crate::audit::types::{
-    CheckResult, CheckStatus, CisRule, RemediationKind, RuleCategory, Severity,
+use crate::audit::{
+    fix_helpers,
+    types::{CheckResult, CheckStatus, CisRule, RemediationKind, RuleCategory, Severity},
 };
 
 pub struct Section3;
@@ -202,8 +203,18 @@ impl Section3 {
                     ))
                 })
             },
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|_docker| {
+                Box::pin(async move {
+                    let path = Self::find_systemd_unit("docker.service")
+                        .unwrap_or_else(|| "/lib/systemd/system/docker.service".into());
+                    match fix_helpers::run_cmd("chown", &["root:root", &path]).await {
+                        Ok((_, _, true)) => Ok(fix_helpers::applied("3.1", &format!("{path} ownership set to root:root"), false)),
+                        Ok((_, stderr, _)) => Ok(fix_helpers::blocked("3.1", &format!("chown failed: {stderr}"))),
+                        Err(e) => Ok(fix_helpers::blocked("3.1", &format!("chown error: {e}"))),
+                    }
+                })
+            }),
             remediation_guide: "chown root:root /lib/systemd/system/docker.service".into(),
             requires_restart: false,
             requires_elevation: true,
@@ -240,8 +251,18 @@ impl Section3 {
                     ))
                 })
             },
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|_docker| {
+                Box::pin(async move {
+                    let path = Self::find_systemd_unit("docker.service")
+                        .unwrap_or_else(|| "/lib/systemd/system/docker.service".into());
+                    match fix_helpers::run_cmd("chmod", &["644", &path]).await {
+                        Ok((_, _, true)) => Ok(fix_helpers::applied("3.2", &format!("{path} permissions set to 644"), false)),
+                        Ok((_, stderr, _)) => Ok(fix_helpers::blocked("3.2", &format!("chmod failed: {stderr}"))),
+                        Err(e) => Ok(fix_helpers::blocked("3.2", &format!("chmod error: {e}"))),
+                    }
+                })
+            }),
             remediation_guide: "chmod 644 /lib/systemd/system/docker.service".into(),
             requires_restart: false,
             requires_elevation: true,
@@ -276,8 +297,18 @@ impl Section3 {
                     ))
                 })
             },
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|_docker| {
+                Box::pin(async move {
+                    let path = Self::find_systemd_unit("docker.socket")
+                        .unwrap_or_else(|| "/lib/systemd/system/docker.socket".into());
+                    match fix_helpers::run_cmd("chown", &["root:root", &path]).await {
+                        Ok((_, _, true)) => Ok(fix_helpers::applied("3.3", &format!("{path} ownership set to root:root"), false)),
+                        Ok((_, stderr, _)) => Ok(fix_helpers::blocked("3.3", &format!("chown failed: {stderr}"))),
+                        Err(e) => Ok(fix_helpers::blocked("3.3", &format!("chown error: {e}"))),
+                    }
+                })
+            }),
             remediation_guide: "chown root:root /lib/systemd/system/docker.socket".into(),
             requires_restart: false,
             requires_elevation: true,
@@ -314,8 +345,18 @@ impl Section3 {
                     ))
                 })
             },
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|_docker| {
+                Box::pin(async move {
+                    let path = Self::find_systemd_unit("docker.socket")
+                        .unwrap_or_else(|| "/lib/systemd/system/docker.socket".into());
+                    match fix_helpers::run_cmd("chmod", &["644", &path]).await {
+                        Ok((_, _, true)) => Ok(fix_helpers::applied("3.4", &format!("{path} permissions set to 644"), false)),
+                        Ok((_, stderr, _)) => Ok(fix_helpers::blocked("3.4", &format!("chmod failed: {stderr}"))),
+                        Err(e) => Ok(fix_helpers::blocked("3.4", &format!("chmod error: {e}"))),
+                    }
+                })
+            }),
             remediation_guide: "chmod 644 /lib/systemd/system/docker.socket".into(),
             requires_restart: false,
             requires_elevation: true,
@@ -348,8 +389,16 @@ impl Section3 {
                     ))
                 })
             },
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|_docker| {
+                Box::pin(async move {
+                    match fix_helpers::run_cmd("chown", &["root:root", "/etc/docker"]).await {
+                        Ok((_, _, true)) => Ok(fix_helpers::applied("3.5", "/etc/docker ownership set to root:root", false)),
+                        Ok((_, stderr, _)) => Ok(fix_helpers::blocked("3.5", &format!("chown failed: {stderr}"))),
+                        Err(e) => Ok(fix_helpers::blocked("3.5", &format!("chown error: {e}"))),
+                    }
+                })
+            }),
             remediation_guide: "chown root:root /etc/docker".into(),
             requires_restart: false,
             requires_elevation: true,
@@ -386,8 +435,16 @@ impl Section3 {
                     ))
                 })
             },
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|_docker| {
+                Box::pin(async move {
+                    match fix_helpers::run_cmd("chmod", &["755", "/etc/docker"]).await {
+                        Ok((_, _, true)) => Ok(fix_helpers::applied("3.6", "/etc/docker permissions set to 755", false)),
+                        Ok((_, stderr, _)) => Ok(fix_helpers::blocked("3.6", &format!("chmod failed: {stderr}"))),
+                        Err(e) => Ok(fix_helpers::blocked("3.6", &format!("chmod error: {e}"))),
+                    }
+                })
+            }),
             remediation_guide: "chmod 755 /etc/docker".into(),
             requires_restart: false,
             requires_elevation: true,
@@ -424,8 +481,19 @@ impl Section3 {
                     ))
                 })
             },
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|_docker| {
+                Box::pin(async move {
+                    if !std::path::Path::new("/etc/docker/daemon.json").exists() {
+                        return Ok(fix_helpers::blocked("3.17", "/etc/docker/daemon.json does not exist"));
+                    }
+                    match fix_helpers::run_cmd("chown", &["root:root", "/etc/docker/daemon.json"]).await {
+                        Ok((_, _, true)) => Ok(fix_helpers::applied("3.17", "/etc/docker/daemon.json ownership set to root:root", false)),
+                        Ok((_, stderr, _)) => Ok(fix_helpers::blocked("3.17", &format!("chown failed: {stderr}"))),
+                        Err(e) => Ok(fix_helpers::blocked("3.17", &format!("chown error: {e}"))),
+                    }
+                })
+            }),
             remediation_guide: "chown root:root /etc/docker/daemon.json".into(),
             requires_restart: false,
             requires_elevation: true,
@@ -462,8 +530,19 @@ impl Section3 {
                     ))
                 })
             },
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|_docker| {
+                Box::pin(async move {
+                    if !std::path::Path::new("/etc/docker/daemon.json").exists() {
+                        return Ok(fix_helpers::blocked("3.18", "/etc/docker/daemon.json does not exist"));
+                    }
+                    match fix_helpers::run_cmd("chmod", &["644", "/etc/docker/daemon.json"]).await {
+                        Ok((_, _, true)) => Ok(fix_helpers::applied("3.18", "/etc/docker/daemon.json permissions set to 644", false)),
+                        Ok((_, stderr, _)) => Ok(fix_helpers::blocked("3.18", &format!("chmod failed: {stderr}"))),
+                        Err(e) => Ok(fix_helpers::blocked("3.18", &format!("chmod error: {e}"))),
+                    }
+                })
+            }),
             remediation_guide: "chmod 644 /etc/docker/daemon.json".into(),
             requires_restart: false,
             requires_elevation: true,

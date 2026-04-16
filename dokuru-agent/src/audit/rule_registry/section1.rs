@@ -1,9 +1,10 @@
 // Section 1: Host Configuration
 // CIS Docker Benchmark v1.8.0
-#![allow(clippy::too_many_lines, clippy::option_if_let_else)]
+#![allow(clippy::too_many_lines, clippy::option_if_let_else, clippy::single_match_else)]
 use super::RuleDefinition;
-use crate::audit::types::{
-    CheckResult, CheckStatus, CisRule, RemediationKind, RuleCategory, Severity,
+use crate::audit::{
+    fix_helpers,
+    types::{CheckResult, CheckStatus, CisRule, RemediationKind, RuleCategory, Severity},
 };
 
 pub struct Section1;
@@ -243,8 +244,18 @@ impl Section1 {
                     Ok(Self::audit_result("1.1.3", "Ensure that Docker daemon activity is audited", "/usr/bin/dockerd", found, &relevant))
                 })
             },
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|_docker| {
+                Box::pin(async move {
+                    match fix_helpers::ensure_audit_rule("-w /usr/bin/dockerd -p rwxa -k docker") {
+                        Err(e) => Ok(fix_helpers::blocked("1.1.3", &format!("Failed to write audit rule: {e}"))),
+                        Ok(_) => {
+                            let _ = fix_helpers::run_cmd("service", &["auditd", "reload"]).await;
+                            Ok(fix_helpers::applied("1.1.3", "Audit rule added for /usr/bin/dockerd", false))
+                        }
+                    }
+                })
+            }),
             remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /usr/bin/dockerd -p rwxa -k docker\nThen: systemctl restart auditd".into(),
             requires_restart: false,
             requires_elevation: true,
@@ -282,8 +293,18 @@ impl Section1 {
                     ))
                 })
             },
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|_docker| {
+                Box::pin(async move {
+                    match fix_helpers::ensure_audit_rule("-w /run/containerd -p rwxa -k docker") {
+                        Err(e) => Ok(fix_helpers::blocked("1.1.4", &format!("Failed to write audit rule: {e}"))),
+                        Ok(_) => {
+                            let _ = fix_helpers::run_cmd("service", &["auditd", "reload"]).await;
+                            Ok(fix_helpers::applied("1.1.4", "Audit rule added for /run/containerd", false))
+                        }
+                    }
+                })
+            }),
             remediation_guide:
                 "Add to /etc/audit/rules.d/docker.rules:\n  -w /run/containerd -p rwxa -k docker"
                     .into(),
@@ -316,8 +337,18 @@ impl Section1 {
                     Ok(Self::audit_result("1.1.5", "Ensure that /var/lib/docker is audited", "/var/lib/docker", found, &relevant))
                 })
             },
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|_docker| {
+                Box::pin(async move {
+                    match fix_helpers::ensure_audit_rule("-w /var/lib/docker -p rwxa -k docker") {
+                        Err(e) => Ok(fix_helpers::blocked("1.1.5", &format!("Failed to write audit rule: {e}"))),
+                        Ok(_) => {
+                            let _ = fix_helpers::run_cmd("service", &["auditd", "reload"]).await;
+                            Ok(fix_helpers::applied("1.1.5", "Audit rule added for /var/lib/docker", false))
+                        }
+                    }
+                })
+            }),
             remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /var/lib/docker -p rwxa -k docker".into(),
             requires_restart: false,
             requires_elevation: true,
@@ -355,8 +386,18 @@ impl Section1 {
                     ))
                 })
             },
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|_docker| {
+                Box::pin(async move {
+                    match fix_helpers::ensure_audit_rule("-w /etc/docker -p rwxa -k docker") {
+                        Err(e) => Ok(fix_helpers::blocked("1.1.6", &format!("Failed to write audit rule: {e}"))),
+                        Ok(_) => {
+                            let _ = fix_helpers::run_cmd("service", &["auditd", "reload"]).await;
+                            Ok(fix_helpers::applied("1.1.6", "Audit rule added for /etc/docker", false))
+                        }
+                    }
+                })
+            }),
             remediation_guide:
                 "Add to /etc/audit/rules.d/docker.rules:\n  -w /etc/docker -p rwxa -k docker".into(),
             requires_restart: false,
@@ -386,8 +427,28 @@ impl Section1 {
                     Ok(Self::audit_result("1.1.7", "Ensure that docker.service is audited", "docker.service", found, &relevant))
                 })
             },
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|_docker| {
+                Box::pin(async move {
+                    let unit_paths = [
+                        "/lib/systemd/system/docker.service",
+                        "/usr/lib/systemd/system/docker.service",
+                        "/etc/systemd/system/docker.service",
+                    ];
+                    let path = unit_paths.iter()
+                        .find(|p| std::path::Path::new(p).exists())
+                        .copied()
+                        .unwrap_or("/lib/systemd/system/docker.service");
+                    let rule = format!("-w {path} -p rwxa -k docker");
+                    match fix_helpers::ensure_audit_rule(&rule) {
+                        Err(e) => Ok(fix_helpers::blocked("1.1.7", &format!("Failed to write audit rule: {e}"))),
+                        Ok(_) => {
+                            let _ = fix_helpers::run_cmd("service", &["auditd", "reload"]).await;
+                            Ok(fix_helpers::applied("1.1.7", &format!("Audit rule added for {path}"), false))
+                        }
+                    }
+                })
+            }),
             remediation_guide: "Find service file path:\n  systemctl show -p FragmentPath docker.service\nAdd rule:\n  -w /lib/systemd/system/docker.service -p rwxa -k docker".into(),
             requires_restart: false,
             requires_elevation: true,
@@ -416,8 +477,18 @@ impl Section1 {
                     Ok(Self::audit_result("1.1.8", "Ensure that containerd.sock is audited", "containerd.sock", found, &relevant))
                 })
             },
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|_docker| {
+                Box::pin(async move {
+                    match fix_helpers::ensure_audit_rule("-w /run/containerd/containerd.sock -p rwxa -k docker") {
+                        Err(e) => Ok(fix_helpers::blocked("1.1.8", &format!("Failed to write audit rule: {e}"))),
+                        Ok(_) => {
+                            let _ = fix_helpers::run_cmd("service", &["auditd", "reload"]).await;
+                            Ok(fix_helpers::applied("1.1.8", "Audit rule added for containerd.sock", false))
+                        }
+                    }
+                })
+            }),
             remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /run/containerd/containerd.sock -p rwxa -k docker".into(),
             requires_restart: false,
             requires_elevation: true,
@@ -446,8 +517,18 @@ impl Section1 {
                     Ok(Self::audit_result("1.1.9", "Ensure that docker.sock is audited", "docker.sock", found, &relevant))
                 })
             },
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|_docker| {
+                Box::pin(async move {
+                    match fix_helpers::ensure_audit_rule("-w /var/run/docker.sock -p rwxa -k docker") {
+                        Err(e) => Ok(fix_helpers::blocked("1.1.9", &format!("Failed to write audit rule: {e}"))),
+                        Ok(_) => {
+                            let _ = fix_helpers::run_cmd("service", &["auditd", "reload"]).await;
+                            Ok(fix_helpers::applied("1.1.9", "Audit rule added for /var/run/docker.sock", false))
+                        }
+                    }
+                })
+            }),
             remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /var/run/docker.sock -p rwxa -k docker".into(),
             requires_restart: false,
             requires_elevation: true,
@@ -499,8 +580,21 @@ impl Section1 {
                     Ok(Self::audit_result("1.1.10", "Ensure that /etc/default/docker is audited", "/etc/default/docker", found, &relevant))
                 })
             },
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|_docker| {
+                Box::pin(async move {
+                    if !std::path::Path::new("/etc/default/docker").exists() {
+                        return Ok(fix_helpers::blocked("1.1.10", "/etc/default/docker does not exist on this system"));
+                    }
+                    match fix_helpers::ensure_audit_rule("-w /etc/default/docker -p rwxa -k docker") {
+                        Err(e) => Ok(fix_helpers::blocked("1.1.10", &format!("Failed to write audit rule: {e}"))),
+                        Ok(_) => {
+                            let _ = fix_helpers::run_cmd("service", &["auditd", "reload"]).await;
+                            Ok(fix_helpers::applied("1.1.10", "Audit rule added for /etc/default/docker", false))
+                        }
+                    }
+                })
+            }),
             remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /etc/default/docker -p rwxa -k docker".into(),
             requires_restart: false,
             requires_elevation: true,
@@ -552,8 +646,21 @@ impl Section1 {
                     Ok(Self::audit_result("1.1.11", "Ensure that /etc/docker/daemon.json is audited", "/etc/docker/daemon.json", found, &relevant))
                 })
             },
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|_docker| {
+                Box::pin(async move {
+                    if !std::path::Path::new("/etc/docker/daemon.json").exists() {
+                        return Ok(fix_helpers::blocked("1.1.11", "/etc/docker/daemon.json does not exist yet"));
+                    }
+                    match fix_helpers::ensure_audit_rule("-w /etc/docker/daemon.json -p rwxa -k docker") {
+                        Err(e) => Ok(fix_helpers::blocked("1.1.11", &format!("Failed to write audit rule: {e}"))),
+                        Ok(_) => {
+                            let _ = fix_helpers::run_cmd("service", &["auditd", "reload"]).await;
+                            Ok(fix_helpers::applied("1.1.11", "Audit rule added for /etc/docker/daemon.json", false))
+                        }
+                    }
+                })
+            }),
             remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /etc/docker/daemon.json -p rwxa -k docker".into(),
             requires_restart: false,
             requires_elevation: true,
@@ -605,8 +712,21 @@ impl Section1 {
                     Ok(Self::audit_result("1.1.12", "Ensure that /etc/containerd/config.toml is audited", "/etc/containerd/config.toml", found, &relevant))
                 })
             },
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|_docker| {
+                Box::pin(async move {
+                    if !std::path::Path::new("/etc/containerd/config.toml").exists() {
+                        return Ok(fix_helpers::blocked("1.1.12", "/etc/containerd/config.toml does not exist"));
+                    }
+                    match fix_helpers::ensure_audit_rule("-w /etc/containerd/config.toml -p rwxa -k docker") {
+                        Err(e) => Ok(fix_helpers::blocked("1.1.12", &format!("Failed to write audit rule: {e}"))),
+                        Ok(_) => {
+                            let _ = fix_helpers::run_cmd("service", &["auditd", "reload"]).await;
+                            Ok(fix_helpers::applied("1.1.12", "Audit rule added for /etc/containerd/config.toml", false))
+                        }
+                    }
+                })
+            }),
             remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /etc/containerd/config.toml -p rwxa -k docker".into(),
             requires_restart: false,
             requires_elevation: true,
@@ -637,8 +757,18 @@ impl Section1 {
                     Ok(Self::audit_result("1.1.14", "Ensure that /usr/bin/containerd is audited", "/usr/bin/containerd", found, &relevant))
                 })
             },
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|_docker| {
+                Box::pin(async move {
+                    match fix_helpers::ensure_audit_rule("-w /usr/bin/containerd -p rwxa -k docker") {
+                        Err(e) => Ok(fix_helpers::blocked("1.1.14", &format!("Failed to write audit rule: {e}"))),
+                        Ok(_) => {
+                            let _ = fix_helpers::run_cmd("service", &["auditd", "reload"]).await;
+                            Ok(fix_helpers::applied("1.1.14", "Audit rule added for /usr/bin/containerd", false))
+                        }
+                    }
+                })
+            }),
             remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /usr/bin/containerd -p rwxa -k docker".into(),
             requires_restart: false,
             requires_elevation: true,
@@ -667,8 +797,18 @@ impl Section1 {
                     Ok(Self::audit_result("1.1.18", "Ensure that /usr/bin/runc is audited", "/usr/bin/runc", found, &relevant))
                 })
             },
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|_docker| {
+                Box::pin(async move {
+                    match fix_helpers::ensure_audit_rule("-w /usr/bin/runc -p rwxa -k docker") {
+                        Err(e) => Ok(fix_helpers::blocked("1.1.18", &format!("Failed to write audit rule: {e}"))),
+                        Ok(_) => {
+                            let _ = fix_helpers::run_cmd("service", &["auditd", "reload"]).await;
+                            Ok(fix_helpers::applied("1.1.18", "Audit rule added for /usr/bin/runc", false))
+                        }
+                    }
+                })
+            }),
             remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /usr/bin/runc -p rwxa -k docker".into(),
             requires_restart: false,
             requires_elevation: true,

@@ -5,6 +5,7 @@
 // - RuleRegistry = STORAGE + EXECUTOR
 // - That's it!
 
+pub mod fix_helpers;
 mod rule_registry;
 mod types;
 
