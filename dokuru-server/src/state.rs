@@ -8,6 +8,7 @@ use crate::{
             stats::{StatsRepository, StatsRepositoryImpl, StatsService},
             user::{AdminUserRepository, AdminUserRepositoryImpl},
         },
+        agent::{AgentRepository, AgentRepositoryImpl, AgentService},
         auth::{
             auth_method::{AuthMethodRepositoryImpl, AuthMethodService},
             service::AuthService,
@@ -37,6 +38,7 @@ pub struct AppState {
     pub user_repo: Arc<dyn UserRepository>,
     pub user_profile_repo: Arc<dyn UserProfileRepository>,
     pub admin_user_repo: Arc<dyn AdminUserRepository>,
+    pub agent_service: Arc<AgentService>,
     pub stats_service: Arc<StatsService>,
     pub storage: Arc<dyn StorageProvider>,
     pub session_blacklist: Option<Arc<dyn SessionBlacklist>>,
@@ -70,6 +72,7 @@ impl AppState {
             Arc::new(UserProfileRepositoryImpl::new());
         let admin_user_repo: Arc<dyn AdminUserRepository> =
             Arc::new(AdminUserRepositoryImpl::new());
+        let agent_repo: Arc<dyn AgentRepository> = Arc::new(AgentRepositoryImpl::new());
         let auth_method_repo = Arc::new(AuthMethodRepositoryImpl::new());
         let session_repo = Arc::new(SessionRepositoryImpl::new());
         let stats_repository: Arc<dyn StatsRepository> = Arc::new(StatsRepositoryImpl::new());
@@ -108,6 +111,7 @@ impl AppState {
         ));
 
         let stats_service = Arc::new(StatsService::new(stats_repository));
+        let agent_service = Arc::new(AgentService::new(agent_repo));
 
         let storage: Arc<dyn StorageProvider> = Arc::new(LocalStorage::new(
             &config.upload.upload_dir,
@@ -121,6 +125,7 @@ impl AppState {
             user_repo,
             user_profile_repo,
             admin_user_repo,
+            agent_service,
             stats_service,
             storage,
             session_blacklist,
@@ -139,6 +144,7 @@ impl AppState {
             Arc::new(UserProfileRepositoryImpl::new());
         let admin_user_repo: Arc<dyn AdminUserRepository> =
             Arc::new(AdminUserRepositoryImpl::new());
+        let agent_repo: Arc<dyn AgentRepository> = Arc::new(AgentRepositoryImpl::new());
         let auth_method_repo = Arc::new(AuthMethodRepositoryImpl::new());
         let session_repo = Arc::new(SessionRepositoryImpl::new());
         let stats_repository: Arc<dyn StatsRepository> = Arc::new(StatsRepositoryImpl::new());
@@ -161,6 +167,7 @@ impl AppState {
         ));
 
         let stats_service = Arc::new(StatsService::new(stats_repository));
+        let agent_service = Arc::new(AgentService::new(agent_repo));
 
         // Dummy reload handle — never called in tests
         let (_, handle): (reload::Layer<EnvFilter, Registry>, ReloadFilterHandle) =
@@ -178,6 +185,7 @@ impl AppState {
             user_repo,
             user_profile_repo,
             admin_user_repo,
+            agent_service,
             stats_service,
             storage,
             session_blacklist: None,

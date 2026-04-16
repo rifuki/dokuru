@@ -8,10 +8,10 @@ import { useLogin } from "@/features/auth/hooks/use-login";
 
 export function LoginForm() {
   const [username, setUsername] = useState(
-    import.meta.env.DEV ? "admin" : ""
+    import.meta.env.DEV ? "testuser" : ""
   );
   const [password, setPassword] = useState(
-    import.meta.env.DEV ? "9uBfq1iYZk6Uf*Ww" : ""
+    import.meta.env.DEV ? "password123" : ""
   );
   const [showPassword, setShowPassword] = useState(false);
   const login = useLogin();
