@@ -1,11 +1,8 @@
 use async_trait::async_trait;
-use sqlx::{PgPool, Row};
+use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::feature::user::{
-    dto::{CreateUser, UpdateUser},
-    entity::User,
-};
+use crate::feature::user::entity::{User, UserProfile, UserWithProfile};
 
 /// User repository errors (data-layer, not auth-layer)
 #[derive(Debug, thiserror::Error)]
@@ -16,56 +13,83 @@ pub enum UserRepositoryError {
     #[error("Username already exists")]
     UsernameExists,
 
-    #[error("Password hashing failed")]
-    HashError,
-
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
+
+    #[error("User not found")]
+    NotFound,
 }
 
 /// User repository trait — usable by any feature (auth, profile, admin, etc.)
 #[async_trait]
 pub trait UserRepository: Send + Sync {
+    /// Create new user (identity only)
     async fn create(
         &self,
         pool: &PgPool,
-        payload: &CreateUser,
+        email: &str,
+        username: Option<&str>,
     ) -> Result<User, UserRepositoryError>;
+
+    /// Find user by ID
     async fn find_by_id(&self, pool: &PgPool, id: Uuid) -> Result<Option<User>, sqlx::Error>;
+
+    /// Find user by email
     async fn find_by_email(&self, pool: &PgPool, email: &str) -> Result<Option<User>, sqlx::Error>;
+
+    /// Find user by username
     async fn find_by_username(
         &self,
         pool: &PgPool,
         username: &str,
     ) -> Result<Option<User>, sqlx::Error>;
+
+    /// List all users
     async fn list(&self, pool: &PgPool, limit: i64, offset: i64) -> Result<Vec<User>, sqlx::Error>;
+
+    /// Update user identity
     async fn update(
         &self,
         pool: &PgPool,
         id: Uuid,
-        payload: &UpdateUser,
+        email: Option<&str>,
+        username: Option<&str>,
     ) -> Result<Option<User>, sqlx::Error>;
+
+    /// Delete user (cascades to profiles, auth_methods, sessions)
     async fn delete(&self, pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error>;
+
+    /// Check if email exists
     async fn exists_by_email(&self, pool: &PgPool, email: &str) -> Result<bool, sqlx::Error>;
+
+    /// Check if username exists
     async fn exists_by_username(&self, pool: &PgPool, username: &str) -> Result<bool, sqlx::Error>;
+
+    /// Update user role
     async fn update_role(
         &self,
         pool: &PgPool,
         id: Uuid,
         role: &str,
     ) -> Result<Option<User>, sqlx::Error>;
-    async fn update_password(
+
+    /// Update email verification status
+    async fn set_email_verified(
         &self,
         pool: &PgPool,
         id: Uuid,
-        password_hash: &str,
+        verified: bool,
     ) -> Result<bool, sqlx::Error>;
-    async fn update_avatar_url(
+
+    /// Activate/deactivate user
+    async fn set_active(&self, pool: &PgPool, id: Uuid, active: bool) -> Result<bool, sqlx::Error>;
+
+    /// Find user with profile
+    async fn find_with_profile(
         &self,
         pool: &PgPool,
         id: Uuid,
-        avatar_url: &str,
-    ) -> Result<(), sqlx::Error>;
+    ) -> Result<Option<UserWithProfile>, sqlx::Error>;
 }
 
 #[derive(Debug, Clone, Default)]
@@ -75,18 +99,6 @@ impl UserRepositoryImpl {
     pub fn new() -> Self {
         Self
     }
-
-    fn hash_password(password: &str) -> Result<String, UserRepositoryError> {
-        use argon2::{
-            Argon2,
-            password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
-        };
-        let salt = SaltString::generate(&mut OsRng);
-        Argon2::default()
-            .hash_password(password.as_bytes(), &salt)
-            .map(|h| h.to_string())
-            .map_err(|_| UserRepositoryError::HashError)
-    }
 }
 
 #[async_trait]
@@ -94,103 +106,50 @@ impl UserRepository for UserRepositoryImpl {
     async fn create(
         &self,
         pool: &PgPool,
-        payload: &CreateUser,
+        email: &str,
+        username: Option<&str>,
     ) -> Result<User, UserRepositoryError> {
         // Check email exists
-        let email_exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)")
-                .bind(&payload.email)
-                .fetch_one(pool)
-                .await?;
-
-        if email_exists {
+        if self.exists_by_email(pool, email).await? {
             return Err(UserRepositoryError::EmailExists);
         }
 
         // Check username exists (if provided)
-        if let Some(ref username) = payload.username {
-            let username_exists: bool =
-                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)")
-                    .bind(username)
-                    .fetch_one(pool)
-                    .await?;
-
-            if username_exists {
-                return Err(UserRepositoryError::UsernameExists);
-            }
+        if let Some(uname) = username
+            && self.exists_by_username(pool, uname).await?
+        {
+            return Err(UserRepositoryError::UsernameExists);
         }
 
-        let password_hash = Self::hash_password(&payload.password)?;
-        let user = User::new(&payload.email, &payload.name, &password_hash);
-
-        let row = sqlx::query(
-            "INSERT INTO users (id, email, username, name, password_hash, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
-             RETURNING id, email, username, name, password_hash, role, avatar_url, created_at, updated_at",
+        let user = sqlx::query_as::<_, User>(
+            r#"
+            INSERT INTO users (email, username)
+            VALUES ($1, $2)
+            RETURNING *
+            "#,
         )
-        .bind(user.id)
-        .bind(&user.email)
-        .bind(&payload.username)
-        .bind(&user.name)
-        .bind(&user.password_hash)
-        .bind(user.created_at)
-        .bind(user.updated_at)
+        .bind(email)
+        .bind(username)
         .fetch_one(pool)
         .await?;
 
-        Ok(User {
-            id: row.get("id"),
-            email: row.get("email"),
-            username: row.get("username"),
-            name: row.get("name"),
-            password_hash: row.get("password_hash"),
-            role: row.get("role"),
-            avatar_url: row.get("avatar_url"),
-            created_at: row.get("created_at"),
-            updated_at: row.get("updated_at"),
-        })
+        Ok(user)
     }
 
     async fn find_by_id(&self, pool: &PgPool, id: Uuid) -> Result<Option<User>, sqlx::Error> {
-        let row = sqlx::query(
-            "SELECT id, email, username, name, password_hash, role, avatar_url, created_at, updated_at FROM users WHERE id = $1"
-        )
-        .bind(id)
-        .fetch_optional(pool)
-        .await?;
-
-        Ok(row.map(|r| User {
-            id: r.get("id"),
-            email: r.get("email"),
-            username: r.get("username"),
-            name: r.get("name"),
-            password_hash: r.get("password_hash"),
-            role: r.get("role"),
-            avatar_url: r.get("avatar_url"),
-            created_at: r.get("created_at"),
-            updated_at: r.get("updated_at"),
-        }))
+        let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1")
+            .bind(id)
+            .fetch_optional(pool)
+            .await?;
+        Ok(user)
     }
 
     async fn find_by_email(&self, pool: &PgPool, email: &str) -> Result<Option<User>, sqlx::Error> {
-        let row = sqlx::query(
-            "SELECT id, email, username, name, password_hash, role, avatar_url, created_at, updated_at FROM users WHERE email = $1"
-        )
-        .bind(email)
-        .fetch_optional(pool)
-        .await?;
-
-        Ok(row.map(|r| User {
-            id: r.get("id"),
-            email: r.get("email"),
-            username: r.get("username"),
-            name: r.get("name"),
-            password_hash: r.get("password_hash"),
-            role: r.get("role"),
-            avatar_url: r.get("avatar_url"),
-            created_at: r.get("created_at"),
-            updated_at: r.get("updated_at"),
-        }))
+        let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE email = $1")
+            .bind(email)
+            .fetch_optional(pool)
+            .await?;
+        Ok(user)
     }
 
     async fn find_by_username(
@@ -198,116 +157,57 @@ impl UserRepository for UserRepositoryImpl {
         pool: &PgPool,
         username: &str,
     ) -> Result<Option<User>, sqlx::Error> {
-        let row = sqlx::query(
-            "SELECT id, email, username, name, password_hash, role, avatar_url, created_at, updated_at FROM users WHERE username = $1"
-        )
-        .bind(username)
-        .fetch_optional(pool)
-        .await?;
-
-        Ok(row.map(|r| User {
-            id: r.get("id"),
-            email: r.get("email"),
-            username: r.get("username"),
-            name: r.get("name"),
-            password_hash: r.get("password_hash"),
-            role: r.get("role"),
-            avatar_url: r.get("avatar_url"),
-            created_at: r.get("created_at"),
-            updated_at: r.get("updated_at"),
-        }))
+        let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE username = $1")
+            .bind(username)
+            .fetch_optional(pool)
+            .await?;
+        Ok(user)
     }
 
     async fn list(&self, pool: &PgPool, limit: i64, offset: i64) -> Result<Vec<User>, sqlx::Error> {
-        let rows = sqlx::query(
-            "SELECT id, email, username, name, password_hash, role, avatar_url, created_at, updated_at
-             FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+        let users = sqlx::query_as::<_, User>(
+            "SELECT * FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2",
         )
         .bind(limit)
         .bind(offset)
         .fetch_all(pool)
         .await?;
-
-        Ok(rows
-            .into_iter()
-            .map(|r| User {
-                id: r.get("id"),
-                email: r.get("email"),
-                username: r.get("username"),
-                name: r.get("name"),
-                password_hash: r.get("password_hash"),
-                role: r.get("role"),
-                avatar_url: r.get("avatar_url"),
-                created_at: r.get("created_at"),
-                updated_at: r.get("updated_at"),
-            })
-            .collect())
+        Ok(users)
     }
 
     async fn update(
         &self,
         pool: &PgPool,
         id: Uuid,
-        payload: &UpdateUser,
+        email: Option<&str>,
+        username: Option<&str>,
     ) -> Result<Option<User>, sqlx::Error> {
-        // Check if username already exists (if updating username)
-        if let Some(ref username) = payload.username {
-            let existing: Option<Uuid> =
-                sqlx::query_scalar("SELECT id FROM users WHERE username = $1 AND id != $2")
-                    .bind(username)
-                    .bind(id)
-                    .fetch_optional(pool)
-                    .await?;
+        // Build dynamic query based on provided fields
+        let mut query = String::from("UPDATE users SET updated_at = NOW()");
+        let mut next_param = 2; // $1 is id
 
-            if existing.is_some() {
-                return Err(sqlx::Error::RowNotFound); // Or custom error
-            }
+        if email.is_some() {
+            query.push_str(&format!(", email = ${}", next_param));
+            next_param += 1;
+        }
+        if username.is_some() {
+            query.push_str(&format!(", username = ${}", next_param));
         }
 
-        // Check if email already exists (if updating email)
-        if let Some(ref email) = payload.email {
-            let existing: Option<Uuid> =
-                sqlx::query_scalar("SELECT id FROM users WHERE email = $1 AND id != $2")
-                    .bind(email)
-                    .bind(id)
-                    .fetch_optional(pool)
-                    .await?;
+        query.push_str(" WHERE id = $1 RETURNING *");
 
-            if existing.is_some() {
-                return Err(sqlx::Error::RowNotFound); // Or custom error
-            }
+        // Build query and bind params
+        let mut query_builder = sqlx::query_as::<_, User>(&query).bind(id);
+
+        if let Some(e) = email {
+            query_builder = query_builder.bind(e);
+        }
+        if let Some(u) = username {
+            query_builder = query_builder.bind(u);
         }
 
-        let updated_at = chrono::Utc::now();
-
-        let row = sqlx::query(
-            "UPDATE users
-             SET name = COALESCE($1, name),
-                 username = COALESCE($2, username),
-                 email = COALESCE($3, email),
-                 updated_at = $4
-             WHERE id = $5
-             RETURNING id, email, username, name, password_hash, role, avatar_url, created_at, updated_at",
-        )
-        .bind(&payload.name)
-        .bind(&payload.username)
-        .bind(&payload.email)
-        .bind(updated_at)
-        .bind(id)
-        .fetch_optional(pool)
-        .await?;
-
-        Ok(row.map(|r| User {
-            id: r.get("id"),
-            email: r.get("email"),
-            username: r.get("username"),
-            name: r.get("name"),
-            password_hash: r.get("password_hash"),
-            role: r.get("role"),
-            avatar_url: r.get("avatar_url"),
-            created_at: r.get("created_at"),
-            updated_at: r.get("updated_at"),
-        }))
+        let user = query_builder.fetch_optional(pool).await?;
+        Ok(user)
     }
 
     async fn delete(&self, pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error> {
@@ -315,26 +215,25 @@ impl UserRepository for UserRepositoryImpl {
             .bind(id)
             .execute(pool)
             .await?;
-
         Ok(result.rows_affected() > 0)
     }
 
     async fn exists_by_email(&self, pool: &PgPool, email: &str) -> Result<bool, sqlx::Error> {
-        let row = sqlx::query("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1) as exists")
-            .bind(email)
-            .fetch_one(pool)
-            .await?;
-
-        Ok(row.get::<bool, _>("exists"))
+        let exists: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)")
+                .bind(email)
+                .fetch_one(pool)
+                .await?;
+        Ok(exists)
     }
 
     async fn exists_by_username(&self, pool: &PgPool, username: &str) -> Result<bool, sqlx::Error> {
-        let row = sqlx::query("SELECT EXISTS(SELECT 1 FROM users WHERE username = $1) as exists")
-            .bind(username)
-            .fetch_one(pool)
-            .await?;
-
-        Ok(row.get::<bool, _>("exists"))
+        let exists: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)")
+                .bind(username)
+                .fetch_one(pool)
+                .await?;
+        Ok(exists)
     }
 
     async fn update_role(
@@ -343,74 +242,220 @@ impl UserRepository for UserRepositoryImpl {
         id: Uuid,
         role: &str,
     ) -> Result<Option<User>, sqlx::Error> {
-        let updated_at = chrono::Utc::now();
-
-        let row = sqlx::query(
-            "UPDATE users
-             SET role = $1,
-                 updated_at = $2
-             WHERE id = $3
-             RETURNING id, email, username, name, password_hash, role, avatar_url, created_at, updated_at",
+        let user = sqlx::query_as::<_, User>(
+            "UPDATE users SET role = $2, updated_at = NOW() WHERE id = $1 RETURNING *",
         )
-        .bind(role)
-        .bind(updated_at)
         .bind(id)
+        .bind(role)
         .fetch_optional(pool)
         .await?;
-
-        Ok(row.map(|r| User {
-            id: r.get("id"),
-            email: r.get("email"),
-            username: r.get("username"),
-            name: r.get("name"),
-            password_hash: r.get("password_hash"),
-            role: r.get("role"),
-            avatar_url: r.get("avatar_url"),
-            created_at: r.get("created_at"),
-            updated_at: r.get("updated_at"),
-        }))
+        Ok(user)
     }
 
-    async fn update_password(
+    async fn set_email_verified(
         &self,
         pool: &PgPool,
         id: Uuid,
-        password_hash: &str,
+        verified: bool,
     ) -> Result<bool, sqlx::Error> {
-        let updated_at = chrono::Utc::now();
-
-        let result = sqlx::query(
-            "UPDATE users 
-             SET password_hash = $1,
-                 updated_at = $2
-             WHERE id = $3",
-        )
-        .bind(password_hash)
-        .bind(updated_at)
-        .bind(id)
-        .execute(pool)
-        .await?;
-
+        let result =
+            sqlx::query("UPDATE users SET email_verified = $2, updated_at = NOW() WHERE id = $1")
+                .bind(id)
+                .bind(verified)
+                .execute(pool)
+                .await?;
         Ok(result.rows_affected() > 0)
     }
 
-    async fn update_avatar_url(
+    async fn set_active(&self, pool: &PgPool, id: Uuid, active: bool) -> Result<bool, sqlx::Error> {
+        let result =
+            sqlx::query("UPDATE users SET is_active = $2, updated_at = NOW() WHERE id = $1")
+                .bind(id)
+                .bind(active)
+                .execute(pool)
+                .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn find_with_profile(
         &self,
         pool: &PgPool,
         id: Uuid,
-        avatar_url: &str,
-    ) -> Result<(), sqlx::Error> {
-        sqlx::query(
-            "UPDATE users
-             SET avatar_url = $1,
-                 updated_at = NOW()
-             WHERE id = $2",
+    ) -> Result<Option<UserWithProfile>, sqlx::Error> {
+        let row = sqlx::query_as::<_, UserWithProfile>(
+            r#"
+            SELECT 
+                u.id, u.email, u.username, u.is_active, u.email_verified, u.role, u.created_at, u.updated_at,
+                p.full_name, p.display_name, p.avatar_url, p.bio, p.phone_number
+            FROM users u
+            LEFT JOIN user_profiles p ON p.user_id = u.id
+            WHERE u.id = $1
+            "#,
         )
-        .bind(avatar_url)
         .bind(id)
-        .execute(pool)
+        .fetch_optional(pool)
+        .await?;
+        Ok(row)
+    }
+}
+
+// =============================================================================
+// User Profile Repository
+// =============================================================================
+
+#[async_trait]
+pub trait UserProfileRepository: Send + Sync {
+    /// Create profile for user
+    async fn create(
+        &self,
+        pool: &PgPool,
+        user_id: Uuid,
+    ) -> Result<UserProfile, UserRepositoryError>;
+
+    /// Get profile by user ID
+    async fn find_by_user_id(
+        &self,
+        pool: &PgPool,
+        user_id: Uuid,
+    ) -> Result<Option<UserProfile>, sqlx::Error>;
+
+    /// Update profile
+    async fn update(
+        &self,
+        pool: &PgPool,
+        user_id: Uuid,
+        full_name: Option<&str>,
+        display_name: Option<&str>,
+        bio: Option<&str>,
+        avatar_url: Option<&str>,
+    ) -> Result<Option<UserProfile>, sqlx::Error>;
+
+    /// Update avatar only
+    async fn update_avatar(
+        &self,
+        pool: &PgPool,
+        user_id: Uuid,
+        avatar_url: Option<&str>,
+    ) -> Result<bool, sqlx::Error>;
+
+    /// Get user with profile (joined view)
+    async fn get_user_with_profile(
+        &self,
+        pool: &PgPool,
+        user_id: Uuid,
+    ) -> Result<Option<UserWithProfile>, sqlx::Error>;
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct UserProfileRepositoryImpl;
+
+impl UserProfileRepositoryImpl {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl UserProfileRepository for UserProfileRepositoryImpl {
+    async fn create(
+        &self,
+        pool: &PgPool,
+        user_id: Uuid,
+    ) -> Result<UserProfile, UserRepositoryError> {
+        let profile = sqlx::query_as::<_, UserProfile>(
+            r#"
+            INSERT INTO user_profiles (user_id)
+            VALUES ($1)
+            RETURNING *
+            "#,
+        )
+        .bind(user_id)
+        .fetch_one(pool)
         .await?;
 
-        Ok(())
+        Ok(profile)
+    }
+
+    async fn find_by_user_id(
+        &self,
+        pool: &PgPool,
+        user_id: Uuid,
+    ) -> Result<Option<UserProfile>, sqlx::Error> {
+        let profile =
+            sqlx::query_as::<_, UserProfile>("SELECT * FROM user_profiles WHERE user_id = $1")
+                .bind(user_id)
+                .fetch_optional(pool)
+                .await?;
+        Ok(profile)
+    }
+
+    async fn update(
+        &self,
+        pool: &PgPool,
+        user_id: Uuid,
+        full_name: Option<&str>,
+        display_name: Option<&str>,
+        bio: Option<&str>,
+        avatar_url: Option<&str>,
+    ) -> Result<Option<UserProfile>, sqlx::Error> {
+        let profile = sqlx::query_as::<_, UserProfile>(
+            r#"
+            UPDATE user_profiles SET
+                full_name = COALESCE($2, full_name),
+                display_name = COALESCE($3, display_name),
+                bio = COALESCE($4, bio),
+                avatar_url = COALESCE($5, avatar_url),
+                updated_at = NOW()
+            WHERE user_id = $1
+            RETURNING *
+            "#,
+        )
+        .bind(user_id)
+        .bind(full_name)
+        .bind(display_name)
+        .bind(bio)
+        .bind(avatar_url)
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(profile)
+    }
+
+    async fn update_avatar(
+        &self,
+        pool: &PgPool,
+        user_id: Uuid,
+        avatar_url: Option<&str>,
+    ) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query(
+            "UPDATE user_profiles SET avatar_url = $2, updated_at = NOW() WHERE user_id = $1",
+        )
+        .bind(user_id)
+        .bind(avatar_url)
+        .execute(pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn get_user_with_profile(
+        &self,
+        pool: &PgPool,
+        user_id: Uuid,
+    ) -> Result<Option<UserWithProfile>, sqlx::Error> {
+        let row = sqlx::query_as::<_, UserWithProfile>(
+            r#"
+            SELECT 
+                u.id, u.email, u.username, u.is_active, u.email_verified, u.role, u.created_at, u.updated_at,
+                p.full_name, p.display_name, p.avatar_url, p.bio, p.phone_number
+            FROM users u
+            LEFT JOIN user_profiles p ON p.user_id = u.id
+            WHERE u.id = $1
+            "#,
+        )
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(row)
     }
 }

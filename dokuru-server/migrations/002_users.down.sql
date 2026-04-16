@@ -1,0 +1,3 @@
+DROP VIEW IF EXISTS user_complete;
+DROP TABLE IF EXISTS user_profiles;
+DROP TABLE IF EXISTS users;

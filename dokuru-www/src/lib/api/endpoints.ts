@@ -1,19 +1,24 @@
-/**
- * API Endpoints
- * Centralized endpoint definitions
- */
-
 export const API_ENDPOINTS = {
   AUTH: {
-    LOGIN: "/api/v1/auth/login",
-    REGISTER: "/api/v1/auth/register",
-    LOGOUT: "/api/v1/auth/logout",
-    REFRESH: "/api/v1/auth/refresh",
-    ME: "/api/v1/auth/me",
+    LOGIN: "/auth/login",
+    REGISTER: "/auth/register",
+    REFRESH: "/auth/refresh",
+    LOGOUT: "/auth/logout",
+    ME: "/auth/me",
+    CHANGE_PASSWORD: "/auth/change-password",
+    SESSIONS: "/auth/sessions",
   },
-  ENVIRONMENTS: {
-    LIST: "/api/v1/environments",
-    CREATE: "/api/v1/environments",
-    DELETE: (id: string) => `/api/v1/environments/${id}`,
+  USER: {
+    ME: "/users/me",
+    UPDATE: "/users/me",
+  },
+  ADMIN: {
+    USERS: "/admin/users",
+    LOG_LEVEL: "/admin/log/level",
+    STATS: "/admin/stats",
+    USER_ROLE: (id: string) => `/admin/users/${id}/role`,
+    API_KEYS: "/admin/api-keys",
+    API_KEY_REVOKE: (id: string) => `/admin/api-keys/${id}/revoke`,
+    API_KEY_DELETE: (id: string) => `/admin/api-keys/${id}`,
   },
 } as const;

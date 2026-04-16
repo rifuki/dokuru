@@ -9,12 +9,6 @@ impl std::fmt::Display for ErrorCode {
     }
 }
 
-impl From<ErrorCode> for String {
-    fn from(code: ErrorCode) -> Self {
-        code.0.to_string()
-    }
-}
-
 /// Auth errors
 pub mod auth {
     use super::ErrorCode;

@@ -1,3 +1,9 @@
+use std::{
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
 use axum::{
     Extension,
     extract::{ConnectInfo, Request},
@@ -6,12 +12,6 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use dashmap::DashMap;
-use std::{
-    net::{IpAddr, SocketAddr},
-    sync::Arc,
-    time::{Duration, Instant},
-};
-
 struct Window {
     count: u32,
     reset_at: Instant,
@@ -69,6 +69,7 @@ pub async fn rate_limit_middleware(
     request: Request,
     next: Next,
 ) -> Response {
+    // ConnectInfo is set by the server in production; falls back to localhost in tests
     let ip = request
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()

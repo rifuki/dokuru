@@ -1,17 +1,17 @@
 use std::path::PathBuf;
 
 pub fn load() {
-    let pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let workspace_dir = pkg_dir.parent().expect("package dir must be in workspace");
+    let api_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let workspace_dir = api_dir.parent().expect("api dir must be in workspace");
 
-    // Load package-level .env first (default)
-    let pkg_env = pkg_dir.join(".env");
-    if pkg_env.exists() {
-        dotenvy::from_path(&pkg_env).expect("Failed to load .env file in package directory");
-        println!("Loaded: {}", pkg_env.display());
+    // Load api/.env first (default)
+    let api_env = api_dir.join(".env");
+    if api_env.exists() {
+        dotenvy::from_path(&api_env).expect("Failed to load .env file in api directory");
+        println!("Loaded: {}", api_env.display());
     }
 
-    // Override with workspace-level .env if exists
+    // Override with workspace/.env if exists
     let workspace_env = workspace_dir.join(".env");
     if workspace_env.exists() {
         dotenvy::from_path(&workspace_env)

@@ -1,8 +1,9 @@
 use axum::{Extension, Router, middleware::from_fn};
 use std::time::Duration;
+use tower_http::services::ServeDir;
 
 use crate::{
-    feature::{audit, auth, environments, health, tokens, ws},
+    feature::{admin, auth, health, user},
     infrastructure::web::middleware::{RateLimiter, rate_limit_middleware},
     state::AppState,
 };
@@ -29,18 +30,21 @@ pub fn app_routes(state: AppState) -> Router {
         .layer(from_fn(rate_limit_middleware))
         .layer(Extension(auth_limiter));
 
+    // Provide session_blacklist to auth middleware
+    let blacklist = state.session_blacklist.clone();
     let api_routes = Router::new()
         .nest("/auth", auth::auth_routes().merge(auth_sensitive))
-        .nest("/environments", environments::environment_routes())
-        .nest("/tokens", tokens::token_routes())
-        .nest("/audit", audit::audit_routes())
+        .nest("/users", user::user_routes())
+        .nest("/admin", admin::routes::admin_routes())
+        .nest("/admin/api-keys", admin::api_key::api_key_routes())
+        .layer(Extension(blacklist)) // Inject blacklist for auth middleware
         .layer(from_fn(rate_limit_middleware))
         .layer(Extension(global_limiter));
 
     Router::new()
         .nest("/health", health::health_routes())
         .nest("/api/v1", api_routes)
-        .nest("/ws", ws::ws_routes())
+        .nest_service("/media", ServeDir::new("uploads"))
         .fallback(handle_404)
         .with_state(state)
 }

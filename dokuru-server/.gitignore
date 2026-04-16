@@ -1,5 +1,29 @@
-/target/
-/logs/
+# Rust
+target/
+*.pdb
+
+# Uploads (user-generated files, not tracked in git)
+uploads/*
+!uploads/.gitkeep
+
+# Environment
 .env
-.env.*
-!.env.example
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+
+# SQLx offline cache
+.sqlx/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

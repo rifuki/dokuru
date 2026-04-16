@@ -1,9 +1,46 @@
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 
+use axum::middleware::from_fn;
 use tokio::net::TcpListener;
 use tracing::info;
 
-pub async fn create_listener(port: u16) -> eyre::Result<TcpListener> {
+use crate::{
+    infrastructure::web::{
+        cors::build_cors_layer,
+        middleware::{http_trace_middleware, request_id_middleware},
+    },
+    routes::app_routes,
+    state::AppState,
+};
+
+/// Start the server: build app, bind listener, serve with graceful shutdown
+pub async fn serve(state: AppState) -> eyre::Result<()> {
+    let port = state.port();
+    let cors = build_cors_layer(&state.config);
+
+    // Build app — middleware applied bottom-up (last = outermost = runs first):
+    // cors → request_id → http_trace → routes
+    let app = app_routes(state)
+        .layer(from_fn(http_trace_middleware))
+        .layer(from_fn(request_id_middleware))
+        .layer(cors);
+
+    let listener = create_listener(port).await?;
+
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await
+    .map_err(|e| eyre::eyre!("Server error: {}", e))?;
+
+    info!("✅ Server shut down gracefully");
+    Ok(())
+}
+
+/// Attempt dual-stack (IPv6+IPv4), fall back to IPv4-only
+async fn create_listener(port: u16) -> eyre::Result<TcpListener> {
     let addr_v6 = SocketAddr::from((IpAddr::V6(Ipv6Addr::UNSPECIFIED), port));
 
     match TcpListener::bind(addr_v6).await {
@@ -11,7 +48,7 @@ pub async fn create_listener(port: u16) -> eyre::Result<TcpListener> {
             info!(
                 address = %listener.local_addr()?,
                 stack = "dual-stack (IPv4+IPv6)",
-                "Server listening"
+                "🌐 Server listening"
             );
             Ok(listener)
         }
@@ -24,14 +61,14 @@ pub async fn create_listener(port: u16) -> eyre::Result<TcpListener> {
             info!(
                 address = %listener.local_addr()?,
                 stack = "IPv4 only",
-                "Server listening"
+                "🌐 Server listening"
             );
             Ok(listener)
         }
     }
 }
 
-pub async fn shutdown_signal() {
+async fn shutdown_signal() {
     let ctrl_c = async {
         tokio::signal::ctrl_c()
             .await
@@ -53,11 +90,4 @@ pub async fn shutdown_signal() {
         _ = ctrl_c => { tracing::info!("Received Ctrl+C, shutting down..."); },
         _ = terminate => { tracing::info!("Received SIGTERM, shutting down..."); },
     }
-
-    // Force exit if graceful shutdown takes longer than 3 seconds
-    tokio::spawn(async {
-        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-        tracing::warn!("Graceful shutdown timed out, forcing exit");
-        std::process::exit(0);
-    });
 }

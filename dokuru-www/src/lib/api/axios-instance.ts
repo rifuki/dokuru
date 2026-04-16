@@ -1,23 +1,15 @@
-/**
- * Axios Instance Configuration
- * Global axios instance with interceptors for auth and error handling
- * 
- * SECURITY: Access token is stored in MEMORY (Zustand), not localStorage.
- * This prevents XSS attacks from stealing tokens.
- */
-
 import axios from "axios";
-import { http_api_url } from "./api-url";
+import { httpApiUrl } from "./api-config";
 import { API_ENDPOINTS } from "./endpoints";
 import { useAuthStore } from "@/stores/use-auth-store";
 
 const apiClient = axios.create({
-  baseURL: http_api_url,
+  baseURL: httpApiUrl,
   headers: {
     "Content-Type": "application/json",
   },
   timeout: 10000,
-  withCredentials: true, // Required for httpOnly cookies (refresh token)
+  withCredentials: true,
 });
 
 let isRefreshing = false;
@@ -38,10 +30,9 @@ function getAccessToken(): string | null {
 
 function handleLogout() {
   useAuthStore.getState().actions.logout();
-  window.location.href = "/login";
+  window.location.href = "/app/login";
 }
 
-// Response Interceptor
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -53,6 +44,9 @@ apiClient.interceptors.response.use(
         originalRequest.url === API_ENDPOINTS.AUTH.REGISTER ||
         originalRequest.url === API_ENDPOINTS.AUTH.REFRESH
       ) {
+        if (error.response?.data) {
+          return Promise.reject(error.response.data);
+        }
         return Promise.reject(error);
       }
 
@@ -71,7 +65,7 @@ apiClient.interceptors.response.use(
 
       try {
         const response = await axios.post(
-          `${http_api_url}${API_ENDPOINTS.AUTH.REFRESH}`,
+          `${httpApiUrl}${API_ENDPOINTS.AUTH.REFRESH}`,
           {},
           { withCredentials: true }
         );
@@ -101,7 +95,6 @@ apiClient.interceptors.response.use(
   }
 );
 
-// Request Interceptor
 apiClient.interceptors.request.use(
   (config) => {
     if (config.url === API_ENDPOINTS.AUTH.REFRESH) {
@@ -116,5 +109,30 @@ apiClient.interceptors.request.use(
   },
   (error) => Promise.reject(error)
 );
+
+export type ApiErrorDetails = {
+  code: number;
+  message: string;
+  details: string | null;
+};
+
+export type ApiErrorResponse = {
+  success: false;
+  error_code?: string;
+  message: string;
+  details?: string | null;
+  timestamp: number;
+};
+
+export const isApiErrorResponse = (error: unknown): error is ApiErrorResponse => {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "success" in error &&
+    error.success === false &&
+    "message" in error &&
+    typeof (error as ApiErrorResponse).message === "string"
+  );
+};
 
 export default apiClient;

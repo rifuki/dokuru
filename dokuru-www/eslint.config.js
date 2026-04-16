@@ -19,26 +19,5 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
-    rules: {
-      'react-refresh/only-export-components': [
-        'error',
-        { 
-          allowExportNames: ['Route', 'loader', 'action', 'meta'],
-          allowConstantExport: true,
-        },
-      ],
-    },
-  },
-  {
-    files: ['src/components/ui/**/*.{ts,tsx}'],
-    rules: {
-      'react-refresh/only-export-components': 'off',
-    },
-  },
-  {
-    files: ['src/routes/**/*.{ts,tsx}'],
-    rules: {
-      'react-refresh/only-export-components': 'off',
-    },
   },
 ])

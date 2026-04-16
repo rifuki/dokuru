@@ -26,6 +26,7 @@ pub struct UserProfileResponse {
     pub email: String,
     pub username: Option<String>,
     pub name: String,
+    pub avatar_url: Option<String>,
     pub role: String,
 }
 

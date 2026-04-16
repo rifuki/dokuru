@@ -1,56 +1,42 @@
-use axum::middleware::from_fn;
-use dokuru_server::{
-    AppState, app_routes,
-    bootstrap::bootstrap,
-    infrastructure::{
-        Config, env, logging,
-        server::{create_listener, shutdown_signal},
-        web::{cors::build_cors_layer, middleware::http_trace_middleware},
-    },
-};
-use eyre::Result;
-use std::net::SocketAddr;
 use tracing::info;
 use tracing_subscriber::util::SubscriberInitExt;
 
+use dokuru_server::{
+    bootstrap,
+    infrastructure::{config, env, logging, server},
+    state::AppState,
+};
+
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> eyre::Result<()> {
+    // 0. Initialize crypto provider for rustls
+    dokuru_server::init_crypto();
+
+    // 1. Load environment variables
     env::load();
+
+    // 2. Set up error handling
     color_eyre::install()?;
 
-    let config = Config::load()?;
+    // 3. Load configuration (fail-fast validation)
+    let config = config::Config::load()?;
 
-    let (subscriber, _) = logging::setup();
+    // 4. Set up logging
+    let (subscriber, reload_handle) = logging::setup_subscriber();
     subscriber.init();
-    info!(rust_env = %config.rust_env, "Application starting...");
+    info!(
+        port = config.server.port,
+        rust_env = %config.rust_env,
+        "🚀 Application starting..."
+    );
 
-    let port = config.server.port;
-    let state = AppState::new(config.clone()).await?;
+    // 5. Initialize application state
+    let state = AppState::new(config.clone(), reload_handle).await?;
+    info!("✅ Application state initialized");
 
-    info!("Application state initialized");
+    // 6. Bootstrap (create initial admin if needed)
+    bootstrap::bootstrap(&state.db, &config).await?;
 
-    // Run bootstrap
-    bootstrap(&state.db, &config).await?;
-
-    let cors = build_cors_layer(&state.config);
-
-    let app = app_routes(state)
-        .layer(from_fn(http_trace_middleware))
-        .layer(cors);
-
-    let listener = create_listener(port).await?;
-
-    info!(port, "Server listening");
-
-    axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .with_graceful_shutdown(shutdown_signal())
-    .await
-    .map_err(|e| eyre::eyre!("Server error: {}", e))?;
-
-    info!("Server shut down gracefully");
-
-    Ok(())
+    // 7. Start server (dual-stack, graceful shutdown)
+    server::serve(state).await
 }

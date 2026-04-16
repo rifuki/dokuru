@@ -1,6 +1,41 @@
+# Rust build artifacts
 target/
-logs/
-*.pem
-*.key
+Cargo.lock
+
+# Environment files
 .env
 .env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Test files
+tests/
+
+# Uploads (will be mounted as volume)
+uploads/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/

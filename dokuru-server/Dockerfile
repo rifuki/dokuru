@@ -1,43 +1,44 @@
-# Stage 1: Build the Rust binary
-FROM rust:1.88-slim-bookworm AS builder
-
+# =============================================================================
+# Chef — install cargo-chef for dependency layer caching
+# =============================================================================
+FROM rust:1-bookworm AS chef
+RUN cargo install cargo-chef --locked
 WORKDIR /app
 
-# Install build dependencies
+# =============================================================================
+# Planner — generate recipe.json from Cargo manifests
+# =============================================================================
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+# =============================================================================
+# Builder — cook deps (cached layer), then build binary
+# =============================================================================
+FROM chef AS builder
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 
-# Cache dependencies
-COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-RUN cargo build --release
-RUN rm -f target/release/deps/rifuki_backend* src/main.rs
+# Restore deps from cache — only re-runs when Cargo.toml/Cargo.lock changes
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
 
-# Copy the actual source and build
-COPY src ./src
-RUN cargo build --release
+# Build the actual binary
+COPY . .
+RUN cargo build --release --bin api
 
-# Stage 2: Runtime
-FROM debian:bookworm-slim
+# =============================================================================
+# Runtime — minimal image
+# =============================================================================
+FROM debian:bookworm-slim AS runtime
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    libssl3 \
-    curl \
-    gnupg \
-    && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker.gpg \
-    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable" \
-       > /etc/apt/sources.list.d/docker.list \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends docker-ce-cli \
-    && apt-get purge -y --auto-remove gnupg \
+RUN apt-get update \
+    && apt-get install -y ca-certificates libssl3 curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the binary
-COPY --from=builder /app/target/release/rifuki-backend /app/rifuki-backend
+COPY --from=builder /app/target/release/api .
 
-# Default port
-EXPOSE 9393
+EXPOSE 8080
 
-CMD ["/app/rifuki-backend"]
+CMD ["./api"]

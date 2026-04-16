@@ -3,57 +3,73 @@ name = "dokuru-server"
 version = "0.1.0"
 edition = "2024"
 
-[workspace]
-# Empty workspace to prevent being part of parent workspace
-
 [dependencies]
-# Web framework
-axum               = { version = "0.8", features = ["ws", "macros"] }
-axum-extra         = { version = "0.10", features = ["cookie"] }
-tokio              = { version = "1", features = ["full"] }
-tower-http         = { version = "0.6", features = ["cors", "trace"] }
-dashmap            = "6"
-
-# Serialization
-serde              = { version = "1", features = ["derive"] }
-serde_json         = "1"
+axum = { version = "0.8.8", features = ["macros", "multipart"] }
+axum-extra = { version = "0.12.5", features = ["cookie"] }
+bytes = "1.11.1"
+chrono = { version = "0.4.44", features = ["serde"] }
+tower-http = { version = "0.6.8", features = ["cors", "trace", "fs"] }
+dashmap = "6.1.0"
 
 # Async
-futures            = "0.3"
-async-trait        = "0.1"
-
-# Logging
-tracing            = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "serde"] }
-tracing-appender   = "0.2"
+async-trait = "0.1.89"
+tokio = { version = "1.49.0", features = [
+  "macros",
+  "rt-multi-thread",
+  "signal",
+  "time",
+] }
 
 # Error handling
-eyre               = "0.6"
-color-eyre         = "0.6"
-thiserror          = "1.0"
+color-eyre = "0.6.5"
+dotenvy = "0.15.7"
+eyre = "0.6.12"
+thiserror = "2.0.18"
 
-# Config
-dotenvy            = "0.15"
-
-# Database
-sqlx               = { version = "0.8", features = ["postgres", "runtime-tokio-rustls", "chrono", "uuid", "migrate"] }
-uuid               = { version = "1", features = ["v4", "serde"] }
-chrono             = { version = "0.4", features = ["serde"] }
-
-# Auth & Crypto
-jsonwebtoken       = "9"
-argon2             = "0.5"
-sha2               = "0.10"
-rand               = "0.8"
-md5                = "0.7"
-hex                = "0.4"
+# Serialization
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
 
 # Validation
-validator          = { version = "0.20", features = ["derive"] }
+validator = { version = "0.20.0", features = ["derive"] }
+
+# Logging
+tracing = "0.1.44"
+tracing-appender = "0.2.4"
+tracing-subscriber = { version = "0.3.22", features = ["serde", "env-filter"] }
+
+# Database
+sqlx = { version = "0.8.6", features = [
+  "postgres",
+  "runtime-tokio-rustls",
+  "chrono",
+  "uuid",
+  "migrate",
+] }
+uuid = { version = "1.21.0", features = ["v4", "serde"] }
 
 # Cookie
-time               = "0.3"
-constant_time_eq   = "0.3"
+time = "0.3.47"
+constant_time_eq = "0.4.2"
+
+# Crypto
+md5 = "0.8.0"
+rand = "0.8.5"
+
+# Auth
+jsonwebtoken = "9"
+argon2 = "0.5.3"
+rustls = { version = "0.23", features = ["ring", "std"] }
+
+# Redis
+bb8-redis = "0.26"
+redis = { version = "1.0.4", features = ["tokio-comp"] }
+
+[dev-dependencies]
+tower = { version = "0.5.3", features = ["util"] }
+http-body-util = "0.1.3"
+testcontainers = "0.27.1"
+testcontainers-modules = { version = "0.15.0", features = ["postgres"] }
 
 [profile.release]
 opt-level = 3
@@ -61,3 +77,8 @@ lto = true
 strip = true
 panic = "abort"
 codegen-units = 1
+
+[profile.release-debug]
+inherits = "release"
+strip = false
+debug = true

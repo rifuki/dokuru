@@ -1,0 +1,24 @@
+# Caddy config — two deployment scenarios:
+#
+# SCENARIO A: Caddy via --profile caddy (in same Docker network as API)
+#   reverse_proxy target: dokuru-api:8080  (service name on dokuru_net)
+#
+# SCENARIO B: Caddy on bare metal host
+#   reverse_proxy target: localhost:8080
+#
+# SCENARIO C: External Caddy container (separate docker-compose)
+#   Connect Caddy container to dokuru_net:
+#     docker network connect dokuru_net <your-caddy-container>
+#   reverse_proxy target: dokuru-api:8080
+
+api.dokuru.rifuki.dev {
+    reverse_proxy dokuru-api:8080
+
+    encode gzip zstd
+
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        -Server
+    }
+}

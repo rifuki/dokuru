@@ -2,7 +2,7 @@
 //! Auto-creates admin user if no admin exists
 
 use crate::{
-    feature::{auth::service::AuthService, user::CreateUser},
+    feature::auth::service::AuthService,
     infrastructure::{config::Config, persistence::Database},
 };
 use std::sync::Arc;
@@ -35,11 +35,11 @@ pub async fn bootstrap(db: &Database, config: &Config) -> eyre::Result<()> {
     let admin_email =
         std::env::var("BOOTSTRAP_ADMIN_EMAIL").unwrap_or_else(|_| "admin@dokuru.dev".to_string());
 
-    let admin_password =
-        std::env::var("BOOTSTRAP_ADMIN_PASSWORD").unwrap_or_else(|_| generate_secure_password());
-
     let admin_username =
         std::env::var("BOOTSTRAP_ADMIN_USERNAME").unwrap_or_else(|_| "admin".to_string());
+
+    let admin_password =
+        std::env::var("BOOTSTRAP_ADMIN_PASSWORD").unwrap_or_else(|_| generate_secure_password());
 
     let admin_name =
         std::env::var("BOOTSTRAP_ADMIN_NAME").unwrap_or_else(|_| "Administrator".to_string());
@@ -49,18 +49,34 @@ pub async fn bootstrap(db: &Database, config: &Config) -> eyre::Result<()> {
     // Create admin via auth service
     let user_repo: Arc<dyn crate::feature::user::repository::UserRepository> =
         Arc::new(crate::feature::user::repository::UserRepositoryImpl::new());
+    let user_profile_repo: Arc<dyn crate::feature::user::UserProfileRepository> =
+        Arc::new(crate::feature::user::UserProfileRepositoryImpl::new());
+    let auth_method_repo = Arc::new(crate::feature::auth::auth_method::AuthMethodRepositoryImpl::new());
+    let session_repo = Arc::new(crate::feature::auth::session::SessionRepositoryImpl::new());
 
-    let auth_service =
-        AuthService::new(db.clone(), Arc::clone(&user_repo), Arc::new(config.clone()));
+    let auth_method_service = crate::feature::auth::auth_method::AuthMethodService::new(db.clone(), auth_method_repo);
+    let session_service = crate::feature::auth::session::SessionService::new(db.clone(), session_repo);
 
-    let create_user = CreateUser {
-        email: admin_email.clone(),
-        username: Some(admin_username.clone()),
-        name: admin_name,
-        password: admin_password.clone(),
-    };
+    let auth_service = AuthService::new(
+        db.clone(),
+        Arc::clone(&user_repo),
+        Arc::clone(&user_profile_repo),
+        auth_method_service,
+        Arc::new(config.clone()),
+        None, // No Redis session blacklist during bootstrap
+        session_service,
+    );
 
-    match auth_service.register(create_user).await {
+    match auth_service
+        .register(
+            &admin_email,
+            Some(&admin_username),
+            &admin_password,
+            Some(&admin_name),
+            None, // No device info during bootstrap
+        )
+        .await
+    {
         Ok((auth_response, _)) => {
             // Promote to admin by updating role directly in DB
             sqlx::query("UPDATE users SET role = 'admin' WHERE id = $1")
@@ -70,13 +86,13 @@ pub async fn bootstrap(db: &Database, config: &Config) -> eyre::Result<()> {
 
             tracing::info!("✅ Bootstrap admin created successfully!");
             tracing::info!("");
-            tracing::info!("╔════════════════════════════════════════════════════════════╗");
-            tracing::info!("║  🎉 ADMIN USER CREATED                                     ║");
-            tracing::info!("╠════════════════════════════════════════════════════════════╣");
-            tracing::info!("║  Email:    {:<46} ║", admin_email);
-            tracing::info!("║  Username: {:<46} ║", admin_username);
-            tracing::info!("║  Password: {:<46} ║", admin_password);
-            tracing::info!("╚════════════════════════════════════════════════════════════╝");
+            tracing::info!("┌────────────────────────────────────────────────────────────┐");
+            tracing::info!("│  ADMIN USER CREATED                                        │");
+            tracing::info!("├────────────────────────────────────────────────────────────┤");
+            tracing::info!("│  Email:    {:<47}│", admin_email);
+            tracing::info!("│  Username: {:<47}│", admin_username);
+            tracing::info!("│  Password: {:<47}│", admin_password);
+            tracing::info!("└────────────────────────────────────────────────────────────┘");
             tracing::info!("");
             tracing::warn!("⚠️  IMPORTANT: Change admin password after first login!");
             tracing::info!("");

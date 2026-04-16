@@ -1,19 +1,16 @@
-/**
- * Auth Types
- */
+export interface TokenResponse {
+  access_token: string;
+  expires_in: number;
+}
 
 export interface User {
   id: string;
-  username: string;
   email: string;
-  roles: string[];
-  created_at: string;
-}
-
-export interface TokenResponse {
-  access_token: string;
-  token_type: string;
-  expires_in: number;
+  username?: string;
+  name: string;
+  role: "user" | "admin";
+  created_at?: string;
+  avatar_url?: string;
 }
 
 export interface AuthResponse {
@@ -27,7 +24,17 @@ export interface LoginCredentials {
 }
 
 export interface RegisterCredentials {
-  username: string;
   email: string;
+  username?: string;
+  name?: string;
   password: string;
+}
+
+export interface AuthContextType {
+  user: User | null;
+  isLoading: boolean;
+  isAuthenticated: boolean;
+  login: (credentials: LoginCredentials) => Promise<void>;
+  register: (credentials: RegisterCredentials) => Promise<void>;
+  logout: () => void;
 }

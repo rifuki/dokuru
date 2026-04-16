@@ -27,7 +27,7 @@ pub fn auth_routes() -> Router<AppState> {
             get(handlers::list_sessions).delete(handlers::logout_all_sessions),
         )
         .route("/sessions/{id}", delete(handlers::revoke_session))
-        .route_layer(middleware::from_fn(auth_middleware));
+        .layer(middleware::from_fn(auth_middleware));
 
     public.merge(protected)
 }
