@@ -3,7 +3,7 @@ import { useAuthUser } from "@/stores/use-auth-store";
 import { useAgentStore } from "@/stores/use-agent-store";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus, RefreshCw, Container, Image, HardDrive, Network, Search, ChevronDown, ArrowUpDown } from "lucide-react";
+import { Plus, RefreshCw, Container, Image, HardDrive, Network, Search, ChevronDown, ArrowUpDown, Edit, Trash2 } from "lucide-react";
 import { AddAgentModal } from "@/components/agents/AddAgentModal";
 import { agentDirectApi, type DockerInfo } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
@@ -20,70 +20,117 @@ type AgentWithInfo = {
 
 function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void }) {
     const { agent, info, loading } = data;
+    const { deleteAgent } = useAgentStore();
     const isOnline = agent.status === "online";
 
-    return (
-        <div
-            className="hover:bg-white/[0.02] transition-all cursor-pointer"
-            onClick={onClick}
-        >
-            <div className="p-4 flex items-center gap-6">
-                <div className="w-14 flex items-center justify-center shrink-0">
-                    <img src="/docker.svg" alt="Docker" className="w-14 h-14" />
-                </div>
+    const handleDelete = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!confirm(`Delete agent "${agent.name}"?`)) return;
+        await deleteAgent(agent.id);
+    };
 
-                <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 flex-wrap">
-                        <span className="text-base font-bold text-white tracking-tight">{agent.name}</span>
-                        <span
-                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-[11px] font-semibold uppercase ${
-                                isOnline
-                                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-                                    : "border-gray-500/30 bg-gray-500/10 text-gray-400"
-                            }`}
-                        >
-                            {isOnline ? "●" : "○"} {isOnline ? "UP" : "DOWN"}
-                        </span>
-                        {info && (
-                            <span className="text-[12px] text-slate-300 font-mono font-medium">
-                                Docker {info.docker_version}
-                            </span>
-                        )}
-                        <span className="text-[12px] text-slate-400 font-mono">{agent.url}</span>
+    return (
+        <div className="flex transition-all">
+            <div
+                className="flex-1 hover:bg-white/[0.02] transition-colors cursor-pointer"
+                onClick={onClick}
+            >
+                <div className="p-4 flex items-center gap-6">
+                    <div className="w-14 flex items-center justify-center shrink-0">
+                        <img src="/docker.svg" alt="Docker" className="w-14 h-14" />
                     </div>
 
-                    {loading ? (
-                        <div className="flex items-center gap-2 mt-3">
-                            <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-[#3BA5EF]" />
-                            <span className="text-[12px] text-slate-400">Loading...</span>
-                        </div>
-                    ) : info ? (
-                        <div className="flex items-center mt-3 text-[12px] font-medium text-slate-300 flex-wrap divide-x divide-white/[0.08]">
-                            <div className="flex items-center gap-1.5 pr-3">
-                                <Container className="w-3.5 h-3.5" />
-                                <span>{info.containers.total} containers</span>
-                                <span className="inline-flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded px-1.5 py-0.5 text-[11px] font-semibold ml-2">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                                    {info.containers.running}
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 flex-wrap">
+                            <span className="text-base font-bold text-white tracking-tight">{agent.name}</span>
+                            <span
+                                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-[11px] font-semibold uppercase ${
+                                    isOnline
+                                        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                                        : "border-gray-500/30 bg-gray-500/10 text-gray-400"
+                                }`}
+                            >
+                                {isOnline ? "●" : "○"} {isOnline ? "UP" : "DOWN"}
+                            </span>
+                            {info && (
+                                <span className="text-[12px] text-slate-300 font-mono font-medium">
+                                    Docker {info.docker_version}
                                 </span>
-                            </div>
-                            <div className="flex items-center gap-1.5 px-3">
-                                <Image className="w-3.5 h-3.5" />
-                                <span>{info.images} images</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 px-3">
-                                <HardDrive className="w-3.5 h-3.5" />
-                                <span>{info.volumes} volumes</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 pl-3">
-                                <Network className="w-3.5 h-3.5" />
-                                <span>{info.networks} networks</span>
-                            </div>
+                            )}
+                            <span className="text-[12px] text-slate-400 font-mono">{agent.url}</span>
                         </div>
-                    ) : (
-                        <p className="text-[12px] text-slate-500 mt-3">Unable to connect</p>
-                    )}
+
+                        {loading ? (
+                            <div className="flex items-center gap-2 mt-3">
+                                <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-[#3BA5EF]" />
+                                <span className="text-[12px] text-slate-400">Loading...</span>
+                            </div>
+                        ) : info ? (
+                            <div className="flex items-center mt-3 text-[12px] font-medium text-slate-300 flex-wrap divide-x divide-white/[0.08]">
+                                <div className="flex items-center gap-1.5 pr-3">
+                                    <Container className="w-3.5 h-3.5" />
+                                    <span>{info.containers.total} containers</span>
+                                    <span className="ml-2 inline-flex items-center gap-1.5">
+                                        <span className="inline-flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded px-1.5 py-0.5 text-[11px] font-semibold">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                            {info.containers.running}
+                                        </span>
+                                        <span className="inline-flex items-center gap-1 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded px-1.5 py-0.5 text-[11px] font-semibold">
+                                            <span className="w-1.5 h-1.5 rounded bg-rose-400"></span>
+                                            {info.containers.stopped}
+                                        </span>
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-1.5 px-3">
+                                    <Image className="w-3.5 h-3.5" />
+                                    <span>{info.images} images</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 px-3">
+                                    <HardDrive className="w-3.5 h-3.5" />
+                                    <span>{info.volumes} volumes</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 pl-3">
+                                    <Network className="w-3.5 h-3.5" />
+                                    <span>{info.networks} networks</span>
+                                </div>
+                            </div>
+                        ) : (
+                            <p className="text-[12px] text-slate-500 mt-3">Unable to connect</p>
+                        )}
+                    </div>
                 </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="w-[180px] border-l border-white/5 flex flex-col justify-center gap-2 px-4 py-3 bg-black/10">
+                <button
+                    className={`flex items-center justify-center gap-2 h-9 w-full rounded text-sm font-semibold transition-all cursor-pointer ${
+                        isOnline
+                            ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 ring-1 ring-emerald-500/20"
+                            : "bg-[#1E4A8A]/40 border border-[#3BA5EF]/20 text-[#3BA5EF] hover:bg-[#1E4A8A]/60"
+                    }`}
+                    onClick={onClick}
+                >
+                    <span className={`w-2 h-2 rounded-full ${isOnline ? "bg-emerald-400 animate-pulse" : "bg-[#3BA5EF]"}`}></span>
+                    {isOnline ? "Connected" : "Connect"}
+                </button>
+            </div>
+
+            <div className="w-12 border-l border-white/5 flex flex-col items-center justify-start py-4 bg-black/10">
+                <button
+                    className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white rounded hover:bg-white/5 transition-colors group cursor-pointer"
+                    title="Edit agent"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <Edit className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                </button>
+                <button
+                    onClick={handleDelete}
+                    className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-rose-400 rounded hover:bg-white/5 transition-colors group cursor-pointer"
+                    title="Delete agent"
+                >
+                    <Trash2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                </button>
             </div>
         </div>
     );

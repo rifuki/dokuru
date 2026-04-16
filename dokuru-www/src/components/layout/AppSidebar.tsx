@@ -117,6 +117,7 @@ export function AppSidebar() {
                   asChild
                   isActive={isActive(isAdmin ? "/admin" : "/")}
                   tooltip="Overview"
+                  className="text-base"
                 >
                   <Link to={isAdmin ? "/admin" : "/"}>
                     <LayoutDashboard className="size-4" />
@@ -143,6 +144,7 @@ export function AppSidebar() {
                       asChild
                       isActive={isActive(item.href)}
                       tooltip={item.title}
+                      className="text-base"
                     >
                       <Link to={item.href}>
                         <item.icon className="size-4" />
@@ -207,10 +209,10 @@ export function AppSidebar() {
                             <Link
                               key={item.href}
                               to={item.href}
-                              className={`flex items-center gap-3 px-3 py-2 mx-1.5 rounded-md text-[13px] transition-colors ${
+                              className={`flex items-center gap-3 px-3 py-2 mx-1.5 rounded-md text-sm transition-colors ${
                                 active
                                   ? "bg-sidebar-primary/15 text-sidebar-primary font-medium"
-                                  : "text-sidebar-foreground/65 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
                               }`}
                             >
                               <item.icon className="size-4 shrink-0" />
@@ -238,7 +240,7 @@ export function AppSidebar() {
                 { title: "Sessions", href: "/settings/sessions", icon: MonitorSmartphone },
               ].map((item) => (
                 <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={isActive(item.href)} tooltip={item.title}>
+                  <SidebarMenuButton asChild isActive={isActive(item.href)} tooltip={item.title} className="text-base">
                     <Link to={item.href}>
                       <item.icon className="size-4" />
                       <span>{item.title}</span>
