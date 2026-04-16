@@ -104,14 +104,14 @@
   --popover-foreground: oklch(0.985 0 0);
   --primary: oklch(0.65 0.15 240);
   /* docker blue */
-  --primary-foreground: oklch(0.145 0 0);
+  --primary-foreground: oklch(1 0 0);
   --secondary: oklch(0.45 0.1 190);
   /* dark teal */
   --secondary-foreground: oklch(0.85 0.08 190);
   --muted: oklch(0.269 0 0);
   --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.45 0.1 190);
-  --accent-foreground: oklch(0.85 0.08 190);
+  --accent: oklch(0.3 0.06 240);
+  --accent-foreground: oklch(0.85 0.08 240);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
