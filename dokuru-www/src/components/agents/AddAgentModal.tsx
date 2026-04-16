@@ -29,13 +29,15 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!name.trim() || !host.trim() || !port.trim() || !token.trim()) {
-            toast.error("All fields are required");
+        if (!name.trim() || !host.trim() || !token.trim()) {
+            toast.error("Name, host, and token are required");
             return;
         }
 
-        // Auto-generate URL: http://host:port
-        const url = `http://${host.trim()}:${port.trim()}`;
+        // Auto-generate URL: http://host:port or http://host (if no port)
+        const url = port.trim() 
+            ? `http://${host.trim()}:${port.trim()}` 
+            : `http://${host.trim()}`;
 
         try {
             await createAgent({ name: name.trim(), url, token: token.trim() });
@@ -99,7 +101,7 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                         </div>
                     </div>
                     <p className="text-xs text-muted-foreground -mt-2">
-                        Agent will be accessible at: {host || "host"}:{port}
+                        Agent will be accessible at: {host || "host"}{port ? `:${port}` : ""}
                     </p>
 
                     <div className="space-y-2">
