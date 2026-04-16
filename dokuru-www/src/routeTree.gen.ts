@@ -30,6 +30,7 @@ import { Route as AuthenticatedAgentsIdNetworksRouteImport } from './routes/_aut
 import { Route as AuthenticatedAgentsIdImagesRouteImport } from './routes/_authenticated/agents.$id.images'
 import { Route as AuthenticatedAgentsIdEventsRouteImport } from './routes/_authenticated/agents.$id.events'
 import { Route as AuthenticatedAgentsIdContainersRouteImport } from './routes/_authenticated/agents.$id.containers'
+import { Route as AuthenticatedAgentsIdAuditsRouteImport } from './routes/_authenticated/agents.$id.audits'
 import { Route as AuthenticatedAgentsIdAuditRouteImport } from './routes/_authenticated/agents.$id.audit'
 
 const SettingsRoute = SettingsRouteImport.update({
@@ -144,6 +145,12 @@ const AuthenticatedAgentsIdContainersRoute =
     path: '/containers',
     getParentRoute: () => AuthenticatedAgentsIdRoute,
   } as any)
+const AuthenticatedAgentsIdAuditsRoute =
+  AuthenticatedAgentsIdAuditsRouteImport.update({
+    id: '/audits',
+    path: '/audits',
+    getParentRoute: () => AuthenticatedAgentsIdRoute,
+  } as any)
 const AuthenticatedAgentsIdAuditRoute =
   AuthenticatedAgentsIdAuditRouteImport.update({
     id: '/audit',
@@ -167,6 +174,7 @@ export interface FileRoutesByFullPath {
   '/admin/': typeof AuthenticatedAdminIndexRoute
   '/agents/': typeof AuthenticatedAgentsIndexRoute
   '/agents/$id/audit': typeof AuthenticatedAgentsIdAuditRoute
+  '/agents/$id/audits': typeof AuthenticatedAgentsIdAuditsRoute
   '/agents/$id/containers': typeof AuthenticatedAgentsIdContainersRoute
   '/agents/$id/events': typeof AuthenticatedAgentsIdEventsRoute
   '/agents/$id/images': typeof AuthenticatedAgentsIdImagesRoute
@@ -187,6 +195,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/agents': typeof AuthenticatedAgentsIndexRoute
   '/agents/$id/audit': typeof AuthenticatedAgentsIdAuditRoute
+  '/agents/$id/audits': typeof AuthenticatedAgentsIdAuditsRoute
   '/agents/$id/containers': typeof AuthenticatedAgentsIdContainersRoute
   '/agents/$id/events': typeof AuthenticatedAgentsIdEventsRoute
   '/agents/$id/images': typeof AuthenticatedAgentsIdImagesRoute
@@ -212,6 +221,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/agents/': typeof AuthenticatedAgentsIndexRoute
   '/_authenticated/agents/$id/audit': typeof AuthenticatedAgentsIdAuditRoute
+  '/_authenticated/agents/$id/audits': typeof AuthenticatedAgentsIdAuditsRoute
   '/_authenticated/agents/$id/containers': typeof AuthenticatedAgentsIdContainersRoute
   '/_authenticated/agents/$id/events': typeof AuthenticatedAgentsIdEventsRoute
   '/_authenticated/agents/$id/images': typeof AuthenticatedAgentsIdImagesRoute
@@ -237,6 +247,7 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/agents/'
     | '/agents/$id/audit'
+    | '/agents/$id/audits'
     | '/agents/$id/containers'
     | '/agents/$id/events'
     | '/agents/$id/images'
@@ -257,6 +268,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/agents'
     | '/agents/$id/audit'
+    | '/agents/$id/audits'
     | '/agents/$id/containers'
     | '/agents/$id/events'
     | '/agents/$id/images'
@@ -281,6 +293,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/'
     | '/_authenticated/agents/'
     | '/_authenticated/agents/$id/audit'
+    | '/_authenticated/agents/$id/audits'
     | '/_authenticated/agents/$id/containers'
     | '/_authenticated/agents/$id/events'
     | '/_authenticated/agents/$id/images'
@@ -445,6 +458,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAgentsIdContainersRouteImport
       parentRoute: typeof AuthenticatedAgentsIdRoute
     }
+    '/_authenticated/agents/$id/audits': {
+      id: '/_authenticated/agents/$id/audits'
+      path: '/audits'
+      fullPath: '/agents/$id/audits'
+      preLoaderRoute: typeof AuthenticatedAgentsIdAuditsRouteImport
+      parentRoute: typeof AuthenticatedAgentsIdRoute
+    }
     '/_authenticated/agents/$id/audit': {
       id: '/_authenticated/agents/$id/audit'
       path: '/audit'
@@ -472,6 +492,7 @@ const AuthenticatedAdminRouteWithChildren =
 
 interface AuthenticatedAgentsIdRouteChildren {
   AuthenticatedAgentsIdAuditRoute: typeof AuthenticatedAgentsIdAuditRoute
+  AuthenticatedAgentsIdAuditsRoute: typeof AuthenticatedAgentsIdAuditsRoute
   AuthenticatedAgentsIdContainersRoute: typeof AuthenticatedAgentsIdContainersRoute
   AuthenticatedAgentsIdEventsRoute: typeof AuthenticatedAgentsIdEventsRoute
   AuthenticatedAgentsIdImagesRoute: typeof AuthenticatedAgentsIdImagesRoute
@@ -482,6 +503,7 @@ interface AuthenticatedAgentsIdRouteChildren {
 
 const AuthenticatedAgentsIdRouteChildren: AuthenticatedAgentsIdRouteChildren = {
   AuthenticatedAgentsIdAuditRoute: AuthenticatedAgentsIdAuditRoute,
+  AuthenticatedAgentsIdAuditsRoute: AuthenticatedAgentsIdAuditsRoute,
   AuthenticatedAgentsIdContainersRoute: AuthenticatedAgentsIdContainersRoute,
   AuthenticatedAgentsIdEventsRoute: AuthenticatedAgentsIdEventsRoute,
   AuthenticatedAgentsIdImagesRoute: AuthenticatedAgentsIdImagesRoute,
