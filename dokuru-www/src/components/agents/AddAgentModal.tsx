@@ -89,17 +89,17 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                             <Label htmlFor="port">Port</Label>
                             <Input
                                 id="port"
-                                type="number"
+                                type="text"
                                 placeholder="3939"
                                 value={port}
-                                onChange={(e) => setPort(e.target.value)}
+                                onChange={(e) => setPort(e.target.value.replace(/\D/g, ''))}
                                 disabled={isLoading}
                                 autoComplete="off"
                             />
                         </div>
                     </div>
                     <p className="text-xs text-muted-foreground -mt-2">
-                        Agent URL will be: http://{host || "host"}:{port}
+                        Agent will be accessible at: {host || "host"}:{port}
                     </p>
 
                     <div className="space-y-2">
