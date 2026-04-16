@@ -1,80 +1,67 @@
-import { useEffect } from "react";
-import { Outlet, Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { X } from "lucide-react";
-import { useAuthUser } from "@/stores/use-auth-store";
+import { Outlet, Link, useLocation } from "@tanstack/react-router";
+import { User, Shield, MonitorSmartphone } from "lucide-react";
 
 const settingsNavigation = [
-    { name: "My Account", href: "/settings/profile" },
-    { name: "Security", href: "/settings/security" },
-    { name: "Devices", href: "/settings/sessions" },
+    { name: "Profile", href: "/settings/profile", icon: User, description: "Manage your account" },
+    { name: "Security", href: "/settings/security", icon: Shield, description: "Password & authentication" },
+    { name: "Sessions", href: "/settings/sessions", icon: MonitorSmartphone, description: "Active devices" },
 ];
 
 export function SettingsLayout() {
     const location = useLocation();
-    const navigate = useNavigate();
-    const user = useAuthUser();
-
-    // Handle ESC key to exit settings
-    useEffect(() => {
-        const handleEsc = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                navigate({ to: user?.role === 'admin' ? '/admin' : '/' });
-            }
-        };
-        window.addEventListener('keydown', handleEsc);
-        return () => window.removeEventListener('keydown', handleEsc);
-    }, [navigate, user?.role]);
 
     return (
-        <div className="flex h-screen w-full bg-background overflow-hidden relative">
-            {/* Sidebar Area */}
-            <aside className="flex w-[230px] md:w-[280px] lg:w-[30%] lg:min-w-[280px] lg:max-w-[340px] justify-end bg-muted/30 pb-10 border-r border-border/50">
-                <nav className="w-full max-w-[240px] px-2 md:px-4 pt-16 flex flex-col gap-0.5">
-                    <div className="px-3 pb-2 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">
-                        User Settings
-                    </div>
-                    {settingsNavigation.map((item) => {
-                        const isActive = location.pathname.startsWith(item.href);
-                        return (
-                            <Link
-                                key={item.href}
-                                to={item.href}
-                                className={`
-                                        flex items-center gap-3 rounded-md px-3 py-1.5 text-[15px] font-medium transition-colors
-                                        ${isActive
-                                        ? "bg-secondary/70 text-foreground"
-                                        : "text-muted-foreground hover:bg-secondary/40 hover:text-foreground"
-                                    }
-                                    `}
-                            >
-                                {item.name}
-                            </Link>
-                        );
-                    })}
-                </nav>
-            </aside>
-
-            {/* Main Content Area */}
-            <main className="flex-1 overflow-y-auto relative pb-20">
-                <div className="px-10 md:px-14 pt-16 max-w-[740px]">
-                    <Outlet />
+        <div className="max-w-7xl mx-auto w-full">
+            <div className="space-y-6">
+                {/* Header */}
+                <div className="border-b pb-6">
+                    <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+                    <p className="text-muted-foreground mt-2">
+                        Manage your account settings and preferences
+                    </p>
                 </div>
 
-                {/* Close Button */}
-                <div className="fixed top-14 right-8 lg:right-16 hidden sm:block z-50">
-                    <button
-                        type="button"
-                        aria-label="Close settings"
-                        onClick={() => navigate({ to: user?.role === 'admin' ? '/admin' : '/' })}
-                        className="group flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-muted-foreground/40 group-hover:bg-muted/50 transition-colors">
-                            <X className="h-4 w-4" />
-                        </div>
-                        <span className="text-[12px] font-bold">ESC</span>
-                    </button>
+                {/* Content Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                    {/* Sidebar Navigation */}
+                    <aside className="lg:col-span-1">
+                        <nav className="space-y-1 sticky top-6">
+                            {settingsNavigation.map((item) => {
+                                const isActive = location.pathname === item.href;
+                                const Icon = item.icon;
+                                return (
+                                    <Link
+                                        key={item.href}
+                                        to={item.href}
+                                        className={`
+                                            flex items-start gap-3 rounded-lg px-3 py-2.5 transition-all
+                                            ${isActive
+                                                ? "bg-miku-primary/10 text-miku-primary border border-miku-primary/20"
+                                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                                            }
+                                        `}
+                                    >
+                                        <Icon className={`h-5 w-5 mt-0.5 flex-shrink-0 ${isActive ? "text-miku-primary" : ""}`} />
+                                        <div className="flex-1 min-w-0">
+                                            <div className={`text-sm font-medium ${isActive ? "text-miku-primary" : ""}`}>
+                                                {item.name}
+                                            </div>
+                                            <div className="text-xs text-muted-foreground mt-0.5">
+                                                {item.description}
+                                            </div>
+                                        </div>
+                                    </Link>
+                                );
+                            })}
+                        </nav>
+                    </aside>
+
+                    {/* Main Content */}
+                    <main className="lg:col-span-3">
+                        <Outlet />
+                    </main>
                 </div>
-            </main>
+            </div>
         </div>
     );
 }
