@@ -31,7 +31,7 @@ function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void
     return (
         <div className="flex transition-all">
             <div
-                className="flex-1 hover:bg-white/[0.02] transition-colors cursor-pointer"
+                className="flex-1 hover:bg-muted/50 transition-colors cursor-pointer"
                 onClick={onClick}
             >
                 <div className="p-4 flex items-center gap-6">
@@ -41,7 +41,7 @@ function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void
 
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 flex-wrap">
-                            <span className="text-base font-bold text-white tracking-tight">{agent.name}</span>
+                            <span className="text-base font-bold text-foreground tracking-tight">{agent.name}</span>
                             <span
                                 className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-[11px] font-semibold uppercase ${
                                     isOnline
@@ -52,20 +52,20 @@ function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void
                                 {isOnline ? "●" : "○"} {isOnline ? "UP" : "DOWN"}
                             </span>
                             {info && (
-                                <span className="text-[12px] text-slate-300 font-mono font-medium">
+                                <span className="text-[12px] text-muted-foreground font-mono font-medium">
                                     Docker {info.docker_version}
                                 </span>
                             )}
-                            <span className="text-[12px] text-slate-400 font-mono">{agent.url}</span>
+                            <span className="text-[12px] text-muted-foreground/70 font-mono">{agent.url}</span>
                         </div>
 
                         {loading ? (
                             <div className="flex items-center gap-2 mt-3">
                                 <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-miku-primary" />
-                                <span className="text-[12px] text-slate-400">Loading...</span>
+                                <span className="text-[12px] text-muted-foreground/70">Loading...</span>
                             </div>
                         ) : info ? (
-                            <div className="flex items-center mt-3 text-[12px] font-medium text-slate-300 flex-wrap divide-x divide-white/[0.08]">
+                            <div className="flex items-center mt-3 text-[12px] font-medium text-muted-foreground flex-wrap divide-x divide-border">
                                 <div className="flex items-center gap-1.5 pr-3">
                                     <Container className="w-3.5 h-3.5" />
                                     <span>{info.containers.total} containers</span>
@@ -98,13 +98,13 @@ function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void
                                 </div>
                             </div>
                         ) : (
-                            <p className="text-[12px] text-slate-500 mt-3">Unable to connect</p>
+                            <p className="text-[12px] text-muted-foreground/50 mt-3">Unable to connect</p>
                         )}
                     </div>
                 </div>
             </div>
 
-            <div className="w-[180px] border-l border-white/5 flex flex-col justify-center gap-2 px-4 py-3 bg-black/10">
+            <div className="w-[180px] border-l border-border flex flex-col justify-center gap-2 px-4 py-3 bg-black/10">
                 <button
                     className={`flex items-center justify-center gap-2 h-9 w-full rounded text-sm font-semibold transition-all cursor-pointer ${
                         isOnline
@@ -118,9 +118,9 @@ function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void
                 </button>
             </div>
 
-            <div className="w-12 border-l border-white/5 flex flex-col items-center justify-start py-4 bg-black/10">
+            <div className="w-12 border-l border-border flex flex-col items-center justify-start py-4 bg-black/10">
                 <button
-                    className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white rounded hover:bg-white/5 transition-colors group cursor-pointer"
+                    className="w-8 h-8 flex items-center justify-center text-muted-foreground/70 hover:text-foreground rounded hover:bg-muted/50 transition-colors group cursor-pointer"
                     title="Edit agent"
                     onClick={(e) => e.stopPropagation()}
                 >
@@ -128,7 +128,7 @@ function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void
                 </button>
                 <button
                     onClick={handleDelete}
-                    className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-rose-400 rounded hover:bg-white/5 transition-colors group cursor-pointer"
+                    className="w-8 h-8 flex items-center justify-center text-muted-foreground/70 hover:text-rose-400 rounded hover:bg-muted/50 transition-colors group cursor-pointer"
                     title="Delete agent"
                 >
                     <Trash2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
@@ -234,18 +234,18 @@ function AgentsList() {
                     </Button>
                 </div>
             ) : (
-                <div className="bg-card border border-white/5 rounded-md overflow-hidden">
-                    <div className="p-4 border-b border-white/5">
+                <div className="bg-card border border-border rounded-md overflow-hidden">
+                    <div className="p-4 border-b border-border">
                         <div className="flex items-center gap-3 flex-wrap">
-                            <button className="px-3 py-1.5 bg-muted/50 border border-white/10 rounded text-sm text-slate-300 hover:bg-white/[0.02] flex items-center gap-2">
+                            <button className="px-3 py-1.5 bg-muted/50 border border-border rounded text-sm text-muted-foreground hover:bg-muted/50 flex items-center gap-2">
                                 Connection
                                 <ChevronDown className="w-4 h-4" />
                             </button>
-                            <button className="px-3 py-1.5 bg-muted/50 border border-white/10 rounded text-sm text-slate-300 hover:bg-white/[0.02] flex items-center gap-2">
+                            <button className="px-3 py-1.5 bg-muted/50 border border-border rounded text-sm text-muted-foreground hover:bg-muted/50 flex items-center gap-2">
                                 Status
                                 <ChevronDown className="w-4 h-4" />
                             </button>
-                            <button className="px-3 py-1.5 bg-muted/50 border border-white/10 rounded text-sm text-slate-300 hover:bg-white/[0.02] flex items-center gap-2">
+                            <button className="px-3 py-1.5 bg-muted/50 border border-border rounded text-sm text-muted-foreground hover:bg-muted/50 flex items-center gap-2">
                                 Agent Version
                                 <ChevronDown className="w-4 h-4" />
                             </button>
@@ -253,20 +253,20 @@ function AgentsList() {
                                 Clear all
                             </button>
                             <div className="flex-1 min-w-[300px] relative">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
                                 <input
                                     type="text"
                                     placeholder="Search by name, status, URL..."
-                                    className="w-full pl-10 pr-4 py-1.5 bg-muted/50 border border-white/10 rounded text-sm text-slate-300 placeholder:text-slate-500 focus:outline-none focus:border-miku-primary/50"
+                                    className="w-full pl-10 pr-4 py-1.5 bg-muted/50 border border-border rounded text-sm text-muted-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-miku-primary/50"
                                 />
                             </div>
                             <div className="flex items-center gap-2 ml-auto">
-                                <span className="text-sm text-slate-400">Sort By</span>
-                                <button className="px-3 py-1.5 bg-muted/50 border border-white/10 rounded text-sm text-slate-300 hover:bg-white/[0.02] flex items-center gap-2">
+                                <span className="text-sm text-muted-foreground/70">Sort By</span>
+                                <button className="px-3 py-1.5 bg-muted/50 border border-border rounded text-sm text-muted-foreground hover:bg-muted/50 flex items-center gap-2">
                                     Name
                                     <ChevronDown className="w-4 h-4" />
                                 </button>
-                                <button className="p-1.5 bg-muted/50 border border-white/10 rounded text-slate-300 hover:bg-white/[0.02]">
+                                <button className="p-1.5 bg-muted/50 border border-border rounded text-muted-foreground hover:bg-muted/50">
                                     <ArrowUpDown className="w-4 h-4" />
                                 </button>
                             </div>
