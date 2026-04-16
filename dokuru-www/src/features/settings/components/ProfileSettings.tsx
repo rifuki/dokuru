@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Separator } from "@/components/ui/separator";
 import { ImageUploadModal } from "./ImageUploadModal";
 import {
     AlertDialog,
@@ -168,14 +167,6 @@ export function ProfileSettings() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-
-            <div>
-                <p className="text-sm text-muted-foreground">
-                    This is how others will see you on the site.
-                </p>
-            </div>
-
-            <Separator className="bg-border/40" />
 
             <form onSubmit={handleProfileSubmit} className="space-y-8 max-w-2xl">
                 {/* Avatar Section */}

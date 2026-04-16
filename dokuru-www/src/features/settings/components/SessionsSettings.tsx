@@ -69,18 +69,7 @@ export function SessionsSettings() {
     const otherSessions = sessions.filter(s => !s.is_current);
 
     return (
-        <div className="space-y-10 animate-fade-in pb-10">
-            <div>
-                <p className="text-sm text-muted-foreground">
-                    Here are all the devices that are currently logged in with your account. You can log out of each one individually or all other devices.
-                </p>
-                <p className="text-sm text-muted-foreground mt-3 lg:max-w-2xl">
-                    If you see an entry you don't recognize, log out of that device and change your account password immediately.
-                </p>
-            </div>
-
-            <Separator className="bg-border/40" />
-
+        <div className="space-y-8 animate-fade-in pb-10">
             {loadingSessions ? (
                 <div className="flex justify-center py-12">
                     <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
