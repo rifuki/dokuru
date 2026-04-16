@@ -19,11 +19,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Bell, Menu } from "lucide-react";
 
-// Mock notifications (only for admin)
-const notifications = [
+// Mock notifications
+const adminNotifications = [
   { id: 1, title: "New user registered", description: "john@example.com joined", time: "2 min ago", unread: true },
   { id: 2, title: "API Key created", description: "Production key was created", time: "1 hour ago", unread: true },
   { id: 3, title: "System update", description: "Database backup completed", time: "3 hours ago", unread: false },
+];
+
+const userNotifications = [
+  { id: 1, title: "System Update", description: "New features available", time: "1 hour ago", unread: true },
+  { id: 2, title: "Announcement", description: "Scheduled maintenance on Sunday", time: "2 days ago", unread: false },
 ];
 
 export const Route = createFileRoute("/_authenticated")({
@@ -63,8 +68,11 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 function DashboardLayout() {
     const user = useAuthUser();
     const [commandOpen, setCommandOpen] = useState(false);
-    const unreadCount = notifications.filter((n) => n.unread).length;
     const isAdmin = user?.role === "admin";
+    
+    // Get notifications based on role
+    const notifications = isAdmin ? adminNotifications : userNotifications;
+    const unreadCount = notifications.filter((n) => n.unread).length;
 
     return (
         <SidebarProvider>
@@ -84,57 +92,55 @@ function DashboardLayout() {
                         <CommandMenuTrigger onClick={() => setCommandOpen(true)} />
                         <CommandMenu open={commandOpen} setOpen={setCommandOpen} />
 
-                        {/* Notifications - Admin only */}
-                        {isAdmin && (
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="relative">
-                                        <Bell className="h-5 w-5" />
-                                        {unreadCount > 0 && (
-                                            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-miku-accent ring-2 ring-background" />
-                                        )}
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-80">
-                                    <DropdownMenuLabel className="flex items-center justify-between">
-                                        <span>Notifications</span>
-                                        {unreadCount > 0 && (
-                                            <Badge variant="secondary" className="text-xs">
-                                                {unreadCount} new
-                                            </Badge>
-                                        )}
-                                    </DropdownMenuLabel>
-                                    <DropdownMenuSeparator />
-                                    {notifications.length === 0 ? (
-                                        <div className="py-4 text-center text-sm text-muted-foreground">
-                                            No notifications
-                                        </div>
-                                    ) : (
-                                        notifications.map((notification) => (
-                                            <DropdownMenuItem
-                                                key={notification.id}
-                                                className="flex flex-col items-start gap-1 p-3 cursor-pointer"
-                                            >
-                                                <div className="flex w-full items-center justify-between">
-                                                    <span className="text-sm font-medium">{notification.title}</span>
-                                                    {notification.unread && (
-                                                        <span className="h-2 w-2 rounded-full bg-primary" />
-                                                    )}
-                                                </div>
-                                                <span className="text-xs text-muted-foreground line-clamp-1">
-                                                    {notification.description}
-                                                </span>
-                                                <span className="text-xs text-muted-foreground">{notification.time}</span>
-                                            </DropdownMenuItem>
-                                        ))
+                        {/* Notifications - Available for all users */}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="relative">
+                                    <Bell className="h-5 w-5" />
+                                    {unreadCount > 0 && (
+                                        <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-miku-accent ring-2 ring-background" />
                                     )}
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem className="justify-center text-sm text-muted-foreground cursor-pointer">
-                                        View all notifications
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        )}
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-80">
+                                <DropdownMenuLabel className="flex items-center justify-between">
+                                    <span>Notifications</span>
+                                    {unreadCount > 0 && (
+                                        <Badge variant="secondary" className="text-xs">
+                                            {unreadCount} new
+                                        </Badge>
+                                    )}
+                                </DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                {notifications.length === 0 ? (
+                                    <div className="py-4 text-center text-sm text-muted-foreground">
+                                        No notifications
+                                    </div>
+                                ) : (
+                                    notifications.map((notification) => (
+                                        <DropdownMenuItem
+                                            key={notification.id}
+                                            className="flex flex-col items-start gap-1 p-3 cursor-pointer"
+                                        >
+                                            <div className="flex w-full items-center justify-between">
+                                                <span className="text-sm font-medium">{notification.title}</span>
+                                                {notification.unread && (
+                                                    <span className="h-2 w-2 rounded-full bg-primary" />
+                                                )}
+                                            </div>
+                                            <span className="text-xs text-muted-foreground line-clamp-1">
+                                                {notification.description}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground">{notification.time}</span>
+                                        </DropdownMenuItem>
+                                    ))
+                                )}
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem className="justify-center text-sm text-muted-foreground cursor-pointer">
+                                    View all notifications
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
 
                         {/* User Menu - Available for all */}
                         <HeaderUserMenu />
