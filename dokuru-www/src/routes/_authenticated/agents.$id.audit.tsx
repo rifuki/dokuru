@@ -852,72 +852,75 @@ function AuditPage() {
                         <ChevronDown className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors -rotate-90" />
                     </button>
                 </>
-            ) : auditHistory.length > 0 ? (
-                /* ── Show Latest Audit ──────────────────────────────── */
-                <>
-                    <div className="flex items-center justify-between mb-4">
-                        <div>
-                            <h3 className="text-lg font-semibold">Latest Audit</h3>
-                            <p className="text-sm text-muted-foreground">Most recent security audit result</p>
-                        </div>
-                        <Link to="/agents/$id/audits" params={{ id: agent?.id ?? "" }}>
-                            <Button variant="outline" size="sm">
-                                <Clock className="h-4 w-4 mr-2" /> View All History
-                            </Button>
-                        </Link>
-                    </div>
-                    
-                    <button
-                        onClick={() => setAuditData(auditHistory[0])}
-                        className="flex items-center gap-4 p-4 rounded-xl border bg-card hover:bg-muted/50 transition-colors text-left w-full group"
-                    >
-                        <div className="flex-shrink-0">
-                            <div className="relative w-16 h-16">
-                                <svg width="64" height="64" viewBox="0 0 64 64">
-                                    <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="4"
-                                        className="text-muted-foreground/10" />
-                                    <circle cx="32" cy="32" r="28" fill="none" 
-                                        stroke={auditHistory[0].summary.score >= 80 ? "#22c55e" : auditHistory[0].summary.score >= 60 ? "#f59e0b" : "#ef4444"}
-                                        strokeWidth="4"
-                                        strokeDasharray={`${2 * Math.PI * 28}`}
-                                        strokeDashoffset={`${2 * Math.PI * 28 - (auditHistory[0].summary.score / 100) * 2 * Math.PI * 28}`}
-                                        strokeLinecap="round" transform="rotate(-90 32 32)"
-                                    />
-                                </svg>
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                    <span className={`text-xl font-bold ${
-                                        auditHistory[0].summary.score >= 80 ? "text-green-500" : 
-                                        auditHistory[0].summary.score >= 60 ? "text-yellow-500" : "text-red-500"
-                                    }`}>{auditHistory[0].summary.score}</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                                <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                                <span className="text-sm font-medium">{fmtDate(auditHistory[0].timestamp)}</span>
-                            </div>
-                            <p className="text-xs text-muted-foreground truncate mb-2">
-                                {auditHistory[0].hostname} • Docker {auditHistory[0].docker_version} • {auditHistory[0].total_containers} containers
-                            </p>
-                            <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="text-[10px]">
-                                    {auditHistory[0].summary.passed} passed
-                                </Badge>
-                                <Badge variant="outline" className="text-[10px]">
-                                    {auditHistory[0].summary.failed} failed
-                                </Badge>
-                                <Badge variant="outline" className="text-[10px]">
-                                    {auditHistory[0].summary.total} total
-                                </Badge>
-                            </div>
-                        </div>
-                        <ChevronDown className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors -rotate-90" />
-                    </button>
-                </>
             ) : (
-                /* ── Empty state ──────────────────────────────────── */
-                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed bg-card/50 py-20 px-8 text-center gap-4">
+                <>
+                    {/* ── Show Latest Audit if exists ──────────────────── */}
+                    {auditHistory.length > 0 && (
+                        <>
+                            <div className="flex items-center justify-between mb-4">
+                                <div>
+                                    <h3 className="text-lg font-semibold">Latest Audit</h3>
+                                    <p className="text-sm text-muted-foreground">Most recent security audit result</p>
+                                </div>
+                                <Link to="/agents/$id/audits" params={{ id: agent?.id ?? "" }}>
+                                    <Button variant="outline" size="sm">
+                                        <Clock className="h-4 w-4 mr-2" /> View All History
+                                    </Button>
+                                </Link>
+                            </div>
+                            
+                            <button
+                                onClick={() => setAuditData(auditHistory[0])}
+                                className="flex items-center gap-4 p-4 rounded-xl border bg-card hover:bg-muted/50 transition-colors text-left w-full group mb-6"
+                            >
+                                <div className="flex-shrink-0">
+                                    <div className="relative w-16 h-16">
+                                        <svg width="64" height="64" viewBox="0 0 64 64">
+                                            <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="4"
+                                                className="text-muted-foreground/10" />
+                                            <circle cx="32" cy="32" r="28" fill="none" 
+                                                stroke={auditHistory[0].summary.score >= 80 ? "#22c55e" : auditHistory[0].summary.score >= 60 ? "#f59e0b" : "#ef4444"}
+                                                strokeWidth="4"
+                                                strokeDasharray={`${2 * Math.PI * 28}`}
+                                                strokeDashoffset={`${2 * Math.PI * 28 - (auditHistory[0].summary.score / 100) * 2 * Math.PI * 28}`}
+                                                strokeLinecap="round" transform="rotate(-90 32 32)"
+                                            />
+                                        </svg>
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                            <span className={`text-xl font-bold ${
+                                                auditHistory[0].summary.score >= 80 ? "text-green-500" : 
+                                                auditHistory[0].summary.score >= 60 ? "text-yellow-500" : "text-red-500"
+                                            }`}>{auditHistory[0].summary.score}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                                        <span className="text-sm font-medium">{fmtDate(auditHistory[0].timestamp)}</span>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground truncate mb-2">
+                                        {auditHistory[0].hostname} • Docker {auditHistory[0].docker_version} • {auditHistory[0].total_containers} containers
+                                    </p>
+                                    <div className="flex items-center gap-2">
+                                        <Badge variant="outline" className="text-[10px]">
+                                            {auditHistory[0].summary.passed} passed
+                                        </Badge>
+                                        <Badge variant="outline" className="text-[10px]">
+                                            {auditHistory[0].summary.failed} failed
+                                        </Badge>
+                                        <Badge variant="outline" className="text-[10px]">
+                                            {auditHistory[0].summary.total} total
+                                        </Badge>
+                                    </div>
+                                </div>
+                                <ChevronDown className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors -rotate-90" />
+                            </button>
+                        </>
+                    )}
+
+                    {/* ── Run New Audit Card (always show) ──────────────── */}
+                    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed bg-card/50 py-20 px-8 text-center gap-4">
                     <div className="rounded-full bg-primary/10 p-5">
                         <Shield className="h-10 w-10 text-primary" />
                     </div>
@@ -940,6 +943,7 @@ function AuditPage() {
                         ))}
                     </div>
                 </div>
+                </>
             )}
         </div>
     );
