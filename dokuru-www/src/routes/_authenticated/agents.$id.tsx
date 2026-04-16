@@ -5,7 +5,7 @@ import { agentDirectApi, type DockerInfo, type AuditResponse } from "@/lib/api/a
 import type { Agent } from "@/types/agent";
 import { getAgentToken } from "@/stores/use-agent-store";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Server, Trash2, Container, Box, HardDrive, Network, Play, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { ArrowLeft, Trash2, Container, Box, HardDrive, Network, Play, CheckCircle2, XCircle, AlertCircle, Bot, Calendar, Wifi, Cpu, MemoryStick, Monitor, Layers } from "lucide-react";
 import { useAgentStore } from "@/stores/use-agent-store";
 import { toast } from "sonner";
 
@@ -134,48 +134,52 @@ function AgentDetail() {
             </div>
 
             {/* Agent Info Card */}
-            <div className="rounded-lg border bg-card p-6">
-                <div className="flex items-center gap-4 mb-6">
-                    <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Server className="h-8 w-8 text-primary" />
+            <div className="rounded-lg border bg-card p-4">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Bot className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                        <h3 className="text-xl font-semibold">Agent Information</h3>
-                        <p className="text-sm text-muted-foreground">
-                            Connection details and status
-                        </p>
+                        <h3 className="text-base font-semibold">Agent Information</h3>
+                        <p className="text-xs text-muted-foreground">Connection details and status</p>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <p className="text-sm font-medium text-muted-foreground">Status</p>
-                        <span
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium mt-1 ${
-                                dockerInfo
-                                    ? "bg-green-500/10 text-green-600 dark:text-green-400"
-                                    : "bg-gray-500/10 text-gray-600 dark:text-gray-400"
-                            }`}
-                        >
-                            <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                            {dockerInfo ? "online" : "offline"}
-                        </span>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="flex items-center gap-2">
+                        <Wifi className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                            <p className="text-xs text-muted-foreground">Status</p>
+                            <span
+                                className={`inline-flex items-center gap-1 text-xs font-medium ${
+                                    dockerInfo ? "text-green-600 dark:text-green-400" : "text-gray-600 dark:text-gray-400"
+                                }`}
+                            >
+                                <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                                {dockerInfo ? "online" : "offline"}
+                            </span>
+                        </div>
                     </div>
-                    <div>
-                        <p className="text-sm font-medium text-muted-foreground">Access Mode</p>
-                        <p className="text-sm mt-1 capitalize">{agent.access_mode}</p>
+                    <div className="flex items-center gap-2">
+                        <Network className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                            <p className="text-xs text-muted-foreground">Access Mode</p>
+                            <p className="text-sm font-medium capitalize">{agent.access_mode}</p>
+                        </div>
                     </div>
-                    <div>
-                        <p className="text-sm font-medium text-muted-foreground">Created</p>
-                        <p className="text-sm mt-1">
-                            {new Date(agent.created_at).toLocaleDateString()}
-                        </p>
+                    <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                            <p className="text-xs text-muted-foreground">Created</p>
+                            <p className="text-sm font-medium">{new Date(agent.created_at).toLocaleDateString()}</p>
+                        </div>
                     </div>
-                    <div>
-                        <p className="text-sm font-medium text-muted-foreground">Docker Version</p>
-                        <p className="text-sm mt-1 font-mono">
-                            {dockerInfo?.docker_version || "N/A"}
-                        </p>
+                    <div className="flex items-center gap-2">
+                        <Layers className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                            <p className="text-xs text-muted-foreground">Docker Version</p>
+                            <p className="text-sm font-medium font-mono">{dockerInfo?.docker_version || "N/A"}</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -189,71 +193,79 @@ function AgentDetail() {
                     </p>
                 </div>
             ) : dockerInfo ? (
-                <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* System Info */}
-                    <div className="rounded-lg border bg-card p-6">
-                        <h3 className="text-lg font-semibold mb-4">System Information</h3>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div>
-                                <p className="text-sm font-medium text-muted-foreground">Operating System</p>
-                                <p className="text-sm mt-1">{dockerInfo.os}</p>
+                    <div className="rounded-lg border bg-card p-4">
+                        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                            <Monitor className="h-4 w-4 text-primary" />
+                            System Information
+                        </h3>
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between py-1.5 border-b border-border/50">
+                                <span className="text-xs text-muted-foreground">Operating System</span>
+                                <span className="text-sm font-medium">{dockerInfo.os}</span>
                             </div>
-                            <div>
-                                <p className="text-sm font-medium text-muted-foreground">Architecture</p>
-                                <p className="text-sm mt-1">{dockerInfo.architecture}</p>
+                            <div className="flex items-center justify-between py-1.5 border-b border-border/50">
+                                <span className="text-xs text-muted-foreground">Architecture</span>
+                                <span className="text-sm font-medium">{dockerInfo.architecture}</span>
                             </div>
-                            <div>
-                                <p className="text-sm font-medium text-muted-foreground">CPU Cores</p>
-                                <p className="text-sm mt-1">{dockerInfo.cpu_count}</p>
+                            <div className="flex items-center justify-between py-1.5 border-b border-border/50">
+                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <Cpu className="h-3 w-3" />
+                                    CPU Cores
+                                </span>
+                                <span className="text-sm font-medium">{dockerInfo.cpu_count}</span>
                             </div>
-                            <div>
-                                <p className="text-sm font-medium text-muted-foreground">Total Memory</p>
-                                <p className="text-sm mt-1">
+                            <div className="flex items-center justify-between py-1.5">
+                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <MemoryStick className="h-3 w-3" />
+                                    Total Memory
+                                </span>
+                                <span className="text-sm font-medium">
                                     {(dockerInfo.memory_total / 1024 / 1024 / 1024).toFixed(1)} GB
-                                </p>
+                                </span>
                             </div>
                         </div>
                     </div>
 
                     {/* Docker Resources */}
-                    <div className="rounded-lg border bg-card p-6">
-                        <h3 className="text-lg font-semibold mb-4">Docker Resources</h3>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div className="p-4 rounded-lg bg-muted/50">
-                                <div className="flex items-center gap-3 mb-2">
-                                    <Container className="h-5 w-5 text-primary" />
-                                    <p className="text-sm font-medium text-muted-foreground">Containers</p>
+                    <div className="rounded-lg border bg-card p-4">
+                        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                            <Layers className="h-4 w-4 text-primary" />
+                            Docker Resources
+                        </h3>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="p-3 rounded-lg bg-muted/50">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <Container className="h-4 w-4 text-primary" />
+                                    <span className="text-xs text-muted-foreground">Containers</span>
                                 </div>
-                                <p className="text-2xl font-bold">{dockerInfo.containers.total}</p>
-                                <div className="flex gap-3 mt-2 text-xs">
-                                    <span className="text-green-600 dark:text-green-400">
-                                        {dockerInfo.containers.running} running
-                                    </span>
-                                    <span className="text-muted-foreground">
-                                        {dockerInfo.containers.stopped} stopped
-                                    </span>
+                                <p className="text-xl font-bold">{dockerInfo.containers.total}</p>
+                                <div className="flex gap-2 mt-1 text-xs">
+                                    <span className="text-green-600 dark:text-green-400">{dockerInfo.containers.running} up</span>
+                                    <span className="text-muted-foreground">{dockerInfo.containers.stopped} down</span>
                                 </div>
                             </div>
-                            <div className="p-4 rounded-lg bg-muted/50">
-                                <div className="flex items-center gap-3 mb-2">
-                                    <Box className="h-5 w-5 text-primary" />
-                                    <p className="text-sm font-medium text-muted-foreground">Images</p>
+                            <div className="p-3 rounded-lg bg-muted/50">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <Box className="h-4 w-4 text-primary" />
+                                    <span className="text-xs text-muted-foreground">Images</span>
                                 </div>
-                                <p className="text-2xl font-bold">{dockerInfo.images}</p>
+                                <p className="text-xl font-bold">{dockerInfo.images}</p>
                             </div>
-                            <div className="p-4 rounded-lg bg-muted/50">
-                                <div className="flex items-center gap-3 mb-2">
-                                    <HardDrive className="h-5 w-5 text-primary" />
-                                    <p className="text-sm font-medium text-muted-foreground">Volumes</p>
+                            <div className="p-3 rounded-lg bg-muted/50">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <HardDrive className="h-4 w-4 text-primary" />
+                                    <span className="text-xs text-muted-foreground">Volumes</span>
                                 </div>
-                                <p className="text-2xl font-bold">{dockerInfo.volumes}</p>
+                                <p className="text-xl font-bold">{dockerInfo.volumes}</p>
                             </div>
-                            <div className="p-4 rounded-lg bg-muted/50">
-                                <div className="flex items-center gap-3 mb-2">
-                                    <Network className="h-5 w-5 text-primary" />
-                                    <p className="text-sm font-medium text-muted-foreground">Networks</p>
+                            <div className="p-3 rounded-lg bg-muted/50">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <Network className="h-4 w-4 text-primary" />
+                                    <span className="text-xs text-muted-foreground">Networks</span>
                                 </div>
-                                <p className="text-2xl font-bold">{dockerInfo.networks}</p>
+                                <p className="text-xl font-bold">{dockerInfo.networks}</p>
                             </div>
                         </div>
                     </div>
