@@ -10,7 +10,6 @@ import {
   LayoutDashboard,
   Bot,
   Container,
-  Image,
   Network,
   HardDrive,
   Activity,
@@ -42,7 +41,7 @@ import { useAgentStore } from "@/stores/use-agent-store";
 const agentNavItems = (agentId: string) => [
   { title: "Dashboard", href: `/agents/${agentId}`, icon: LayoutDashboard },
   { title: "Containers", href: `/agents/${agentId}/containers`, icon: Container },
-  { title: "Images", href: `/agents/${agentId}/images`, icon: Image },
+  { title: "Images", href: `/agents/${agentId}/images`, icon: Box },
   { title: "Networks", href: `/agents/${agentId}/networks`, icon: Network },
   { title: "Volumes", href: `/agents/${agentId}/volumes`, icon: HardDrive },
   { title: "Events", href: `/agents/${agentId}/events`, icon: Activity },
@@ -68,9 +67,12 @@ export function AppSidebar() {
         active[agent.id] = true;
       }
     }
-    queueMicrotask(() => {
-      setOpenAgents((prev) => ({ ...prev, ...active }));
-    });
+    if (Object.keys(active).length > 0) {
+      setOpenAgents((prev) => {
+        const hasChanges = Object.keys(active).some(id => !prev[id]);
+        return hasChanges ? { ...prev, ...active } : prev;
+      });
+    }
   }, [agents, location.pathname]);
 
   const isActive = (href: string) => {
@@ -186,7 +188,7 @@ export function AppSidebar() {
                 return (
                   <Collapsible
                     key={agent.id}
-                    open={openAgents[agent.id] ?? true}
+                    open={!!openAgents[agent.id]}
                     onOpenChange={() => toggleAgent(agent.id)}
                   >
                     <div>

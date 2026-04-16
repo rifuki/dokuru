@@ -113,6 +113,7 @@ function AgentDetail() {
                         variant="ghost"
                         size="icon"
                         onClick={() => navigate({ to: "/" })}
+                        className="hover:bg-primary/10"
                     >
                         <ArrowLeft className="h-5 w-5" />
                     </Button>

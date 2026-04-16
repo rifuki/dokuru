@@ -98,7 +98,7 @@ function DashboardLayout() {
                                 <Button variant="ghost" size="icon" className="relative hover:bg-primary/10">
                                     <Bell className="h-5 w-5" />
                                     {unreadCount > 0 && (
-                                        <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-miku-accent ring-2 ring-background" />
+                                        <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary ring-2 ring-background" />
                                     )}
                                 </Button>
                             </DropdownMenuTrigger>
