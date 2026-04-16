@@ -64,6 +64,7 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             disabled={isLoading}
+                            autoComplete="off"
                         />
                     </div>
 
@@ -76,6 +77,7 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                             value={url}
                             onChange={(e) => setUrl(e.target.value)}
                             disabled={isLoading}
+                            autoComplete="off"
                         />
                         <p className="text-xs text-muted-foreground">
                             The HTTP address where Dokuru Agent is running
@@ -91,6 +93,7 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                             value={token}
                             onChange={(e) => setToken(e.target.value)}
                             disabled={isLoading}
+                            autoComplete="off"
                         />
                         <p className="text-xs text-muted-foreground">
                             Token from agent onboarding (shown once)
