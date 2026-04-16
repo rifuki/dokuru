@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,7 @@ export function RegisterForm() {
   );
   const [showPassword, setShowPassword] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const typingTimerRef = useRef<number | null>(null);
   const register = useRegister();
 
   // Live username availability check with debounce
@@ -33,11 +34,23 @@ export function RegisterForm() {
 
   // Track typing state for spinner
   const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setUsername(e.target.value.toLowerCase());
-    if (e.target.value.length >= 3) {
+    // Only allow lowercase letters, numbers, and underscores (no spaces!)
+    const filtered = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+    setUsername(filtered);
+    
+    // Clear previous timer
+    if (typingTimerRef.current) {
+      clearTimeout(typingTimerRef.current);
+    }
+    
+    if (filtered.length >= 3) {
       setIsTyping(true);
       // Reset after debounce time
-      setTimeout(() => setIsTyping(false), 1000);
+      typingTimerRef.current = setTimeout(() => {
+        setIsTyping(false);
+      }, 1000);
+    } else {
+      setIsTyping(false);
     }
   };
 
