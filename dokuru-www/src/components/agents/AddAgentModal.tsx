@@ -26,6 +26,17 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
     const [port, setPort] = useState("3939");
     const [token, setToken] = useState("");
 
+    // Auto-detect if host is IP address (show port) or domain (hide port)
+    const isIpAddress = (value: string) => {
+        // IPv4 regex
+        const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+        // IPv6 regex (simplified)
+        const ipv6Regex = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/;
+        return ipv4Regex.test(value) || ipv6Regex.test(value);
+    };
+
+    const showPortInput = isIpAddress(host);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -34,8 +45,10 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
             return;
         }
 
-        // Auto-generate URL: http://host:port or http://host (if no port)
-        const url = port.trim() 
+        // Auto-generate URL
+        // IP address → http://host:port
+        // Domain → http://host (assume https/cloudflare/etc)
+        const url = showPortInput && port.trim()
             ? `http://${host.trim()}:${port.trim()}` 
             : `http://${host.trim()}`;
 
@@ -75,8 +88,8 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                         />
                     </div>
 
-                    <div className="grid grid-cols-3 gap-4">
-                        <div className="space-y-2 col-span-2">
+                    <div className={showPortInput ? "grid grid-cols-3 gap-4" : "space-y-2"}>
+                        <div className={`space-y-2 ${showPortInput ? "col-span-2" : ""}`}>
                             <Label htmlFor="host">Host / IP Address</Label>
                             <Input
                                 id="host"
@@ -87,21 +100,23 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                                 autoComplete="off"
                             />
                         </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="port">Port</Label>
-                            <Input
-                                id="port"
-                                type="text"
-                                placeholder="3939"
-                                value={port}
-                                onChange={(e) => setPort(e.target.value.replace(/\D/g, ''))}
-                                disabled={isLoading}
-                                autoComplete="off"
-                            />
-                        </div>
+                        {showPortInput && (
+                            <div className="space-y-2">
+                                <Label htmlFor="port">Port</Label>
+                                <Input
+                                    id="port"
+                                    type="text"
+                                    placeholder="3939"
+                                    value={port}
+                                    onChange={(e) => setPort(e.target.value.replace(/\D/g, ''))}
+                                    disabled={isLoading}
+                                    autoComplete="off"
+                                />
+                            </div>
+                        )}
                     </div>
                     <p className="text-xs text-muted-foreground -mt-2">
-                        Agent will be accessible at: {host || "host"}{port ? `:${port}` : ""}
+                        Agent will be accessible at: {host || "host"}{showPortInput && port ? `:${port}` : ""}
                     </p>
 
                     <div className="space-y-2">
