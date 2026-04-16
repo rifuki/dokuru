@@ -92,19 +92,6 @@ export function RegisterForm() {
                 )}
               </div>
             </div>
-            {showUsernameStatus && (
-              <p
-                className={`text-xs ${
-                  usernameCheck.data.available
-                    ? "text-green-600 dark:text-green-400"
-                    : "text-red-600 dark:text-red-400"
-                }`}
-              >
-                {usernameCheck.data.available
-                  ? "Username available"
-                  : usernameCheck.data.reason || "Username already taken"}
-              </p>
-            )}
           </div>
 
           <div className="space-y-2">
