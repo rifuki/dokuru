@@ -169,39 +169,41 @@ function Dashboard() {
 
             {/* Filter Bar - Portainer Style */}
             {agents.length > 0 && (
-                <div className="flex items-center gap-3 flex-wrap">
-                    <button className="px-3 py-1.5 bg-[#23282D] border border-white/10 rounded text-sm text-slate-300 hover:bg-white/[0.02] flex items-center gap-2">
-                        Connection
-                        <ChevronDown className="w-4 h-4" />
-                    </button>
-                    <button className="px-3 py-1.5 bg-[#23282D] border border-white/10 rounded text-sm text-slate-300 hover:bg-white/[0.02] flex items-center gap-2">
-                        Status
-                        <ChevronDown className="w-4 h-4" />
-                    </button>
-                    <button className="px-3 py-1.5 bg-[#23282D] border border-white/10 rounded text-sm text-slate-300 hover:bg-white/[0.02] flex items-center gap-2">
-                        Agent Version
-                        <ChevronDown className="w-4 h-4" />
-                    </button>
-                    <button className="px-3 py-1.5 text-sm text-[#3BA5EF] hover:text-[#3BA5EF]/80">
-                        Clear all
-                    </button>
-                    <div className="flex-1 min-w-[300px] relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                        <input
-                            type="text"
-                            placeholder="Search by name, status, URL..."
-                            className="w-full pl-10 pr-4 py-1.5 bg-[#23282D] border border-white/10 rounded text-sm text-slate-300 placeholder:text-slate-500 focus:outline-none focus:border-[#3BA5EF]/50"
-                        />
-                    </div>
-                    <div className="flex items-center gap-2 ml-auto">
-                        <span className="text-sm text-slate-400">Sort By</span>
-                        <button className="px-3 py-1.5 bg-[#23282D] border border-white/10 rounded text-sm text-slate-300 hover:bg-white/[0.02] flex items-center gap-2">
-                            Name
+                <div className="bg-[#23282D] border border-white/5 rounded-md p-4">
+                    <div className="flex items-center gap-3 flex-wrap">
+                        <button className="px-3 py-1.5 bg-[#1A1E23] border border-white/10 rounded text-sm text-slate-300 hover:bg-white/[0.02] flex items-center gap-2">
+                            Connection
                             <ChevronDown className="w-4 h-4" />
                         </button>
-                        <button className="p-1.5 bg-[#23282D] border border-white/10 rounded text-slate-300 hover:bg-white/[0.02]">
-                            <ArrowUpDown className="w-4 h-4" />
+                        <button className="px-3 py-1.5 bg-[#1A1E23] border border-white/10 rounded text-sm text-slate-300 hover:bg-white/[0.02] flex items-center gap-2">
+                            Status
+                            <ChevronDown className="w-4 h-4" />
                         </button>
+                        <button className="px-3 py-1.5 bg-[#1A1E23] border border-white/10 rounded text-sm text-slate-300 hover:bg-white/[0.02] flex items-center gap-2">
+                            Agent Version
+                            <ChevronDown className="w-4 h-4" />
+                        </button>
+                        <button className="px-3 py-1.5 text-sm text-[#3BA5EF] hover:text-[#3BA5EF]/80">
+                            Clear all
+                        </button>
+                        <div className="flex-1 min-w-[300px] relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                            <input
+                                type="text"
+                                placeholder="Search by name, status, URL..."
+                                className="w-full pl-10 pr-4 py-1.5 bg-[#1A1E23] border border-white/10 rounded text-sm text-slate-300 placeholder:text-slate-500 focus:outline-none focus:border-[#3BA5EF]/50"
+                            />
+                        </div>
+                        <div className="flex items-center gap-2 ml-auto">
+                            <span className="text-sm text-slate-400">Sort By</span>
+                            <button className="px-3 py-1.5 bg-[#1A1E23] border border-white/10 rounded text-sm text-slate-300 hover:bg-white/[0.02] flex items-center gap-2">
+                                Name
+                                <ChevronDown className="w-4 h-4" />
+                            </button>
+                            <button className="p-1.5 bg-[#1A1E23] border border-white/10 rounded text-slate-300 hover:bg-white/[0.02]">
+                                <ArrowUpDown className="w-4 h-4" />
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

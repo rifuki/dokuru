@@ -13,7 +13,7 @@ import {
   Network,
   HardDrive,
   Activity,
-  ChevronRight,
+  ChevronDown,
   Box,
 } from "lucide-react";
 
@@ -26,9 +26,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
   SidebarRail,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
@@ -62,7 +59,6 @@ export function AppSidebar() {
     }
   }, [fetchAgents, isAdmin]);
 
-  // Auto-open the agent whose sub-route is currently active
   useEffect(() => {
     const active: Record<string, boolean> = {};
     for (const agent of agents) {
@@ -111,6 +107,7 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
+        {/* Platform */}
         <SidebarGroup>
           <SidebarGroupLabel>Platform</SidebarGroupLabel>
           <SidebarMenu>
@@ -129,6 +126,7 @@ export function AppSidebar() {
           </SidebarMenu>
         </SidebarGroup>
 
+        {/* Admin */}
         {isAdmin && (
           <SidebarGroup>
             <SidebarGroupLabel>Admin</SidebarGroupLabel>
@@ -154,63 +152,78 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
+        {/* Agents — card per agent */}
         {!isAdmin && agents.length > 0 && (
           <SidebarGroup>
-            <SidebarGroupLabel>Environments</SidebarGroupLabel>
-            <SidebarMenu>
+            <SidebarGroupLabel>Agents</SidebarGroupLabel>
+            <div className="px-2 space-y-1.5">
               {agents.map((agent) => (
                 <Collapsible
                   key={agent.id}
                   open={openAgents[agent.id] ?? false}
                   onOpenChange={() => toggleAgent(agent.id)}
                 >
-                  <SidebarMenuItem>
+                  {/* Card wrapper */}
+                  <div
+                    className={`rounded-lg border transition-colors overflow-hidden ${
+                      location.pathname.startsWith(`/agents/${agent.id}`)
+                        ? "border-sidebar-primary/30 bg-sidebar-accent/50"
+                        : "border-sidebar-border bg-sidebar-accent/20 hover:bg-sidebar-accent/35"
+                    }`}
+                  >
+                    {/* Agent header / trigger */}
                     <CollapsibleTrigger asChild>
-                      <SidebarMenuButton
-                        tooltip={agent.name}
-                        isActive={location.pathname.startsWith(`/agents/${agent.id}`)}
-                        className="group/agent"
+                      <button
+                        type="button"
+                        className="w-full flex items-center gap-3 px-3 py-3 text-left"
                       >
-                        <Box className="size-4 shrink-0 text-blue-400" />
-                        <span className="truncate">{agent.name}</span>
-                        <div className="ml-auto flex items-center gap-1.5">
-                          <span
-                            className={`h-1.5 w-1.5 rounded-full shrink-0 ${
-                              agent.status === "online"
-                                ? "bg-green-500"
-                                : "bg-gray-400"
-                            }`}
-                          />
-                          <ChevronRight
-                            className={`size-3 shrink-0 transition-transform duration-200 ${
-                              openAgents[agent.id] ? "rotate-90" : ""
-                            }`}
-                          />
-                        </div>
-                      </SidebarMenuButton>
+                        <Box className="size-5 shrink-0 text-blue-400" />
+                        <span className="flex-1 truncate text-[13px] font-semibold text-sidebar-foreground">
+                          {agent.name}
+                        </span>
+                        <span
+                          className={`h-2 w-2 rounded-full shrink-0 ${
+                            agent.status === "online" ? "bg-green-500" : "bg-gray-500"
+                          }`}
+                        />
+                        <ChevronDown
+                          className={`size-4 shrink-0 text-sidebar-foreground/50 transition-transform duration-200 ${
+                            openAgents[agent.id] ? "rotate-180" : ""
+                          }`}
+                        />
+                      </button>
                     </CollapsibleTrigger>
 
+                    {/* Sub-nav inside card */}
                     <CollapsibleContent>
-                      <SidebarMenuSub>
-                        {agentNavItems(agent.id).map((item) => (
-                          <SidebarMenuSubItem key={item.href}>
-                            <SidebarMenuSubButton asChild isActive={isActive(item.href)}>
-                              <Link to={item.href}>
-                                <item.icon className="size-3.5" />
-                                <span>{item.title}</span>
-                              </Link>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                        ))}
-                      </SidebarMenuSub>
+                      <div className="border-t border-sidebar-border/60 pb-1.5 pt-1">
+                        {agentNavItems(agent.id).map((item) => {
+                          const active = isActive(item.href);
+                          return (
+                            <Link
+                              key={item.href}
+                              to={item.href}
+                              className={`flex items-center gap-3 px-3 py-2 mx-1.5 rounded-md text-[13px] transition-colors ${
+                                active
+                                  ? "bg-sidebar-primary/15 text-sidebar-primary font-medium"
+                                  : "text-sidebar-foreground/65 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                              }`}
+                            >
+                              <item.icon className="size-4 shrink-0" />
+                              <span>{item.title}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
                     </CollapsibleContent>
-                  </SidebarMenuItem>
+                  </div>
                 </Collapsible>
               ))}
-            </SidebarMenu>
+            </div>
           </SidebarGroup>
         )}
 
+        {/* Settings */}
         <SidebarGroup>
           <SidebarGroupLabel>Settings</SidebarGroupLabel>
           <SidebarMenu>
