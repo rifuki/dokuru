@@ -60,6 +60,54 @@ pub struct CheckResult {
     pub audit_command: Option<String>, // Command executed for this check
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_output: Option<String>, // Raw command output
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub references: Option<Vec<String>>, // External reference links
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub rationale: Option<String>, // Why this rule matters
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub impact: Option<String>, // Impact of implementing this rule
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub tags: Option<Vec<String>>, // Tags for categorization
+}
+
+impl CheckResult {
+    /// Create a new `CheckResult` with minimal required fields
+    /// Additional metadata will be enriched by `RuleDefinition.check()`
+    #[allow(dead_code, clippy::missing_const_for_fn)]
+    pub fn new(
+        rule: CisRule,
+        status: CheckStatus,
+        message: String,
+        affected: Vec<String>,
+        remediation_kind: RemediationKind,
+    ) -> Self {
+        Self {
+            rule,
+            status,
+            message,
+            affected,
+            remediation_kind,
+            audit_command: None,
+            raw_output: None,
+            references: None,
+            rationale: None,
+            impact: None,
+            tags: None,
+        }
+    }
+
+    /// Builder pattern for optional fields
+    #[allow(dead_code)]
+    pub fn with_audit_command(mut self, cmd: String) -> Self {
+        self.audit_command = Some(cmd);
+        self
+    }
+
+    #[allow(dead_code)]
+    pub fn with_raw_output(mut self, output: String) -> Self {
+        self.raw_output = Some(output);
+        self
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -25,6 +25,19 @@ export interface AuditResult {
   level: string;
   status: "pass" | "fail" | "warn" | "info";
   message: string;
+  category?: string;
+  severity?: "High" | "Medium" | "Low";
+  section?: string;
+  description?: string;
+  remediation?: string;
+  affected?: string[];
+  remediation_kind?: "Auto" | "Guided" | "Manual";
+  audit_command?: string;
+  raw_output?: string;
+  references?: string[];
+  rationale?: string;
+  impact?: string;
+  tags?: string[];
 }
 
 export interface AuditResponse {

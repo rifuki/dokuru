@@ -11,6 +11,7 @@ use std::future::Future;
 use std::pin::Pin;
 
 mod section2;
+mod section5;
 
 // ── Rule Definition ──────────────────────────────────────────────────────────
 
@@ -61,7 +62,15 @@ impl RuleDefinition {
         docker: &Docker,
         containers: &[bollard::models::ContainerSummary],
     ) -> Result<CheckResult> {
-        (self.check_fn)(docker, containers).await
+        let mut result = (self.check_fn)(docker, containers).await?;
+
+        // Enrich result with rule metadata
+        result.references = Some(self.references.clone());
+        result.rationale = Some(self.rationale.clone());
+        result.impact = Some(self.impact.clone());
+        result.tags = Some(self.tags.clone());
+
+        Ok(result)
     }
 
     /// Execute fix for this rule
@@ -92,6 +101,9 @@ impl RuleRegistry {
 
         // Register all sections
         for rule in section2::Section2::rules() {
+            rules.insert(rule.id.clone(), rule);
+        }
+        for rule in section5::Section5::rules() {
             rules.insert(rule.id.clone(), rule);
         }
 

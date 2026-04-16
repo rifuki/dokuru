@@ -24,6 +24,7 @@ import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAgentsIdRouteImport } from './routes/_authenticated/agents.$id'
 import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin/users'
 import { Route as AuthenticatedAdminApiKeysRouteImport } from './routes/_authenticated/admin/api-keys'
+import { Route as AuthenticatedAgentsIdIndexRouteImport } from './routes/_authenticated/agents.$id.index'
 import { Route as AuthenticatedAgentsIdVolumesRouteImport } from './routes/_authenticated/agents.$id.volumes'
 import { Route as AuthenticatedAgentsIdNetworksRouteImport } from './routes/_authenticated/agents.$id.networks'
 import { Route as AuthenticatedAgentsIdImagesRouteImport } from './routes/_authenticated/agents.$id.images'
@@ -107,6 +108,12 @@ const AuthenticatedAdminApiKeysRoute =
     path: '/api-keys',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAgentsIdIndexRoute =
+  AuthenticatedAgentsIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedAgentsIdRoute,
+  } as any)
 const AuthenticatedAgentsIdVolumesRoute =
   AuthenticatedAgentsIdVolumesRouteImport.update({
     id: '/volumes',
@@ -165,6 +172,7 @@ export interface FileRoutesByFullPath {
   '/agents/$id/images': typeof AuthenticatedAgentsIdImagesRoute
   '/agents/$id/networks': typeof AuthenticatedAgentsIdNetworksRoute
   '/agents/$id/volumes': typeof AuthenticatedAgentsIdVolumesRoute
+  '/agents/$id/': typeof AuthenticatedAgentsIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
@@ -176,7 +184,6 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsIndexRoute
   '/admin/api-keys': typeof AuthenticatedAdminApiKeysRoute
   '/admin/users': typeof AuthenticatedAdminUsersRoute
-  '/agents/$id': typeof AuthenticatedAgentsIdRouteWithChildren
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/agents': typeof AuthenticatedAgentsIndexRoute
   '/agents/$id/audit': typeof AuthenticatedAgentsIdAuditRoute
@@ -185,6 +192,7 @@ export interface FileRoutesByTo {
   '/agents/$id/images': typeof AuthenticatedAgentsIdImagesRoute
   '/agents/$id/networks': typeof AuthenticatedAgentsIdNetworksRoute
   '/agents/$id/volumes': typeof AuthenticatedAgentsIdVolumesRoute
+  '/agents/$id': typeof AuthenticatedAgentsIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -209,6 +217,7 @@ export interface FileRoutesById {
   '/_authenticated/agents/$id/images': typeof AuthenticatedAgentsIdImagesRoute
   '/_authenticated/agents/$id/networks': typeof AuthenticatedAgentsIdNetworksRoute
   '/_authenticated/agents/$id/volumes': typeof AuthenticatedAgentsIdVolumesRoute
+  '/_authenticated/agents/$id/': typeof AuthenticatedAgentsIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -233,6 +242,7 @@ export interface FileRouteTypes {
     | '/agents/$id/images'
     | '/agents/$id/networks'
     | '/agents/$id/volumes'
+    | '/agents/$id/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
@@ -244,7 +254,6 @@ export interface FileRouteTypes {
     | '/settings'
     | '/admin/api-keys'
     | '/admin/users'
-    | '/agents/$id'
     | '/admin'
     | '/agents'
     | '/agents/$id/audit'
@@ -253,6 +262,7 @@ export interface FileRouteTypes {
     | '/agents/$id/images'
     | '/agents/$id/networks'
     | '/agents/$id/volumes'
+    | '/agents/$id'
   id:
     | '__root__'
     | '/_authenticated'
@@ -276,6 +286,7 @@ export interface FileRouteTypes {
     | '/_authenticated/agents/$id/images'
     | '/_authenticated/agents/$id/networks'
     | '/_authenticated/agents/$id/volumes'
+    | '/_authenticated/agents/$id/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -392,6 +403,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminApiKeysRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/agents/$id/': {
+      id: '/_authenticated/agents/$id/'
+      path: '/'
+      fullPath: '/agents/$id/'
+      preLoaderRoute: typeof AuthenticatedAgentsIdIndexRouteImport
+      parentRoute: typeof AuthenticatedAgentsIdRoute
+    }
     '/_authenticated/agents/$id/volumes': {
       id: '/_authenticated/agents/$id/volumes'
       path: '/volumes'
@@ -459,6 +477,7 @@ interface AuthenticatedAgentsIdRouteChildren {
   AuthenticatedAgentsIdImagesRoute: typeof AuthenticatedAgentsIdImagesRoute
   AuthenticatedAgentsIdNetworksRoute: typeof AuthenticatedAgentsIdNetworksRoute
   AuthenticatedAgentsIdVolumesRoute: typeof AuthenticatedAgentsIdVolumesRoute
+  AuthenticatedAgentsIdIndexRoute: typeof AuthenticatedAgentsIdIndexRoute
 }
 
 const AuthenticatedAgentsIdRouteChildren: AuthenticatedAgentsIdRouteChildren = {
@@ -468,6 +487,7 @@ const AuthenticatedAgentsIdRouteChildren: AuthenticatedAgentsIdRouteChildren = {
   AuthenticatedAgentsIdImagesRoute: AuthenticatedAgentsIdImagesRoute,
   AuthenticatedAgentsIdNetworksRoute: AuthenticatedAgentsIdNetworksRoute,
   AuthenticatedAgentsIdVolumesRoute: AuthenticatedAgentsIdVolumesRoute,
+  AuthenticatedAgentsIdIndexRoute: AuthenticatedAgentsIdIndexRoute,
 }
 
 const AuthenticatedAgentsIdRouteWithChildren =
