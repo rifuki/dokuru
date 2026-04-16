@@ -192,9 +192,9 @@ impl Section3 {
             audit_command: Some("stat -c %U:%G $(systemctl show -p FragmentPath docker.service | cut -d= -f2)".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let path = Section3::find_systemd_unit("docker.service")
+                    let path = Self::find_systemd_unit("docker.service")
                         .unwrap_or_else(|| "/lib/systemd/system/docker.service".into());
-                    Ok(Section3::ownership_check(
+                    Ok(Self::ownership_check(
                         "3.1",
                         "Ensure that the docker.service file ownership is set to root:root",
                         &path,
@@ -228,9 +228,9 @@ impl Section3 {
             audit_command: Some("stat -c %a $(systemctl show -p FragmentPath docker.service | cut -d= -f2)".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let path = Section3::find_systemd_unit("docker.service")
+                    let path = Self::find_systemd_unit("docker.service")
                         .unwrap_or_else(|| "/lib/systemd/system/docker.service".into());
-                    Ok(Section3::permissions_check(
+                    Ok(Self::permissions_check(
                         "3.2",
                         "Ensure that the docker.service file permissions are appropriately set",
                         &path,
@@ -266,9 +266,9 @@ impl Section3 {
             audit_command: Some("stat -c %U:%G /lib/systemd/system/docker.socket".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let path = Section3::find_systemd_unit("docker.socket")
+                    let path = Self::find_systemd_unit("docker.socket")
                         .unwrap_or_else(|| "/lib/systemd/system/docker.socket".into());
-                    Ok(Section3::ownership_check(
+                    Ok(Self::ownership_check(
                         "3.3",
                         "Ensure that the docker.socket file ownership is set to root:root",
                         &path,
@@ -302,9 +302,9 @@ impl Section3 {
             audit_command: Some("stat -c %a /lib/systemd/system/docker.socket".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let path = Section3::find_systemd_unit("docker.socket")
+                    let path = Self::find_systemd_unit("docker.socket")
                         .unwrap_or_else(|| "/lib/systemd/system/docker.socket".into());
-                    Ok(Section3::permissions_check(
+                    Ok(Self::permissions_check(
                         "3.4",
                         "Ensure that the docker.socket file permissions are appropriately set",
                         &path,
@@ -340,7 +340,7 @@ impl Section3 {
             audit_command: Some("stat -c %U:%G /etc/docker".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    Ok(Section3::ownership_check(
+                    Ok(Self::ownership_check(
                         "3.5",
                         "Ensure that the /etc/docker directory ownership is set to root:root",
                         "/etc/docker",
@@ -376,7 +376,7 @@ impl Section3 {
             audit_command: Some("stat -c %a /etc/docker".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    Ok(Section3::permissions_check(
+                    Ok(Self::permissions_check(
                         "3.6",
                         "Ensure that /etc/docker directory permissions are set to 755 or more restrictive",
                         "/etc/docker",
@@ -416,7 +416,7 @@ impl Section3 {
             audit_command: Some("stat -c %U:%G /etc/docker/daemon.json".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    Ok(Section3::ownership_check(
+                    Ok(Self::ownership_check(
                         "3.17",
                         "Ensure that the daemon.json file ownership is set to root:root",
                         "/etc/docker/daemon.json",
@@ -452,7 +452,7 @@ impl Section3 {
             audit_command: Some("stat -c %a /etc/docker/daemon.json".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    Ok(Section3::permissions_check(
+                    Ok(Self::permissions_check(
                         "3.18",
                         "Ensure that the daemon.json file permissions are set to 644 or more restrictive",
                         "/etc/docker/daemon.json",

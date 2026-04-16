@@ -66,7 +66,7 @@ impl Section4 {
                 let containers = containers.to_vec();
                 Box::pin(async move {
                     if containers.is_empty() {
-                        return Ok(Section4::empty_result(
+                        return Ok(Self::empty_result(
                             "4.1",
                             "Ensure that a user for the container has been created",
                             RuleCategory::Namespace,
@@ -85,7 +85,7 @@ impl Section4 {
                                 .as_ref()
                                 .and_then(|cfg| cfg.user.as_deref())
                                 .unwrap_or("");
-                            let name = Section4::container_name(c.names.as_ref(), id);
+                            let name = Self::container_name(c.names.as_ref(), id);
                             raw_lines.push(format!("{name}: User={user:?}"));
                             // Fail if user is empty, "root", or "0"
                             if user.is_empty() || user == "root" || user == "0" {
@@ -123,13 +123,13 @@ impl Section4 {
             },
             remediation_kind: RemediationKind::Manual,
             fix_fn: None,
-            remediation_guide: r#"Add a non-root user in your Dockerfile:
+            remediation_guide: r"Add a non-root user in your Dockerfile:
 
   RUN groupadd -r appuser && useradd -r -g appuser appuser
   USER appuser
 
 Or use the --user flag at runtime:
-  docker run --user 1000:1000 nginx"#.into(),
+  docker run --user 1000:1000 nginx".into(),
             requires_restart: true,
             requires_elevation: false,
             references: vec![
@@ -160,7 +160,7 @@ Or use the --user flag at runtime:
                 let containers = containers.to_vec();
                 Box::pin(async move {
                     if containers.is_empty() {
-                        return Ok(Section4::empty_result(
+                        return Ok(Self::empty_result(
                             "4.6",
                             "Ensure that HEALTHCHECK instructions have been added to container images",
                             RuleCategory::Runtime,
@@ -179,7 +179,7 @@ Or use the --user flag at runtime:
                                 .as_ref()
                                 .and_then(|cfg| cfg.healthcheck.as_ref())
                                 .is_some();
-                            let name = Section4::container_name(c.names.as_ref(), id);
+                            let name = Self::container_name(c.names.as_ref(), id);
                             raw_lines.push(format!("{name}: Healthcheck={has_healthcheck}"));
                             if !has_healthcheck {
                                 failing.push(name);
@@ -216,13 +216,13 @@ Or use the --user flag at runtime:
             },
             remediation_kind: RemediationKind::Manual,
             fix_fn: None,
-            remediation_guide: r#"Add HEALTHCHECK to your Dockerfile:
+            remediation_guide: r"Add HEALTHCHECK to your Dockerfile:
 
   HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
     CMD curl -f http://localhost/health || exit 1
 
 Or for non-HTTP services:
-  HEALTHCHECK CMD pg_isready -U postgres || exit 1"#.into(),
+  HEALTHCHECK CMD pg_isready -U postgres || exit 1".into(),
             requires_restart: true,
             requires_elevation: false,
             references: vec![

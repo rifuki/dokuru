@@ -1,6 +1,6 @@
 // Section 1: Host Configuration
 // CIS Docker Benchmark v1.8.0
-#![allow(clippy::too_many_lines)]
+#![allow(clippy::too_many_lines, clippy::option_if_let_else)]
 use super::RuleDefinition;
 use crate::audit::types::{
     CheckResult, CheckStatus, CisRule, RemediationKind, RuleCategory, Severity,
@@ -40,7 +40,7 @@ impl Section1 {
                 .flatten()
                 .filter(|e| e.path().extension().is_some_and(|ext| ext == "rules"))
                 .collect();
-            paths.sort_by_key(|e| e.path());
+            paths.sort_by_key(std::fs::DirEntry::path);
             for entry in paths {
                 if let Ok(s) = std::fs::read_to_string(entry.path()) {
                     content.push_str(&s);
@@ -50,23 +50,12 @@ impl Section1 {
         content
     }
 
-    fn check_audit_rule(target_path: &str) -> bool {
-        let content = Self::read_audit_rules();
-        if content.is_empty() {
-            return false;
-        }
-        content.lines().any(|line| {
-            let line = line.trim();
-            !line.starts_with('#') && line.contains(target_path)
-        })
-    }
-
     fn audit_result(
         id: &str,
         title: &str,
         target: &str,
         found: bool,
-        relevant: Vec<&str>,
+        relevant: &[&str],
     ) -> CheckResult {
         CheckResult {
             rule: CisRule {
@@ -248,10 +237,10 @@ impl Section1 {
             audit_command: Some("auditctl -l | grep /usr/bin/dockerd".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let raw = Section1::read_audit_rules();
+                    let raw = Self::read_audit_rules();
                     let relevant: Vec<&str> = raw.lines().filter(|l| l.contains("/usr/bin/dockerd")).collect();
                     let found = !relevant.is_empty();
-                    Ok(Section1::audit_result("1.1.3", "Ensure that Docker daemon activity is audited", "/usr/bin/dockerd", found, relevant))
+                    Ok(Self::audit_result("1.1.3", "Ensure that Docker daemon activity is audited", "/usr/bin/dockerd", found, &relevant))
                 })
             },
             remediation_kind: RemediationKind::Guided,
@@ -278,18 +267,18 @@ impl Section1 {
             audit_command: Some("auditctl -l | grep /run/containerd".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let raw = Section1::read_audit_rules();
+                    let raw = Self::read_audit_rules();
                     let relevant: Vec<&str> = raw
                         .lines()
                         .filter(|l| l.contains("/run/containerd"))
                         .collect();
                     let found = !relevant.is_empty();
-                    Ok(Section1::audit_result(
+                    Ok(Self::audit_result(
                         "1.1.4",
                         "Ensure that containerd is audited",
                         "/run/containerd",
                         found,
-                        relevant,
+                        &relevant,
                     ))
                 })
             },
@@ -321,10 +310,10 @@ impl Section1 {
             audit_command: Some("auditctl -l | grep /var/lib/docker".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let raw = Section1::read_audit_rules();
+                    let raw = Self::read_audit_rules();
                     let relevant: Vec<&str> = raw.lines().filter(|l| l.contains("/var/lib/docker")).collect();
                     let found = !relevant.is_empty();
-                    Ok(Section1::audit_result("1.1.5", "Ensure that /var/lib/docker is audited", "/var/lib/docker", found, relevant))
+                    Ok(Self::audit_result("1.1.5", "Ensure that /var/lib/docker is audited", "/var/lib/docker", found, &relevant))
                 })
             },
             remediation_kind: RemediationKind::Guided,
@@ -353,16 +342,16 @@ impl Section1 {
             audit_command: Some("auditctl -l | grep /etc/docker".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let raw = Section1::read_audit_rules();
+                    let raw = Self::read_audit_rules();
                     let relevant: Vec<&str> =
                         raw.lines().filter(|l| l.contains("/etc/docker")).collect();
                     let found = !relevant.is_empty();
-                    Ok(Section1::audit_result(
+                    Ok(Self::audit_result(
                         "1.1.6",
                         "Ensure that /etc/docker is audited",
                         "/etc/docker",
                         found,
-                        relevant,
+                        &relevant,
                     ))
                 })
             },
@@ -391,10 +380,10 @@ impl Section1 {
             audit_command: Some("auditctl -l | grep docker.service".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let raw = Section1::read_audit_rules();
+                    let raw = Self::read_audit_rules();
                     let relevant: Vec<&str> = raw.lines().filter(|l| l.contains("docker.service")).collect();
                     let found = !relevant.is_empty();
-                    Ok(Section1::audit_result("1.1.7", "Ensure that docker.service is audited", "docker.service", found, relevant))
+                    Ok(Self::audit_result("1.1.7", "Ensure that docker.service is audited", "docker.service", found, &relevant))
                 })
             },
             remediation_kind: RemediationKind::Guided,
@@ -421,10 +410,10 @@ impl Section1 {
             audit_command: Some("auditctl -l | grep containerd.sock".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let raw = Section1::read_audit_rules();
+                    let raw = Self::read_audit_rules();
                     let relevant: Vec<&str> = raw.lines().filter(|l| l.contains("containerd.sock")).collect();
                     let found = !relevant.is_empty();
-                    Ok(Section1::audit_result("1.1.8", "Ensure that containerd.sock is audited", "containerd.sock", found, relevant))
+                    Ok(Self::audit_result("1.1.8", "Ensure that containerd.sock is audited", "containerd.sock", found, &relevant))
                 })
             },
             remediation_kind: RemediationKind::Guided,
@@ -451,10 +440,10 @@ impl Section1 {
             audit_command: Some("auditctl -l | grep docker.sock".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let raw = Section1::read_audit_rules();
+                    let raw = Self::read_audit_rules();
                     let relevant: Vec<&str> = raw.lines().filter(|l| l.contains("docker.sock")).collect();
                     let found = !relevant.is_empty();
-                    Ok(Section1::audit_result("1.1.9", "Ensure that docker.sock is audited", "docker.sock", found, relevant))
+                    Ok(Self::audit_result("1.1.9", "Ensure that docker.sock is audited", "docker.sock", found, &relevant))
                 })
             },
             remediation_kind: RemediationKind::Guided,
@@ -504,10 +493,10 @@ impl Section1 {
                             tags: None,
                         });
                     }
-                    let raw = Section1::read_audit_rules();
+                    let raw = Self::read_audit_rules();
                     let relevant: Vec<&str> = raw.lines().filter(|l| l.contains("/etc/default/docker")).collect();
                     let found = !relevant.is_empty();
-                    Ok(Section1::audit_result("1.1.10", "Ensure that /etc/default/docker is audited", "/etc/default/docker", found, relevant))
+                    Ok(Self::audit_result("1.1.10", "Ensure that /etc/default/docker is audited", "/etc/default/docker", found, &relevant))
                 })
             },
             remediation_kind: RemediationKind::Guided,
@@ -557,10 +546,10 @@ impl Section1 {
                             tags: None,
                         });
                     }
-                    let raw = Section1::read_audit_rules();
+                    let raw = Self::read_audit_rules();
                     let relevant: Vec<&str> = raw.lines().filter(|l| l.contains("daemon.json")).collect();
                     let found = !relevant.is_empty();
-                    Ok(Section1::audit_result("1.1.11", "Ensure that /etc/docker/daemon.json is audited", "/etc/docker/daemon.json", found, relevant))
+                    Ok(Self::audit_result("1.1.11", "Ensure that /etc/docker/daemon.json is audited", "/etc/docker/daemon.json", found, &relevant))
                 })
             },
             remediation_kind: RemediationKind::Guided,
@@ -610,10 +599,10 @@ impl Section1 {
                             tags: None,
                         });
                     }
-                    let raw = Section1::read_audit_rules();
+                    let raw = Self::read_audit_rules();
                     let relevant: Vec<&str> = raw.lines().filter(|l| l.contains("/etc/containerd/config.toml")).collect();
                     let found = !relevant.is_empty();
-                    Ok(Section1::audit_result("1.1.12", "Ensure that /etc/containerd/config.toml is audited", "/etc/containerd/config.toml", found, relevant))
+                    Ok(Self::audit_result("1.1.12", "Ensure that /etc/containerd/config.toml is audited", "/etc/containerd/config.toml", found, &relevant))
                 })
             },
             remediation_kind: RemediationKind::Guided,
@@ -640,12 +629,12 @@ impl Section1 {
             audit_command: Some("auditctl -l | grep /usr/bin/containerd".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let raw = Section1::read_audit_rules();
+                    let raw = Self::read_audit_rules();
                     let relevant: Vec<&str> = raw.lines()
                         .filter(|l| l.contains("/usr/bin/containerd") && !l.contains("containerd-shim"))
                         .collect();
                     let found = !relevant.is_empty();
-                    Ok(Section1::audit_result("1.1.14", "Ensure that /usr/bin/containerd is audited", "/usr/bin/containerd", found, relevant))
+                    Ok(Self::audit_result("1.1.14", "Ensure that /usr/bin/containerd is audited", "/usr/bin/containerd", found, &relevant))
                 })
             },
             remediation_kind: RemediationKind::Guided,
@@ -672,10 +661,10 @@ impl Section1 {
             audit_command: Some("auditctl -l | grep /usr/bin/runc".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let raw = Section1::read_audit_rules();
+                    let raw = Self::read_audit_rules();
                     let relevant: Vec<&str> = raw.lines().filter(|l| l.contains("/usr/bin/runc")).collect();
                     let found = !relevant.is_empty();
-                    Ok(Section1::audit_result("1.1.18", "Ensure that /usr/bin/runc is audited", "/usr/bin/runc", found, relevant))
+                    Ok(Self::audit_result("1.1.18", "Ensure that /usr/bin/runc is audited", "/usr/bin/runc", found, &relevant))
                 })
             },
             remediation_kind: RemediationKind::Guided,
