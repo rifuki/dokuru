@@ -118,7 +118,7 @@ export function AppSidebar() {
                   asChild
                   isActive={isActive(isAdmin ? "/admin" : "/")}
                   tooltip="Overview"
-                  className="text-base"
+                  className="text-base! py-2.5!"
                 >
                   <Link to={isAdmin ? "/admin" : "/"}>
                     <LayoutDashboard className="size-4" />
@@ -145,7 +145,7 @@ export function AppSidebar() {
                       asChild
                       isActive={isActive(item.href)}
                       tooltip={item.title}
-                      className="text-base"
+                      className="text-base! py-2.5!"
                     >
                       <Link to={item.href}>
                         <item.icon className="size-4" />
@@ -257,7 +257,7 @@ export function AppSidebar() {
                     asChild
                     isActive={isActive(item.href)}
                     tooltip={item.title}
-                    className="text-base"
+                    className="text-base! py-2.5!"
                   >
                     <Link to={item.href}>
                       <item.icon className="size-4" />
