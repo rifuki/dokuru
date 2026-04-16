@@ -118,7 +118,7 @@ export function AppSidebar() {
                   asChild
                   isActive={isActive(isAdmin ? "/admin" : "/agents")}
                   tooltip={isAdmin ? "Overview" : "Agents"}
-                  className="text-base! py-2.5! data-[active=true]:bg-miku-primary/15 data-[active=true]:text-white data-[active=true]:font-semibold"
+                  className="text-base! py-2.5! data-[active=true]:bg-miku-primary/15 data-[active=true]:text-miku-primary data-[active=true]:font-semibold"
                 >
                   <Link to={isAdmin ? "/admin" : "/agents"}>
                     <LayoutDashboard className="size-4" />
@@ -204,18 +204,18 @@ export function AppSidebar() {
                         <CollapsibleTrigger asChild>
                           {isIconMode ? (
                             <SidebarMenuButton tooltip={agent.name} isActive={isAgentActive}>
-                              <Box className="size-5 text-blue-400" />
+                              <Box className="size-5 text-miku-primary" />
                             </SidebarMenuButton>
                           ) : (
                             <button
                               type="button"
                               className={`w-full flex items-center gap-3 px-3 py-2.5 text-base font-semibold rounded-none transition-colors ${
                                 isAgentActive
-                                  ? "text-blue-400"
+                                  ? "text-miku-primary"
                                   : "text-sidebar-foreground hover:bg-sidebar-accent/40"
                               }`}
                             >
-                              <Box className="size-5 shrink-0 text-blue-400" />
+                              <Box className="size-5 shrink-0 text-miku-primary" />
                               <span className="flex-1 truncate text-left">{agent.name}</span>
                               <ChevronDown
                                 className={`size-5 shrink-0 text-sidebar-foreground/50 transition-transform duration-200 ${
@@ -237,7 +237,7 @@ export function AppSidebar() {
                                     to={item.href}
                                     className={`flex items-center gap-3 py-2 text-sm transition-colors ${
                                       active
-                                        ? "px-3 mx-0 rounded-none border-l-[3px] border-blue-400 bg-miku-primary/20 text-blue-300 font-semibold"
+                                        ? "px-3 mx-0 rounded-none border-l-[3px] border-miku-primary bg-miku-primary/20 text-miku-primary font-semibold"
                                         : "px-3 mx-1.5 rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
                                     }`}
                                   >
