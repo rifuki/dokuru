@@ -232,7 +232,6 @@ function AgentsList() {
                 </div>
                 <div className="flex items-center gap-2">
                     <Button
-                        variant="outline"
                         onClick={handleRefresh}
                         disabled={isLoading}
                     >
