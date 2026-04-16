@@ -54,9 +54,7 @@ export function AppSidebar() {
   const [openAgents, setOpenAgents] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    if (!isAdmin) {
-      fetchAgents();
-    }
+    if (!isAdmin) fetchAgents();
   }, [fetchAgents, isAdmin]);
 
   useEffect(() => {
@@ -110,7 +108,7 @@ export function AppSidebar() {
         {/* Platform */}
         <SidebarGroup>
           <SidebarGroupLabel>Platform</SidebarGroupLabel>
-          <div className="px-2">
+          <div className="px-2 group-data-[collapsible=icon]:px-0">
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton
@@ -133,7 +131,7 @@ export function AppSidebar() {
         {isAdmin && (
           <SidebarGroup>
             <SidebarGroupLabel>Admin</SidebarGroupLabel>
-            <div className="px-2">
+            <div className="px-2 group-data-[collapsible=icon]:px-0">
               <SidebarMenu>
                 {[
                   { title: "Users", href: "/admin/users", icon: Users },
@@ -162,69 +160,80 @@ export function AppSidebar() {
         {!isAdmin && agents.length > 0 && (
           <SidebarGroup>
             <SidebarGroupLabel>Agents</SidebarGroupLabel>
-            <div className="px-2 space-y-1.5">
-              {agents.map((agent) => (
-                <Collapsible
-                  key={agent.id}
-                  open={openAgents[agent.id] ?? false}
-                  onOpenChange={() => toggleAgent(agent.id)}
-                >
-                  {/* Card wrapper */}
-                  <div
-                    className={`rounded-lg border transition-colors overflow-hidden ${
-                      location.pathname.startsWith(`/agents/${agent.id}`)
-                        ? "border-sidebar-primary/30 bg-sidebar-accent/50"
-                        : "border-sidebar-border bg-sidebar-accent/20 hover:bg-sidebar-accent/35"
-                    }`}
+            {/* px-2 wrapper resets to 0 in icon mode */}
+            <div className="px-2 space-y-1.5 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:space-y-1">
+              {agents.map((agent) => {
+                const isAgentActive = location.pathname.startsWith(`/agents/${agent.id}`);
+                return (
+                  <Collapsible
+                    key={agent.id}
+                    open={openAgents[agent.id] ?? false}
+                    onOpenChange={() => toggleAgent(agent.id)}
                   >
-                    {/* Agent header / trigger */}
-                    <CollapsibleTrigger asChild>
-                      <button
-                        type="button"
-                        className="w-full flex items-center gap-3 px-3 py-3 text-left"
+                    <SidebarMenuItem>
+                      {/* Card wrapper — transparent in icon mode */}
+                      <div
+                        className={`rounded-lg border transition-colors overflow-hidden
+                          group-data-[collapsible=icon]:rounded-md
+                          group-data-[collapsible=icon]:border-transparent
+                          group-data-[collapsible=icon]:bg-transparent
+                          group-data-[collapsible=icon]:overflow-visible
+                          ${
+                            isAgentActive
+                              ? "border-sidebar-primary/30 bg-sidebar-accent/50"
+                              : "border-sidebar-border bg-sidebar-accent/20"
+                          }`}
                       >
-                        <Box className="size-5 shrink-0 text-blue-400" />
-                        <span className="flex-1 truncate text-[13px] font-semibold text-sidebar-foreground">
-                          {agent.name}
-                        </span>
-                        <span
-                          className={`h-2 w-2 rounded-full shrink-0 ${
-                            agent.status === "online" ? "bg-green-500" : "bg-gray-500"
-                          }`}
-                        />
-                        <ChevronDown
-                          className={`size-4 shrink-0 text-sidebar-foreground/50 transition-transform duration-200 ${
-                            openAgents[agent.id] ? "rotate-180" : ""
-                          }`}
-                        />
-                      </button>
-                    </CollapsibleTrigger>
-
-                    {/* Sub-nav inside card */}
-                    <CollapsibleContent>
-                      <div className="border-t border-sidebar-border/60 pb-1.5 pt-1">
-                        {agentNavItems(agent.id).map((item) => {
-                          const active = isActive(item.href);
-                          return (
-                            <Link
-                              key={item.href}
-                              to={item.href}
-                              className={`flex items-center gap-3 px-3 py-2 mx-1.5 rounded-md text-sm transition-colors ${
-                                active
-                                  ? "bg-sidebar-primary/15 text-sidebar-primary font-medium"
-                                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                        {/* Trigger — use SidebarMenuButton so icon mode works */}
+                        <CollapsibleTrigger asChild>
+                          <SidebarMenuButton
+                            tooltip={agent.name}
+                            isActive={isAgentActive}
+                            className="text-[15px] font-semibold rounded-none group-data-[collapsible=icon]:rounded-md"
+                          >
+                            <Box className="size-4 shrink-0 text-blue-400" />
+                            <span className="flex-1 truncate">{agent.name}</span>
+                            {/* Hide these in icon mode */}
+                            <span
+                              className={`h-2 w-2 rounded-full shrink-0 group-data-[collapsible=icon]:hidden ${
+                                agent.status === "online" ? "bg-green-500" : "bg-gray-500"
                               }`}
-                            >
-                              <item.icon className="size-4 shrink-0" />
-                              <span>{item.title}</span>
-                            </Link>
-                          );
-                        })}
+                            />
+                            <ChevronDown
+                              className={`size-4 shrink-0 text-sidebar-foreground/50 transition-transform duration-200 group-data-[collapsible=icon]:hidden ${
+                                openAgents[agent.id] ? "rotate-180" : ""
+                              }`}
+                            />
+                          </SidebarMenuButton>
+                        </CollapsibleTrigger>
+
+                        {/* Sub-nav — hidden entirely in icon mode */}
+                        <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
+                          <div className="border-t border-sidebar-border/60 pb-1.5 pt-1">
+                            {agentNavItems(agent.id).map((item) => {
+                              const active = isActive(item.href);
+                              return (
+                                <Link
+                                  key={item.href}
+                                  to={item.href}
+                                  className={`flex items-center gap-3 px-3 py-2 mx-1.5 rounded-md text-sm transition-colors ${
+                                    active
+                                      ? "bg-sidebar-primary/15 text-sidebar-primary font-medium"
+                                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                                  }`}
+                                >
+                                  <item.icon className="size-4 shrink-0" />
+                                  <span>{item.title}</span>
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        </CollapsibleContent>
                       </div>
-                    </CollapsibleContent>
-                  </div>
-                </Collapsible>
-              ))}
+                    </SidebarMenuItem>
+                  </Collapsible>
+                );
+              })}
             </div>
           </SidebarGroup>
         )}
@@ -232,7 +241,7 @@ export function AppSidebar() {
         {/* Settings */}
         <SidebarGroup>
           <SidebarGroupLabel>Settings</SidebarGroupLabel>
-          <div className="px-2">
+          <div className="px-2 group-data-[collapsible=icon]:px-0">
             <SidebarMenu>
               {[
                 { title: "Profile", href: "/settings/profile", icon: User },
@@ -240,7 +249,12 @@ export function AppSidebar() {
                 { title: "Sessions", href: "/settings/sessions", icon: MonitorSmartphone },
               ].map((item) => (
                 <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={isActive(item.href)} tooltip={item.title} className="text-base">
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive(item.href)}
+                    tooltip={item.title}
+                    className="text-base"
+                  >
                     <Link to={item.href}>
                       <item.icon className="size-4" />
                       <span>{item.title}</span>
