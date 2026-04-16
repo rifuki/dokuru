@@ -46,10 +46,10 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
         }
 
         // Auto-generate URL
-        // IP address → http://host:port
+        // IP address → http://host:port (default 3939 if empty)
         // Domain → http://host (assume https/cloudflare/etc)
-        const url = showPortInput && port.trim()
-            ? `http://${host.trim()}:${port.trim()}` 
+        const url = showPortInput
+            ? `http://${host.trim()}:${port.trim() || "3939"}` 
             : `http://${host.trim()}`;
 
         try {
@@ -116,7 +116,7 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                         )}
                     </div>
                     <p className="text-xs text-muted-foreground -mt-2">
-                        Agent will be accessible at: {host || "host"}{showPortInput && port ? `:${port}` : ""}
+                        Agent will be accessible at: {host || "host"}{showPortInput ? `:${port || "3939"}` : ""}
                     </p>
 
                     <div className="space-y-2">
