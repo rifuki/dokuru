@@ -68,9 +68,11 @@ export function AppSidebar() {
       }
     }
     if (Object.keys(active).length > 0) {
-      setOpenAgents((prev) => {
-        const hasChanges = Object.keys(active).some(id => !prev[id]);
-        return hasChanges ? { ...prev, ...active } : prev;
+      queueMicrotask(() => {
+        setOpenAgents((prev) => {
+          const hasChanges = Object.keys(active).some(id => !prev[id]);
+          return hasChanges ? { ...prev, ...active } : prev;
+        });
       });
     }
   }, [agents, location.pathname]);
