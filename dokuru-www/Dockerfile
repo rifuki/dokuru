@@ -13,6 +13,11 @@ RUN bun install --frozen-lockfile
 
 # Copy source and build
 COPY . .
+
+# Build-time environment variables
+ARG VITE_API_BASE_URL
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+
 RUN bun run build
 
 # Stage 2: Production (Nginx)

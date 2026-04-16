@@ -61,3 +61,5 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            VITE_API_BASE_URL=https://api.dokuru.rifuki.dev
