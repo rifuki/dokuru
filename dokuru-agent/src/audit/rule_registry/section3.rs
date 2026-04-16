@@ -39,7 +39,7 @@ impl Section3 {
     }
 
     /// True if no extra permission bits are set beyond `max`
-    fn perms_ok(mode: u32, max: u32) -> bool {
+    const fn perms_ok(mode: u32, max: u32) -> bool {
         (mode & !max) == 0
     }
 
