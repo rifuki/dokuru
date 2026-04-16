@@ -3,7 +3,7 @@ import { useAuthUser } from "@/stores/use-auth-store";
 import { useAgentStore } from "@/stores/use-agent-store";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus, RefreshCw, Server, Box, Cpu, MemoryStick, Container, Image, HardDrive, Network, Layers } from "lucide-react";
+import { Plus, RefreshCw, Server, Container, Image, HardDrive, Network } from "lucide-react";
 import { AddAgentModal } from "@/components/agents/AddAgentModal";
 import { agentDirectApi, type DockerInfo } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
@@ -18,138 +18,72 @@ type AgentWithInfo = {
     loading: boolean;
 };
 
-function formatBytes(bytes: number): string {
-    if (bytes === 0) return "0 B";
-    const gb = bytes / (1024 * 1024 * 1024);
-    if (gb >= 1) return `${gb.toFixed(1)} GB`;
-    const mb = bytes / (1024 * 1024);
-    return `${mb.toFixed(0)} MB`;
-}
-
 function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void }) {
     const { agent, info, loading } = data;
     const isOnline = agent.status === "online";
 
     return (
         <div
-            className="rounded-xl border bg-card hover:bg-accent/30 transition-colors cursor-pointer overflow-hidden"
+            className="bg-[#23282D] rounded-md border border-white/5 hover:bg-white/[0.02] transition-all cursor-pointer"
             onClick={onClick}
         >
-            {/* Card Header */}
-            <div className="flex items-start gap-4 p-5 border-b">
-                <div className="flex-shrink-0 h-12 w-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                    <Box className="h-6 w-6 text-blue-400" />
+            <div className="p-4 flex items-center gap-6">
+                <div className="w-14 flex items-center justify-center text-[#3BA5EF] shrink-0">
+                    <Server className="w-14 h-14" />
                 </div>
+
                 <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-semibold text-base truncate">{agent.name}</h3>
+                    <div className="flex items-center gap-3 flex-wrap">
+                        <span className="text-base font-bold text-white tracking-tight">{agent.name}</span>
                         <span
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-[11px] font-semibold uppercase ${
                                 isOnline
-                                    ? "bg-green-500/15 text-green-600 dark:text-green-400"
-                                    : "bg-gray-500/15 text-gray-500 dark:text-gray-400"
+                                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                                    : "border-gray-500/30 bg-gray-500/10 text-gray-400"
                             }`}
                         >
-                            <span className={`h-1.5 w-1.5 rounded-full bg-current ${isOnline ? "animate-pulse" : ""}`} />
-                            {isOnline ? "Up" : "Down"}
-                        </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5 truncate">{agent.url}</p>
-                    <div className="flex items-center gap-3 mt-1 flex-wrap">
-                        <span className="text-xs text-muted-foreground capitalize">
-                            {agent.access_mode}
+                            {isOnline ? "●" : "○"} {isOnline ? "UP" : "DOWN"}
                         </span>
                         {info && (
-                            <>
-                                <span className="text-xs text-muted-foreground">•</span>
-                                <span className="text-xs text-muted-foreground">
-                                    Docker {info.docker_version}
-                                </span>
-                                <span className="text-xs text-muted-foreground">•</span>
-                                <span className="text-xs text-muted-foreground">{info.os}</span>
-                            </>
+                            <span className="text-[12px] text-slate-300 font-mono font-medium">
+                                Docker {info.docker_version}
+                            </span>
                         )}
+                        <span className="text-[12px] text-slate-400 font-mono">{agent.url}</span>
                     </div>
-                </div>
-            </div>
 
-            {/* Stats */}
-            <div className="p-4">
-                {loading ? (
-                    <div className="flex items-center justify-center py-4">
-                        <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-primary" />
-                    </div>
-                ) : info ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-                        <StatItem
-                            icon={<Layers className="h-4 w-4" />}
-                            label="Stacks"
-                            value={info.stacks}
-                        />
-                        <StatItem
-                            icon={<Container className="h-4 w-4" />}
-                            label="Containers"
-                            value={info.containers.total}
-                            detail={
-                                <span className="text-green-500 dark:text-green-400">
-                                    {info.containers.running} running
+                    {loading ? (
+                        <div className="flex items-center gap-2 mt-3">
+                            <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-[#3BA5EF]" />
+                            <span className="text-[12px] text-slate-400">Loading...</span>
+                        </div>
+                    ) : info ? (
+                        <div className="flex items-center mt-3 text-[12px] font-medium text-slate-300 flex-wrap divide-x divide-white/[0.08]">
+                            <div className="flex items-center gap-1.5 pr-3">
+                                <Container className="w-3.5 h-3.5" />
+                                <span>{info.containers.total} containers</span>
+                                <span className="inline-flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded px-1.5 py-0.5 text-[11px] font-semibold ml-2">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                    {info.containers.running}
                                 </span>
-                            }
-                        />
-                        <StatItem
-                            icon={<Image className="h-4 w-4" />}
-                            label="Images"
-                            value={info.images}
-                        />
-                        <StatItem
-                            icon={<HardDrive className="h-4 w-4" />}
-                            label="Volumes"
-                            value={info.volumes}
-                        />
-                        <StatItem
-                            icon={<Network className="h-4 w-4" />}
-                            label="Networks"
-                            value={info.networks}
-                        />
-                        <StatItem
-                            icon={<Cpu className="h-4 w-4" />}
-                            label="CPU"
-                            value={`${info.cpu_count} core${info.cpu_count !== 1 ? "s" : ""}`}
-                        />
-                        <StatItem
-                            icon={<MemoryStick className="h-4 w-4" />}
-                            label="RAM"
-                            value={formatBytes(info.memory_total)}
-                        />
-                    </div>
-                ) : (
-                    <p className="text-xs text-muted-foreground text-center py-3">
-                        Unable to connect to agent
-                    </p>
-                )}
-            </div>
-        </div>
-    );
-}
-
-function StatItem({
-    icon,
-    label,
-    value,
-    detail,
-}: {
-    icon: React.ReactNode;
-    label: string;
-    value: string | number;
-    detail?: React.ReactNode;
-}) {
-    return (
-        <div className="flex items-center gap-2">
-            <span className="text-muted-foreground shrink-0">{icon}</span>
-            <div className="min-w-0">
-                <p className="text-sm font-medium leading-none">{value}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
-                {detail && <p className="text-xs mt-0.5">{detail}</p>}
+                            </div>
+                            <div className="flex items-center gap-1.5 px-3">
+                                <Image className="w-3.5 h-3.5" />
+                                <span>{info.images} images</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 px-3">
+                                <HardDrive className="w-3.5 h-3.5" />
+                                <span>{info.volumes} volumes</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 pl-3">
+                                <Network className="w-3.5 h-3.5" />
+                                <span>{info.networks} networks</span>
+                            </div>
+                        </div>
+                    ) : (
+                        <p className="text-[12px] text-slate-500 mt-3">Unable to connect</p>
+                    )}
+                </div>
             </div>
         </div>
     );
