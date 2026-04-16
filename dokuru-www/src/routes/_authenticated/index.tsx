@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useAuthUser } from "@/stores/use-auth-store";
-import { useAgentStore } from "@/stores/use-agent-store";
+import { useAgentStore, getAgentToken } from "@/stores/use-agent-store";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus, RefreshCw, Container, Image, HardDrive, Search, ChevronDown, ArrowUpDown, Edit, Trash2, Cpu, Server } from "lucide-react";
@@ -169,8 +169,17 @@ function Dashboard() {
             setAgentInfos(loadingState);
 
             for (const agent of agents) {
+                const token = getAgentToken(agent.id);
+                if (!token) {
+                    setAgentInfos((prev) => ({
+                        ...prev,
+                        [agent.id]: { info: null, loading: false },
+                    }));
+                    continue;
+                }
+
                 agentDirectApi
-                    .getInfo(agent.url)
+                    .getInfo(agent.url, token)
                     .then((info) => {
                         setAgentInfos((prev) => ({
                             ...prev,

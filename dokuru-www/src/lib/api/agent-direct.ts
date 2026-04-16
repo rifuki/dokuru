@@ -36,13 +36,15 @@ export interface AuditResponse {
 }
 
 export const agentDirectApi = {
-  getInfo: async (agentUrl: string): Promise<DockerInfo> => {
-    const response = await axios.get(`${agentUrl}/api/v1/info`);
+  getInfo: async (agentUrl: string, token?: string): Promise<DockerInfo> => {
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const response = await axios.get(`${agentUrl}/api/v1/info`, { headers });
     return response.data.data;
   },
 
-  runAudit: async (agentUrl: string): Promise<AuditResponse> => {
-    const response = await axios.get(`${agentUrl}/audit`);
+  runAudit: async (agentUrl: string, token?: string): Promise<AuditResponse> => {
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const response = await axios.get(`${agentUrl}/audit`, { headers });
     return response.data.data;
   },
 

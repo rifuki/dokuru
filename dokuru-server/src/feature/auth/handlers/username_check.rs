@@ -40,15 +40,12 @@ pub async fn check_username_availability(
     }
 
     // Check if username exists
-    let exists = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)",
-    )
-    .bind(username)
-    .fetch_one(state.db.pool())
-    .await
-    .map_err(|e| {
-        crate::infrastructure::web::response::ApiError::default().log_only(e)
-    })?;
+    let exists =
+        sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)")
+            .bind(username)
+            .fetch_one(state.db.pool())
+            .await
+            .map_err(|e| crate::infrastructure::web::response::ApiError::default().log_only(e))?;
 
     Ok(ApiSuccess::default()
         .with_data(serde_json::json!({

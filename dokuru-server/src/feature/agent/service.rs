@@ -24,6 +24,7 @@ impl AgentService {
         dto: CreateAgentDto,
     ) -> Result<AgentResponse> {
         let token_hash = Self::hash_token(&dto.token);
+        let plain_token = dto.token.clone(); // Keep for response
 
         let agent = Agent {
             id: Uuid::new_v4(),
@@ -39,7 +40,7 @@ impl AgentService {
         };
 
         let created = self.agent_repo.create(pool, &agent).await?;
-        Ok(Self::to_response(created))
+        Ok(Self::to_response_with_token(created, Some(plain_token)))
     }
 
     pub async fn list_agents(&self, pool: &PgPool, user_id: Uuid) -> Result<Vec<AgentResponse>> {
@@ -54,13 +55,13 @@ impl AgentService {
         user_id: Uuid,
     ) -> Result<Option<AgentResponse>> {
         let agent = self.agent_repo.find_by_id(pool, id).await?;
-        
+
         if let Some(agent) = agent {
             if agent.user_id == user_id {
                 return Ok(Some(Self::to_response(agent)));
             }
         }
-        
+
         Ok(None)
     }
 
@@ -76,6 +77,10 @@ impl AgentService {
     }
 
     fn to_response(agent: Agent) -> AgentResponse {
+        Self::to_response_with_token(agent, None)
+    }
+
+    fn to_response_with_token(agent: Agent, token: Option<String>) -> AgentResponse {
         AgentResponse {
             id: agent.id,
             name: agent.name,
@@ -85,6 +90,7 @@ impl AgentService {
             last_seen: agent.last_seen,
             created_at: agent.created_at,
             updated_at: agent.updated_at,
+            token,
         }
     }
 }

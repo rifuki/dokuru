@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { agentApi } from "@/lib/api/agent";
 import { agentDirectApi, type DockerInfo, type AuditResponse } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
+import { getAgentToken } from "@/stores/use-agent-store";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Server, Trash2, Container, Image, HardDrive, Network, Play, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { useAgentStore } from "@/stores/use-agent-store";
@@ -31,9 +32,16 @@ function AgentDetail() {
                 setAgent(data);
                 
                 // Fetch Docker info from agent directly
+                const token = getAgentToken(data.id);
+                if (!token) {
+                    toast.error("Agent token not found");
+                    setIsLoadingDocker(false);
+                    return;
+                }
+
                 setIsLoadingDocker(true);
                 try {
-                    const info = await agentDirectApi.getInfo(data.url);
+                    const info = await agentDirectApi.getInfo(data.url, token);
                     setDockerInfo(info);
                 } catch {
                     toast.error("Failed to connect to agent");
@@ -68,9 +76,15 @@ function AgentDetail() {
     const handleRunAudit = async () => {
         if (!agent) return;
 
+        const token = getAgentToken(agent.id);
+        if (!token) {
+            toast.error("Agent token not found");
+            return;
+        }
+
         setIsRunningAudit(true);
         try {
-            const results = await agentDirectApi.runAudit(agent.url);
+            const results = await agentDirectApi.runAudit(agent.url, token);
             setAuditResults(results);
             toast.success("Audit completed successfully");
         } catch {

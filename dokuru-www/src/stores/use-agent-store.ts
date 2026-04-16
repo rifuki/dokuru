@@ -32,6 +32,12 @@ export const useAgentStore = create<AgentState>((set) => ({
     set({ isLoading: true, error: null });
     try {
       const agent = await agentApi.create(dto);
+      
+      // Save token to localStorage (only returned on create)
+      if (agent.token) {
+        localStorage.setItem(`agent_token_${agent.id}`, agent.token);
+      }
+      
       set((state) => ({
         agents: [agent, ...state.agents],
         isLoading: false,
@@ -59,3 +65,8 @@ export const useAgentStore = create<AgentState>((set) => ({
 
   clearError: () => set({ error: null }),
 }));
+
+// Helper to get agent token from localStorage
+export const getAgentToken = (agentId: string): string | null => {
+  return localStorage.getItem(`agent_token_${agentId}`);
+};

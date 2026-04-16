@@ -1,8 +1,7 @@
 use axum::{
-    Extension,
+    Extension, Json,
     extract::{Path, State},
     http::StatusCode,
-    Json,
 };
 use uuid::Uuid;
 use validator::Validate;

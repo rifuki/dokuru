@@ -7,6 +7,7 @@ export interface Agent {
   last_seen: string | null;
   created_at: string;
   updated_at: string;
+  token?: string; // Only returned on create
 }
 
 export interface CreateAgentDto {

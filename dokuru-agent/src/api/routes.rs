@@ -4,14 +4,14 @@ use super::state::AppState;
 use axum::{Router, middleware};
 
 pub fn build_router(state: AppState) -> Router {
-    // Public routes (no auth) - for Direct Mode
+    // Public routes (no auth) - only health check
     let public_routes = Router::new()
-        .merge(health::routes())
-        .merge(info::routes())
-        .merge(audit::routes());
+        .merge(health::routes());
 
-    // Protected routes (require auth) - for future Relay Mode
+    // Protected routes (require auth token)
     let protected_routes = Router::new()
+        .merge(info::routes())
+        .merge(audit::routes())
         .merge(fix::routes())
         .merge(rules::routes())
         .merge(containers::routes())

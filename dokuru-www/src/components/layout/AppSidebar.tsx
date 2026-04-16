@@ -169,7 +169,7 @@ export function AppSidebar() {
                 return (
                   <Collapsible
                     key={agent.id}
-                    open={openAgents[agent.id] ?? false}
+                    open={openAgents[agent.id] ?? true}
                     onOpenChange={() => toggleAgent(agent.id)}
                   >
                     <div>
@@ -186,21 +186,28 @@ export function AppSidebar() {
                         }
                       >
                         <CollapsibleTrigger asChild>
-                          <SidebarMenuButton
-                            tooltip={agent.name}
-                            isActive={isAgentActive}
-                            className={`text-[15px] font-semibold ${isIconMode ? "" : "rounded-none py-3!"}`}
-                          >
-                            <Box className="size-4 shrink-0 text-blue-400" />
-                            <span className="flex-1 truncate">{agent.name}</span>
-                            {!isIconMode && (
+                          {isIconMode ? (
+                            <SidebarMenuButton tooltip={agent.name} isActive={isAgentActive}>
+                              <Box className="size-5 text-blue-400" />
+                            </SidebarMenuButton>
+                          ) : (
+                            <button
+                              type="button"
+                              className={`w-full flex items-center gap-3 px-3 py-2.5 text-base font-semibold rounded-none transition-colors ${
+                                isAgentActive
+                                  ? "text-sidebar-primary"
+                                  : "text-sidebar-foreground hover:bg-sidebar-accent/40"
+                              }`}
+                            >
+                              <Box className="size-5 shrink-0 text-blue-400" />
+                              <span className="flex-1 truncate text-left">{agent.name}</span>
                               <ChevronDown
-                                className={`size-4 shrink-0 text-sidebar-foreground/50 transition-transform duration-200 ${
+                                className={`size-5 shrink-0 text-sidebar-foreground/50 transition-transform duration-200 ${
                                   openAgents[agent.id] ? "rotate-180" : ""
                                 }`}
                               />
-                            )}
-                          </SidebarMenuButton>
+                            </button>
+                          )}
                         </CollapsibleTrigger>
 
                         {!isIconMode && (
