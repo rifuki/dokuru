@@ -65,7 +65,9 @@ function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void
                   Docker {info.docker_version}
                 </span>
               )}
-              <span className="text-[12px] text-muted-foreground/70 font-mono">{agent.url}</span>
+              <span className="text-[12px] text-muted-foreground/70 font-mono">
+                {agent.url.replace(/^https?:\/\//, '')}
+              </span>
             </div>
 
             {loading ? (
@@ -117,12 +119,13 @@ function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void
         <button
           className={`flex items-center justify-center gap-2 h-9 w-full rounded text-sm font-semibold transition-all cursor-pointer ${isOnline
             ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 ring-1 ring-emerald-500/20"
-            : "bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20"
+            : "bg-gray-500/10 border border-gray-500/30 text-gray-400"
             }`}
-          onClick={onClick}
+          onClick={isOnline ? onClick : undefined}
+          disabled={!isOnline}
         >
-          <span className={`w-2 h-2 rounded-full ${isOnline ? "bg-emerald-400 animate-pulse" : "bg-primary"}`}></span>
-          {isOnline ? "Connected" : "Connect"}
+          <span className={`w-2 h-2 rounded-full ${isOnline ? "bg-emerald-400 animate-pulse" : "bg-gray-400"}`}></span>
+          {isOnline ? "Connected" : "Disconnected"}
         </button>
       </div>
 
