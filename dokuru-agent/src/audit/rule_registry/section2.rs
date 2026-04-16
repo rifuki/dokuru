@@ -1,4 +1,5 @@
 // Section 2: Docker Daemon Configuration
+#![allow(clippy::too_many_lines)]
 use super::RuleDefinition;
 use crate::audit::{
     fix_helpers,
@@ -72,8 +73,23 @@ impl Section2 {
             remediation_kind: RemediationKind::Auto,
             fix_fn: Some(|_docker| {
                 Box::pin(async move {
-                    // Create dockremap user (ignore error if already exists)
+                    // Step 1: Create dockremap user (ignore error if already exists)
                     let _ = fix_helpers::run_cmd("useradd", &["-r", "-s", "/bin/false", "dockremap"]).await;
+
+                    // Step 2: Ensure /etc/subuid and /etc/subgid exist
+                    let _ = fix_helpers::run_cmd("touch", &["/etc/subuid", "/etc/subgid"]).await;
+
+                    // Step 3: Add subuid/subgid mappings for dockremap
+                    let _ = fix_helpers::run_cmd(
+                        "usermod",
+                        &["--add-subuids", "100000-165535", "dockremap"],
+                    ).await;
+                    let _ = fix_helpers::run_cmd(
+                        "usermod",
+                        &["--add-subgids", "100000-165535", "dockremap"],
+                    ).await;
+
+                    // Step 4: Write userns-remap to daemon.json
                     match fix_helpers::merge_daemon_json(
                         "userns-remap",
                         serde_json::Value::String("default".into()),
@@ -83,7 +99,7 @@ impl Section2 {
                             match fix_helpers::run_cmd("systemctl", &["restart", "docker"]).await {
                                 Ok((_, _, true)) => Ok(fix_helpers::applied(
                                     "2.10",
-                                    "userns-remap enabled in daemon.json, Docker daemon restarted",
+                                    "userns-remap enabled: dockremap user created, subuid/subgid mapped, Docker restarted",
                                     false,
                                 )),
                                 Ok((_, stderr, _)) => Ok(fix_helpers::blocked(

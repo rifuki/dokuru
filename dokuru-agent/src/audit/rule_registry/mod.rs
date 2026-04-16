@@ -72,6 +72,8 @@ impl RuleDefinition {
         result.rationale = Some(self.rationale.clone());
         result.impact = Some(self.impact.clone());
         result.tags = Some(self.tags.clone());
+        // Always use definition-level remediation_kind so FE knows if auto-fix is available
+        result.remediation_kind = self.remediation_kind.clone();
 
         Ok(result)
     }
