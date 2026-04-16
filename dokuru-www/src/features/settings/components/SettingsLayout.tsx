@@ -42,8 +42,8 @@ export function SettingsLayout() {
                                 className={`
                                         flex items-center gap-3 rounded-md px-3 py-1.5 text-[15px] font-medium transition-colors
                                         ${isActive
-                                        ? "bg-secondary/70 text-foreground"
-                                        : "text-muted-foreground hover:bg-secondary/40 hover:text-foreground"
+                                        ? "bg-primary/15 text-primary"
+                                        : "text-muted-foreground hover:bg-primary/10 hover:text-foreground"
                                     }
                                     `}
                             >

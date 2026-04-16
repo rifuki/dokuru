@@ -36,7 +36,7 @@ export function HeaderUserMenu() {
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full ml-1">
+                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full ml-1 hover:bg-primary/10">
                     <Avatar className="h-8 w-8 object-cover">
                         <AvatarImage src={getAvatarUrl(user?.avatar_url)} className="object-cover" />
                         <AvatarFallback className="bg-primary/10 text-primary text-xs">
@@ -54,7 +54,7 @@ export function HeaderUserMenu() {
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
-                    <DropdownMenuItem onClick={() => navigate({ to: "/settings/profile" })}>
+                    <DropdownMenuItem onClick={() => navigate({ to: "/settings/profile" })} className="focus:bg-primary/10 dark:focus:bg-primary/20 focus:text-primary">
                         <Settings className="mr-2 h-4 w-4" />
                         <span>User Settings</span>
                     </DropdownMenuItem>
@@ -68,17 +68,17 @@ export function HeaderUserMenu() {
                         </DropdownMenuSubTrigger>
                         <DropdownMenuPortal>
                             <DropdownMenuSubContent>
-                                <DropdownMenuItem onClick={() => setTheme("light")}>
+                                <DropdownMenuItem onClick={() => setTheme("light")} className="focus:bg-primary/10 dark:focus:bg-primary/20 focus:text-primary">
                                     <Sun className="mr-2 h-4 w-4" />
                                     <span>Light</span>
                                     {theme === "light" && <span className="ml-auto text-xs">✓</span>}
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => setTheme("dark")}>
+                                <DropdownMenuItem onClick={() => setTheme("dark")} className="focus:bg-primary/10 dark:focus:bg-primary/20 focus:text-primary">
                                     <Moon className="mr-2 h-4 w-4" />
                                     <span>Dark</span>
                                     {theme === "dark" && <span className="ml-auto text-xs">✓</span>}
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => setTheme("system")}>
+                                <DropdownMenuItem onClick={() => setTheme("system")} className="focus:bg-primary/10 dark:focus:bg-primary/20 focus:text-primary">
                                     <Monitor className="mr-2 h-4 w-4" />
                                     <span>System</span>
                                     {theme === "system" && <span className="ml-auto text-xs">✓</span>}
@@ -88,7 +88,7 @@ export function HeaderUserMenu() {
                     </DropdownMenuSub>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => logout.mutate()} className="text-destructive focus:text-destructive">
+                <DropdownMenuItem onClick={() => logout.mutate()} className="text-destructive focus:text-destructive focus:bg-destructive/10">
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Log out</span>
                 </DropdownMenuItem>

@@ -126,7 +126,7 @@ export function CommandMenuTrigger({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="inline-flex items-center gap-2 rounded-md border bg-background px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+      className="inline-flex items-center gap-2 rounded-md border bg-background px-3 py-1.5 text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary"
     >
       <Search className="h-3.5 w-3.5" />
       <span>Search...</span>
