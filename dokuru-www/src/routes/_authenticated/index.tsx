@@ -3,7 +3,7 @@ import { useAuthUser } from "@/stores/use-auth-store";
 import { useAgentStore } from "@/stores/use-agent-store";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus, RefreshCw, Container, Image, HardDrive, Network, Search, ChevronDown, ArrowUpDown, Edit, Trash2 } from "lucide-react";
+import { Plus, RefreshCw, Container, Image, HardDrive, Search, ChevronDown, ArrowUpDown, Edit, Trash2, Cpu, Server } from "lucide-react";
 import { AddAgentModal } from "@/components/agents/AddAgentModal";
 import { agentDirectApi, type DockerInfo } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
@@ -82,16 +82,20 @@ function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void
                                     </span>
                                 </div>
                                 <div className="flex items-center gap-1.5 px-3">
+                                    <HardDrive className="w-3.5 h-3.5" />
+                                    <span>{info.volumes} volumes</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 px-3">
                                     <Image className="w-3.5 h-3.5" />
                                     <span>{info.images} images</span>
                                 </div>
                                 <div className="flex items-center gap-1.5 px-3">
-                                    <HardDrive className="w-3.5 h-3.5" />
-                                    <span>{info.volumes} volumes</span>
+                                    <Cpu className="w-3.5 h-3.5" />
+                                    <span>{info.cpu_count} CPU</span>
                                 </div>
                                 <div className="flex items-center gap-1.5 pl-3">
-                                    <Network className="w-3.5 h-3.5" />
-                                    <span>{info.networks} networks</span>
+                                    <Server className="w-3.5 h-3.5" />
+                                    <span>{(info.memory_total / 1024 / 1024 / 1024).toFixed(0)} GB RAM</span>
                                 </div>
                             </div>
                         ) : (
