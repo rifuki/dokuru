@@ -13,8 +13,10 @@ pub async fn request_id_middleware(mut req: Request, next: Next) -> Response {
         .headers()
         .get(REQUEST_ID_HEADER)
         .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| Uuid::new_v4().to_string());
+        .map_or_else(
+            || Uuid::new_v4().to_string(),
+            std::string::ToString::to_string,
+        );
 
     req.extensions_mut().insert(RequestId(id.clone()));
 

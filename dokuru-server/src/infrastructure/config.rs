@@ -86,17 +86,18 @@ pub struct CookieConfig {
 impl CookieConfig {
     fn from_env(is_production: bool) -> Self {
         // Parse SameSite from env, fallback based on environment
-        let same_site = env::var("COOKIE_SAMESITE")
-            .map(|s| match s.to_lowercase().as_str() {
+        let same_site = env::var("COOKIE_SAMESITE").map_or_else(
+            |_| Self::default_same_site(is_production),
+            |s| match s.to_lowercase().as_str() {
                 "strict" => SameSite::Strict,
                 "lax" => SameSite::Lax,
                 "none" => SameSite::None,
                 _ => {
-                    eprintln!("Warning: Invalid COOKIE_SAMESITE '{}', using default", s);
+                    eprintln!("Warning: Invalid COOKIE_SAMESITE '{s}', using default");
                     Self::default_same_site(is_production)
                 }
-            })
-            .unwrap_or_else(|_| Self::default_same_site(is_production));
+            },
+        );
 
         // Secure flag: env override or default based on production
         let secure = env::var("COOKIE_SECURE")
@@ -115,7 +116,7 @@ impl CookieConfig {
         }
     }
 
-    fn default_same_site(is_production: bool) -> SameSite {
+    const fn default_same_site(is_production: bool) -> SameSite {
         if is_production {
             SameSite::Strict
         } else {

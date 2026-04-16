@@ -18,13 +18,13 @@ pub async fn set_log_level(
     let new_filter = EnvFilter::try_new(&req.level).map_err(|e| {
         ApiError::default()
             .with_code(axum::http::StatusCode::BAD_REQUEST)
-            .with_message(format!("Invalid log level filter: {}", e))
+            .with_message(format!("Invalid log level filter: {e}"))
     })?;
 
     state
         .log_reload_handle
         .reload(new_filter)
-        .map_err(|e| ApiError::default().log_only(format!("Failed to reload log filter: {}", e)))?;
+        .map_err(|e| ApiError::default().log_only(format!("Failed to reload log filter: {e}")))?;
 
     tracing::info!(level = %req.level, "Log level changed by admin");
 

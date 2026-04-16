@@ -91,7 +91,7 @@ pub trait AuthMethodRepository: Send + Sync {
 pub struct AuthMethodRepositoryImpl;
 
 impl AuthMethodRepositoryImpl {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -116,11 +116,11 @@ impl AuthMethodRepository for AuthMethodRepositoryImpl {
         }
 
         let method = sqlx::query_as::<_, AuthMethod>(
-            r#"
+            r"
             INSERT INTO auth_methods (user_id, provider, password_hash, is_primary, is_verified)
             VALUES ($1, 'password', $2, $3, true)
             RETURNING *
-            "#,
+            ",
         )
         .bind(data.user_id)
         .bind(&data.password_hash)
@@ -150,13 +150,13 @@ impl AuthMethodRepository for AuthMethodRepositoryImpl {
         }
 
         let method = sqlx::query_as::<_, AuthMethod>(
-            r#"
+            r"
             INSERT INTO auth_methods 
                 (user_id, provider, provider_id, oauth_access_token, oauth_refresh_token, 
                  oauth_expires_at, is_primary, is_verified)
             VALUES ($1, $2, $3, $4, $5, $6, $7, true)
             RETURNING *
-            "#,
+            ",
         )
         .bind(data.user_id)
         .bind(data.provider.as_str())

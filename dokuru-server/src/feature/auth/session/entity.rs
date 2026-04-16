@@ -86,7 +86,7 @@ impl DeviceInfo {
             "Unknown"
         };
 
-        let name = format!("{} on {}", browser, os);
+        let name = format!("{browser} on {os}");
         (name, device_type)
     }
 }

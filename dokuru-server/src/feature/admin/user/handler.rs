@@ -92,5 +92,5 @@ pub async fn update_user_role(
             created_at: user.created_at,
             updated_at: user.updated_at,
         })
-        .with_message(format!("User role updated to '{}'", role)))
+        .with_message(format!("User role updated to '{role}'")))
 }

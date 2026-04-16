@@ -40,7 +40,7 @@ impl<T: Serialize> Default for ApiSuccess<T> {
 // Builder methods
 impl<T: Serialize> ApiSuccess<T> {
     /// Set HTTP status code
-    pub fn with_code(mut self, code: StatusCode) -> Self {
+    pub const fn with_code(mut self, code: StatusCode) -> Self {
         self.code = code.as_u16();
         self
     }

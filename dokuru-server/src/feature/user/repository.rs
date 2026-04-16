@@ -96,7 +96,7 @@ pub trait UserRepository: Send + Sync {
 pub struct UserRepositoryImpl;
 
 impl UserRepositoryImpl {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -122,11 +122,11 @@ impl UserRepository for UserRepositoryImpl {
         }
 
         let user = sqlx::query_as::<_, User>(
-            r#"
+            r"
             INSERT INTO users (email, username)
             VALUES ($1, $2)
             RETURNING *
-            "#,
+            ",
         )
         .bind(email)
         .bind(username)
@@ -187,11 +187,13 @@ impl UserRepository for UserRepositoryImpl {
         let mut next_param = 2; // $1 is id
 
         if email.is_some() {
-            query.push_str(&format!(", email = ${}", next_param));
+            use std::fmt::Write;
+            write!(&mut query, ", email = ${next_param}").unwrap();
             next_param += 1;
         }
         if username.is_some() {
-            query.push_str(&format!(", username = ${}", next_param));
+            use std::fmt::Write;
+            write!(&mut query, ", username = ${next_param}").unwrap();
         }
 
         query.push_str(" WHERE id = $1 RETURNING *");
@@ -283,14 +285,14 @@ impl UserRepository for UserRepositoryImpl {
         id: Uuid,
     ) -> Result<Option<UserWithProfile>, sqlx::Error> {
         let row = sqlx::query_as::<_, UserWithProfile>(
-            r#"
+            r"
             SELECT 
                 u.id, u.email, u.username, u.is_active, u.email_verified, u.role, u.created_at, u.updated_at,
                 p.full_name, p.display_name, p.avatar_url, p.bio, p.phone_number
             FROM users u
             LEFT JOIN user_profiles p ON p.user_id = u.id
             WHERE u.id = $1
-            "#,
+            ",
         )
         .bind(id)
         .fetch_optional(pool)
@@ -350,7 +352,7 @@ pub trait UserProfileRepository: Send + Sync {
 pub struct UserProfileRepositoryImpl;
 
 impl UserProfileRepositoryImpl {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -363,11 +365,11 @@ impl UserProfileRepository for UserProfileRepositoryImpl {
         user_id: Uuid,
     ) -> Result<UserProfile, UserRepositoryError> {
         let profile = sqlx::query_as::<_, UserProfile>(
-            r#"
+            r"
             INSERT INTO user_profiles (user_id)
             VALUES ($1)
             RETURNING *
-            "#,
+            ",
         )
         .bind(user_id)
         .fetch_one(pool)
@@ -399,7 +401,7 @@ impl UserProfileRepository for UserProfileRepositoryImpl {
         avatar_url: Option<&str>,
     ) -> Result<Option<UserProfile>, sqlx::Error> {
         let profile = sqlx::query_as::<_, UserProfile>(
-            r#"
+            r"
             UPDATE user_profiles SET
                 full_name = COALESCE($2, full_name),
                 display_name = COALESCE($3, display_name),
@@ -408,7 +410,7 @@ impl UserProfileRepository for UserProfileRepositoryImpl {
                 updated_at = NOW()
             WHERE user_id = $1
             RETURNING *
-            "#,
+            ",
         )
         .bind(user_id)
         .bind(full_name)
@@ -443,14 +445,14 @@ impl UserProfileRepository for UserProfileRepositoryImpl {
         user_id: Uuid,
     ) -> Result<Option<UserWithProfile>, sqlx::Error> {
         let row = sqlx::query_as::<_, UserWithProfile>(
-            r#"
+            r"
             SELECT 
                 u.id, u.email, u.username, u.is_active, u.email_verified, u.role, u.created_at, u.updated_at,
                 p.full_name, p.display_name, p.avatar_url, p.bio, p.phone_number
             FROM users u
             LEFT JOIN user_profiles p ON p.user_id = u.id
             WHERE u.id = $1
-            "#,
+            ",
         )
         .bind(user_id)
         .fetch_optional(pool)

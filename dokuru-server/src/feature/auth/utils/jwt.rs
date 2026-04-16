@@ -29,7 +29,7 @@ fn refresh_expiry_secs() -> i64 {
     env::var("JWT_REFRESH_EXPIRY_SECS")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(604800) // default 7 days
+        .unwrap_or(604_800) // default 7 days
 }
 
 /// JWT Error types
@@ -50,8 +50,8 @@ pub enum JwtError {
 impl From<jsonwebtoken::errors::Error> for JwtError {
     fn from(err: jsonwebtoken::errors::Error) -> Self {
         match err.kind() {
-            jsonwebtoken::errors::ErrorKind::ExpiredSignature => JwtError::Expired,
-            _ => JwtError::Invalid,
+            jsonwebtoken::errors::ErrorKind::ExpiredSignature => Self::Expired,
+            _ => Self::Invalid,
         }
     }
 }

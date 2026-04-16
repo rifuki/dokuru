@@ -28,6 +28,7 @@ fn setup_env() {
     ENV_INIT.get_or_init(|| {
         unsafe {
             std::env::set_var("RUST_ENV", "development");
+            std::env::set_var("PORT", "9393");
             std::env::set_var("JWT_ACCESS_SECRET", "test-access-secret-min-32-chars-ok!!");
             std::env::set_var("JWT_REFRESH_SECRET", "test-refresh-secret-min-32-chars-ok!");
             std::env::set_var("CORS_ALLOWED_ORIGINS", "*");

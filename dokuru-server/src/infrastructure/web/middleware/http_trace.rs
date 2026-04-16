@@ -24,10 +24,10 @@ struct ClientInfo {
 }
 
 impl ClientInfo {
-    fn extract(req: &Request) -> ClientInfo {
+    fn extract(req: &Request) -> Self {
         let headers = req.headers();
 
-        ClientInfo {
+        Self {
             user_agent: headers
                 .get("user-agent")
                 .and_then(|v| v.to_str().ok())
@@ -36,41 +36,33 @@ impl ClientInfo {
             x_forwarded_for: headers
                 .get("x-forwarded-for")
                 .and_then(|v| v.to_str().ok())
-                .map(|s| s.to_string()),
+                .map(std::string::ToString::to_string),
             x_real_ip: headers
                 .get("x-real-ip")
                 .and_then(|v| v.to_str().ok())
-                .map(|s| s.to_string()),
+                .map(std::string::ToString::to_string),
         }
     }
 }
 
 /// Determines log level based on status code.
-fn log_level_for_status(status: StatusCode) -> Level {
+const fn log_level_for_status(status: StatusCode) -> Level {
     match status.as_u16() {
         100..=199 => Level::Debug, // Informational responses
-        200..=299 => Level::Info,  // Successful responses
-        300..=399 => Level::Info,  // Redirection messages
         400..=499 => Level::Warn,  // Client errors
         500..=599 => Level::Error, // Server errors
-        _ => Level::Info,          // Default for other status codes
+        _ => Level::Info,          // Default (200-399 and others)
     }
 }
 
-fn log_emoji_for_status(status: StatusCode) -> &'static str {
+const fn log_emoji_for_status(status: StatusCode) -> &'static str {
     match status.as_u16() {
-        100..=199 => "ℹ️", // Informational responses
         200..=299 => "✅", // Successful responses
         300..=399 => "🔄", // Redirection messages
-        400..=499 => {
-            if status.as_u16() == 429 {
-                "🧱" // Rate limit exceeded
-            } else {
-                "⚠️" // Client errors
-            }
-        }
+        429 => "🧱",       // Rate limit exceeded
+        400..=499 => "⚠️", // Client errors
         500..=599 => "🔥", // Server errors
-        _ => "ℹ️",         // Default for other status codes
+        _ => "ℹ️",         // Default (including 100-199 informational)
     }
 }
 
@@ -88,8 +80,7 @@ pub async fn http_trace_middleware(
     let request_id = req
         .extensions()
         .get::<RequestId>()
-        .map(|r| r.0.clone())
-        .unwrap_or_else(|| "unknown".to_string());
+        .map_or_else(|| "unknown".to_string(), |r| r.0.clone());
 
     // Create a span that will wrap the entire request-response lifecycle.
     let span = info_span!(

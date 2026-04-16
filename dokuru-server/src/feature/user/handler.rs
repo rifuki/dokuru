@@ -49,7 +49,7 @@ pub async fn update_me(
         return Err(ApiError::default()
             .with_code(axum::http::StatusCode::BAD_REQUEST)
             .with_error_code(crate::infrastructure::web::response::codes::validation::INVALID_INPUT)
-            .with_message(format!("Validation error: {}", e)));
+            .with_message(format!("Validation error: {e}")));
     }
 
     // Update user (email, username)

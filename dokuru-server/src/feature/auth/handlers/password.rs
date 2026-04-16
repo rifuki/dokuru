@@ -24,7 +24,7 @@ pub async fn change_password(
         return Err(ApiError::default()
             .with_code(StatusCode::BAD_REQUEST)
             .with_error_code(val_codes::INVALID_INPUT)
-            .with_message(format!("Validation error: {}", e)));
+            .with_message(format!("Validation error: {e}")));
     }
 
     // Validate new password length

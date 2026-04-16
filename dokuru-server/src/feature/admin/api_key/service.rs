@@ -32,10 +32,12 @@ impl ApiKeyService {
     ) -> Result<ApiKeyWithPlain, ApiKeyError> {
         // Generate random API key: prefix + random string
         let prefix = "ak_";
-        let random_part: String = (0..32)
-            .map(|_| format!("{:x}", rand::random::<u8>()))
-            .collect();
-        let plain_key = format!("{}{}", prefix, random_part);
+        let mut random_part = String::with_capacity(64);
+        for _ in 0..32 {
+            use std::fmt::Write;
+            write!(&mut random_part, "{:x}", rand::random::<u8>()).unwrap();
+        }
+        let plain_key = format!("{prefix}{random_part}");
 
         // Hash the key for storage (using simple hash for now, can use bcrypt/argon2)
         let key_hash = format!("{:x}", md5::compute(&plain_key));

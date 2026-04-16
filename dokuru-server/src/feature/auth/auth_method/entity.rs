@@ -14,13 +14,13 @@ pub enum AuthProvider {
 }
 
 impl AuthProvider {
-    pub fn as_str(&self) -> &'static str {
+    pub const fn as_str(&self) -> &'static str {
         match self {
-            AuthProvider::Password => "password",
-            AuthProvider::Google => "google",
-            AuthProvider::Github => "github",
-            AuthProvider::Discord => "discord",
-            AuthProvider::Twitter => "twitter",
+            Self::Password => "password",
+            Self::Google => "google",
+            Self::Github => "github",
+            Self::Discord => "discord",
+            Self::Twitter => "twitter",
         }
     }
 }
@@ -30,11 +30,11 @@ impl TryFrom<&str> for AuthProvider {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value.to_lowercase().as_str() {
-            "password" => Ok(AuthProvider::Password),
-            "google" => Ok(AuthProvider::Google),
-            "github" => Ok(AuthProvider::Github),
-            "discord" => Ok(AuthProvider::Discord),
-            "twitter" => Ok(AuthProvider::Twitter),
+            "password" => Ok(Self::Password),
+            "google" => Ok(Self::Google),
+            "github" => Ok(Self::Github),
+            "discord" => Ok(Self::Discord),
+            "twitter" => Ok(Self::Twitter),
             _ => Err(()),
         }
     }

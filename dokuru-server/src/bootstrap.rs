@@ -51,11 +51,14 @@ pub async fn bootstrap(db: &Database, config: &Config) -> eyre::Result<()> {
         Arc::new(crate::feature::user::repository::UserRepositoryImpl::new());
     let user_profile_repo: Arc<dyn crate::feature::user::UserProfileRepository> =
         Arc::new(crate::feature::user::UserProfileRepositoryImpl::new());
-    let auth_method_repo = Arc::new(crate::feature::auth::auth_method::AuthMethodRepositoryImpl::new());
+    let auth_method_repo =
+        Arc::new(crate::feature::auth::auth_method::AuthMethodRepositoryImpl::new());
     let session_repo = Arc::new(crate::feature::auth::session::SessionRepositoryImpl::new());
 
-    let auth_method_service = crate::feature::auth::auth_method::AuthMethodService::new(db.clone(), auth_method_repo);
-    let session_service = crate::feature::auth::session::SessionService::new(db.clone(), session_repo);
+    let auth_method_service =
+        crate::feature::auth::auth_method::AuthMethodService::new(db.clone(), auth_method_repo);
+    let session_service =
+        crate::feature::auth::session::SessionService::new(db.clone(), session_repo);
 
     let auth_service = AuthService::new(
         db.clone(),

@@ -111,7 +111,7 @@ impl AuthService {
             let refresh_expiry: i64 = std::env::var("JWT_REFRESH_EXPIRY_SECS")
                 .ok()
                 .and_then(|v| v.parse().ok())
-                .unwrap_or(604800); // default 7 days
+                .unwrap_or(604_800); // default 7 days
 
             let expires_at =
                 chrono::DateTime::from_timestamp(tokens.session_iat + refresh_expiry, 0)
@@ -133,7 +133,9 @@ impl AuthService {
                 id: user.id,
                 email: user.email,
                 username,
-                name: full_name.map(|s| s.to_string()).unwrap_or_default(),
+                name: full_name
+                    .map(std::string::ToString::to_string)
+                    .unwrap_or_default(),
                 avatar_url: None,
                 role,
             },
@@ -217,7 +219,7 @@ impl AuthService {
             let refresh_expiry: i64 = std::env::var("JWT_REFRESH_EXPIRY_SECS")
                 .ok()
                 .and_then(|v| v.parse().ok())
-                .unwrap_or(604800); // default 7 days
+                .unwrap_or(604_800); // default 7 days
 
             let expires_at =
                 chrono::DateTime::from_timestamp(tokens.session_iat + refresh_expiry, 0)
@@ -438,7 +440,9 @@ impl AuthService {
                 id: user.id,
                 email: user.email,
                 username,
-                name: name.map(|s| s.to_string()).unwrap_or_default(),
+                name: name
+                    .map(std::string::ToString::to_string)
+                    .unwrap_or_default(),
                 avatar_url: None,
                 role,
             },
@@ -568,12 +572,12 @@ impl AuthService {
     }
 
     /// Get auth method service
-    pub fn auth_method_service(&self) -> &AuthMethodService {
+    pub const fn auth_method_service(&self) -> &AuthMethodService {
         &self.auth_method_service
     }
 
     /// Get session service
-    pub fn session_service(&self) -> &SessionService {
+    pub const fn session_service(&self) -> &SessionService {
         &self.session_service
     }
 }

@@ -12,13 +12,13 @@ use crate::{
 pub async fn get_dashboard_stats(
     State(state): State<AppState>,
 ) -> ApiResult<DashboardStatsResponse> {
-    let stats = state
+    let dashboard_stats = state
         .stats_service
         .get_dashboard_stats(state.db.pool())
         .await
         .map_err(|e| crate::infrastructure::web::response::ApiError::default().log_only(e))?;
 
     Ok(ApiSuccess::default()
-        .with_data(stats)
+        .with_data(dashboard_stats)
         .with_message("Dashboard statistics retrieved"))
 }

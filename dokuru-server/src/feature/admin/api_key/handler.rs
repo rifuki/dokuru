@@ -35,7 +35,7 @@ pub async fn list_keys(
         ApiError::default()
             .with_code(StatusCode::INTERNAL_SERVER_ERROR)
             .with_error_code(generic::INTERNAL)
-            .with_message(format!("Failed to list API keys: {}", e))
+            .with_message(format!("Failed to list API keys: {e}"))
     })?;
 
     Ok(ApiSuccess::default()
@@ -57,7 +57,7 @@ pub async fn create_key(
             ApiError::default()
                 .with_code(StatusCode::INTERNAL_SERVER_ERROR)
                 .with_error_code(generic::INTERNAL)
-                .with_message(format!("Failed to create API key: {}", e))
+                .with_message(format!("Failed to create API key: {e}"))
         })?;
 
     Ok(ApiSuccess::default()
@@ -80,7 +80,7 @@ pub async fn get_key(
             ApiError::default()
                 .with_code(StatusCode::INTERNAL_SERVER_ERROR)
                 .with_error_code(generic::INTERNAL)
-                .with_message(format!("Failed to get API key: {}", e))
+                .with_message(format!("Failed to get API key: {e}"))
         })?
         .ok_or_else(|| {
             ApiError::default()
@@ -109,7 +109,7 @@ pub async fn update_key(
             ApiError::default()
                 .with_code(StatusCode::INTERNAL_SERVER_ERROR)
                 .with_error_code(generic::INTERNAL)
-                .with_message(format!("Failed to update API key: {}", e))
+                .with_message(format!("Failed to update API key: {e}"))
         })?
         .ok_or_else(|| {
             ApiError::default()
@@ -131,7 +131,7 @@ pub async fn delete_key(State(state): State<AppState>, Path(id): Path<Uuid>) -> 
         ApiError::default()
             .with_code(StatusCode::INTERNAL_SERVER_ERROR)
             .with_error_code(generic::INTERNAL)
-            .with_message(format!("Failed to delete API key: {}", e))
+            .with_message(format!("Failed to delete API key: {e}"))
     })?;
 
     if !deleted {
@@ -158,7 +158,7 @@ pub async fn revoke_key(
             ApiError::default()
                 .with_code(StatusCode::INTERNAL_SERVER_ERROR)
                 .with_error_code(generic::INTERNAL)
-                .with_message(format!("Failed to revoke API key: {}", e))
+                .with_message(format!("Failed to revoke API key: {e}"))
         })?
         .ok_or_else(|| {
             ApiError::default()
@@ -186,7 +186,7 @@ pub async fn refresh_key(
         ApiError::default()
             .with_code(StatusCode::INTERNAL_SERVER_ERROR)
             .with_error_code(generic::INTERNAL)
-            .with_message(format!("Failed to refresh API key: {}", e))
+            .with_message(format!("Failed to refresh API key: {e}"))
     })?;
 
     Ok(ApiSuccess::default()

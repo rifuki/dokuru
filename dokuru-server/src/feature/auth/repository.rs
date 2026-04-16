@@ -27,10 +27,10 @@ impl From<crate::feature::user::repository::UserRepositoryError> for AuthError {
     fn from(err: crate::feature::user::repository::UserRepositoryError) -> Self {
         use crate::feature::user::repository::UserRepositoryError;
         match err {
-            UserRepositoryError::EmailExists => AuthError::EmailExists,
-            UserRepositoryError::UsernameExists => AuthError::UsernameExists,
-            UserRepositoryError::NotFound => AuthError::UserNotFound,
-            UserRepositoryError::Database(e) => AuthError::Database(e),
+            UserRepositoryError::EmailExists => Self::EmailExists,
+            UserRepositoryError::UsernameExists => Self::UsernameExists,
+            UserRepositoryError::NotFound => Self::UserNotFound,
+            UserRepositoryError::Database(e) => Self::Database(e),
         }
     }
 }

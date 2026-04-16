@@ -49,8 +49,7 @@ pub async fn upload_avatar(
             return Err(ApiError::default()
                 .with_code(axum::http::StatusCode::BAD_REQUEST)
                 .with_message(format!(
-                    "Unsupported file type '{}'. Allowed: jpeg, png, webp, gif",
-                    content_type
+                    "Unsupported file type '{content_type}'. Allowed: jpeg, png, webp, gif"
                 )));
         }
 
@@ -65,8 +64,7 @@ pub async fn upload_avatar(
             return Err(ApiError::default()
                 .with_code(axum::http::StatusCode::BAD_REQUEST)
                 .with_message(format!(
-                    "File too large. Maximum allowed size is {} bytes",
-                    max_size
+                    "File too large. Maximum allowed size is {max_size} bytes"
                 )));
         }
 

@@ -38,7 +38,7 @@ pub struct RedisCache {
 }
 
 impl RedisCache {
-    pub fn new(pool: RedisPool) -> Self {
+    pub const fn new(pool: RedisPool) -> Self {
         Self { pool }
     }
 }
@@ -96,7 +96,7 @@ pub struct RedisSessionBlacklist {
 }
 
 impl RedisSessionBlacklist {
-    pub fn new(pool: RedisPool) -> Self {
+    pub const fn new(pool: RedisPool) -> Self {
         Self { pool }
     }
 
@@ -122,9 +122,12 @@ impl SessionBlacklist for RedisSessionBlacklist {
 
         let key = Self::blacklist_key(jti);
 
+        #[allow(clippy::cast_sign_loss)]
+        let ttl = remaining_ttl.max(0) as u64;
+
         redis::cmd("SETEX")
             .arg(&key)
-            .arg(remaining_ttl as u64)
+            .arg(ttl)
             .arg("revoked")
             .query_async::<bool>(&mut *conn)
             .await
@@ -166,7 +169,7 @@ pub struct UserCache {
 }
 
 impl UserCache {
-    pub fn new(cache: RedisCache, ttl_secs: u64) -> Self {
+    pub const fn new(cache: RedisCache, ttl_secs: u64) -> Self {
         Self { cache, ttl_secs }
     }
 

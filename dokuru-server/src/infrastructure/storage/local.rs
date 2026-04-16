@@ -41,7 +41,7 @@ impl StorageProvider for LocalStorage {
     async fn delete(&self, key: &str) -> Result<(), StorageError> {
         let path = self.upload_dir.join(key);
         match fs::remove_file(&path).await {
-            Ok(_) => Ok(()),
+            Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(e) => Err(StorageError::Io(e)),
         }

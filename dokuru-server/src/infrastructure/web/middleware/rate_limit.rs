@@ -73,8 +73,7 @@ pub async fn rate_limit_middleware(
     let ip = request
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()
-        .map(|ci| ci.0.ip())
-        .unwrap_or_else(|| IpAddr::V4(std::net::Ipv4Addr::LOCALHOST));
+        .map_or_else(|| IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), |ci| ci.0.ip());
 
     if limiter.is_allowed(ip) {
         next.run(request).await

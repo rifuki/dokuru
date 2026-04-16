@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum Role {
     Admin,
@@ -11,8 +11,8 @@ pub enum Role {
 impl fmt::Display for Role {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Role::Admin => write!(f, "admin"),
-            Role::User => write!(f, "user"),
+            Self::Admin => write!(f, "admin"),
+            Self::User => write!(f, "user"),
         }
     }
 }
@@ -21,14 +21,14 @@ impl TryFrom<&str> for Role {
     type Error = ();
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
-            "admin" => Ok(Role::Admin),
-            "user" => Ok(Role::User),
+            "admin" => Ok(Self::Admin),
+            "user" => Ok(Self::User),
             _ => Err(()),
         }
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum TokenType {
     Access,
@@ -38,8 +38,8 @@ pub enum TokenType {
 impl fmt::Display for TokenType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TokenType::Access => write!(f, "access"),
-            TokenType::Refresh => write!(f, "refresh"),
+            Self::Access => write!(f, "access"),
+            Self::Refresh => write!(f, "refresh"),
         }
     }
 }

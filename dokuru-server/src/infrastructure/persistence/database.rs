@@ -40,7 +40,7 @@ impl Database {
     }
 
     /// Get raw pool for auto-commit operations
-    pub fn pool(&self) -> &PgPool {
+    pub const fn pool(&self) -> &PgPool {
         &self.pool
     }
 
@@ -71,7 +71,7 @@ impl Database {
     }
 
     /// Create from existing pool — used by integration tests (sqlx::test provides the pool)
-    pub fn from_pool(pool: PgPool) -> Self {
+    pub const fn from_pool(pool: PgPool) -> Self {
         Self { pool }
     }
 }

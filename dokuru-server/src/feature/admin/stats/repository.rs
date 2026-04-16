@@ -56,7 +56,7 @@ pub trait StatsRepository: Send + Sync {
 pub struct StatsRepositoryImpl;
 
 impl StatsRepositoryImpl {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self
     }
 }

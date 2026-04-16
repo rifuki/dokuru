@@ -23,7 +23,8 @@ async fn test_redis_connection() {
         return;
     }
 
-    let config = dokuru_server::infrastructure::config::Config::load().expect("Failed to load config");
+    let config =
+        dokuru_server::infrastructure::config::Config::load().expect("Failed to load config");
     let pool = create_redis_pool(&config).await;
 
     assert!(pool.is_ok(), "Should connect to Redis");
@@ -36,7 +37,8 @@ async fn test_cache_operations() {
         return;
     }
 
-    let config = dokuru_server::infrastructure::config::Config::load().expect("Failed to load config");
+    let config =
+        dokuru_server::infrastructure::config::Config::load().expect("Failed to load config");
     let pool = create_redis_pool(&config)
         .await
         .expect("Failed to connect to Redis");
@@ -78,7 +80,8 @@ async fn test_session_blacklist() {
         return;
     }
 
-    let config = dokuru_server::infrastructure::config::Config::load().expect("Failed to load config");
+    let config =
+        dokuru_server::infrastructure::config::Config::load().expect("Failed to load config");
     let pool = create_redis_pool(&config)
         .await
         .expect("Failed to connect to Redis");
@@ -118,7 +121,8 @@ async fn test_session_blacklist_expired() {
         return;
     }
 
-    let config = dokuru_server::infrastructure::config::Config::load().expect("Failed to load config");
+    let config =
+        dokuru_server::infrastructure::config::Config::load().expect("Failed to load config");
     let pool = create_redis_pool(&config)
         .await
         .expect("Failed to connect to Redis");

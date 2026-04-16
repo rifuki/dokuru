@@ -32,7 +32,7 @@ pub trait AdminUserRepository: Send + Sync {
 pub struct AdminUserRepositoryImpl;
 
 impl AdminUserRepositoryImpl {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -41,11 +41,11 @@ impl AdminUserRepositoryImpl {
 impl AdminUserRepository for AdminUserRepositoryImpl {
     async fn list_all(&self, pool: &PgPool) -> Result<Vec<User>, AdminUserRepositoryError> {
         let users: Vec<User> = sqlx::query_as(
-            r#"
+            r"
             SELECT id, email, username, is_active, email_verified, role, created_at, updated_at 
             FROM users 
             ORDER BY created_at DESC
-            "#,
+            ",
         )
         .fetch_all(pool)
         .await?;
@@ -60,12 +60,12 @@ impl AdminUserRepository for AdminUserRepositoryImpl {
         role: &str,
     ) -> Result<Option<User>, AdminUserRepositoryError> {
         let user: Option<User> = sqlx::query_as(
-            r#"
+            r"
             UPDATE users 
             SET role = $1, updated_at = NOW() 
             WHERE id = $2 
             RETURNING id, email, username, is_active, email_verified, role, created_at, updated_at
-            "#,
+            ",
         )
         .bind(role)
         .bind(user_id)
