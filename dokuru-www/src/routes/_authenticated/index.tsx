@@ -205,9 +205,9 @@ function Dashboard() {
             {/* Header */}
             <div className="flex items-end justify-between">
                 <div>
-                    <h2 className="text-2xl font-bold tracking-tight">Environments</h2>
+                    <h2 className="text-2xl font-bold tracking-tight">Agents</h2>
                     <p className="text-muted-foreground text-sm mt-1">
-                        {agents.length} environment{agents.length !== 1 ? "s" : ""} connected
+                        {agents.length} agent{agents.length !== 1 ? "s" : ""} connected
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -235,9 +235,9 @@ function Dashboard() {
             ) : agents.length === 0 ? (
                 <div className="rounded-xl border border-dashed bg-card/50 p-16 text-center flex flex-col items-center justify-center min-h-[400px]">
                     <img src="/docker.svg" alt="Docker" className="w-14 h-14 opacity-40 mb-4" />
-                    <h3 className="text-xl font-semibold tracking-tight">No environments</h3>
+                    <h3 className="text-xl font-semibold tracking-tight">No agents</h3>
                     <p className="text-muted-foreground mt-2 max-w-sm text-sm">
-                        Add your first Docker agent to start managing and auditing environments.
+                        Add your first Docker agent to start managing and auditing.
                     </p>
                     <Button className="mt-6" onClick={() => setIsAddModalOpen(true)}>
                         <Plus className="h-4 w-4 mr-2" />
