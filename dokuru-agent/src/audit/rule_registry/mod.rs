@@ -10,7 +10,10 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 
+mod section1;
 mod section2;
+mod section3;
+mod section4;
 mod section5;
 
 // ── Rule Definition ──────────────────────────────────────────────────────────
@@ -100,7 +103,16 @@ impl RuleRegistry {
         let mut rules = HashMap::new();
 
         // Register all sections
+        for rule in section1::Section1::rules() {
+            rules.insert(rule.id.clone(), rule);
+        }
         for rule in section2::Section2::rules() {
+            rules.insert(rule.id.clone(), rule);
+        }
+        for rule in section3::Section3::rules() {
+            rules.insert(rule.id.clone(), rule);
+        }
+        for rule in section4::Section4::rules() {
             rules.insert(rule.id.clone(), rule);
         }
         for rule in section5::Section5::rules() {

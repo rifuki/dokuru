@@ -1,5 +1,6 @@
 // Section 1: Host Configuration
 // CIS Docker Benchmark v1.8.0
+#![allow(clippy::too_many_lines)]
 use super::RuleDefinition;
 use crate::audit::types::{
     CheckResult, CheckStatus, CisRule, RemediationKind, RuleCategory, Severity,
@@ -29,22 +30,15 @@ impl Section1 {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    /// Read all audit rule files and return combined content
     fn read_audit_rules() -> String {
         let mut content = String::new();
-
         if let Ok(s) = std::fs::read_to_string("/etc/audit/audit.rules") {
             content.push_str(&s);
         }
-
         if let Ok(entries) = std::fs::read_dir("/etc/audit/rules.d") {
             let mut paths: Vec<_> = entries
                 .flatten()
-                .filter(|e| {
-                    e.path()
-                        .extension()
-                        .is_some_and(|ext| ext == "rules")
-                })
+                .filter(|e| e.path().extension().is_some_and(|ext| ext == "rules"))
                 .collect();
             paths.sort_by_key(|e| e.path());
             for entry in paths {
@@ -53,11 +47,9 @@ impl Section1 {
                 }
             }
         }
-
         content
     }
 
-    /// Check if any audit rule watches the given target path
     fn check_audit_rule(target_path: &str) -> bool {
         let content = Self::read_audit_rules();
         if content.is_empty() {
@@ -69,34 +61,65 @@ impl Section1 {
         })
     }
 
+    fn audit_result(
+        id: &str,
+        title: &str,
+        target: &str,
+        found: bool,
+        relevant: Vec<&str>,
+    ) -> CheckResult {
+        CheckResult {
+            rule: CisRule {
+                id: id.into(),
+                title: title.into(),
+                category: RuleCategory::Runtime,
+                severity: Severity::Medium,
+                section: "Host Configuration".into(),
+                description: format!("Audit rule for {target}"),
+                remediation: format!("Add auditd rule: -w {target} -p rwxa -k docker"),
+            },
+            status: if found { CheckStatus::Pass } else { CheckStatus::Fail },
+            message: if found {
+                format!("Audit rule found for {target}")
+            } else {
+                format!("No audit rule for {target}")
+            },
+            affected: if found { vec![] } else { vec![target.into()] },
+            remediation_kind: RemediationKind::Guided,
+            audit_command: Some(format!("auditctl -l | grep {target}")),
+            raw_output: Some(if relevant.is_empty() {
+                "(no matching rules)".into()
+            } else {
+                relevant.join("\n")
+            }),
+            references: None,
+            rationale: None,
+            impact: None,
+            tags: None,
+        }
+    }
+
     // ── 1.1.1 — Separate partition ────────────────────────────────────────────
 
-    /// 1.1.1 - Ensure a separate partition for containers has been created
     fn rule_1_1_1() -> RuleDefinition {
         RuleDefinition {
             id: "1.1.1".into(),
             section: 1,
             title: "Ensure a separate partition for containers has been created".into(),
-            description: "Docker uses /var/lib/docker as default data directory. It should be on a separate partition to prevent container/image data from filling the root filesystem.".into(),
-
+            description: "Docker uses /var/lib/docker as default data directory. It should be on a separate partition to prevent container data from filling the root filesystem.".into(),
             category: RuleCategory::Runtime,
             severity: Severity::Low,
             scored: true,
-
             audit_command: Some("cat /proc/mounts | grep /var/lib/docker".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
                     let mounts = std::fs::read_to_string("/proc/mounts").unwrap_or_default();
-                    let matching: Vec<&str> = mounts
+                    let matching: Vec<String> = mounts
                         .lines()
-                        .filter(|l| {
-                            l.split_whitespace()
-                                .nth(1)
-                                .is_some_and(|mp| mp == "/var/lib/docker")
-                        })
+                        .filter(|l| l.split_whitespace().nth(1).is_some_and(|mp| mp == "/var/lib/docker"))
+                        .map(String::from)
                         .collect();
                     let found = !matching.is_empty();
-
                     Ok(CheckResult {
                         rule: CisRule {
                             id: "1.1.1".into(),
@@ -105,7 +128,7 @@ impl Section1 {
                             severity: Severity::Low,
                             section: "Host Configuration".into(),
                             description: "Separate partition for /var/lib/docker".into(),
-                            remediation: "Create and mount a dedicated partition at /var/lib/docker".into(),
+                            remediation: "Mount a dedicated partition at /var/lib/docker".into(),
                         },
                         status: if found { CheckStatus::Pass } else { CheckStatus::Fail },
                         message: if found {
@@ -116,72 +139,42 @@ impl Section1 {
                         affected: if found { vec![] } else { vec!["/var/lib/docker".into()] },
                         remediation_kind: RemediationKind::Manual,
                         audit_command: Some("cat /proc/mounts | grep /var/lib/docker".into()),
-                        raw_output: Some(if matching.is_empty() {
+                        raw_output: Some(if matching.is_empty() { "(no mount entry)".into() } else { matching.join("\n") }),
                         references: None,
                         rationale: None,
                         impact: None,
                         tags: None,
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                            "(no mount entry found)".into()
-                        } else {
-                            matching.join("\n")
-                        }),
                     })
                 })
             },
-
             remediation_kind: RemediationKind::Manual,
             fix_fn: None,
-            remediation_guide: r#"Create a dedicated partition for Docker data:
-
-1. Create partition: fdisk /dev/sdX → create new partition
-2. Format: mkfs.ext4 /dev/sdX1
-3. Move existing data:
-   systemctl stop docker
-   mv /var/lib/docker /var/lib/docker.bak
-   mkdir /var/lib/docker
-4. Mount: mount /dev/sdX1 /var/lib/docker
-5. Add to /etc/fstab for persistence
-6. Restore data: mv /var/lib/docker.bak/* /var/lib/docker/
-7. Start Docker: systemctl start docker"#.into(),
+            remediation_guide: "Create a dedicated partition and mount it at /var/lib/docker:\n  1. Create partition with fdisk\n  2. mkfs.ext4 /dev/sdX1\n  3. Add to /etc/fstab\n  4. Restart Docker".into(),
             requires_restart: false,
             requires_elevation: true,
-
-            references: vec![
-                "https://docs.docker.com/storage/storagedriver/".into(),
-                "CIS Docker Benchmark v1.8.0, Section 1.1.1".into(),
-            ],
-            rationale: "Docker uses /var/lib/docker for image layers, containers, and volumes. If this fills the root filesystem, the system may become unresponsive.".into(),
-            impact: "Requires partitioning and potential data migration.".into(),
+            references: vec!["CIS Docker Benchmark v1.8.0, Section 1.1.1".into()],
+            rationale: "Without a separate partition, Docker data can fill the root filesystem.".into(),
+            impact: "Requires partitioning and data migration.".into(),
             tags: vec!["host".into(), "partition".into(), "filesystem".into()],
         }
     }
 
     // ── 1.1.2 — Docker group ─────────────────────────────────────────────────
 
-    /// 1.1.2 - Ensure only trusted users are added to the docker group
     fn rule_1_1_2() -> RuleDefinition {
         RuleDefinition {
             id: "1.1.2".into(),
             section: 1,
             title: "Ensure only trusted users are added to the docker group".into(),
-            description: "Members of the docker group have equivalent root-level access to the system via Docker. Only trusted users should be in this group.".into(),
-
+            description: "Members of the docker group have root-equivalent access via Docker. Only trusted administrators should be members.".into(),
             category: RuleCategory::Runtime,
             severity: Severity::High,
             scored: true,
-
             audit_command: Some("getent group docker".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
                     let group_content = std::fs::read_to_string("/etc/group").unwrap_or_default();
-                    let docker_line = group_content
-                        .lines()
-                        .find(|l| l.starts_with("docker:"));
-
+                    let docker_line = group_content.lines().find(|l| l.starts_with("docker:"));
                     let (members, raw) = match docker_line {
                         Some(line) => {
                             let parts: Vec<&str> = line.split(':').collect();
@@ -195,11 +188,7 @@ impl Section1 {
                         }
                         None => (vec![], "(docker group not found)".into()),
                     };
-
-                    // We report the members; operator must verify if they're trusted
-                    // Fail only if docker group doesn't exist
                     let group_exists = docker_line.is_some();
-
                     Ok(CheckResult {
                         rule: CisRule {
                             id: "1.1.2".into(),
@@ -208,7 +197,7 @@ impl Section1 {
                             severity: Severity::High,
                             section: "Host Configuration".into(),
                             description: "Docker group membership control".into(),
-                            remediation: "Review and restrict docker group membership".into(),
+                            remediation: "Remove untrusted users from the docker group".into(),
                         },
                         status: if group_exists { CheckStatus::Pass } else { CheckStatus::Fail },
                         message: if !group_exists {
@@ -226,278 +215,142 @@ impl Section1 {
                         rationale: None,
                         impact: None,
                         tags: None,
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
                     })
                 })
             },
-
             remediation_kind: RemediationKind::Manual,
             fix_fn: None,
-            remediation_guide: r#"Review docker group membership:
-  cat /etc/group | grep docker
-
-Remove untrusted users:
-  sudo gpasswd -d <username> docker
-
-Members of the docker group have root-equivalent access.
-Prefer using sudo docker or rootless Docker instead."#.into(),
+            remediation_guide: "Review docker group:\n  cat /etc/group | grep docker\nRemove untrusted users:\n  sudo gpasswd -d <username> docker".into(),
             requires_restart: false,
             requires_elevation: true,
-
-            references: vec![
-                "https://docs.docker.com/engine/security/#docker-daemon-attack-surface".into(),
-                "CIS Docker Benchmark v1.8.0, Section 1.1.2".into(),
-            ],
-            rationale: "docker group membership grants equivalent root access. Unintended membership is a privilege escalation vector.".into(),
-            impact: "Removing users from the docker group requires them to use sudo for Docker commands.".into(),
+            references: vec!["CIS Docker Benchmark v1.8.0, Section 1.1.2".into()],
+            rationale: "docker group membership grants root-equivalent access to the host.".into(),
+            impact: "Removed users must use sudo for Docker commands.".into(),
             tags: vec!["host".into(), "privilege".into(), "group".into()],
         }
     }
 
-    // ── 1.1.3 — Audit: dockerd ────────────────────────────────────────────────
+    // ── 1.1.3–1.1.18 — Auditd rules ─────────────────────────────────────────
 
     fn rule_1_1_3() -> RuleDefinition {
         RuleDefinition {
             id: "1.1.3".into(),
             section: 1,
             title: "Ensure that Docker daemon activity is audited".into(),
-            description: "Audit the Docker daemon binary (/usr/bin/dockerd) for security event tracking.".into(),
-
+            description: "Audit /usr/bin/dockerd to track all daemon invocations.".into(),
             category: RuleCategory::Runtime,
             severity: Severity::Medium,
             scored: true,
-
             audit_command: Some("auditctl -l | grep /usr/bin/dockerd".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let found = Section1::check_audit_rule("/usr/bin/dockerd");
                     let raw = Section1::read_audit_rules();
                     let relevant: Vec<&str> = raw.lines().filter(|l| l.contains("/usr/bin/dockerd")).collect();
-                    Ok(CheckResult {
-                        rule: CisRule {
-                            id: "1.1.3".into(),
-                            title: "Ensure that Docker daemon activity is audited".into(),
-                            category: RuleCategory::Runtime,
-                            severity: Severity::Medium,
-                            section: "Host Configuration".into(),
-                            description: "Audit rule for /usr/bin/dockerd".into(),
-                            remediation: "Add auditd rule: -w /usr/bin/dockerd -k docker".into(),
-                        },
-                        status: if found { CheckStatus::Pass } else { CheckStatus::Fail },
-                        message: if found {
-                            "Audit rule found for /usr/bin/dockerd".into()
-                        } else {
-                            "No audit rule for /usr/bin/dockerd".into()
-                        },
-                        affected: if found { vec![] } else { vec!["/usr/bin/dockerd".into()] },
-                        remediation_kind: RemediationKind::Guided,
-                        audit_command: Some("auditctl -l | grep /usr/bin/dockerd".into()),
-                        raw_output: Some(if relevant.is_empty() { "(no matching rules)".into() } else { relevant.join("\n") }),
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                    })
+                    let found = !relevant.is_empty();
+                    Ok(Section1::audit_result("1.1.3", "Ensure that Docker daemon activity is audited", "/usr/bin/dockerd", found, relevant))
                 })
             },
-
             remediation_kind: RemediationKind::Guided,
             fix_fn: None,
-            remediation_guide: r#"Add to /etc/audit/rules.d/docker.rules:
-  -w /usr/bin/dockerd -p rwxa -k docker
-
-Then reload:
-  auditctl -R /etc/audit/rules.d/docker.rules
-  systemctl restart auditd"#.into(),
+            remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /usr/bin/dockerd -p rwxa -k docker\nThen: systemctl restart auditd".into(),
             requires_restart: false,
             requires_elevation: true,
-
-            references: vec![
-                "https://linux.die.net/man/8/auditctl".into(),
-                "CIS Docker Benchmark v1.8.0, Section 1.1.3".into(),
-            ],
-            rationale: "Auditing Docker daemon binary activity allows detection of tampering with the Docker binary or unexpected execution.".into(),
+            references: vec!["CIS Docker Benchmark v1.8.0, Section 1.1.3".into()],
+            rationale: "Auditing dockerd detects tampering with the Docker binary.".into(),
             impact: "Minimal performance impact from audit logging.".into(),
-            tags: vec!["audit".into(), "host".into(), "logging".into()],
+            tags: vec!["audit".into(), "host".into()],
         }
     }
-
-    // ── 1.1.4 — Audit: containerd ─────────────────────────────────────────────
 
     fn rule_1_1_4() -> RuleDefinition {
         RuleDefinition {
             id: "1.1.4".into(),
             section: 1,
             title: "Ensure that containerd is audited".into(),
-            description: "Audit the containerd socket (/run/containerd) for security event tracking.".into(),
+            description: "Audit /run/containerd to track container runtime socket access.".into(),
             category: RuleCategory::Runtime,
             severity: Severity::Medium,
             scored: true,
             audit_command: Some("auditctl -l | grep /run/containerd".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let found = Section1::check_audit_rule("/run/containerd");
                     let raw = Section1::read_audit_rules();
                     let relevant: Vec<&str> = raw.lines().filter(|l| l.contains("/run/containerd")).collect();
-                    Ok(CheckResult {
-                        rule: CisRule {
-                            id: "1.1.4".into(),
-                            title: "Ensure that containerd is audited".into(),
-                            category: RuleCategory::Runtime,
-                            severity: Severity::Medium,
-                            section: "Host Configuration".into(),
-                            description: "Audit rule for /run/containerd".into(),
-                            remediation: "Add auditd rule: -w /run/containerd -k docker".into(),
-                        },
-                        status: if found { CheckStatus::Pass } else { CheckStatus::Fail },
-                        message: if found { "Audit rule found for /run/containerd".into() } else { "No audit rule for /run/containerd".into() },
-                        affected: if found { vec![] } else { vec!["/run/containerd".into()] },
-                        remediation_kind: RemediationKind::Guided,
-                        audit_command: Some("auditctl -l | grep /run/containerd".into()),
-                        raw_output: Some(if relevant.is_empty() { "(no matching rules)".into() } else { relevant.join("\n") }),
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                    })
+                    let found = !relevant.is_empty();
+                    Ok(Section1::audit_result("1.1.4", "Ensure that containerd is audited", "/run/containerd", found, relevant))
                 })
             },
             remediation_kind: RemediationKind::Guided,
             fix_fn: None,
-            remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /run/containerd -p rwxa -k docker\nThen reload auditd.".into(),
+            remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /run/containerd -p rwxa -k docker".into(),
             requires_restart: false,
             requires_elevation: true,
             references: vec!["CIS Docker Benchmark v1.8.0, Section 1.1.4".into()],
-            rationale: "Auditing containerd socket activity helps detect unauthorized container runtime operations.".into(),
-            impact: "Minimal performance impact from audit logging.".into(),
-            tags: vec!["audit".into(), "host".into(), "containerd".into()],
+            rationale: "Containerd socket access should be audited to detect bypasses of Docker daemon.".into(),
+            impact: "Minimal performance impact.".into(),
+            tags: vec!["audit".into(), "containerd".into()],
         }
     }
-
-    // ── 1.1.5 — Audit: /var/lib/docker ───────────────────────────────────────
 
     fn rule_1_1_5() -> RuleDefinition {
         RuleDefinition {
             id: "1.1.5".into(),
             section: 1,
             title: "Ensure that /var/lib/docker is audited".into(),
-            description: "Audit the Docker data directory (/var/lib/docker) to track changes to container and image data.".into(),
+            description: "Audit the Docker data directory to track changes to container/image data.".into(),
             category: RuleCategory::Runtime,
             severity: Severity::Medium,
             scored: true,
             audit_command: Some("auditctl -l | grep /var/lib/docker".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let found = Section1::check_audit_rule("/var/lib/docker");
                     let raw = Section1::read_audit_rules();
                     let relevant: Vec<&str> = raw.lines().filter(|l| l.contains("/var/lib/docker")).collect();
-                    Ok(CheckResult {
-                        rule: CisRule {
-                            id: "1.1.5".into(),
-                            title: "Ensure that /var/lib/docker is audited".into(),
-                            category: RuleCategory::Runtime,
-                            severity: Severity::Medium,
-                            section: "Host Configuration".into(),
-                            description: "Audit rule for /var/lib/docker".into(),
-                            remediation: "Add auditd rule: -w /var/lib/docker -k docker".into(),
-                        },
-                        status: if found { CheckStatus::Pass } else { CheckStatus::Fail },
-                        message: if found { "Audit rule found for /var/lib/docker".into() } else { "No audit rule for /var/lib/docker".into() },
-                        affected: if found { vec![] } else { vec!["/var/lib/docker".into()] },
-                        remediation_kind: RemediationKind::Guided,
-                        audit_command: Some("auditctl -l | grep /var/lib/docker".into()),
-                        raw_output: Some(if relevant.is_empty() { "(no matching rules)".into() } else { relevant.join("\n") }),
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                    })
+                    let found = !relevant.is_empty();
+                    Ok(Section1::audit_result("1.1.5", "Ensure that /var/lib/docker is audited", "/var/lib/docker", found, relevant))
                 })
             },
             remediation_kind: RemediationKind::Guided,
             fix_fn: None,
-            remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /var/lib/docker -p rwxa -k docker\nThen reload auditd.".into(),
+            remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /var/lib/docker -p rwxa -k docker".into(),
             requires_restart: false,
             requires_elevation: true,
             references: vec!["CIS Docker Benchmark v1.8.0, Section 1.1.5".into()],
-            rationale: "Auditing /var/lib/docker helps detect unauthorized modifications to Docker image layers and container data.".into(),
-            impact: "Audit logging on a high-churn directory may produce significant log volume.".into(),
-            tags: vec!["audit".into(), "host".into(), "data".into()],
+            rationale: "Auditing /var/lib/docker detects unauthorized modifications to image layers and container data.".into(),
+            impact: "High-churn directory may produce significant log volume.".into(),
+            tags: vec!["audit".into(), "data".into()],
         }
     }
-
-    // ── 1.1.6 — Audit: /etc/docker ───────────────────────────────────────────
 
     fn rule_1_1_6() -> RuleDefinition {
         RuleDefinition {
             id: "1.1.6".into(),
             section: 1,
             title: "Ensure that /etc/docker is audited".into(),
-            description: "Audit the Docker configuration directory (/etc/docker) to track changes to daemon configuration files.".into(),
+            description: "Audit the Docker config directory to detect changes to TLS certs and daemon.json.".into(),
             category: RuleCategory::Files,
             severity: Severity::Medium,
             scored: true,
             audit_command: Some("auditctl -l | grep /etc/docker".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let found = Section1::check_audit_rule("/etc/docker");
                     let raw = Section1::read_audit_rules();
                     let relevant: Vec<&str> = raw.lines().filter(|l| l.contains("/etc/docker")).collect();
-                    Ok(CheckResult {
-                        rule: CisRule {
-                            id: "1.1.6".into(),
-                            title: "Ensure that /etc/docker is audited".into(),
-                            category: RuleCategory::Files,
-                            severity: Severity::Medium,
-                            section: "Host Configuration".into(),
-                            description: "Audit rule for /etc/docker".into(),
-                            remediation: "Add auditd rule: -w /etc/docker -k docker".into(),
-                        },
-                        status: if found { CheckStatus::Pass } else { CheckStatus::Fail },
-                        message: if found { "Audit rule found for /etc/docker".into() } else { "No audit rule for /etc/docker".into() },
-                        affected: if found { vec![] } else { vec!["/etc/docker".into()] },
-                        remediation_kind: RemediationKind::Guided,
-                        audit_command: Some("auditctl -l | grep /etc/docker".into()),
-                        raw_output: Some(if relevant.is_empty() { "(no matching rules)".into() } else { relevant.join("\n") }),
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                    })
+                    let found = !relevant.is_empty();
+                    Ok(Section1::audit_result("1.1.6", "Ensure that /etc/docker is audited", "/etc/docker", found, relevant))
                 })
             },
             remediation_kind: RemediationKind::Guided,
             fix_fn: None,
-            remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /etc/docker -p rwxa -k docker\nThen reload auditd.".into(),
+            remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /etc/docker -p rwxa -k docker".into(),
             requires_restart: false,
             requires_elevation: true,
             references: vec!["CIS Docker Benchmark v1.8.0, Section 1.1.6".into()],
-            rationale: "Auditing /etc/docker tracks changes to TLS certificates and daemon.json that could weaken Docker security.".into(),
-            impact: "Low volume of audit events as /etc/docker changes infrequently.".into(),
-            tags: vec!["audit".into(), "host".into(), "config".into()],
+            rationale: "Changes to /etc/docker may weaken TLS or daemon security settings.".into(),
+            impact: "Low event volume.".into(),
+            tags: vec!["audit".into(), "config".into()],
         }
     }
-
-    // ── 1.1.7 — Audit: docker.service ────────────────────────────────────────
 
     fn rule_1_1_7() -> RuleDefinition {
         RuleDefinition {
@@ -511,181 +364,97 @@ Then reload:
             audit_command: Some("auditctl -l | grep docker.service".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let found = Section1::check_audit_rule("docker.service");
                     let raw = Section1::read_audit_rules();
                     let relevant: Vec<&str> = raw.lines().filter(|l| l.contains("docker.service")).collect();
-                    Ok(CheckResult {
-                        rule: CisRule {
-                            id: "1.1.7".into(),
-                            title: "Ensure that docker.service is audited".into(),
-                            category: RuleCategory::Files,
-                            severity: Severity::Medium,
-                            section: "Host Configuration".into(),
-                            description: "Audit rule for docker.service".into(),
-                            remediation: "Add auditd rule watching the docker.service file".into(),
-                        },
-                        status: if found { CheckStatus::Pass } else { CheckStatus::Fail },
-                        message: if found { "Audit rule found for docker.service".into() } else { "No audit rule for docker.service".into() },
-                        affected: if found { vec![] } else { vec!["docker.service".into()] },
-                        remediation_kind: RemediationKind::Guided,
-                        audit_command: Some("auditctl -l | grep docker.service".into()),
-                        raw_output: Some(if relevant.is_empty() { "(no matching rules)".into() } else { relevant.join("\n") }),
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                    })
+                    let found = !relevant.is_empty();
+                    Ok(Section1::audit_result("1.1.7", "Ensure that docker.service is audited", "docker.service", found, relevant))
                 })
             },
             remediation_kind: RemediationKind::Guided,
             fix_fn: None,
-            remediation_guide: r#"Find the service file:
-  systemctl show -p FragmentPath docker.service
-
-Add to /etc/audit/rules.d/docker.rules:
-  -w /lib/systemd/system/docker.service -p rwxa -k docker"#.into(),
+            remediation_guide: "Find service file path:\n  systemctl show -p FragmentPath docker.service\nAdd rule:\n  -w /lib/systemd/system/docker.service -p rwxa -k docker".into(),
             requires_restart: false,
             requires_elevation: true,
             references: vec!["CIS Docker Benchmark v1.8.0, Section 1.1.7".into()],
-            rationale: "Auditing docker.service detects tampering with service startup configuration.".into(),
-            impact: "Low audit event volume.".into(),
-            tags: vec!["audit".into(), "systemd".into(), "service".into()],
+            rationale: "Tampering with docker.service changes daemon startup configuration.".into(),
+            impact: "Low event volume.".into(),
+            tags: vec!["audit".into(), "systemd".into()],
         }
     }
-
-    // ── 1.1.8 — Audit: containerd.sock ───────────────────────────────────────
 
     fn rule_1_1_8() -> RuleDefinition {
         RuleDefinition {
             id: "1.1.8".into(),
             section: 1,
             title: "Ensure that containerd.sock is audited".into(),
-            description: "Audit the containerd socket file to detect unauthorized access to the container runtime.".into(),
+            description: "Audit the containerd socket to detect unauthorized container runtime access.".into(),
             category: RuleCategory::Runtime,
             severity: Severity::Medium,
             scored: true,
             audit_command: Some("auditctl -l | grep containerd.sock".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let found = Section1::check_audit_rule("containerd.sock");
                     let raw = Section1::read_audit_rules();
                     let relevant: Vec<&str> = raw.lines().filter(|l| l.contains("containerd.sock")).collect();
-                    Ok(CheckResult {
-                        rule: CisRule {
-                            id: "1.1.8".into(),
-                            title: "Ensure that containerd.sock is audited".into(),
-                            category: RuleCategory::Runtime,
-                            severity: Severity::Medium,
-                            section: "Host Configuration".into(),
-                            description: "Audit rule for containerd.sock".into(),
-                            remediation: "Add auditd rule watching containerd.sock".into(),
-                        },
-                        status: if found { CheckStatus::Pass } else { CheckStatus::Fail },
-                        message: if found { "Audit rule found for containerd.sock".into() } else { "No audit rule for containerd.sock".into() },
-                        affected: if found { vec![] } else { vec!["containerd.sock".into()] },
-                        remediation_kind: RemediationKind::Guided,
-                        audit_command: Some("auditctl -l | grep containerd.sock".into()),
-                        raw_output: Some(if relevant.is_empty() { "(no matching rules)".into() } else { relevant.join("\n") }),
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                    })
+                    let found = !relevant.is_empty();
+                    Ok(Section1::audit_result("1.1.8", "Ensure that containerd.sock is audited", "containerd.sock", found, relevant))
                 })
             },
             remediation_kind: RemediationKind::Guided,
             fix_fn: None,
-            remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /run/containerd/containerd.sock -p rwxa -k docker\nThen reload auditd.".into(),
+            remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /run/containerd/containerd.sock -p rwxa -k docker".into(),
             requires_restart: false,
             requires_elevation: true,
             references: vec!["CIS Docker Benchmark v1.8.0, Section 1.1.8".into()],
-            rationale: "Auditing the containerd socket detects unauthorized container runtime access that bypasses Docker daemon.".into(),
-            impact: "Low audit event volume.".into(),
+            rationale: "Containerd socket access bypasses Docker daemon — it must be audited separately.".into(),
+            impact: "Low event volume.".into(),
             tags: vec!["audit".into(), "containerd".into(), "socket".into()],
         }
     }
-
-    // ── 1.1.9 — Audit: docker.sock ───────────────────────────────────────────
 
     fn rule_1_1_9() -> RuleDefinition {
         RuleDefinition {
             id: "1.1.9".into(),
             section: 1,
             title: "Ensure that docker.sock is audited".into(),
-            description: "Audit the Docker daemon socket file to track all API access attempts.".into(),
+            description: "Audit /var/run/docker.sock — the primary Docker API entry point — to track all API access.".into(),
             category: RuleCategory::Runtime,
             severity: Severity::High,
             scored: true,
             audit_command: Some("auditctl -l | grep docker.sock".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let found = Section1::check_audit_rule("docker.sock");
                     let raw = Section1::read_audit_rules();
                     let relevant: Vec<&str> = raw.lines().filter(|l| l.contains("docker.sock")).collect();
-                    Ok(CheckResult {
-                        rule: CisRule {
-                            id: "1.1.9".into(),
-                            title: "Ensure that docker.sock is audited".into(),
-                            category: RuleCategory::Runtime,
-                            severity: Severity::High,
-                            section: "Host Configuration".into(),
-                            description: "Audit rule for /var/run/docker.sock".into(),
-                            remediation: "Add auditd rule: -w /var/run/docker.sock -k docker".into(),
-                        },
-                        status: if found { CheckStatus::Pass } else { CheckStatus::Fail },
-                        message: if found { "Audit rule found for docker.sock".into() } else { "No audit rule for docker.sock".into() },
-                        affected: if found { vec![] } else { vec!["/var/run/docker.sock".into()] },
-                        remediation_kind: RemediationKind::Guided,
-                        audit_command: Some("auditctl -l | grep docker.sock".into()),
-                        raw_output: Some(if relevant.is_empty() { "(no matching rules)".into() } else { relevant.join("\n") }),
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                    })
+                    let found = !relevant.is_empty();
+                    Ok(Section1::audit_result("1.1.9", "Ensure that docker.sock is audited", "docker.sock", found, relevant))
                 })
             },
             remediation_kind: RemediationKind::Guided,
             fix_fn: None,
-            remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /var/run/docker.sock -p rwxa -k docker\nThen reload auditd.".into(),
+            remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /var/run/docker.sock -p rwxa -k docker".into(),
             requires_restart: false,
             requires_elevation: true,
             references: vec!["CIS Docker Benchmark v1.8.0, Section 1.1.9".into()],
-            rationale: "The Docker socket is the primary API entry point. Auditing it provides a record of all Docker API access.".into(),
-            impact: "High-volume Docker environments will generate significant audit log entries.".into(),
+            rationale: "docker.sock is the API entry point. Auditing it records all Docker API calls.".into(),
+            impact: "High-volume environments generate significant log entries.".into(),
             tags: vec!["audit".into(), "socket".into(), "api".into()],
         }
     }
-
-    // ── 1.1.10 — Audit: /etc/default/docker ──────────────────────────────────
 
     fn rule_1_1_10() -> RuleDefinition {
         RuleDefinition {
             id: "1.1.10".into(),
             section: 1,
             title: "Ensure that /etc/default/docker is audited".into(),
-            description: "Audit the Docker default environment file (/etc/default/docker).".into(),
+            description: "Audit the Docker environment override file if it exists.".into(),
             category: RuleCategory::Files,
             severity: Severity::Low,
             scored: true,
             audit_command: Some("auditctl -l | grep /etc/default/docker".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    // Check if file exists first
-                    let file_exists = std::path::Path::new("/etc/default/docker").exists();
-                    if !file_exists {
+                    if !std::path::Path::new("/etc/default/docker").exists() {
                         return Ok(CheckResult {
                             rule: CisRule {
                                 id: "1.1.10".into(),
@@ -694,82 +463,51 @@ Add to /etc/audit/rules.d/docker.rules:
                                 severity: Severity::Low,
                                 section: "Host Configuration".into(),
                                 description: "Audit rule for /etc/default/docker".into(),
-                                remediation: "Add auditd rule if file exists".into(),
+                                remediation: "Not applicable — file does not exist".into(),
                             },
                             status: CheckStatus::Pass,
-                            message: "/etc/default/docker does not exist (not applicable)".into(),
+                            message: "/etc/default/docker does not exist (not applicable on this system)".into(),
                             affected: vec![],
                             remediation_kind: RemediationKind::Manual,
                             audit_command: None,
                             raw_output: None,
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
+                            references: None,
+                            rationale: None,
+                            impact: None,
+                            tags: None,
                         });
                     }
-                    let found = Section1::check_audit_rule("/etc/default/docker");
                     let raw = Section1::read_audit_rules();
                     let relevant: Vec<&str> = raw.lines().filter(|l| l.contains("/etc/default/docker")).collect();
-                    Ok(CheckResult {
-                        rule: CisRule {
-                            id: "1.1.10".into(),
-                            title: "Ensure that /etc/default/docker is audited".into(),
-                            category: RuleCategory::Files,
-                            severity: Severity::Low,
-                            section: "Host Configuration".into(),
-                            description: "Audit rule for /etc/default/docker".into(),
-                            remediation: "Add auditd rule: -w /etc/default/docker -k docker".into(),
-                        },
-                        status: if found { CheckStatus::Pass } else { CheckStatus::Fail },
-                        message: if found { "Audit rule found for /etc/default/docker".into() } else { "No audit rule for /etc/default/docker".into() },
-                        affected: if found { vec![] } else { vec!["/etc/default/docker".into()] },
-                        remediation_kind: RemediationKind::Guided,
-                        audit_command: Some("auditctl -l | grep /etc/default/docker".into()),
-                        raw_output: Some(if relevant.is_empty() { "(no matching rules)".into() } else { relevant.join("\n") }),
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                    })
+                    let found = !relevant.is_empty();
+                    Ok(Section1::audit_result("1.1.10", "Ensure that /etc/default/docker is audited", "/etc/default/docker", found, relevant))
                 })
             },
             remediation_kind: RemediationKind::Guided,
             fix_fn: None,
-            remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /etc/default/docker -p rwxa -k docker\nThen reload auditd.".into(),
+            remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /etc/default/docker -p rwxa -k docker".into(),
             requires_restart: false,
             requires_elevation: true,
             references: vec!["CIS Docker Benchmark v1.8.0, Section 1.1.10".into()],
-            rationale: "Auditing /etc/default/docker detects changes to Docker daemon environment variable overrides.".into(),
-            impact: "Only applicable on Debian/Ubuntu-based systems.".into(),
+            rationale: "Detects changes to Docker daemon env var overrides on Debian-based systems.".into(),
+            impact: "Only applicable on Debian/Ubuntu systems.".into(),
             tags: vec!["audit".into(), "config".into()],
         }
     }
-
-    // ── 1.1.11 — Audit: daemon.json ──────────────────────────────────────────
 
     fn rule_1_1_11() -> RuleDefinition {
         RuleDefinition {
             id: "1.1.11".into(),
             section: 1,
             title: "Ensure that /etc/docker/daemon.json is audited".into(),
-            description: "Audit the Docker daemon configuration file to detect unauthorized changes to daemon settings.".into(),
+            description: "Audit daemon.json to detect unauthorized changes to Docker daemon security settings.".into(),
             category: RuleCategory::Files,
             severity: Severity::Medium,
             scored: true,
             audit_command: Some("auditctl -l | grep daemon.json".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let file_exists = std::path::Path::new("/etc/docker/daemon.json").exists();
-                    if !file_exists {
+                    if !std::path::Path::new("/etc/docker/daemon.json").exists() {
                         return Ok(CheckResult {
                             rule: CisRule {
                                 id: "1.1.11".into(),
@@ -786,74 +524,43 @@ Add to /etc/audit/rules.d/docker.rules:
                             remediation_kind: RemediationKind::Manual,
                             audit_command: None,
                             raw_output: None,
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
+                            references: None,
+                            rationale: None,
+                            impact: None,
+                            tags: None,
                         });
                     }
-                    let found = Section1::check_audit_rule("daemon.json");
                     let raw = Section1::read_audit_rules();
                     let relevant: Vec<&str> = raw.lines().filter(|l| l.contains("daemon.json")).collect();
-                    Ok(CheckResult {
-                        rule: CisRule {
-                            id: "1.1.11".into(),
-                            title: "Ensure that /etc/docker/daemon.json is audited".into(),
-                            category: RuleCategory::Files,
-                            severity: Severity::Medium,
-                            section: "Host Configuration".into(),
-                            description: "Audit rule for /etc/docker/daemon.json".into(),
-                            remediation: "Add auditd rule: -w /etc/docker/daemon.json -k docker".into(),
-                        },
-                        status: if found { CheckStatus::Pass } else { CheckStatus::Fail },
-                        message: if found { "Audit rule found for daemon.json".into() } else { "No audit rule for /etc/docker/daemon.json".into() },
-                        affected: if found { vec![] } else { vec!["/etc/docker/daemon.json".into()] },
-                        remediation_kind: RemediationKind::Guided,
-                        audit_command: Some("auditctl -l | grep daemon.json".into()),
-                        raw_output: Some(if relevant.is_empty() { "(no matching rules)".into() } else { relevant.join("\n") }),
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                    })
+                    let found = !relevant.is_empty();
+                    Ok(Section1::audit_result("1.1.11", "Ensure that /etc/docker/daemon.json is audited", "/etc/docker/daemon.json", found, relevant))
                 })
             },
             remediation_kind: RemediationKind::Guided,
             fix_fn: None,
-            remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /etc/docker/daemon.json -p rwxa -k docker\nThen reload auditd.".into(),
+            remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /etc/docker/daemon.json -p rwxa -k docker".into(),
             requires_restart: false,
             requires_elevation: true,
             references: vec!["CIS Docker Benchmark v1.8.0, Section 1.1.11".into()],
-            rationale: "daemon.json controls all Docker daemon security settings. Auditing it detects unauthorized configuration changes.".into(),
-            impact: "Low audit event volume.".into(),
+            rationale: "daemon.json controls all Docker security settings. Auditing it detects unauthorized changes.".into(),
+            impact: "Low event volume.".into(),
             tags: vec!["audit".into(), "daemon".into(), "config".into()],
         }
     }
-
-    // ── 1.1.12 — Audit: /etc/containerd/config.toml ──────────────────────────
 
     fn rule_1_1_12() -> RuleDefinition {
         RuleDefinition {
             id: "1.1.12".into(),
             section: 1,
             title: "Ensure that /etc/containerd/config.toml is audited".into(),
-            description: "Audit the containerd configuration file to detect unauthorized changes to runtime settings.".into(),
+            description: "Audit containerd config to detect unauthorized runtime configuration changes.".into(),
             category: RuleCategory::Files,
             severity: Severity::Medium,
             scored: true,
             audit_command: Some("auditctl -l | grep /etc/containerd/config.toml".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let file_exists = std::path::Path::new("/etc/containerd/config.toml").exists();
-                    if !file_exists {
+                    if !std::path::Path::new("/etc/containerd/config.toml").exists() {
                         return Ok(CheckResult {
                             rule: CisRule {
                                 id: "1.1.12".into(),
@@ -870,59 +577,29 @@ Add to /etc/audit/rules.d/docker.rules:
                             remediation_kind: RemediationKind::Manual,
                             audit_command: None,
                             raw_output: None,
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
+                            references: None,
+                            rationale: None,
+                            impact: None,
+                            tags: None,
                         });
                     }
-                    let found = Section1::check_audit_rule("/etc/containerd/config.toml");
                     let raw = Section1::read_audit_rules();
                     let relevant: Vec<&str> = raw.lines().filter(|l| l.contains("/etc/containerd/config.toml")).collect();
-                    Ok(CheckResult {
-                        rule: CisRule {
-                            id: "1.1.12".into(),
-                            title: "Ensure that /etc/containerd/config.toml is audited".into(),
-                            category: RuleCategory::Files,
-                            severity: Severity::Medium,
-                            section: "Host Configuration".into(),
-                            description: "Audit rule for /etc/containerd/config.toml".into(),
-                            remediation: "Add auditd rule for /etc/containerd/config.toml".into(),
-                        },
-                        status: if found { CheckStatus::Pass } else { CheckStatus::Fail },
-                        message: if found { "Audit rule found for /etc/containerd/config.toml".into() } else { "No audit rule for /etc/containerd/config.toml".into() },
-                        affected: if found { vec![] } else { vec!["/etc/containerd/config.toml".into()] },
-                        remediation_kind: RemediationKind::Guided,
-                        audit_command: Some("auditctl -l | grep /etc/containerd/config.toml".into()),
-                        raw_output: Some(if relevant.is_empty() { "(no matching rules)".into() } else { relevant.join("\n") }),
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                    })
+                    let found = !relevant.is_empty();
+                    Ok(Section1::audit_result("1.1.12", "Ensure that /etc/containerd/config.toml is audited", "/etc/containerd/config.toml", found, relevant))
                 })
             },
             remediation_kind: RemediationKind::Guided,
             fix_fn: None,
-            remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /etc/containerd/config.toml -p rwxa -k docker\nThen reload auditd.".into(),
+            remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /etc/containerd/config.toml -p rwxa -k docker".into(),
             requires_restart: false,
             requires_elevation: true,
             references: vec!["CIS Docker Benchmark v1.8.0, Section 1.1.12".into()],
-            rationale: "Containerd config controls low-level container runtime behavior. Auditing detects tampering.".into(),
-            impact: "Low audit event volume.".into(),
-            tags: vec!["audit".into(), "containerd".into(), "config".into()],
+            rationale: "containerd config controls low-level runtime behavior. Auditing detects tampering.".into(),
+            impact: "Low event volume.".into(),
+            tags: vec!["audit".into(), "containerd".into()],
         }
     }
-
-    // ── 1.1.14 — Audit: /usr/bin/containerd ──────────────────────────────────
 
     fn rule_1_1_14() -> RuleDefinition {
         RuleDefinition {
@@ -936,101 +613,51 @@ Add to /etc/audit/rules.d/docker.rules:
             audit_command: Some("auditctl -l | grep /usr/bin/containerd".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let found = Section1::check_audit_rule("/usr/bin/containerd");
                     let raw = Section1::read_audit_rules();
                     let relevant: Vec<&str> = raw.lines()
                         .filter(|l| l.contains("/usr/bin/containerd") && !l.contains("containerd-shim"))
                         .collect();
-                    Ok(CheckResult {
-                        rule: CisRule {
-                            id: "1.1.14".into(),
-                            title: "Ensure that /usr/bin/containerd is audited".into(),
-                            category: RuleCategory::Runtime,
-                            severity: Severity::Medium,
-                            section: "Host Configuration".into(),
-                            description: "Audit rule for /usr/bin/containerd".into(),
-                            remediation: "Add auditd rule: -w /usr/bin/containerd -k docker".into(),
-                        },
-                        status: if found { CheckStatus::Pass } else { CheckStatus::Fail },
-                        message: if found { "Audit rule found for /usr/bin/containerd".into() } else { "No audit rule for /usr/bin/containerd".into() },
-                        affected: if found { vec![] } else { vec!["/usr/bin/containerd".into()] },
-                        remediation_kind: RemediationKind::Guided,
-                        audit_command: Some("auditctl -l | grep /usr/bin/containerd".into()),
-                        raw_output: Some(if relevant.is_empty() { "(no matching rules)".into() } else { relevant.join("\n") }),
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                    })
+                    let found = !relevant.is_empty();
+                    Ok(Section1::audit_result("1.1.14", "Ensure that /usr/bin/containerd is audited", "/usr/bin/containerd", found, relevant))
                 })
             },
             remediation_kind: RemediationKind::Guided,
             fix_fn: None,
-            remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /usr/bin/containerd -p rwxa -k docker\nThen reload auditd.".into(),
+            remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /usr/bin/containerd -p rwxa -k docker".into(),
             requires_restart: false,
             requires_elevation: true,
             references: vec!["CIS Docker Benchmark v1.8.0, Section 1.1.14".into()],
-            rationale: "Auditing the containerd binary detects unauthorized execution or modification of the container runtime.".into(),
+            rationale: "Auditing the containerd binary detects unauthorized execution or tampering.".into(),
             impact: "Minimal performance impact.".into(),
             tags: vec!["audit".into(), "containerd".into(), "binary".into()],
         }
     }
-
-    // ── 1.1.18 — Audit: /usr/bin/runc ────────────────────────────────────────
 
     fn rule_1_1_18() -> RuleDefinition {
         RuleDefinition {
             id: "1.1.18".into(),
             section: 1,
             title: "Ensure that /usr/bin/runc is audited".into(),
-            description: "Audit the runc binary — the low-level OCI container runtime used by containerd and Docker.".into(),
+            description: "Audit the runc OCI runtime binary to detect unauthorized access or modification.".into(),
             category: RuleCategory::Runtime,
             severity: Severity::Medium,
             scored: true,
             audit_command: Some("auditctl -l | grep /usr/bin/runc".into()),
             check_fn: |_docker, _containers| {
                 Box::pin(async move {
-                    let found = Section1::check_audit_rule("/usr/bin/runc");
                     let raw = Section1::read_audit_rules();
                     let relevant: Vec<&str> = raw.lines().filter(|l| l.contains("/usr/bin/runc")).collect();
-                    Ok(CheckResult {
-                        rule: CisRule {
-                            id: "1.1.18".into(),
-                            title: "Ensure that /usr/bin/runc is audited".into(),
-                            category: RuleCategory::Runtime,
-                            severity: Severity::Medium,
-                            section: "Host Configuration".into(),
-                            description: "Audit rule for /usr/bin/runc".into(),
-                            remediation: "Add auditd rule: -w /usr/bin/runc -k docker".into(),
-                        },
-                        status: if found { CheckStatus::Pass } else { CheckStatus::Fail },
-                        message: if found { "Audit rule found for /usr/bin/runc".into() } else { "No audit rule for /usr/bin/runc".into() },
-                        affected: if found { vec![] } else { vec!["/usr/bin/runc".into()] },
-                        remediation_kind: RemediationKind::Guided,
-                        audit_command: Some("auditctl -l | grep /usr/bin/runc".into()),
-                        raw_output: Some(if relevant.is_empty() { "(no matching rules)".into() } else { relevant.join("\n") }),
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                    })
+                    let found = !relevant.is_empty();
+                    Ok(Section1::audit_result("1.1.18", "Ensure that /usr/bin/runc is audited", "/usr/bin/runc", found, relevant))
                 })
             },
             remediation_kind: RemediationKind::Guided,
             fix_fn: None,
-            remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /usr/bin/runc -p rwxa -k docker\nThen reload auditd.".into(),
+            remediation_guide: "Add to /etc/audit/rules.d/docker.rules:\n  -w /usr/bin/runc -p rwxa -k docker".into(),
             requires_restart: false,
             requires_elevation: true,
             references: vec!["CIS Docker Benchmark v1.8.0, Section 1.1.18".into()],
-            rationale: "runc is the final layer of container execution. Auditing it detects exploitation attempts like CVE-2019-5736 (runc escape).".into(),
+            rationale: "runc is the final execution layer. Auditing detects CVE-style binary replacement attacks.".into(),
             impact: "Minimal performance impact.".into(),
             tags: vec!["audit".into(), "runc".into(), "oci".into()],
         }

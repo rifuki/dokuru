@@ -1,28 +1,284 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { agentApi } from "@/lib/api/agent";
-import { agentDirectApi, type AuditResponse } from "@/lib/api/agent-direct";
+import { agentDirectApi, type AuditResponse, type AuditResult } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
 import { getAgentToken } from "@/stores/use-agent-store";
 import { Button } from "@/components/ui/button";
-import { Play, CheckCircle2, XCircle, AlertCircle, Filter, ChevronDown, ChevronUp, ExternalLink, Terminal, Wrench, AlertTriangle, Info } from "lucide-react";
-import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+    Play, Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
+    Terminal, Wrench, ExternalLink, AlertTriangle, Info, Server,
+    Clock, Cpu, Container, RefreshCw,
+} from "lucide-react";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/audit")({
     component: AuditPage,
 });
 
-type FilterType = "all" | "pass" | "fail" | "warn";
+// ── Section metadata ────────────────────────────────────────────────────────
+
+const SECTION_META: Record<string, { label: string; color: string; bg: string; border: string }> = {
+    "Host Configuration":    { label: "§1 Host",    color: "text-blue-500",   bg: "bg-blue-500/10",   border: "border-blue-500/30" },
+    "Daemon Configuration":  { label: "§2 Daemon",  color: "text-violet-500", bg: "bg-violet-500/10", border: "border-violet-500/30" },
+    "Config File Permissions":{ label: "§3 Files",  color: "text-orange-500", bg: "bg-orange-500/10", border: "border-orange-500/30" },
+    "Container Images":      { label: "§4 Images",  color: "text-teal-500",   bg: "bg-teal-500/10",   border: "border-teal-500/30" },
+    "Container Runtime":     { label: "§5 Runtime", color: "text-indigo-500", bg: "bg-indigo-500/10", border: "border-indigo-500/30" },
+};
+
+function sectionMeta(section: string) {
+    return SECTION_META[section] ?? { label: section, color: "text-gray-500", bg: "bg-gray-500/10", border: "border-gray-500/30" };
+}
+
+// ── Score Ring ───────────────────────────────────────────────────────────────
+
+function ScoreRing({ score }: { score: number }) {
+    const r = 52;
+    const circ = 2 * Math.PI * r;
+    const offset = circ - (score / 100) * circ;
+    const color = score >= 80 ? "#22c55e" : score >= 60 ? "#f59e0b" : "#ef4444";
+    const label = score >= 80 ? "Secure" : score >= 60 ? "At Risk" : "Critical";
+
+    return (
+        <div className="relative flex items-center justify-center">
+            <svg width="128" height="128" viewBox="0 0 120 120">
+                <circle cx="60" cy="60" r={r} fill="none" stroke="currentColor" strokeWidth="10"
+                    className="text-muted-foreground/10" />
+                <circle cx="60" cy="60" r={r} fill="none" stroke={color} strokeWidth="10"
+                    strokeDasharray={circ} strokeDashoffset={offset}
+                    strokeLinecap="round" transform="rotate(-90 60 60)"
+                    style={{ transition: "stroke-dashoffset 0.8s ease" }}
+                />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-3xl font-bold leading-none">{score}</span>
+                <span className="text-xs text-muted-foreground mt-1">{label}</span>
+            </div>
+        </div>
+    );
+}
+
+// ── Severity badge ───────────────────────────────────────────────────────────
+
+function SeverityBadge({ severity }: { severity: string }) {
+    const map: Record<string, string> = {
+        High: "bg-red-500/15 text-red-500 border-red-500/30",
+        Medium: "bg-yellow-500/15 text-yellow-600 border-yellow-500/30",
+        Low: "bg-blue-500/15 text-blue-500 border-blue-500/30",
+    };
+    return (
+        <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase border", map[severity] ?? "bg-muted text-muted-foreground")}>
+            {severity}
+        </span>
+    );
+}
+
+// ── Status indicator ─────────────────────────────────────────────────────────
+
+function StatusIcon({ status }: { status: "Pass" | "Fail" | "Error" }) {
+    if (status === "Pass") return <ShieldCheck className="h-5 w-5 text-green-500 shrink-0" />;
+    if (status === "Fail") return <ShieldX className="h-5 w-5 text-red-500 shrink-0" />;
+    return <Shield className="h-5 w-5 text-orange-500 shrink-0" />;
+}
+
+// ── Rule Card ────────────────────────────────────────────────────────────────
+
+function RuleCard({ result }: { result: AuditResult }) {
+    const [open, setOpen] = useState(false);
+    const { rule, status, message, affected, audit_command, raw_output, references, rationale, impact } = result;
+    const meta = sectionMeta(rule.section);
+
+    const borderLeft = status === "Pass"
+        ? "border-l-green-500/60"
+        : status === "Fail"
+        ? "border-l-red-500/60"
+        : "border-l-orange-500/60";
+
+    const headerBg = status === "Pass"
+        ? "hover:bg-green-500/5"
+        : status === "Fail"
+        ? "hover:bg-red-500/5"
+        : "hover:bg-orange-500/5";
+
+    return (
+        <div className={cn("rounded-xl border border-border bg-card border-l-4 transition-shadow hover:shadow-sm", borderLeft)}>
+            {/* Header row */}
+            <button
+                onClick={() => setOpen(v => !v)}
+                className={cn("w-full text-left px-4 py-3.5 flex items-start gap-3 transition-colors rounded-xl", headerBg)}
+            >
+                <StatusIcon status={status} />
+
+                <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                        <span className="font-mono text-[11px] font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                            {rule.id}
+                        </span>
+                        <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded border", meta.bg, meta.color, meta.border)}>
+                            {meta.label}
+                        </span>
+                        <SeverityBadge severity={rule.severity} />
+                        {affected.length > 0 && (
+                            <span className="inline-flex items-center gap-1 text-[10px] bg-orange-500/10 text-orange-500 border border-orange-500/30 px-1.5 py-0.5 rounded font-semibold">
+                                <AlertTriangle className="h-2.5 w-2.5" />
+                                {affected.length} affected
+                            </span>
+                        )}
+                    </div>
+                    <p className="font-medium text-sm leading-snug">{rule.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed line-clamp-1">{message}</p>
+                </div>
+
+                <div className="shrink-0 ml-2 mt-0.5">
+                    {open
+                        ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                        : <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    }
+                </div>
+            </button>
+
+            {/* Expanded detail */}
+            {open && (
+                <div className="px-4 pb-4 pt-0 border-t border-border/50 space-y-4 text-sm">
+                    {/* Message full */}
+                    <div className="pt-3">
+                        <p className="text-muted-foreground">{message}</p>
+                    </div>
+
+                    {/* Description */}
+                    {rule.description && (
+                        <div>
+                            <h5 className="flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1.5">
+                                <Info className="h-3.5 w-3.5" /> About
+                            </h5>
+                            <p className="text-sm text-muted-foreground">{rule.description}</p>
+                        </div>
+                    )}
+
+                    {/* Affected */}
+                    {affected.length > 0 && (
+                        <div>
+                            <h5 className="flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wide text-orange-500 mb-1.5">
+                                <AlertTriangle className="h-3.5 w-3.5" /> Affected ({affected.length})
+                            </h5>
+                            <div className="flex flex-wrap gap-1.5">
+                                {affected.map((item, i) => (
+                                    <code key={i} className="text-xs bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20 px-2 py-0.5 rounded">
+                                        {item}
+                                    </code>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Remediation */}
+                    {rule.remediation && (
+                        <div>
+                            <h5 className="flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1.5">
+                                <Wrench className="h-3.5 w-3.5" /> Remediation
+                            </h5>
+                            <p className="text-sm text-muted-foreground bg-muted/40 rounded-lg p-3 font-mono whitespace-pre-wrap">{rule.remediation}</p>
+                        </div>
+                    )}
+
+                    {/* Audit Command */}
+                    {audit_command && (
+                        <div>
+                            <h5 className="flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1.5">
+                                <Terminal className="h-3.5 w-3.5" /> Audit Command
+                            </h5>
+                            <code className="block text-xs bg-zinc-900 dark:bg-zinc-950 text-green-400 p-3 rounded-lg overflow-x-auto font-mono">
+                                $ {audit_command}
+                            </code>
+                        </div>
+                    )}
+
+                    {/* Raw Output */}
+                    {raw_output && (
+                        <div>
+                            <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Raw Output</h5>
+                            <pre className="text-xs bg-muted/50 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap font-mono text-muted-foreground">
+                                {raw_output}
+                            </pre>
+                        </div>
+                    )}
+
+                    {/* Rationale + Impact */}
+                    {(rationale || impact) && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {rationale && (
+                                <div className="bg-muted/30 rounded-lg p-3">
+                                    <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1">Rationale</h5>
+                                    <p className="text-xs text-muted-foreground leading-relaxed">{rationale}</p>
+                                </div>
+                            )}
+                            {impact && (
+                                <div className="bg-muted/30 rounded-lg p-3">
+                                    <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1">Impact</h5>
+                                    <p className="text-xs text-muted-foreground leading-relaxed">{impact}</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* References */}
+                    {references && references.length > 0 && (
+                        <div>
+                            <h5 className="flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1.5">
+                                <ExternalLink className="h-3.5 w-3.5" /> References
+                            </h5>
+                            <div className="space-y-1">
+                                {references.map((ref, i) => (
+                                    <a key={i} href={ref.startsWith("http") ? ref : undefined}
+                                        target="_blank" rel="noopener noreferrer"
+                                        className="flex items-center gap-1.5 text-xs text-primary hover:underline">
+                                        <ExternalLink className="h-3 w-3 shrink-0" />
+                                        {ref}
+                                    </a>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ── Section group header ─────────────────────────────────────────────────────
+
+function SectionHeader({ section, total, passed }: { section: string; total: number; passed: number }) {
+    const meta = sectionMeta(section);
+    const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
+    return (
+        <div className="flex items-center gap-3 py-1">
+            <span className={cn("text-xs font-bold px-2 py-1 rounded-md border", meta.bg, meta.color, meta.border)}>
+                {meta.label}
+            </span>
+            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                <div
+                    className={cn("h-full rounded-full transition-all", pct === 100 ? "bg-green-500" : pct >= 50 ? "bg-yellow-500" : "bg-red-500")}
+                    style={{ width: `${pct}%` }}
+                />
+            </div>
+            <span className="text-xs text-muted-foreground font-mono">{passed}/{total}</span>
+        </div>
+    );
+}
+
+// ── Main Page ────────────────────────────────────────────────────────────────
+
+type StatusFilter = "all" | "Pass" | "Fail";
 
 function AuditPage() {
     const { id } = Route.useParams();
     const [agent, setAgent] = useState<Agent | null>(null);
-    const [auditResults, setAuditResults] = useState<AuditResponse | null>(null);
+    const [auditData, setAuditData] = useState<AuditResponse | null>(null);
     const [isRunning, setIsRunning] = useState(false);
-    const [filter, setFilter] = useState<FilterType>("all");
-    const [expandedRules, setExpandedRules] = useState<Set<string>>(new Set());
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+    const [sectionFilter, setSectionFilter] = useState<string>("all");
 
     useEffect(() => {
         agentApi.getById(id).then(setAgent).catch(() => toast.error("Failed to load agent"));
@@ -32,311 +288,233 @@ function AuditPage() {
         if (!agent) return;
         const token = getAgentToken(agent.id);
         if (!token) return toast.error("Agent token not found");
-
         setIsRunning(true);
         try {
-            const results = await agentDirectApi.runAudit(agent.url, token);
-            setAuditResults(results);
-            toast.success("Audit completed");
+            const data = await agentDirectApi.runAudit(agent.url, token);
+            setAuditData(data);
+            toast.success(`Audit complete — ${data.summary.score}/100`);
         } catch {
-            toast.error("Failed to run audit");
+            toast.error("Audit failed");
         } finally {
             setIsRunning(false);
         }
     };
 
-    const toggleRule = (ruleId: string) => {
-        setExpandedRules(prev => {
-            const next = new Set(prev);
-            if (next.has(ruleId)) {
-                next.delete(ruleId);
-            } else {
-                next.add(ruleId);
-            }
-            return next;
-        });
-    };
+    // Group sections
+    const sections = auditData
+        ? [...new Set(auditData.results.map(r => r.rule.section))]
+        : [];
 
-    const filteredResults = auditResults?.results.filter((r) => {
-        if (filter === "all") return true;
-        return r.status === filter;
-    });
+    const sectionStats = auditData
+        ? Object.fromEntries(sections.map(s => {
+            const sectionRules = auditData.results.filter(r => r.rule.section === s);
+            return [s, { total: sectionRules.length, passed: sectionRules.filter(r => r.status === "Pass").length }];
+        }))
+        : {};
 
-    const getSeverityColor = (severity?: string) => {
-        switch (severity) {
-            case "High": return "text-red-600 dark:text-red-400 bg-red-500/10 border-red-500/20";
-            case "Medium": return "text-yellow-600 dark:text-yellow-400 bg-yellow-500/10 border-yellow-500/20";
-            case "Low": return "text-blue-600 dark:text-blue-400 bg-blue-500/10 border-blue-500/20";
-            default: return "text-gray-600 dark:text-gray-400 bg-gray-500/10 border-gray-500/20";
-        }
+    const filteredResults = auditData?.results.filter(r => {
+        const statusOk = statusFilter === "all" || r.status === statusFilter;
+        const sectionOk = sectionFilter === "all" || r.rule.section === sectionFilter;
+        return statusOk && sectionOk;
+    }) ?? [];
+
+    // Group filtered results by section
+    const groupedResults = filteredResults.reduce<Record<string, AuditResult[]>>((acc, r) => {
+        (acc[r.rule.section] ??= []).push(r);
+        return acc;
+    }, {});
+
+    const fmtDate = (ts: string) => {
+        try { return new Date(ts).toLocaleString(); } catch { return ts; }
     };
 
     return (
-        <div className="max-w-7xl mx-auto w-full space-y-6">
-            <div className="flex items-center justify-between">
+        <div className="max-w-5xl mx-auto w-full space-y-6 pb-10">
+            {/* ── Top bar ─────────────────────────────────────────── */}
+            <div className="flex items-start justify-between gap-4">
                 <div>
                     <h2 className="text-2xl font-bold tracking-tight">Security Audit</h2>
-                    <p className="text-muted-foreground text-sm mt-1">CIS Docker Benchmark v1.8.0 - Namespace & Cgroup Security</p>
+                    <p className="text-muted-foreground text-sm mt-0.5">CIS Docker Benchmark v1.8.0</p>
                 </div>
-                <Button onClick={handleRunAudit} disabled={isRunning || !agent}>
-                    <Play className={`h-4 w-4 mr-2 ${isRunning ? 'animate-spin' : ''}`} />
-                    {isRunning ? "Running..." : "Run Audit"}
+                <Button onClick={handleRunAudit} disabled={isRunning || !agent} size="sm" className="shrink-0">
+                    {isRunning
+                        ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Running…</>
+                        : auditData
+                        ? <><RefreshCw className="h-4 w-4 mr-2" /> Re-run Audit</>
+                        : <><Play className="h-4 w-4 mr-2" /> Run Audit</>
+                    }
                 </Button>
             </div>
 
-            {auditResults ? (
-                <div className="space-y-6">
-                    {/* Summary Cards */}
-                    <div className="grid grid-cols-3 gap-4">
-                        <button
-                            onClick={() => setFilter(filter === "pass" ? "all" : "pass")}
-                            className={`flex items-center gap-3 p-4 rounded-lg border transition-all ${
-                                filter === "pass"
-                                    ? "bg-green-500/20 border-green-500/40 ring-2 ring-green-500/30"
-                                    : "bg-green-500/10 border-green-500/20 hover:bg-green-500/15"
-                            }`}
-                        >
-                            <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400 shrink-0" />
-                            <div className="text-left">
-                                <p className="text-3xl font-bold">{auditResults.passed}</p>
-                                <p className="text-sm text-muted-foreground">Passed</p>
+            {auditData ? (
+                <>
+                    {/* ── Summary ────────────────────────────────────── */}
+                    <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-4">
+                        {/* Score ring + meta */}
+                        <div className="flex flex-col items-center justify-center bg-card border rounded-2xl px-8 py-5 gap-2">
+                            <ScoreRing score={auditData.summary.score} />
+                            <span className="text-xs text-muted-foreground font-medium">CIS Score</span>
+                        </div>
+
+                        {/* Stats grid + metadata */}
+                        <div className="flex flex-col gap-3">
+                            {/* Pass / Fail / Total */}
+                            <div className="grid grid-cols-3 gap-3">
+                                <button
+                                    onClick={() => setStatusFilter(f => f === "Pass" ? "all" : "Pass")}
+                                    className={cn(
+                                        "flex flex-col items-center justify-center rounded-xl border p-4 transition-all",
+                                        statusFilter === "Pass"
+                                            ? "bg-green-500/20 border-green-500/50 ring-2 ring-green-500/30"
+                                            : "bg-green-500/5 border-green-500/20 hover:bg-green-500/10"
+                                    )}
+                                >
+                                    <span className="text-3xl font-bold text-green-500">{auditData.summary.passed}</span>
+                                    <span className="text-xs text-muted-foreground mt-1">Passed</span>
+                                </button>
+                                <button
+                                    onClick={() => setStatusFilter(f => f === "Fail" ? "all" : "Fail")}
+                                    className={cn(
+                                        "flex flex-col items-center justify-center rounded-xl border p-4 transition-all",
+                                        statusFilter === "Fail"
+                                            ? "bg-red-500/20 border-red-500/50 ring-2 ring-red-500/30"
+                                            : "bg-red-500/5 border-red-500/20 hover:bg-red-500/10"
+                                    )}
+                                >
+                                    <span className="text-3xl font-bold text-red-500">{auditData.summary.failed}</span>
+                                    <span className="text-xs text-muted-foreground mt-1">Failed</span>
+                                </button>
+                                <div className="flex flex-col items-center justify-center rounded-xl border bg-card p-4">
+                                    <span className="text-3xl font-bold">{auditData.summary.total}</span>
+                                    <span className="text-xs text-muted-foreground mt-1">Total Rules</span>
+                                </div>
                             </div>
-                        </button>
-                        <button
-                            onClick={() => setFilter(filter === "fail" ? "all" : "fail")}
-                            className={`flex items-center gap-3 p-4 rounded-lg border transition-all ${
-                                filter === "fail"
-                                    ? "bg-red-500/20 border-red-500/40 ring-2 ring-red-500/30"
-                                    : "bg-red-500/10 border-red-500/20 hover:bg-red-500/15"
-                            }`}
-                        >
-                            <XCircle className="h-6 w-6 text-red-600 dark:text-red-400 shrink-0" />
-                            <div className="text-left">
-                                <p className="text-3xl font-bold">{auditResults.failed}</p>
-                                <p className="text-sm text-muted-foreground">Failed</p>
+
+                            {/* Meta info */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                {[
+                                    { icon: Server, label: "Host", value: auditData.hostname },
+                                    { icon: Cpu, label: "Docker", value: auditData.docker_version },
+                                    { icon: Container, label: "Containers", value: String(auditData.total_containers) },
+                                    { icon: Clock, label: "Ran at", value: fmtDate(auditData.timestamp).split(",")[1]?.trim() ?? fmtDate(auditData.timestamp) },
+                                ].map(({ icon: Icon, label, value }) => (
+                                    <div key={label} className="bg-muted/30 rounded-lg px-3 py-2 flex items-center gap-2 min-w-0">
+                                        <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                        <div className="min-w-0">
+                                            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</p>
+                                            <p className="text-xs font-medium truncate">{value}</p>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
-                        </button>
-                        <button
-                            onClick={() => setFilter(filter === "warn" ? "all" : "warn")}
-                            className={`flex items-center gap-3 p-4 rounded-lg border transition-all ${
-                                filter === "warn"
-                                    ? "bg-yellow-500/20 border-yellow-500/40 ring-2 ring-yellow-500/30"
-                                    : "bg-yellow-500/10 border-yellow-500/20 hover:bg-yellow-500/15"
-                            }`}
-                        >
-                            <AlertCircle className="h-6 w-6 text-yellow-600 dark:text-yellow-400 shrink-0" />
-                            <div className="text-left">
-                                <p className="text-3xl font-bold">{auditResults.warned}</p>
-                                <p className="text-sm text-muted-foreground">Warnings</p>
-                            </div>
-                        </button>
+                        </div>
                     </div>
 
-                    {/* Filter Info */}
-                    {filter !== "all" && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Filter className="h-4 w-4" />
-                            <span>
-                                Showing {filteredResults?.length} {filter === "pass" ? "passed" : filter === "fail" ? "failed" : "warning"} results
-                            </span>
-                            <button
-                                onClick={() => setFilter("all")}
-                                className="text-primary hover:underline ml-2"
-                            >
-                                Clear filter
-                            </button>
-                        </div>
-                    )}
+                    {/* ── Section breakdown ───────────────────────────── */}
+                    <div className="bg-card border rounded-2xl p-4 space-y-2.5">
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Section Breakdown</h3>
+                        {sections.map(s => (
+                            <SectionHeader key={s} section={s}
+                                total={sectionStats[s]?.total ?? 0}
+                                passed={sectionStats[s]?.passed ?? 0}
+                            />
+                        ))}
+                    </div>
 
-                    {/* Audit Results */}
-                    <div className="space-y-3">
-                        {filteredResults?.map((result) => {
-                            const isExpanded = expandedRules.has(result.rule_id);
+                    {/* ── Filters ─────────────────────────────────────── */}
+                    <div className="flex flex-wrap gap-2 items-center">
+                        <span className="text-xs text-muted-foreground mr-1">Section:</span>
+                        <button
+                            onClick={() => setSectionFilter("all")}
+                            className={cn("text-xs px-2.5 py-1 rounded-full border font-medium transition-all",
+                                sectionFilter === "all" ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border hover:bg-muted")}
+                        >
+                            All
+                        </button>
+                        {sections.map(s => {
+                            const meta = sectionMeta(s);
                             return (
-                                <Collapsible
-                                    key={result.rule_id}
-                                    open={isExpanded}
-                                    onOpenChange={() => toggleRule(result.rule_id)}
+                                <button key={s}
+                                    onClick={() => setSectionFilter(f => f === s ? "all" : s)}
+                                    className={cn("text-xs px-2.5 py-1 rounded-full border font-medium transition-all",
+                                        sectionFilter === s
+                                            ? cn(meta.bg, meta.color, meta.border)
+                                            : "bg-card border-border hover:bg-muted")}
                                 >
-                                    <div
-                                        className={`rounded-lg border ${
-                                            result.status === "pass"
-                                                ? "bg-green-500/5 border-green-500/20"
-                                                : result.status === "fail"
-                                                ? "bg-red-500/5 border-red-500/20"
-                                                : "bg-yellow-500/5 border-yellow-500/20"
-                                        }`}
-                                    >
-                                        <CollapsibleTrigger className="w-full p-5 text-left hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
-                                            <div className="flex items-start gap-4">
-                                                {result.status === "pass" ? (
-                                                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 mt-1 shrink-0" />
-                                                ) : result.status === "fail" ? (
-                                                    <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-1 shrink-0" />
-                                                ) : (
-                                                    <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mt-1 shrink-0" />
-                                                )}
-                                                <div className="flex-1 min-w-0 space-y-2">
-                                                    <div className="flex items-start justify-between gap-4">
-                                                        <div className="flex-1">
-                                                            <h3 className="font-semibold text-base leading-tight">{result.title}</h3>
-                                                            <div className="flex items-center gap-2 mt-2 flex-wrap">
-                                                                <Badge variant="outline" className="font-mono text-xs">
-                                                                    {result.rule_id}
-                                                                </Badge>
-                                                                <Badge
-                                                                    variant={
-                                                                        result.status === "pass"
-                                                                            ? "default"
-                                                                            : result.status === "fail"
-                                                                            ? "destructive"
-                                                                            : "secondary"
-                                                                    }
-                                                                    className="text-xs uppercase"
-                                                                >
-                                                                    {result.status}
-                                                                </Badge>
-                                                                {result.severity && (
-                                                                    <Badge variant="outline" className={`text-xs ${getSeverityColor(result.severity)}`}>
-                                                                        {result.severity}
-                                                                    </Badge>
-                                                                )}
-                                                                {result.category && (
-                                                                    <Badge variant="outline" className="text-xs">
-                                                                        {result.category}
-                                                                    </Badge>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                        {isExpanded ? (
-                                                            <ChevronUp className="h-5 w-5 text-muted-foreground shrink-0" />
-                                                        ) : (
-                                                            <ChevronDown className="h-5 w-5 text-muted-foreground shrink-0" />
-                                                        )}
-                                                    </div>
-                                                    <p className="text-sm text-muted-foreground leading-relaxed">
-                                                        {result.message}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </CollapsibleTrigger>
-
-                                        <CollapsibleContent>
-                                            <div className="px-5 pb-5 space-y-4 border-t border-border/50 pt-4">
-                                                {/* Description */}
-                                                {result.description && (
-                                                    <div>
-                                                        <h4 className="text-sm font-semibold mb-1 flex items-center gap-2">
-                                                            <Info className="h-4 w-4" />
-                                                            Description
-                                                        </h4>
-                                                        <p className="text-sm text-muted-foreground">{result.description}</p>
-                                                    </div>
-                                                )}
-
-                                                {/* Affected Containers */}
-                                                {result.affected && result.affected.length > 0 && (
-                                                    <div>
-                                                        <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                                                            <AlertTriangle className="h-4 w-4 text-orange-500" />
-                                                            Affected Containers ({result.affected.length})
-                                                        </h4>
-                                                        <div className="flex flex-wrap gap-2">
-                                                            {result.affected.map((container, idx) => (
-                                                                <Badge key={idx} variant="secondary" className="font-mono text-xs">
-                                                                    {container}
-                                                                </Badge>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* Remediation */}
-                                                {result.remediation && (
-                                                    <div>
-                                                        <h4 className="text-sm font-semibold mb-1 flex items-center gap-2">
-                                                            <Wrench className="h-4 w-4" />
-                                                            Remediation
-                                                        </h4>
-                                                        <p className="text-sm text-muted-foreground whitespace-pre-wrap font-mono bg-muted/50 p-3 rounded">
-                                                            {result.remediation}
-                                                        </p>
-                                                    </div>
-                                                )}
-
-                                                {/* Audit Command */}
-                                                {result.audit_command && (
-                                                    <div>
-                                                        <h4 className="text-sm font-semibold mb-1 flex items-center gap-2">
-                                                            <Terminal className="h-4 w-4" />
-                                                            Audit Command
-                                                        </h4>
-                                                        <code className="text-xs bg-muted/50 p-3 rounded block overflow-x-auto">
-                                                            {result.audit_command}
-                                                        </code>
-                                                    </div>
-                                                )}
-
-                                                {/* Raw Output */}
-                                                {result.raw_output && (
-                                                    <div>
-                                                        <h4 className="text-sm font-semibold mb-1">Raw Output</h4>
-                                                        <pre className="text-xs bg-muted/50 p-3 rounded overflow-x-auto whitespace-pre-wrap">
-                                                            {result.raw_output}
-                                                        </pre>
-                                                    </div>
-                                                )}
-
-                                                {/* External References */}
-                                                {result.references && result.references.length > 0 && (
-                                                    <div>
-                                                        <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                                                            <ExternalLink className="h-4 w-4" />
-                                                            References
-                                                        </h4>
-                                                        <div className="space-y-1">
-                                                            {result.references.map((ref, idx) => (
-                                                                <a
-                                                                    key={idx}
-                                                                    href={ref}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    className="text-sm text-primary hover:underline flex items-center gap-1"
-                                                                >
-                                                                    <ExternalLink className="h-3 w-3" />
-                                                                    {ref}
-                                                                </a>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* Rationale & Impact */}
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                    {result.rationale && (
-                                                        <div>
-                                                            <h4 className="text-sm font-semibold mb-1">Rationale</h4>
-                                                            <p className="text-sm text-muted-foreground">{result.rationale}</p>
-                                                        </div>
-                                                    )}
-                                                    {result.impact && (
-                                                        <div>
-                                                            <h4 className="text-sm font-semibold mb-1">Impact</h4>
-                                                            <p className="text-sm text-muted-foreground">{result.impact}</p>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </CollapsibleContent>
-                                    </div>
-                                </Collapsible>
+                                    {meta.label}
+                                </button>
                             );
                         })}
+                        {(statusFilter !== "all" || sectionFilter !== "all") && (
+                            <button
+                                onClick={() => { setStatusFilter("all"); setSectionFilter("all"); }}
+                                className="text-xs px-2.5 py-1 text-muted-foreground hover:text-foreground ml-auto"
+                            >
+                                Clear filters
+                            </button>
+                        )}
                     </div>
-                </div>
+
+                    {/* ── Results grouped by section ──────────────────── */}
+                    {Object.keys(groupedResults).length === 0 ? (
+                        <div className="text-center py-12 text-muted-foreground text-sm">
+                            No results match the current filters.
+                        </div>
+                    ) : (
+                        <div className="space-y-6">
+                            {Object.entries(groupedResults).map(([section, results]) => {
+                                const meta = sectionMeta(section);
+                                return (
+                                    <div key={section}>
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <span className={cn("text-xs font-bold px-2 py-1 rounded-md border", meta.bg, meta.color, meta.border)}>
+                                                {meta.label}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground">{section}</span>
+                                            <Badge variant="outline" className="text-[10px] ml-auto font-mono">
+                                                {results.filter(r => r.status === "Pass").length}/{results.length}
+                                            </Badge>
+                                        </div>
+                                        <div className="space-y-2">
+                                            {results
+                                                .sort((a, b) => {
+                                                    // Fail first, then by rule id
+                                                    if (a.status !== b.status) return a.status === "Fail" ? -1 : 1;
+                                                    return a.rule.id.localeCompare(b.rule.id, undefined, { numeric: true });
+                                                })
+                                                .map(r => <RuleCard key={r.rule.id} result={r} />)
+                                            }
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </>
             ) : (
-                <div className="rounded-lg border bg-card p-12 text-center">
-                    <p className="text-muted-foreground">Click "Run Audit" to start CIS Docker Benchmark security audit</p>
+                /* ── Empty state ──────────────────────────────────── */
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed bg-card/50 py-20 px-8 text-center gap-4">
+                    <div className="rounded-full bg-primary/10 p-5">
+                        <Shield className="h-10 w-10 text-primary" />
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-semibold">No Audit Results Yet</h3>
+                        <p className="text-muted-foreground text-sm mt-1 max-w-sm">
+                            Run the CIS Docker Benchmark v1.8.0 audit to check namespace isolation,
+                            cgroup configuration, file permissions, and more.
+                        </p>
+                    </div>
+                    <Button onClick={handleRunAudit} disabled={isRunning || !agent}>
+                        {isRunning
+                            ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Running Audit…</>
+                            : <><Play className="h-4 w-4 mr-2" /> Run Security Audit</>
+                        }
+                    </Button>
+                    <div className="flex flex-wrap justify-center gap-2 mt-2">
+                        {["Host Config", "Daemon", "File Perms", "Images", "Namespaces", "Cgroups"].map(t => (
+                            <span key={t} className="text-[10px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full">{t}</span>
+                        ))}
+                    </div>
                 </div>
             )}
         </div>

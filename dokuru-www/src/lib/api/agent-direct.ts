@@ -19,19 +19,22 @@ export interface DockerInfo {
   memory_total: number;
 }
 
-export interface AuditResult {
-  rule_id: string;
+export interface CisRule {
+  id: string;
   title: string;
-  level: string;
-  status: "pass" | "fail" | "warn" | "info";
+  category: string;
+  severity: "High" | "Medium" | "Low";
+  section: string;
+  description: string;
+  remediation: string;
+}
+
+export interface AuditResult {
+  rule: CisRule;
+  status: "Pass" | "Fail" | "Error";
   message: string;
-  category?: string;
-  severity?: "High" | "Medium" | "Low";
-  section?: string;
-  description?: string;
-  remediation?: string;
-  affected?: string[];
-  remediation_kind?: "Auto" | "Guided" | "Manual";
+  affected: string[];
+  remediation_kind: "auto" | "guided" | "manual";
   audit_command?: string;
   raw_output?: string;
   references?: string[];
@@ -40,12 +43,20 @@ export interface AuditResult {
   tags?: string[];
 }
 
-export interface AuditResponse {
+export interface AuditSummary {
   total: number;
   passed: number;
   failed: number;
-  warned: number;
+  score: number;
+}
+
+export interface AuditResponse {
+  timestamp: string;
+  hostname: string;
+  docker_version: string;
+  total_containers: number;
   results: AuditResult[];
+  summary: AuditSummary;
 }
 
 export const agentDirectApi = {
