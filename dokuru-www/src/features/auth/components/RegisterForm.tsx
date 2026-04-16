@@ -25,10 +25,21 @@ export function RegisterForm() {
     import.meta.env.DEV ? "password123" : ""
   );
   const [showPassword, setShowPassword] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
   const register = useRegister();
 
   // Live username availability check with debounce
   const usernameCheck = useUsernameAvailability(username);
+
+  // Track typing state for spinner
+  const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setUsername(e.target.value.toLowerCase());
+    if (e.target.value.length >= 3) {
+      setIsTyping(true);
+      // Reset after debounce time
+      setTimeout(() => setIsTyping(false), 1000);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,7 +83,7 @@ export function RegisterForm() {
                 type="text"
                 placeholder="johndoe"
                 value={username}
-                onChange={(e) => setUsername(e.target.value.toLowerCase())}
+                onChange={handleUsernameChange}
                 required
                 minLength={3}
                 maxLength={30}
@@ -85,16 +96,16 @@ export function RegisterForm() {
                 {username.length > 0 && username.length < 3 && (
                   <XCircle className="h-4 w-4 text-red-500" />
                 )}
-                {/* Show loading spinner while checking */}
-                {usernameCheck.isLoading && username.length >= 3 && (
+                {/* Show loading spinner while typing or checking */}
+                {(isTyping || usernameCheck.isLoading) && username.length >= 3 && (
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 )}
                 {/* Show checkmark if available */}
-                {showUsernameStatus && usernameCheck.data.available && (
+                {!isTyping && showUsernameStatus && usernameCheck.data.available && (
                   <CheckCircle2 className="h-4 w-4 text-green-500" />
                 )}
                 {/* Show X if taken */}
-                {showUsernameStatus && !usernameCheck.data.available && (
+                {!isTyping && showUsernameStatus && !usernameCheck.data.available && (
                   <XCircle className="h-4 w-4 text-red-500" />
                 )}
               </div>
