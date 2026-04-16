@@ -1,5 +1,6 @@
 // Section 5: Container Runtime Configuration
 // Namespace & Cgroup rules — CIS Docker Benchmark v1.8.0
+#![allow(clippy::needless_raw_string_hashes, clippy::too_many_lines)]
 use super::RuleDefinition;
 use crate::audit::types::{
     CheckResult, CheckStatus, CisRule, RemediationKind, RuleCategory, Severity,
@@ -766,17 +767,16 @@ By default, each container gets its own UTS namespace with an isolated hostname.
                     for c in &containers {
                         let id = c.id.as_deref().unwrap_or("");
                         if let Ok(inspect) = docker.inspect_container(id, None).await
-                            && let Some(hc) = &inspect.host_config
-                        {
-                            let memory = hc.memory.unwrap_or(0);
-                            let cpu_shares = hc.cpu_shares.unwrap_or(0);
-                            let pids_limit = hc.pids_limit.unwrap_or(0);
-                            let cgroup_parent = hc.cgroup_parent.as_deref().unwrap_or("");
+                            && let Some(hc) = &inspect.host_config {
+                                let memory = hc.memory.unwrap_or(0);
+                                let cpu_shares = hc.cpu_shares.unwrap_or(0);
+                                let pids_limit = hc.pids_limit.unwrap_or(0);
+                                let cgroup_parent = hc.cgroup_parent.as_deref().unwrap_or("");
 
-                            let has_limits = memory > 0
-                                || cpu_shares > 0
-                                || pids_limit > 0
-                                || !cgroup_parent.is_empty();
+                                let has_limits = memory > 0
+                                    || cpu_shares > 0
+                                    || pids_limit > 0
+                                    || !cgroup_parent.is_empty();
 
                                 let name = Self::container_name(c.names.as_ref(), id);
                                 raw_lines.push(format!(
@@ -786,7 +786,7 @@ By default, each container gets its own UTS namespace with an isolated hostname.
                                 if !has_limits {
                                     failing.push(name);
                                 }
-                        }
+                            }
                     }
 
                     Ok(CheckResult {
