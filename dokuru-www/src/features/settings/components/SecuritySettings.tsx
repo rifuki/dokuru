@@ -72,8 +72,7 @@ export function SecuritySettings() {
     return (
         <div className="space-y-10 animate-fade-in pb-10">
             <div>
-                <h2 className="text-2xl font-bold tracking-tight mb-2">Password and Authentication</h2>
-                <p className="text-[15px] text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                     Manage your account security and change your password.
                 </p>
             </div>

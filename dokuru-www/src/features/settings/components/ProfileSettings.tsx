@@ -170,8 +170,7 @@ export function ProfileSettings() {
             </AlertDialog>
 
             <div>
-                <h2 className="text-2xl font-bold tracking-tight mb-2">My Account</h2>
-                <p className="text-[15px] text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                     This is how others will see you on the site.
                 </p>
             </div>

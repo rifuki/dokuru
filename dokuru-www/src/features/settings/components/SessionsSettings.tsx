@@ -71,11 +71,10 @@ export function SessionsSettings() {
     return (
         <div className="space-y-10 animate-fade-in pb-10">
             <div>
-                <h2 className="text-2xl font-bold tracking-tight mb-2">Devices</h2>
-                <p className="text-[15px] text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                     Here are all the devices that are currently logged in with your account. You can log out of each one individually or all other devices.
                 </p>
-                <p className="text-[15px] text-muted-foreground mt-3 lg:max-w-2xl">
+                <p className="text-sm text-muted-foreground mt-3 lg:max-w-2xl">
                     If you see an entry you don't recognize, log out of that device and change your account password immediately.
                 </p>
             </div>
