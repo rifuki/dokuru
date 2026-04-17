@@ -541,7 +541,7 @@ function AuditPage() {
     const isOnline = !!agentOnlineStatus[id];
     const [agent, setAgent] = useState<Agent | null>(null);
     const [token, setToken] = useState<string | undefined>();
-    const [auditData, setAuditData] = useState<AuditResponse | null>(null);
+    const [auditData] = useState<AuditResponse | null>(null);
     const [auditHistory, setAuditHistory] = useState<AuditResponse[]>([]);
     const [isRunning, setIsRunning] = useState(false);
     const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
