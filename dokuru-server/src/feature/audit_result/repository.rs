@@ -31,8 +31,14 @@ pub trait AuditResultRepository: Send + Sync {
 
 pub struct AuditResultRepositoryImpl;
 
+impl Default for AuditResultRepositoryImpl {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AuditResultRepositoryImpl {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -41,13 +47,13 @@ impl AuditResultRepositoryImpl {
 impl AuditResultRepository for AuditResultRepositoryImpl {
     async fn save(&self, pool: &PgPool, record: &AuditResultRecord) -> Result<AuditResultRecord> {
         let saved = sqlx::query_as::<_, AuditResultRecord>(
-            r#"
+            r"
             INSERT INTO audit_results
                 (id, agent_id, user_id, hostname, docker_version, total_containers,
                  results, total_rules, passed, failed, score, ran_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             RETURNING *
-            "#,
+            ",
         )
         .bind(record.id)
         .bind(record.agent_id)
@@ -74,12 +80,12 @@ impl AuditResultRepository for AuditResultRepositoryImpl {
         user_id: Uuid,
     ) -> Result<Option<AuditResultRecord>> {
         let record = sqlx::query_as::<_, AuditResultRecord>(
-            r#"
+            r"
             SELECT * FROM audit_results
             WHERE agent_id = $1 AND user_id = $2
             ORDER BY ran_at DESC
             LIMIT 1
-            "#,
+            ",
         )
         .bind(agent_id)
         .bind(user_id)
@@ -97,10 +103,10 @@ impl AuditResultRepository for AuditResultRepositoryImpl {
         user_id: Uuid,
     ) -> Result<Option<AuditResultRecord>> {
         let record = sqlx::query_as::<_, AuditResultRecord>(
-            r#"
+            r"
             SELECT * FROM audit_results
             WHERE id = $1 AND agent_id = $2 AND user_id = $3
-            "#,
+            ",
         )
         .bind(audit_id)
         .bind(agent_id)
@@ -118,11 +124,11 @@ impl AuditResultRepository for AuditResultRepositoryImpl {
         user_id: Uuid,
     ) -> Result<Vec<AuditResultRecord>> {
         let records = sqlx::query_as::<_, AuditResultRecord>(
-            r#"
+            r"
             SELECT * FROM audit_results
             WHERE agent_id = $1 AND user_id = $2
             ORDER BY ran_at DESC
-            "#,
+            ",
         )
         .bind(agent_id)
         .bind(user_id)

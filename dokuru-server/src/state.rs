@@ -75,7 +75,8 @@ impl AppState {
         let admin_user_repo: Arc<dyn AdminUserRepository> =
             Arc::new(AdminUserRepositoryImpl::new());
         let agent_repo: Arc<dyn AgentRepository> = Arc::new(AgentRepositoryImpl::new());
-        let audit_result_repo: Arc<dyn AuditResultRepository> = Arc::new(AuditResultRepositoryImpl::new());
+        let audit_result_repo: Arc<dyn AuditResultRepository> =
+            Arc::new(AuditResultRepositoryImpl::new());
         let auth_method_repo = Arc::new(AuthMethodRepositoryImpl::new());
         let session_repo = Arc::new(SessionRepositoryImpl::new());
         let stats_repository: Arc<dyn StatsRepository> = Arc::new(StatsRepositoryImpl::new());
@@ -150,7 +151,8 @@ impl AppState {
         let admin_user_repo: Arc<dyn AdminUserRepository> =
             Arc::new(AdminUserRepositoryImpl::new());
         let agent_repo: Arc<dyn AgentRepository> = Arc::new(AgentRepositoryImpl::new());
-        let audit_result_repo: Arc<dyn AuditResultRepository> = Arc::new(AuditResultRepositoryImpl::new());
+        let audit_result_repo: Arc<dyn AuditResultRepository> =
+            Arc::new(AuditResultRepositoryImpl::new());
         let auth_method_repo = Arc::new(AuthMethodRepositoryImpl::new());
         let session_repo = Arc::new(SessionRepositoryImpl::new());
         let stats_repository: Arc<dyn StatsRepository> = Arc::new(StatsRepositoryImpl::new());

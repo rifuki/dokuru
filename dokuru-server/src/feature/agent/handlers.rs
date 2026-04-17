@@ -23,7 +23,7 @@ pub async fn list_agents(
         .agent_service
         .list_agents(state.db.pool(), auth_user.user_id)
         .await
-        .map_err(|e| ApiError::default().with_message(&e.to_string()))?;
+        .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
     Ok(ApiSuccess::default().with_data(agents))
 }
@@ -34,13 +34,13 @@ pub async fn create_agent(
     Json(dto): Json<CreateAgentDto>,
 ) -> ApiResult<AgentResponse> {
     dto.validate()
-        .map_err(|e| ApiError::default().with_message(&e.to_string()))?;
+        .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
     let agent = state
         .agent_service
         .create_agent(state.db.pool(), auth_user.user_id, dto)
         .await
-        .map_err(|e| ApiError::default().with_message(&e.to_string()))?;
+        .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
     Ok(ApiSuccess::default()
         .with_code(StatusCode::CREATED)
@@ -56,14 +56,11 @@ pub async fn get_agent(
         .agent_service
         .get_agent(state.db.pool(), id, auth_user.user_id)
         .await
-        .map_err(|e| ApiError::default().with_message(&e.to_string()))?;
+        .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
-    match agent {
-        Some(agent) => Ok(ApiSuccess::default().with_data(agent)),
-        None => Err(ApiError::default()
+    agent.map_or_else(|| Err(ApiError::default()
             .with_code(StatusCode::NOT_FOUND)
-            .with_message("Agent not found")),
-    }
+            .with_message("Agent not found")), |agent| Ok(ApiSuccess::default().with_data(agent)))
 }
 
 pub async fn update_agent(
@@ -73,20 +70,17 @@ pub async fn update_agent(
     Json(dto): Json<UpdateAgentDto>,
 ) -> ApiResult<AgentResponse> {
     dto.validate()
-        .map_err(|e| ApiError::default().with_message(&e.to_string()))?;
+        .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
     let agent = state
         .agent_service
         .update_agent(state.db.pool(), id, auth_user.user_id, dto)
         .await
-        .map_err(|e| ApiError::default().with_message(&e.to_string()))?;
+        .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
-    match agent {
-        Some(agent) => Ok(ApiSuccess::default().with_data(agent)),
-        None => Err(ApiError::default()
+    agent.map_or_else(|| Err(ApiError::default()
             .with_code(StatusCode::NOT_FOUND)
-            .with_message("Agent not found")),
-    }
+            .with_message("Agent not found")), |agent| Ok(ApiSuccess::default().with_data(agent)))
 }
 
 pub async fn delete_agent(
@@ -98,7 +92,7 @@ pub async fn delete_agent(
         .agent_service
         .delete_agent(state.db.pool(), id, auth_user.user_id)
         .await
-        .map_err(|e| ApiError::default().with_message(&e.to_string()))?;
+        .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
     if deleted {
         Ok(ApiSuccess::default().with_message("Agent deleted successfully"))

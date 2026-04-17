@@ -24,9 +24,7 @@ impl AuditResultService {
         user_id: Uuid,
         dto: SaveAuditDto,
     ) -> Result<AuditResultResponse> {
-        let ran_at = DateTime::parse_from_rfc3339(&dto.timestamp)
-            .map(|dt| dt.with_timezone(&chrono::Utc))
-            .unwrap_or_else(|_| chrono::Utc::now());
+        let ran_at = DateTime::parse_from_rfc3339(&dto.timestamp).map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc));
 
         let record = AuditResultRecord {
             id: Uuid::new_v4(),
@@ -34,11 +32,11 @@ impl AuditResultService {
             user_id,
             hostname: dto.hostname,
             docker_version: dto.docker_version,
-            total_containers: dto.total_containers as i32,
+            total_containers: i32::try_from(dto.total_containers).unwrap_or(0),
             results: dto.results,
-            total_rules: dto.summary.total as i32,
-            passed: dto.summary.passed as i32,
-            failed: dto.summary.failed as i32,
+            total_rules: i32::try_from(dto.summary.total).unwrap_or(0),
+            passed: i32::try_from(dto.summary.passed).unwrap_or(0),
+            failed: i32::try_from(dto.summary.failed).unwrap_or(0),
             score: i32::from(dto.summary.score),
             ran_at,
             created_at: chrono::Utc::now(),
@@ -65,7 +63,10 @@ impl AuditResultService {
         agent_id: Uuid,
         user_id: Uuid,
     ) -> Result<Option<AuditResultResponse>> {
-        let record = self.repo.find_by_id(pool, audit_id, agent_id, user_id).await?;
+        let record = self
+            .repo
+            .find_by_id(pool, audit_id, agent_id, user_id)
+            .await?;
         Ok(record.map(Self::to_response))
     }
 

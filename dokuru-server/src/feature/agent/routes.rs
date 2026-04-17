@@ -5,8 +5,7 @@ use axum::{
 
 use crate::{
     feature::audit_result::handlers as audit_handlers,
-    infrastructure::web::middleware::auth_middleware,
-    state::AppState,
+    infrastructure::web::middleware::auth_middleware, state::AppState,
 };
 
 use super::handlers;
@@ -22,7 +21,10 @@ pub fn agent_routes() -> Router<AppState> {
         )
         .route("/{id}/audit", post(audit_handlers::save_audit))
         .route("/{id}/audit/latest", get(audit_handlers::get_latest_audit))
-        .route("/{id}/audit/{audit_id}", get(audit_handlers::get_audit_by_id))
+        .route(
+            "/{id}/audit/{audit_id}",
+            get(audit_handlers::get_audit_by_id),
+        )
         .route("/{id}/audits", get(audit_handlers::list_audits))
         .layer(middleware::from_fn(auth_middleware))
 }

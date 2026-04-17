@@ -56,11 +56,10 @@ impl AgentService {
     ) -> Result<Option<AgentResponse>> {
         let agent = self.agent_repo.find_by_id(pool, id).await?;
 
-        if let Some(agent) = agent {
-            if agent.user_id == user_id {
+        if let Some(agent) = agent
+            && agent.user_id == user_id {
                 return Ok(Some(Self::to_response(agent)));
             }
-        }
 
         Ok(None)
     }
@@ -75,7 +74,14 @@ impl AgentService {
         let token_hash = dto.token.as_deref().map(Self::hash_token);
         let agent = self
             .agent_repo
-            .update(pool, id, user_id, &dto.name, &dto.url, token_hash.as_deref())
+            .update(
+                pool,
+                id,
+                user_id,
+                &dto.name,
+                &dto.url,
+                token_hash.as_deref(),
+            )
             .await?;
         Ok(agent.map(Self::to_response))
     }

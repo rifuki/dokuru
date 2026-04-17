@@ -6,7 +6,10 @@ use axum::{
 use uuid::Uuid;
 
 use crate::{
-    feature::{audit_result::dto::{AuditResultResponse, SaveAuditDto}, auth::AuthUser},
+    feature::{
+        audit_result::dto::{AuditResultResponse, SaveAuditDto},
+        auth::AuthUser,
+    },
     infrastructure::web::response::{ApiError, ApiResult, ApiSuccess},
     state::AppState,
 };
@@ -22,7 +25,7 @@ pub async fn save_audit(
         .agent_service
         .get_agent(state.db.pool(), agent_id, auth_user.user_id)
         .await
-        .map_err(|e| ApiError::default().with_message(&e.to_string()))?;
+        .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
     if agent.is_none() {
         return Err(ApiError::default()
@@ -34,7 +37,7 @@ pub async fn save_audit(
         .audit_service
         .save(state.db.pool(), agent_id, auth_user.user_id, dto)
         .await
-        .map_err(|e| ApiError::default().with_message(&e.to_string()))?;
+        .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
     Ok(ApiSuccess::default()
         .with_code(StatusCode::CREATED)
@@ -51,7 +54,7 @@ pub async fn get_latest_audit(
         .agent_service
         .get_agent(state.db.pool(), agent_id, auth_user.user_id)
         .await
-        .map_err(|e| ApiError::default().with_message(&e.to_string()))?;
+        .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
     if agent.is_none() {
         return Err(ApiError::default()
@@ -63,7 +66,7 @@ pub async fn get_latest_audit(
         .audit_service
         .get_latest(state.db.pool(), agent_id, auth_user.user_id)
         .await
-        .map_err(|e| ApiError::default().with_message(&e.to_string()))?;
+        .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
     Ok(ApiSuccess::default().with_data(result))
 }
@@ -77,7 +80,7 @@ pub async fn list_audits(
         .agent_service
         .get_agent(state.db.pool(), agent_id, auth_user.user_id)
         .await
-        .map_err(|e| ApiError::default().with_message(&e.to_string()))?;
+        .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
     if agent.is_none() {
         return Err(ApiError::default()
@@ -89,7 +92,7 @@ pub async fn list_audits(
         .audit_service
         .list(state.db.pool(), agent_id, auth_user.user_id)
         .await
-        .map_err(|e| ApiError::default().with_message(&e.to_string()))?;
+        .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
     Ok(ApiSuccess::default().with_data(results))
 }
@@ -103,7 +106,7 @@ pub async fn get_audit_by_id(
         .agent_service
         .get_agent(state.db.pool(), agent_id, auth_user.user_id)
         .await
-        .map_err(|e| ApiError::default().with_message(&e.to_string()))?;
+        .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
     if agent.is_none() {
         return Err(ApiError::default()
@@ -115,12 +118,9 @@ pub async fn get_audit_by_id(
         .audit_service
         .get_by_id(state.db.pool(), audit_id, agent_id, auth_user.user_id)
         .await
-        .map_err(|e| ApiError::default().with_message(&e.to_string()))?;
+        .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
-    match result {
-        Some(audit) => Ok(ApiSuccess::default().with_data(audit)),
-        None => Err(ApiError::default()
+    result.map_or_else(|| Err(ApiError::default()
             .with_code(StatusCode::NOT_FOUND)
-            .with_message("Audit not found")),
-    }
+            .with_message("Audit not found")), |audit| Ok(ApiSuccess::default().with_data(audit)))
 }
