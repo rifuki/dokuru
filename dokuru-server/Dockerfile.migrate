@@ -6,6 +6,7 @@ RUN cargo install sqlx-cli --no-default-features --features native-tls,postgres
 
 WORKDIR /migrations
 
+COPY migrations ./migrations
 COPY migrate.sh /migrate.sh
 RUN chmod +x /migrate.sh
 

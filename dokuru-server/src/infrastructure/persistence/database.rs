@@ -28,12 +28,12 @@ impl Database {
             .connect(database_url)
             .await?;
 
-        // Test connection
-        sqlx::query("SELECT 1").fetch_one(&pool).await?;
+        // Run migrations
+        sqlx::migrate!("./migrations").run(&pool).await?;
 
         info!(
             elapsed = ?start.elapsed(),
-            "Connected to database successfully"
+            "Connected to database and migrations applied"
         );
 
         Ok(Self { pool })
