@@ -15,4 +15,4 @@ pattern = "dokuru.rifuki.dev/health"
 zone_name = "rifuki.dev"
 
 [build]
-command = "cargo install -q \"worker-build@^0.8\" && worker-build --release"
+command = "curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable && source $HOME/.cargo/env && cargo install -q \"worker-build@^0.8\" && worker-build --release"
