@@ -3,10 +3,6 @@ main = "build/index.js"
 compatibility_date = "2026-04-14"
 
 [[routes]]
-pattern = "dokuru.rifuki.dev"
-zone_name = "rifuki.dev"
-
-[[routes]]
 pattern = "dokuru.rifuki.dev/install"
 zone_name = "rifuki.dev"
 

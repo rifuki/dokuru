@@ -15,9 +15,12 @@ pub async fn install() -> std::result::Result<HttpResponse, (StatusCode, &'stati
         .await
         .map_err(|_| (StatusCode::BAD_GATEWAY, "Failed to read installer cache"))?
     {
-        return cached
-            .try_into()
-            .map_err(|_| (StatusCode::BAD_GATEWAY, "Failed to stream cached installer script"));
+        return cached.try_into().map_err(|_| {
+            (
+                StatusCode::BAD_GATEWAY,
+                "Failed to stream cached installer script",
+            )
+        });
     }
 
     let url = Url::parse(INSTALLER_URL)
@@ -35,25 +38,45 @@ pub async fn install() -> std::result::Result<HttpResponse, (StatusCode, &'stati
         ));
     }
 
-    let body = upstream_response
-        .bytes()
-        .await
-        .map_err(|_| (StatusCode::BAD_GATEWAY, "Failed to read installer script body"))?;
+    let body = upstream_response.bytes().await.map_err(|_| {
+        (
+            StatusCode::BAD_GATEWAY,
+            "Failed to read installer script body",
+        )
+    })?;
 
     let mut response = Response::from_bytes(body)
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to build installer response"))?
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to build installer response",
+            )
+        })?
         .with_status(upstream_response.status_code());
 
     let headers = response.headers_mut();
     headers
         .set("content-type", "text/x-shellscript; charset=utf-8")
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to set content type"))?;
-    headers
-        .set("cache-control", CACHE_CONTROL)
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to set cache control"))?;
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to set content type",
+            )
+        })?;
+    headers.set("cache-control", CACHE_CONTROL).map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to set cache control",
+        )
+    })?;
     headers
         .set("x-content-type-options", "nosniff")
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to set response headers"))?;
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to set response headers",
+            )
+        })?;
 
     if let Ok(response_for_cache) = response.cloned() {
         let _ = cache.put(CACHE_KEY, response_for_cache).await;
