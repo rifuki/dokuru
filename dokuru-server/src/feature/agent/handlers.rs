@@ -8,7 +8,7 @@ use validator::Validate;
 
 use crate::{
     feature::{
-        agent::{AgentResponse, CreateAgentDto},
+        agent::{AgentResponse, CreateAgentDto, UpdateAgentDto},
         auth::AuthUser,
     },
     infrastructure::web::response::{ApiError, ApiResult, ApiSuccess},
@@ -55,6 +55,29 @@ pub async fn get_agent(
     let agent = state
         .agent_service
         .get_agent(state.db.pool(), id, auth_user.user_id)
+        .await
+        .map_err(|e| ApiError::default().with_message(&e.to_string()))?;
+
+    match agent {
+        Some(agent) => Ok(ApiSuccess::default().with_data(agent)),
+        None => Err(ApiError::default()
+            .with_code(StatusCode::NOT_FOUND)
+            .with_message("Agent not found")),
+    }
+}
+
+pub async fn update_agent(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path(id): Path<Uuid>,
+    Json(dto): Json<UpdateAgentDto>,
+) -> ApiResult<AgentResponse> {
+    dto.validate()
+        .map_err(|e| ApiError::default().with_message(&e.to_string()))?;
+
+    let agent = state
+        .agent_service
+        .update_agent(state.db.pool(), id, auth_user.user_id, dto)
         .await
         .map_err(|e| ApiError::default().with_message(&e.to_string()))?;
 

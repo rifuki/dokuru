@@ -16,10 +16,13 @@ pub fn agent_routes() -> Router<AppState> {
         .route("/", get(handlers::list_agents).post(handlers::create_agent))
         .route(
             "/{id}",
-            get(handlers::get_agent).delete(handlers::delete_agent),
+            get(handlers::get_agent)
+                .put(handlers::update_agent)
+                .delete(handlers::delete_agent),
         )
         .route("/{id}/audit", post(audit_handlers::save_audit))
-        .route("/{id}/audits", get(audit_handlers::list_audits))
         .route("/{id}/audit/latest", get(audit_handlers::get_latest_audit))
+        .route("/{id}/audit/{audit_id}", get(audit_handlers::get_audit_by_id))
+        .route("/{id}/audits", get(audit_handlers::list_audits))
         .layer(middleware::from_fn(auth_middleware))
 }

@@ -38,22 +38,23 @@ import {
 } from "@/components/ui/collapsible";
 import { useAuthUser } from "@/stores/use-auth-store";
 import { useAgentStore } from "@/stores/use-agent-store";
+import { agentDirectApi } from "@/lib/api/agent-direct";
 
 const agentNavItems = (agentId: string) => [
-  { title: "Dashboard", href: `/agents/${agentId}`, icon: LayoutDashboard },
-  { title: "Audit", href: `/agents/${agentId}/audit`, icon: ShieldCheck },
-  { title: "Containers", href: `/agents/${agentId}/containers`, icon: Container },
-  { title: "Images", href: `/agents/${agentId}/images`, icon: Box },
-  { title: "Networks", href: `/agents/${agentId}/networks`, icon: Network },
-  { title: "Volumes", href: `/agents/${agentId}/volumes`, icon: HardDrive },
-  { title: "Events", href: `/agents/${agentId}/events`, icon: Activity },
+  { title: "Dashboard",  href: `/agents/${agentId}`,            icon: LayoutDashboard, requiresOnline: false },
+  { title: "Audit",      href: `/agents/${agentId}/audit`,      icon: ShieldCheck,     requiresOnline: false },
+  { title: "Containers", href: `/agents/${agentId}/containers`, icon: Container,       requiresOnline: true },
+  { title: "Images",     href: `/agents/${agentId}/images`,     icon: Box,             requiresOnline: true },
+  { title: "Networks",   href: `/agents/${agentId}/networks`,   icon: Network,         requiresOnline: true },
+  { title: "Volumes",    href: `/agents/${agentId}/volumes`,    icon: HardDrive,       requiresOnline: true },
+  { title: "Events",     href: `/agents/${agentId}/events`,     icon: Activity,        requiresOnline: true },
 ];
 
 export function AppSidebar() {
   const user = useAuthUser();
   const isAdmin = user?.role === "admin";
   const location = useLocation();
-  const { agents, fetchAgents } = useAgentStore();
+  const { agents, fetchAgents, agentOnlineStatus, setAgentOnline } = useAgentStore();
   const { state: sidebarState } = useSidebar();
   const isIconMode = sidebarState === "collapsed";
   const [openAgents, setOpenAgents] = useState<Record<string, boolean>>({});
@@ -78,6 +79,15 @@ export function AppSidebar() {
       });
     }
   }, [agents, location.pathname]);
+
+  useEffect(() => {
+    if (isAdmin || agents.length === 0) return;
+    for (const agent of agents) {
+      agentDirectApi.checkHealth(agent.url)
+        .then((ok) => setAgentOnline(agent.id, ok))
+        .catch(() => setAgentOnline(agent.id, false));
+    }
+  }, [agents, isAdmin, setAgentOnline]);
 
   const isActive = (href: string) => {
     if (href === "/admin") return location.pathname === "/admin";
@@ -189,6 +199,7 @@ export function AppSidebar() {
             <div className={isIconMode ? "" : "px-2"}>
               {agents.map((agent) => {
                 const isAgentActive = location.pathname.startsWith(`/agents/${agent.id}`);
+                const isOnline = !!agentOnlineStatus[agent.id];
                 return (
                   <Collapsible
                     key={agent.id}
@@ -238,7 +249,17 @@ export function AppSidebar() {
                             <div className="border-t border-sidebar-border/60 pb-1.5 pt-1">
                               {agentNavItems(agent.id).map((item) => {
                                 const active = isActive(item.href);
-                                return (
+                                const disabled = item.requiresOnline && !isOnline;
+                                return disabled ? (
+                                  <span
+                                    key={item.href}
+                                    title="Agent offline"
+                                    className="flex items-center gap-3 py-2 text-sm px-3 mx-1.5 rounded-md text-sidebar-foreground/30 cursor-not-allowed select-none"
+                                  >
+                                    <item.icon className="size-4 shrink-0" />
+                                    <span>{item.title}</span>
+                                  </span>
+                                ) : (
                                   <Link
                                     key={item.href}
                                     to={item.href}

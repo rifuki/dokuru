@@ -60,6 +60,7 @@ export interface AuditSummary {
 }
 
 export interface AuditResponse {
+  id?: string;
   timestamp: string;
   hostname: string;
   docker_version: string;

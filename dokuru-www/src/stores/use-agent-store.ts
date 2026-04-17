@@ -6,17 +6,20 @@ interface AgentState {
   agents: Agent[];
   isLoading: boolean;
   error: string | null;
+  agentOnlineStatus: Record<string, boolean>;
 
   fetchAgents: () => Promise<void>;
   createAgent: (dto: CreateAgentDto) => Promise<Agent>;
   deleteAgent: (id: string) => Promise<void>;
   clearError: () => void;
+  setAgentOnline: (id: string, online: boolean) => void;
 }
 
 export const useAgentStore = create<AgentState>((set) => ({
   agents: [],
   isLoading: false,
   error: null,
+  agentOnlineStatus: {},
 
   fetchAgents: async () => {
     set({ isLoading: true, error: null });
@@ -64,9 +67,16 @@ export const useAgentStore = create<AgentState>((set) => ({
   },
 
   clearError: () => set({ error: null }),
+  setAgentOnline: (id, online) =>
+    set((state) => ({ agentOnlineStatus: { ...state.agentOnlineStatus, [id]: online } })),
 }));
 
 // Helper to get agent token from localStorage
 export const getAgentToken = (agentId: string): string | null => {
   return localStorage.getItem(`agent_token_${agentId}`);
+};
+
+// Helper to set agent token in localStorage
+export const setAgentToken = (agentId: string, token: string): void => {
+  localStorage.setItem(`agent_token_${agentId}`, token);
 };

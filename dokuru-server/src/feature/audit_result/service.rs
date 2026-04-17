@@ -58,6 +58,17 @@ impl AuditResultService {
         Ok(record.map(Self::to_response))
     }
 
+    pub async fn get_by_id(
+        &self,
+        pool: &PgPool,
+        audit_id: Uuid,
+        agent_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<Option<AuditResultResponse>> {
+        let record = self.repo.find_by_id(pool, audit_id, agent_id, user_id).await?;
+        Ok(record.map(Self::to_response))
+    }
+
     pub async fn list(
         &self,
         pool: &PgPool,

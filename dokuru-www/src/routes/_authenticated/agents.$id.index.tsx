@@ -3,9 +3,16 @@ import { useEffect, useState } from "react";
 import { agentApi } from "@/lib/api/agent";
 import { agentDirectApi, type DockerInfo, type AuditResponse } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
-import { getAgentToken } from "@/stores/use-agent-store";
+import { getAgentToken, setAgentToken } from "@/stores/use-agent-store";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Trash2, Container, Box, HardDrive, Network, Play, CheckCircle2, XCircle, AlertCircle, Bot, Calendar, Wifi, Cpu, MemoryStick, Monitor, Layers } from "lucide-react";
+import {
+    AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+    AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Trash2, Edit, Eye, EyeOff, Container, Box, HardDrive, Network, Play, CheckCircle2, XCircle, AlertCircle, Bot, Calendar, Wifi, Cpu, MemoryStick, Monitor, Layers } from "lucide-react";
 import { useAgentStore } from "@/stores/use-agent-store";
 import { toast } from "sonner";
 
@@ -24,6 +31,13 @@ function AgentDetail() {
     const [isLoadingDocker, setIsLoadingDocker] = useState(false);
     const [isRunningAudit, setIsRunningAudit] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [editDialogOpen, setEditDialogOpen] = useState(false);
+    const [editName, setEditName] = useState("");
+    const [editUrl, setEditUrl] = useState("");
+    const [editToken, setEditToken] = useState("");
+    const [showToken, setShowToken] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
         const fetchAgent = async () => {
@@ -60,8 +74,6 @@ function AgentDetail() {
     }, [id, navigate]);
 
     const handleDelete = async () => {
-        if (!confirm("Are you sure you want to delete this agent?")) return;
-
         setIsDeleting(true);
         try {
             await deleteAgent(id);
@@ -70,6 +82,34 @@ function AgentDetail() {
         } catch {
             toast.error("Failed to delete agent");
             setIsDeleting(false);
+        }
+    };
+
+    const openEdit = () => {
+        if (!agent) return;
+        setEditName(agent.name);
+        setEditUrl(agent.url);
+        setEditToken("");
+        setShowToken(false);
+        setEditDialogOpen(true);
+    };
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        try {
+            const updated = await agentApi.update(id, {
+                name: editName,
+                url: editUrl,
+                token: editToken || undefined,
+            });
+            if (editToken) setAgentToken(id, editToken);
+            setAgent(updated);
+            setEditDialogOpen(false);
+            toast.success("Agent updated");
+        } catch {
+            toast.error("Failed to update agent");
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -106,31 +146,84 @@ function AgentDetail() {
 
     return (
         <div className="max-w-7xl mx-auto w-full space-y-8">
+            {/* Edit Dialog */}
+            <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Edit Agent</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                        <div className="space-y-1.5">
+                            <Label htmlFor="edit-name">Name</Label>
+                            <Input id="edit-name" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Agent name" />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="edit-url">URL</Label>
+                            <Input id="edit-url" value={editUrl} onChange={(e) => setEditUrl(e.target.value)} placeholder="http://host:port" />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="edit-token">Token <span className="text-muted-foreground text-xs">(leave blank to keep current)</span></Label>
+                            <div className="relative">
+                                <Input
+                                    id="edit-token"
+                                    type={showToken ? "text" : "password"}
+                                    value={editToken}
+                                    onChange={(e) => setEditToken(e.target.value)}
+                                    placeholder="New token (optional)"
+                                    className="pr-10"
+                                />
+                                <button type="button" onClick={() => setShowToken(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                                    {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={handleSave} disabled={isSaving || !editName || !editUrl}>
+                            {isSaving ? "Saving…" : "Save Changes"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Delete Dialog */}
+            <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Agent</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Are you sure you want to delete agent "{agent.name}"? This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDelete}
+                            className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                        >
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
             {/* Header */}
             <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => navigate({ to: "/" })}
-                        className="hover:bg-primary/10"
-                    >
-                        <ArrowLeft className="h-5 w-5" />
-                    </Button>
-                    <div>
-                        <h2 className="text-3xl font-bold tracking-tight">{agent.name}</h2>
-                        <p className="text-muted-foreground mt-1">{agent.url}</p>
-                    </div>
+                <div>
+                    <h2 className="text-3xl font-bold tracking-tight">{agent.name}</h2>
+                    <p className="text-muted-foreground mt-1">{agent.url}</p>
                 </div>
-                <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleDelete}
-                    disabled={isDeleting}
-                >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete Agent
-                </Button>
+                <div className="flex items-center gap-2">
+                    <Button variant="outline" onClick={openEdit}>
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit Agent
+                    </Button>
+                    <Button variant="destructive" onClick={() => setDeleteDialogOpen(true)} disabled={isDeleting}>
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete Agent
+                    </Button>
+                </div>
             </div>
 
             {/* Agent Info Card */}
@@ -295,7 +388,6 @@ function AgentDetail() {
                     <Button
                         onClick={handleRunAudit}
                         disabled={isRunningAudit || !dockerInfo}
-                        size="sm"
                     >
                         <Play className={`h-4 w-4 mr-2 ${isRunningAudit ? 'animate-spin' : ''}`} />
                         {isRunningAudit ? "Running..." : "Run Audit"}

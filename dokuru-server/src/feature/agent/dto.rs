@@ -19,6 +19,22 @@ pub struct CreateAgentDto {
     pub token: String,
 }
 
+#[derive(Debug, Deserialize, Validate)]
+pub struct UpdateAgentDto {
+    #[validate(length(
+        min = 1,
+        max = 255,
+        message = "Name must be between 1 and 255 characters"
+    ))]
+    pub name: String,
+
+    #[validate(url(message = "Invalid URL format"))]
+    pub url: String,
+
+    /// If provided, token will be re-hashed and updated
+    pub token: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct AgentResponse {
     pub id: Uuid,

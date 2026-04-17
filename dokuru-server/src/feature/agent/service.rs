@@ -4,7 +4,7 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use super::dto::{AgentResponse, CreateAgentDto};
+use super::dto::{AgentResponse, CreateAgentDto, UpdateAgentDto};
 use super::entity::Agent;
 use super::repository::AgentRepository;
 
@@ -63,6 +63,21 @@ impl AgentService {
         }
 
         Ok(None)
+    }
+
+    pub async fn update_agent(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        user_id: Uuid,
+        dto: UpdateAgentDto,
+    ) -> Result<Option<AgentResponse>> {
+        let token_hash = dto.token.as_deref().map(Self::hash_token);
+        let agent = self
+            .agent_repo
+            .update(pool, id, user_id, &dto.name, &dto.url, token_hash.as_deref())
+            .await?;
+        Ok(agent.map(Self::to_response))
     }
 
     pub async fn delete_agent(&self, pool: &PgPool, id: Uuid, user_id: Uuid) -> Result<bool> {

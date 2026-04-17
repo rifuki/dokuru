@@ -12,10 +12,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, RefreshCw, Container, Box, HardDrive, Search, ChevronDown, ArrowUpDown, Edit, Trash2, Cpu, Server, } from "lucide-react";
+import { Plus, RefreshCw, Container, Box, HardDrive, Search, ChevronDown, ArrowUpDown, Edit, Trash2, Cpu, Server, Eye, EyeOff } from "lucide-react";
 import { AddAgentModal } from "@/components/agents/AddAgentModal";
 import { agentDirectApi, type DockerInfo } from "@/lib/api/agent-direct";
+import { agentApi } from "@/lib/api/agent";
+import { setAgentToken } from "@/stores/use-agent-store";
 import type { Agent } from "@/types/agent";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/agents/")({
   component: AgentsList,
@@ -27,15 +33,50 @@ type AgentWithInfo = {
   loading: boolean;
 };
 
-function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void }) {
+function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick: () => void; onUpdated: (agent: Agent) => void }) {
   const { agent, info, loading } = data;
   const { deleteAgent } = useAgentStore();
   const isOnline = !loading && info !== null;
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editName, setEditName] = useState(agent.name);
+  const [editUrl, setEditUrl] = useState(agent.url);
+  const [editToken, setEditToken] = useState("");
+  const [showToken, setShowToken] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleDelete = async () => {
     await deleteAgent(agent.id);
     setShowDeleteDialog(false);
+  };
+
+  const openEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditName(agent.name);
+    setEditUrl(agent.url);
+    setEditToken("");
+    setShowEditDialog(true);
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const updated = await agentApi.update(agent.id, {
+        name: editName,
+        url: editUrl,
+        token: editToken || undefined,
+      });
+      if (editToken) {
+        setAgentToken(agent.id, editToken);
+      }
+      onUpdated(updated);
+      setShowEditDialog(false);
+      toast.success("Agent updated");
+    } catch {
+      toast.error("Failed to update agent");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -138,7 +179,7 @@ function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void
         <button
           className="w-8 h-8 flex items-center justify-center text-muted-foreground/70 hover:text-foreground rounded hover:bg-muted/50 transition-colors group cursor-pointer"
           title="Edit agent"
-          onClick={(e) => e.stopPropagation()}
+          onClick={openEdit}
         >
           <Edit className="w-4 h-4 group-hover:scale-110 transition-transform" />
         </button>
@@ -153,6 +194,60 @@ function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void
           <Trash2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
         </button>
       </div>
+
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Agent</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input
+                id="edit-name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="Agent name"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-url">URL</Label>
+              <Input
+                id="edit-url"
+                value={editUrl}
+                onChange={(e) => setEditUrl(e.target.value)}
+                placeholder="http://host:port"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-token">Token <span className="text-muted-foreground text-xs">(leave blank to keep current)</span></Label>
+              <div className="relative">
+                <Input
+                  id="edit-token"
+                  type={showToken ? "text" : "password"}
+                  value={editToken}
+                  onChange={(e) => setEditToken(e.target.value)}
+                  placeholder="New token (optional)"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowToken(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditDialog(false)}>Cancel</Button>
+            <Button onClick={handleSave} disabled={isSaving || !editName || !editUrl}>
+              {isSaving ? "Saving…" : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
@@ -177,12 +272,21 @@ function AgentCard({ data, onClick }: { data: AgentWithInfo; onClick: () => void
 function AgentsList() {
   const navigate = useNavigate();
   const { agents, isLoading, fetchAgents } = useAgentStore();
+  const [localAgents, setLocalAgents] = useState<Agent[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [agentInfos, setAgentInfos] = useState<Record<string, { info: DockerInfo | null; loading: boolean }>>({});
 
   useEffect(() => {
     fetchAgents();
   }, [fetchAgents]);
+
+  useEffect(() => {
+    setLocalAgents(agents);
+  }, [agents]);
+
+  const handleAgentUpdated = (updated: Agent) => {
+    setLocalAgents(prev => prev.map(a => a.id === updated.id ? updated : a));
+  };
 
   useEffect(() => {
     if (agents.length === 0) return;
@@ -309,7 +413,7 @@ function AgentsList() {
           </div>
 
           <div className="divide-y divide-white/5">
-            {agents.map((agent) => (
+            {localAgents.map((agent) => (
               <AgentCard
                 key={agent.id}
                 data={{
@@ -318,6 +422,7 @@ function AgentsList() {
                   loading: agentInfos[agent.id]?.loading ?? true,
                 }}
                 onClick={() => navigate({ to: `/agents/${agent.id}` })}
+                onUpdated={handleAgentUpdated}
               />
             ))}
           </div>

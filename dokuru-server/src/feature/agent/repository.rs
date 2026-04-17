@@ -10,6 +10,7 @@ pub trait AgentRepository: Send + Sync {
     async fn create(&self, pool: &PgPool, agent: &Agent) -> Result<Agent>;
     async fn find_by_id(&self, pool: &PgPool, id: Uuid) -> Result<Option<Agent>>;
     async fn find_by_user_id(&self, pool: &PgPool, user_id: Uuid) -> Result<Vec<Agent>>;
+    async fn update(&self, pool: &PgPool, id: Uuid, user_id: Uuid, name: &str, url: &str, token_hash: Option<&str>) -> Result<Option<Agent>>;
     async fn delete(&self, pool: &PgPool, id: Uuid, user_id: Uuid) -> Result<bool>;
 }
 
@@ -68,6 +69,43 @@ impl AgentRepository for AgentRepositoryImpl {
         .await?;
 
         Ok(agents)
+    }
+
+    async fn update(&self, pool: &PgPool, id: Uuid, user_id: Uuid, name: &str, url: &str, token_hash: Option<&str>) -> Result<Option<Agent>> {
+        let agent = if let Some(hash) = token_hash {
+            sqlx::query_as::<_, Agent>(
+                r#"
+                UPDATE agents
+                SET name = $1, url = $2, token_hash = $3, updated_at = NOW()
+                WHERE id = $4 AND user_id = $5
+                RETURNING *
+                "#,
+            )
+            .bind(name)
+            .bind(url)
+            .bind(hash)
+            .bind(id)
+            .bind(user_id)
+            .fetch_optional(pool)
+            .await?
+        } else {
+            sqlx::query_as::<_, Agent>(
+                r#"
+                UPDATE agents
+                SET name = $1, url = $2, updated_at = NOW()
+                WHERE id = $3 AND user_id = $4
+                RETURNING *
+                "#,
+            )
+            .bind(name)
+            .bind(url)
+            .bind(id)
+            .bind(user_id)
+            .fetch_optional(pool)
+            .await?
+        };
+
+        Ok(agent)
     }
 
     async fn delete(&self, pool: &PgPool, id: Uuid, user_id: Uuid) -> Result<bool> {

@@ -14,6 +14,13 @@ pub trait AuditResultRepository: Send + Sync {
         agent_id: Uuid,
         user_id: Uuid,
     ) -> Result<Option<AuditResultRecord>>;
+    async fn find_by_id(
+        &self,
+        pool: &PgPool,
+        audit_id: Uuid,
+        agent_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<Option<AuditResultRecord>>;
     async fn find_all(
         &self,
         pool: &PgPool,
@@ -74,6 +81,28 @@ impl AuditResultRepository for AuditResultRepositoryImpl {
             LIMIT 1
             "#,
         )
+        .bind(agent_id)
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(record)
+    }
+
+    async fn find_by_id(
+        &self,
+        pool: &PgPool,
+        audit_id: Uuid,
+        agent_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<Option<AuditResultRecord>> {
+        let record = sqlx::query_as::<_, AuditResultRecord>(
+            r#"
+            SELECT * FROM audit_results
+            WHERE id = $1 AND agent_id = $2 AND user_id = $3
+            "#,
+        )
+        .bind(audit_id)
         .bind(agent_id)
         .bind(user_id)
         .fetch_optional(pool)
