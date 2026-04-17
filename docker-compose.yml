@@ -74,6 +74,7 @@ services:
         condition: service_healthy
     networks:
       - dokuru-internal
+      - traefik-public
 
   # ===========================================================================
   # App
@@ -89,6 +90,9 @@ services:
       - "traefik.http.routers.dokuru-api.tls.certresolver=letsencrypt"
       - "traefik.http.services.dokuru-server.loadbalancer.server.port=9393"
     env_file: ./dokuru-server/.env
+    # environment:
+      # DATABASE_URL: postgres://dokuru:${DOKURU_DB_PASSWORD:-secret}@dokuru-db:5432/dokuru_db
+      # REDIS_URL: redis://dokuru-redis:6379
     depends_on:
       dokuru-db:
         condition: service_healthy
@@ -104,7 +108,7 @@ services:
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.dokuru-web.rule=Host(`dokuru.rifuki.dev`)"
+      - "traefik.http.routers.dokuru-web.rule=Host(`app.dokuru.rifuki.dev`)"
       - "traefik.http.routers.dokuru-web.entrypoints=websecure"
       - "traefik.http.routers.dokuru-web.tls.certresolver=letsencrypt"
       - "traefik.http.services.dokuru-web.loadbalancer.server.port=80"
