@@ -135,7 +135,7 @@ export function AppSidebar() {
                   asChild
                   isActive={isActive(isAdmin ? "/admin" : "/agents")}
                   tooltip={isAdmin ? "Overview" : "Agents"}
-                  className="text-base! py-2.5! data-[active=true]:bg-miku-primary/15 data-[active=true]:text-miku-primary data-[active=true]:font-semibold"
+                  className="text-sm! py-2! data-[active=true]:bg-miku-primary/15 data-[active=true]:text-miku-primary data-[active=true]:font-medium"
                 >
                   <Link to={isAdmin ? "/admin" : "/agents"}>
                     {isAdmin ? <LayoutDashboard className="size-4" /> : <Bot className="size-4" />}
@@ -182,7 +182,7 @@ export function AppSidebar() {
             <div className="px-2">
               <Link
                 to="/"
-                className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-sidebar-border bg-sidebar-accent/20 text-sm text-sidebar-foreground/60 hover:bg-sidebar-accent/35 transition-colors"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-sidebar-border bg-sidebar-accent/20 text-sm text-sidebar-foreground/60 hover:bg-sidebar-accent/35 transition-colors"
               >
                 <span className="font-medium text-sidebar-foreground/80">Agent:</span>
                 <span className="text-sidebar-foreground/40">/</span>
@@ -196,7 +196,7 @@ export function AppSidebar() {
         {!isAdmin && agents.length > 0 && (
           <SidebarGroup>
             <SidebarGroupLabel>Agents</SidebarGroupLabel>
-            <div className={isIconMode ? "" : "px-2"}>
+            <div className={isIconMode ? "flex flex-col gap-1.5" : "px-2 flex flex-col gap-1.5"}>
               {agents.map((agent) => {
                 const isAgentActive = location.pathname.startsWith(`/agents/${agent.id}`);
                 const isOnline = !!agentOnlineStatus[agent.id];
@@ -227,7 +227,7 @@ export function AppSidebar() {
                           ) : (
                             <button
                               type="button"
-                              className={`w-full flex items-center gap-3 px-3 py-2.5 text-base font-semibold rounded-none transition-colors ${
+                              className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-none transition-colors ${
                                 isAgentActive
                                   ? "text-miku-primary"
                                   : "text-sidebar-foreground hover:bg-sidebar-accent/40"
@@ -263,9 +263,9 @@ export function AppSidebar() {
                                   <Link
                                     key={item.href}
                                     to={item.href}
-                                    className={`flex items-center gap-3 py-2 text-sm transition-colors ${
+                                    className={`flex items-center gap-3 py-1.5 text-sm transition-colors ${
                                       active
-                                        ? "px-3 mx-0 rounded-none border-l-[3px] border-miku-primary bg-miku-primary/20 text-miku-primary font-semibold"
+                                        ? "px-3 mx-0 rounded-none border-l-[3px] border-miku-primary bg-miku-primary/20 text-miku-primary font-medium"
                                         : "px-3 mx-1.5 rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
                                     }`}
                                   >
@@ -301,7 +301,7 @@ export function AppSidebar() {
                     asChild
                     isActive={isActive(item.href)}
                     tooltip={item.title}
-                    className="text-base! py-2.5!"
+                    className="text-sm! py-2!"
                   >
                     <Link to={item.href}>
                       <item.icon className="size-4" />
