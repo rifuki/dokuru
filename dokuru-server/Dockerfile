@@ -27,7 +27,7 @@ COPY . .
 RUN cargo build --release --bin dokuru-server
 
 # =============================================================================
-# Runtime — minimal image (built from source)
+# Runtime — minimal image
 # =============================================================================
 FROM debian:bookworm-slim AS runtime
 
@@ -38,24 +38,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/dokuru-server .
-
-EXPOSE 9393
-
-CMD ["./dokuru-server"]
-
-# =============================================================================
-# Runtime CI — accepts pre-built binary (used by GitHub Actions)
-# =============================================================================
-FROM debian:bookworm-slim AS runtime-ci
-
-WORKDIR /app
-
-RUN apt-get update \
-    && apt-get install -y ca-certificates libssl3 curl \
-    && rm -rf /var/lib/apt/lists/*
-
-ARG BINARY=dokuru-server
-COPY $BINARY ./dokuru-server
 
 EXPOSE 9393
 
