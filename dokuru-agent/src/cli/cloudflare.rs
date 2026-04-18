@@ -29,8 +29,6 @@ impl CloudflareTunnel {
             _ => return Err(eyre::eyre!("Unsupported architecture: {}", arch)),
         };
 
-        eprintln!("→ Downloading cloudflared from: {download_url}");
-
         // Download
         let output = Command::new("curl")
             .args(["-L", "-o", "/tmp/cloudflared", download_url])
@@ -38,38 +36,26 @@ impl CloudflareTunnel {
             .wrap_err("Failed to download cloudflared")?;
 
         if !output.status.success() {
-            eprintln!("✗ Download failed");
             return Err(eyre::eyre!("Failed to download cloudflared"));
         }
 
-        eprintln!("✓ Downloaded to /tmp/cloudflared");
-
         // Make executable
-        eprintln!("→ Making executable: chmod +x /tmp/cloudflared");
         Command::new("chmod")
             .args(["+x", "/tmp/cloudflared"])
             .status()
             .wrap_err("Failed to make cloudflared executable")?;
 
         // Move to /usr/local/bin
-        eprintln!("→ Installing to /usr/local/bin (requires sudo)");
-        let status = Command::new("sudo")
+        Command::new("sudo")
             .args(["mv", "/tmp/cloudflared", "/usr/local/bin/cloudflared"])
             .status()
             .wrap_err("Failed to install cloudflared to /usr/local/bin")?;
-
-        if status.success() {
-            eprintln!("✓ Installed to /usr/local/bin/cloudflared");
-        }
 
         Ok(())
     }
 
     /// Start quick tunnel (temporary URL, no login needed)
     pub fn start_quick_tunnel(port: u16) -> Result<String> {
-        eprintln!("→ Starting Cloudflare quick tunnel on port {port}");
-        eprintln!("  Command: cloudflared tunnel --url http://localhost:{port}");
-
         let mut child = Command::new("cloudflared")
             .args(["tunnel", "--url", &format!("http://localhost:{port}")])
             .stdout(Stdio::piped())
@@ -81,20 +67,12 @@ impl CloudflareTunnel {
         let stderr = child.stderr.take().unwrap();
         let reader = BufReader::new(stderr);
 
-        eprintln!("→ Waiting for tunnel URL...");
-
         for line in reader.lines() {
             let line = line?;
-
-            // Show cloudflared output
-            if line.contains("INF") || line.contains("https://") {
-                eprintln!("  {line}");
-            }
 
             // Look for URL in output
             // Example: "2024-04-18T14:00:00Z INF |  https://xxx.trycloudflare.com"
             if let Some(url) = extract_url(&line) {
-                eprintln!("✓ Tunnel URL: {url}");
                 // Detach process (let it run in background)
                 std::mem::forget(child);
                 return Ok(url);
@@ -132,7 +110,6 @@ WantedBy=multi-user.target
             .wrap_err("Failed to write service file")?;
 
         // Move to systemd directory
-        eprintln!("→ Installing service to /etc/systemd/system (requires sudo)");
         Command::new("sudo")
             .args([
                 "mv",
@@ -143,41 +120,32 @@ WantedBy=multi-user.target
             .wrap_err("Failed to install systemd service")?;
 
         // Reload systemd
-        eprintln!("→ Reloading systemd daemon");
-        let output = Command::new("sudo")
+        Command::new("sudo")
             .args(["systemctl", "daemon-reload"])
             .output()
             .wrap_err("Failed to reload systemd")?;
-
-        if output.status.success() {
-            eprintln!("✓ Service file installed");
-        }
 
         Ok(())
     }
 
     /// Start tunnel service
     pub fn start_service() -> Result<()> {
-        eprintln!("→ Starting dokuru-tunnel service");
         let output = Command::new("sudo")
             .args(["systemctl", "start", "dokuru-tunnel"])
             .output()
             .wrap_err("Failed to start dokuru-tunnel service")?;
 
         if !output.status.success() {
-            eprintln!("✗ Failed to start service");
-            eprintln!("  stderr: {}", String::from_utf8_lossy(&output.stderr));
+            return Err(eyre::eyre!(
+                "Failed to start service: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
         }
 
-        eprintln!("→ Enabling dokuru-tunnel service (auto-start on boot)");
-        let output = Command::new("sudo")
+        Command::new("sudo")
             .args(["systemctl", "enable", "dokuru-tunnel"])
             .output()
             .wrap_err("Failed to enable dokuru-tunnel service")?;
-
-        if output.status.success() {
-            eprintln!("✓ Service started and enabled");
-        }
 
         Ok(())
     }
