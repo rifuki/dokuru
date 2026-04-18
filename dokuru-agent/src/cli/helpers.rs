@@ -303,6 +303,7 @@ enum ConfigSection {
     Server,
     Docker,
     Service,
+    Access,
     Done,
 }
 
@@ -316,6 +317,11 @@ pub fn run_configure_sections(config: &mut InstallerConfig) -> Result<()> {
             )
             .item(ConfigSection::Docker, "Docker", "socket path")
             .item(ConfigSection::Service, "Service", "systemd service")
+            .item(
+                ConfigSection::Access,
+                "Access",
+                "access mode (Cloudflare/Direct)",
+            )
             .item(ConfigSection::Done, "Continue", "finish and apply")
             .interact()?;
 
@@ -323,6 +329,7 @@ pub fn run_configure_sections(config: &mut InstallerConfig) -> Result<()> {
             ConfigSection::Server => configure_server_section(config)?,
             ConfigSection::Docker => configure_docker_section(config)?,
             ConfigSection::Service => configure_service_section(config)?,
+            ConfigSection::Access => configure_access_section(config)?,
             ConfigSection::Done => break,
         }
     }
@@ -363,6 +370,67 @@ pub fn configure_service_section(config: &mut InstallerConfig) -> Result<()> {
         .initial_value(!config.skip_service)
         .interact()?;
     config.skip_service = !want_service;
+    Ok(())
+}
+
+pub fn configure_access_section(config: &mut InstallerConfig) -> Result<()> {
+    use crate::cli::CloudflareTunnel;
+
+    let access_mode = select("How should this agent be accessible?")
+        .item(
+            "cloudflare",
+            "Cloudflare Tunnel",
+            "Auto HTTPS, no domain needed (recommended)",
+        )
+        .item(
+            "direct",
+            "Direct HTTP",
+            "Use your own reverse proxy for HTTPS",
+        )
+        .initial_value("cloudflare")
+        .interact()?;
+
+    match access_mode {
+        "cloudflare" => {
+            if !CloudflareTunnel::is_installed() {
+                let spinner = cliclack::spinner();
+                spinner.start("Installing cloudflared...");
+                CloudflareTunnel::install()?;
+                spinner.stop("✓ cloudflared installed");
+            }
+
+            let spinner = cliclack::spinner();
+            spinner.start("Starting Cloudflare Tunnel...");
+            let url = CloudflareTunnel::start_quick_tunnel(config.port)?;
+            spinner.stop(format!("✓ Tunnel started: {url}"));
+
+            let spinner = cliclack::spinner();
+            spinner.start("Creating tunnel systemd service...");
+            CloudflareTunnel::create_systemd_service(config.port)?;
+            CloudflareTunnel::start_service()?;
+            spinner.stop("✓ Tunnel service enabled");
+
+            note(
+                "Access Mode Updated",
+                format!(
+                    "Mode: Cloudflare Tunnel\nURL:  {url}\n\n⚠️  Update this URL in your Dokuru dashboard"
+                ),
+            )?;
+        }
+        "direct" => {
+            note(
+                "Direct HTTP Mode",
+                "⚠️  Agent will serve HTTP on port 3939.\n\
+                 \n\
+                 For HTTPS access:\n\
+                 1. Setup reverse proxy (Nginx/Caddy/Traefik)\n\
+                 2. Configure SSL certificate (Let's Encrypt)\n\
+                 3. Proxy to http://localhost:3939",
+            )?;
+        }
+        _ => unreachable!(),
+    }
+
     Ok(())
 }
 
