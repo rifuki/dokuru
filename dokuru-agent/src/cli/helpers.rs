@@ -380,14 +380,15 @@ pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
         .item(
             "cloudflare",
             "Cloudflare Tunnel",
-            "Auto HTTPS, no domain needed (recommended)",
+            "Restart tunnel and get new URL",
         )
         .item(
-            "direct",
-            "Direct HTTP",
-            "Use your own reverse proxy for HTTPS",
+            "refresh",
+            "Refresh Tunnel URL",
+            "Get URL from running tunnel",
         )
-        .initial_value("cloudflare")
+        .item("direct", "Direct HTTP", "Use your own reverse proxy")
+        .initial_value("refresh")
         .interact()?;
 
     match access_mode {
@@ -400,32 +401,66 @@ pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
             }
 
             let spinner = cliclack::spinner();
-            spinner.start("Starting Cloudflare Tunnel...");
-            let url = CloudflareTunnel::start_quick_tunnel(config.port)?;
-            spinner.stop(format!("✓ Tunnel started: {url}"));
+            spinner.start("Restarting tunnel...");
+            CloudflareTunnel::create_systemd_service(config.port)?;
+            let _ = run_command("systemctl", &["stop", "dokuru-tunnel"]);
+            CloudflareTunnel::start_service()?;
+            std::thread::sleep(std::time::Duration::from_secs(3));
+            spinner.stop("✓ Tunnel restarted");
+
+            match CloudflareTunnel::get_tunnel_url() {
+                Ok(url) => {
+                    update_config_access_mode(config, crate::api::AccessMode::Cloudflare, &url)?;
+                    note(
+                        "Tunnel URL Updated",
+                        format!("URL: {url}\n\n✓ Config updated\n⚠️  Update in dashboard"),
+                    )?;
+                }
+                Err(e) => {
+                    cliclack::log::warning(format!("Could not get URL: {e}"))?;
+                    cliclack::log::info(
+                        "Run: sudo journalctl -u dokuru-tunnel -n 50 | grep https://",
+                    )?;
+                }
+            }
+        }
+        "refresh" => {
+            if !CloudflareTunnel::is_service_running() {
+                cliclack::log::error("Tunnel not running. Use 'Cloudflare Tunnel' option first.")?;
+                return Ok(());
+            }
 
             let spinner = cliclack::spinner();
-            spinner.start("Creating tunnel systemd service...");
-            CloudflareTunnel::create_systemd_service(config.port)?;
-            CloudflareTunnel::start_service()?;
-            spinner.stop("✓ Tunnel service enabled");
+            spinner.start("Getting URL from logs...");
 
-            note(
-                "Access Mode Updated",
-                format!(
-                    "Mode: Cloudflare Tunnel\nURL:  {url}\n\n⚠️  Update this URL in your Dokuru dashboard"
-                ),
-            )?;
+            match CloudflareTunnel::get_tunnel_url() {
+                Ok(url) => {
+                    spinner.stop(format!("✓ Found: {url}"));
+                    update_config_access_mode(config, crate::api::AccessMode::Cloudflare, &url)?;
+                    note(
+                        "URL Refreshed",
+                        format!("URL: {url}\n\n✓ Config updated\n⚠️  Update in dashboard"),
+                    )?;
+                }
+                Err(e) => {
+                    spinner.stop("✗ Not found");
+                    cliclack::log::error(format!("{e}"))?;
+                    cliclack::log::info("Try: sudo systemctl restart dokuru-tunnel")?;
+                }
+            }
         }
         "direct" => {
+            let host_ip = std::net::UdpSocket::bind("0.0.0.0:0")
+                .and_then(|s| {
+                    s.connect("8.8.8.8:80")?;
+                    s.local_addr()
+                })
+                .map_or_else(|_| "localhost".to_string(), |a| a.ip().to_string());
+            let url = format!("http://{}:{}", host_ip, config.port);
+            update_config_access_mode(config, crate::api::AccessMode::Direct, &url)?;
             note(
-                "Direct HTTP Mode",
-                "⚠️  Agent will serve HTTP on port 3939.\n\
-                 \n\
-                 For HTTPS access:\n\
-                 1. Setup reverse proxy (Nginx/Caddy/Traefik)\n\
-                 2. Configure SSL certificate (Let's Encrypt)\n\
-                 3. Proxy to http://localhost:3939",
+                "Direct Mode",
+                format!("URL: {url}\n\n✓ Config updated\nSetup reverse proxy for HTTPS"),
             )?;
         }
         _ => unreachable!(),
@@ -443,6 +478,37 @@ pub fn confirm_action(yes: bool, prompt: &str) -> Result<bool> {
         .initial_value(true)
         .interact()
         .map_err(Into::into)
+}
+
+pub fn update_config_access_mode(
+    config: &InstallerConfig,
+    mode: crate::api::AccessMode,
+    url: &str,
+) -> Result<()> {
+    use crate::api::{AccessConfig, Config as RuntimeConfig};
+
+    let config_path = runtime_config_path(config);
+
+    // Read existing config
+    let mut runtime_config: RuntimeConfig = {
+        let content =
+            std::fs::read_to_string(&config_path).wrap_err("Failed to read config file")?;
+        toml::from_str(&content).wrap_err("Failed to parse config file")?
+    };
+
+    // Update access config
+    runtime_config.access = AccessConfig {
+        mode,
+        url: url.to_string(),
+        cloudflare_tunnel_id: None,
+    };
+
+    // Write back
+    let toml_content =
+        toml::to_string_pretty(&runtime_config).wrap_err("Failed to serialize config")?;
+    std::fs::write(&config_path, toml_content).wrap_err("Failed to write config file")?;
+
+    Ok(())
 }
 
 // ─── Display Helpers ──────────────────────────────────────────────────────────

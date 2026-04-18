@@ -2,8 +2,8 @@ use super::super::helpers::{
     InstallerConfig, collect_preflight, enable_service, generate_agent_token, hash_token,
     install_binary, install_docker, offer_docker_installation, prompt_for_config, reload_systemd,
     resolve_config, restart_service, run_command, run_step, runtime_config_path, service_unit_path,
-    setup_dokuru_user, setup_log_directory, show_preflight, user_in_docker_group,
-    write_config_file, write_systemd_unit,
+    setup_dokuru_user, setup_log_directory, show_preflight, update_config_access_mode,
+    user_in_docker_group, write_config_file, write_systemd_unit,
 };
 use super::super::types::{SetupArgs, SetupMode};
 use cliclack::{confirm, intro, note, outro, outro_cancel, select};
@@ -430,39 +430,6 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
 
     note("Next steps", next_steps.join("\n"))?;
     outro("Dokuru is ready.")?;
-
-    Ok(())
-}
-
-// ─── Doctor ──────────────────────────────────────────────────────────────────
-
-fn update_config_access_mode(
-    config: &InstallerConfig,
-    mode: crate::api::AccessMode,
-    url: &str,
-) -> Result<()> {
-    use crate::api::{AccessConfig, Config as RuntimeConfig};
-
-    let config_path = runtime_config_path(config);
-
-    // Read existing config
-    let mut runtime_config: RuntimeConfig = {
-        let content =
-            std::fs::read_to_string(&config_path).wrap_err("Failed to read config file")?;
-        toml::from_str(&content).wrap_err("Failed to parse config file")?
-    };
-
-    // Update access config
-    runtime_config.access = AccessConfig {
-        mode,
-        url: url.to_string(),
-        cloudflare_tunnel_id: None,
-    };
-
-    // Write back
-    let toml_content =
-        toml::to_string_pretty(&runtime_config).wrap_err("Failed to serialize config")?;
-    std::fs::write(&config_path, toml_content).wrap_err("Failed to write config file")?;
 
     Ok(())
 }

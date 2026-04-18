@@ -183,7 +183,6 @@ WantedBy=multi-user.target
     }
 
     /// Get tunnel URL from running service
-    #[allow(dead_code)]
     pub fn get_tunnel_url() -> Result<String> {
         let output = Command::new("journalctl")
             .args(["-u", "dokuru-tunnel", "-n", "100", "--no-pager"])
@@ -204,7 +203,6 @@ WantedBy=multi-user.target
     }
 
     /// Check if tunnel service is running
-    #[allow(dead_code)]
     pub fn is_service_running() -> bool {
         Command::new("systemctl")
             .args(["is-active", "dokuru-tunnel"])
