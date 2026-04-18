@@ -18,8 +18,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Info, AlertTriangle, Loader2 } from "lucide-react";
+import { Globe, Link2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface AddAgentModalProps {
@@ -105,44 +104,31 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="cloudflare">
-                                    🌟 Cloudflare Tunnel (Recommended)
+                                    <div className="flex items-center gap-2">
+                                        <img src="/cloudflare.svg" alt="Cloudflare" className="h-4 w-4" />
+                                        Cloudflare Tunnel (Recommended)
+                                    </div>
                                 </SelectItem>
                                 <SelectItem value="direct">
-                                    Direct HTTP (Bring Your Own Proxy)
+                                    <div className="flex items-center gap-2">
+                                        <Globe className="h-4 w-4" />
+                                        Direct HTTP (Bring Your Own Proxy)
+                                    </div>
                                 </SelectItem>
                                 <SelectItem value="domain" disabled>
-                                    Custom Domain (Coming Soon)
+                                    <div className="flex items-center gap-2">
+                                        <Globe className="h-4 w-4" />
+                                        Custom Domain (Coming Soon)
+                                    </div>
                                 </SelectItem>
                                 <SelectItem value="relay">
-                                    🔗 Relay Mode (No Public URL Needed)
+                                    <div className="flex items-center gap-2">
+                                        <Link2 className="h-4 w-4" />
+                                        Relay Mode (No Public URL Needed)
+                                    </div>
                                 </SelectItem>
                             </SelectContent>
                         </Select>
-
-                        {accessMode === "direct" && (
-                            <Alert>
-                                <AlertTriangle className="h-4 w-4" />
-                                <AlertDescription>
-                                    Make sure you've setup reverse proxy with HTTPS.
-                                    <br />
-                                    URL should be:{" "}
-                                    <code className="text-xs">
-                                        https://agent.yourdomain.com
-                                    </code>
-                                </AlertDescription>
-                            </Alert>
-                        )}
-
-                        {accessMode === "relay" && (
-                            <Alert>
-                                <Info className="h-4 w-4" />
-                                <AlertDescription>
-                                    Agent connects via WebSocket to dokuru-server.
-                                    <br />
-                                    No public URL needed - works behind firewall/NAT.
-                                </AlertDescription>
-                            </Alert>
-                        )}
                     </div>
 
                     {accessMode !== "relay" && (
