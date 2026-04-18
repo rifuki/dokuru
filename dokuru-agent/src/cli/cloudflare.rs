@@ -30,7 +30,7 @@ impl CloudflareTunnel {
                 "cloudflared-linux-arm64",
                 "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64",
             ),
-            ("macos", "x86_64") | ("macos", "aarch64") => (
+            ("macos", "x86_64" | "aarch64") => (
                 "cloudflared-darwin-amd64.tgz",
                 "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-amd64.tgz",
             ),
