@@ -1,12 +1,12 @@
 use super::super::helpers::{
-    collect_preflight, enable_service, generate_agent_token, hash_token, install_binary,
-    install_docker, offer_docker_installation, prompt_for_config, reload_systemd, resolve_config,
-    restart_service, run_command, run_step, runtime_config_path, service_unit_path,
-    setup_dokuru_user, setup_log_directory, show_preflight, user_in_docker_group,
-    write_config_file, write_systemd_unit,
+    InstallerConfig, collect_preflight, enable_service, generate_agent_token, hash_token,
+    install_binary, install_docker, offer_docker_installation, prompt_for_config, reload_systemd,
+    resolve_config, restart_service, run_command, run_step, runtime_config_path,
+    service_unit_path, setup_dokuru_user, setup_log_directory, show_preflight,
+    user_in_docker_group, write_config_file, write_systemd_unit,
 };
 use super::super::types::{SetupArgs, SetupMode};
-use cliclack::{confirm, intro, note, outro, outro_cancel};
+use cliclack::{confirm, intro, note, outro, outro_cancel, select};
 use eyre::{Result, WrapErr, bail};
 use std::io::{IsTerminal, stderr};
 use std::path::PathBuf;
@@ -301,21 +301,107 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         })
         .is_some();
 
-    let host_ip = if is_cloud {
-        reqwest::blocking::get("https://api.ipify.org")
-            .and_then(reqwest::blocking::Response::text)
-            .unwrap_or_else(|_| "localhost".to_string())
-    } else {
-        std::net::UdpSocket::bind("0.0.0.0:0")
-            .and_then(|s| {
-                s.connect("8.8.8.8:80")?;
-                s.local_addr()
-            })
-            .map_or_else(|_| "localhost".to_string(), |a| a.ip().to_string())
+    // ─── Access Mode Selection ───────────────────────────────────────────────
+    
+    let access_mode = select("How should this agent be accessible?")
+        .item("cloudflare", "Cloudflare Tunnel", "Auto HTTPS, no domain needed (recommended)")
+        .item("direct", "Direct HTTP", "Use your own reverse proxy for HTTPS")
+        .item("domain", "Custom Domain", "Auto SSL with your domain (coming soon)")
+        .item("relay", "Relay Mode", "Through dokuru-server (coming soon)")
+        .initial_value("cloudflare")
+        .interact()?;
+
+    let (access_url, access_mode_enum) = match access_mode {
+        "cloudflare" => {
+            use crate::cli::CloudflareTunnel;
+            
+            // Check if cloudflared installed
+            if !CloudflareTunnel::is_installed() {
+                let spinner = cliclack::spinner();
+                spinner.start("Installing cloudflared...");
+                
+                CloudflareTunnel::install()
+                    .wrap_err("Failed to install cloudflared")?;
+                
+                spinner.stop("✓ cloudflared installed");
+            }
+
+            // Start tunnel
+            let spinner = cliclack::spinner();
+            spinner.start("Starting Cloudflare Tunnel...");
+            
+            let url = CloudflareTunnel::start_quick_tunnel(config.port)
+                .wrap_err("Failed to start Cloudflare Tunnel")?;
+            
+            spinner.stop(format!("✓ Tunnel started: {}", url));
+
+            // Create systemd service
+            let spinner = cliclack::spinner();
+            spinner.start("Creating tunnel systemd service...");
+            
+            CloudflareTunnel::create_systemd_service(config.port)
+                .wrap_err("Failed to create systemd service")?;
+            CloudflareTunnel::start_service()
+                .wrap_err("Failed to start tunnel service")?;
+            
+            spinner.stop("✓ Tunnel service enabled");
+
+            (url, crate::api::AccessMode::Cloudflare)
+        }
+        
+        "direct" => {
+            note(
+                "Direct HTTP Mode",
+                "⚠️  Agent will serve HTTP on port 3939.\n\
+                 \n\
+                 For HTTPS access:\n\
+                 1. Setup reverse proxy (Nginx/Caddy/Traefik)\n\
+                 2. Configure SSL certificate (Let's Encrypt)\n\
+                 3. Proxy to http://localhost:3939\n\
+                 \n\
+                 Example Caddy config:\n\
+                 agent.yourdomain.com {\n\
+                     reverse_proxy localhost:3939\n\
+                 }",
+            )?;
+            
+            let host_ip = if is_cloud {
+                reqwest::blocking::get("https://api.ipify.org")
+                    .and_then(reqwest::blocking::Response::text)
+                    .unwrap_or_else(|_| "localhost".to_string())
+            } else {
+                std::net::UdpSocket::bind("0.0.0.0:0")
+                    .and_then(|s| {
+                        s.connect("8.8.8.8:80")?;
+                        s.local_addr()
+                    })
+                    .map_or_else(|_| "localhost".to_string(), |a| a.ip().to_string())
+            };
+            
+            (format!("http://{}:{}", host_ip, config.port), crate::api::AccessMode::Direct)
+        }
+        
+        "domain" => {
+            note("Custom Domain", "Coming soon in Phase 6")?;
+            return Err(eyre::eyre!("Custom domain not yet implemented"));
+        }
+        
+        "relay" => {
+            note("Relay Mode", "Coming soon in Phase 6")?;
+            return Err(eyre::eyre!("Relay mode not yet implemented"));
+        }
+        
+        _ => unreachable!(),
     };
+
+    // Update config with access mode
+    update_config_access_mode(&config, access_mode_enum, &access_url)?;
+
+    // ─── Next Steps ──────────────────────────────────────────────────────────
+
     next_steps.push(format!(
-        "Agent URL: {host_ip}:{}\n           → Add this as a new environment in your Dokuru dashboard",
-        config.port
+        "Agent URL: {}\n           → Add this as a new environment in your Dokuru dashboard",
+        access_url
     ));
     next_steps.push(format!(
         "Token:     {agent_token}\n           → Copy this token (shown once only)"
@@ -324,6 +410,41 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
     note("Next steps", next_steps.join("\n"))?;
     outro("Dokuru is ready.")?;
 
+    Ok(())
+}
+
+// ─── Doctor ──────────────────────────────────────────────────────────────────
+
+fn update_config_access_mode(
+    config: &InstallerConfig,
+    mode: crate::api::AccessMode,
+    url: &str,
+) -> Result<()> {
+    use crate::api::{AccessConfig, Config as RuntimeConfig};
+    
+    let config_path = runtime_config_path(config);
+    
+    // Read existing config
+    let mut runtime_config: RuntimeConfig = {
+        let content = std::fs::read_to_string(&config_path)
+            .wrap_err("Failed to read config file")?;
+        toml::from_str(&content)
+            .wrap_err("Failed to parse config file")?
+    };
+    
+    // Update access config
+    runtime_config.access = AccessConfig {
+        mode,
+        url: url.to_string(),
+        cloudflare_tunnel_id: None,
+    };
+    
+    // Write back
+    let toml_content = toml::to_string_pretty(&runtime_config)
+        .wrap_err("Failed to serialize config")?;
+    std::fs::write(&config_path, toml_content)
+        .wrap_err("Failed to write config file")?;
+    
     Ok(())
 }
 

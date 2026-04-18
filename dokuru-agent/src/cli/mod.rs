@@ -4,8 +4,10 @@
 // - types/: CLI argument definitions and enums
 // - commands/: Command implementations (onboard, doctor, update, uninstall)
 // - helpers.rs: Shared helper functions (internal only)
+// - cloudflare.rs: Cloudflare Tunnel integration
 // - utils.rs: Shared utilities (internal only)
 
+mod cloudflare;
 mod commands;
 mod helpers;
 mod types;
@@ -18,3 +20,4 @@ pub use commands::{
 pub use types::{DoctorArgs, SetupArgs, SetupMode, SharedArgs, UninstallArgs, UpdateArgs};
 
 // Internal use only
+pub(crate) use cloudflare::CloudflareTunnel;
