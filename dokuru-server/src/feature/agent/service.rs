@@ -32,7 +32,7 @@ impl AgentService {
             name: dto.name,
             url: dto.url,
             token_hash,
-            access_mode: "direct".to_string(),
+            access_mode: dto.access_mode,
             status: "unknown".to_string(),
             last_seen: None,
             created_at: chrono::Utc::now(),

@@ -14,6 +14,7 @@ export interface CreateAgentDto {
   name: string;
   url: string;
   token: string;
+  access_mode: string;
 }
 
 export interface UpdateAgentDto {

@@ -11,7 +11,15 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { Loader2 } from "lucide-react";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Info, AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface AddAgentModalProps {
@@ -22,43 +30,37 @@ interface AddAgentModalProps {
 export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
     const { createAgent, isLoading } = useAgentStore();
     const [name, setName] = useState("");
-    const [host, setHost] = useState("");
-    const [port, setPort] = useState("3939");
+    const [url, setUrl] = useState("");
     const [token, setToken] = useState("");
-
-    // Auto-detect if host is IP address (show port) or domain (hide port)
-    const isIpAddress = (value: string) => {
-        // IPv4 regex
-        const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
-        // IPv6 regex (simplified)
-        const ipv6Regex = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/;
-        return ipv4Regex.test(value) || ipv6Regex.test(value);
-    };
-
-    const showPortInput = isIpAddress(host);
+    const [accessMode, setAccessMode] = useState("cloudflare");
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!name.trim() || !host.trim() || !token.trim()) {
-            toast.error("Name, host, and token are required");
+        if (!name.trim() || !url.trim() || !token.trim()) {
+            toast.error("All fields are required");
             return;
         }
 
-        // Auto-generate URL
-        // IP address → http://host:port (default 3939 if empty)
-        // Domain → http://host (assume https/cloudflare/etc)
-        const url = showPortInput
-            ? `http://${host.trim()}:${port.trim() || "3939"}` 
-            : `http://${host.trim()}`;
+        // Validate URL based on access mode
+        if (accessMode === "cloudflare" && !url.startsWith("https://")) {
+            toast.error("Cloudflare Tunnel URL must use HTTPS");
+            return;
+        }
 
         try {
-            await createAgent({ name: name.trim(), url, token: token.trim() });
+            await createAgent({
+                name: name.trim(),
+                url: url.trim(),
+                token: token.trim(),
+                access_mode: accessMode,
+            });
             toast.success("Agent added successfully");
+            // Reset form
             setName("");
-            setHost("");
-            setPort("3939");
+            setUrl("");
             setToken("");
+            setAccessMode("cloudflare");
             onOpenChange(false);
         } catch (error) {
             toast.error((error as Error).message || "Failed to add agent");
@@ -88,36 +90,70 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                         />
                     </div>
 
-                    <div className={showPortInput ? "grid grid-cols-3 gap-4" : "space-y-2"}>
-                        <div className={`space-y-2 ${showPortInput ? "col-span-2" : ""}`}>
-                            <Label htmlFor="host">Host / IP Address</Label>
-                            <Input
-                                id="host"
-                                placeholder="192.168.1.50 or agent.example.com"
-                                value={host}
-                                onChange={(e) => setHost(e.target.value)}
-                                disabled={isLoading}
-                                autoComplete="off"
-                            />
-                        </div>
-                        {showPortInput && (
-                            <div className="space-y-2">
-                                <Label htmlFor="port">Port</Label>
-                                <Input
-                                    id="port"
-                                    type="text"
-                                    placeholder="3939"
-                                    value={port}
-                                    onChange={(e) => setPort(e.target.value.replace(/\D/g, ''))}
-                                    disabled={isLoading}
-                                    autoComplete="off"
-                                />
-                            </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="access-mode">Access Mode</Label>
+                        <Select value={accessMode} onValueChange={setAccessMode}>
+                            <SelectTrigger>
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="cloudflare">
+                                    🌟 Cloudflare Tunnel (Recommended)
+                                </SelectItem>
+                                <SelectItem value="direct">
+                                    Direct HTTP (Bring Your Own Proxy)
+                                </SelectItem>
+                                <SelectItem value="domain" disabled>
+                                    Custom Domain (Coming Soon)
+                                </SelectItem>
+                                <SelectItem value="relay" disabled>
+                                    Relay Mode (Coming Soon)
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+
+                        {accessMode === "cloudflare" && (
+                            <Alert>
+                                <Info className="h-4 w-4" />
+                                <AlertDescription>
+                                    URL from agent onboarding:{" "}
+                                    <code className="text-xs">
+                                        https://xxx.trycloudflare.com
+                                    </code>
+                                </AlertDescription>
+                            </Alert>
+                        )}
+
+                        {accessMode === "direct" && (
+                            <Alert>
+                                <AlertTriangle className="h-4 w-4" />
+                                <AlertDescription>
+                                    Make sure you've setup reverse proxy with HTTPS.
+                                    <br />
+                                    URL should be:{" "}
+                                    <code className="text-xs">
+                                        https://agent.yourdomain.com
+                                    </code>
+                                </AlertDescription>
+                            </Alert>
                         )}
                     </div>
-                    <p className="text-xs text-muted-foreground -mt-2">
-                        Agent will be accessible at: {host || "host"}{showPortInput ? `:${port || "3939"}` : ""}
-                    </p>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="url">Agent URL</Label>
+                        <Input
+                            id="url"
+                            placeholder={
+                                accessMode === "cloudflare"
+                                    ? "https://xxx.trycloudflare.com"
+                                    : "https://agent.yourdomain.com"
+                            }
+                            value={url}
+                            onChange={(e) => setUrl(e.target.value)}
+                            disabled={isLoading}
+                            autoComplete="off"
+                        />
+                    </div>
 
                     <div className="space-y-2">
                         <Label htmlFor="token">Agent Token</Label>

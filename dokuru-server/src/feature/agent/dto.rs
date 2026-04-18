@@ -17,6 +17,20 @@ pub struct CreateAgentDto {
 
     #[validate(length(min = 1, message = "Token is required"))]
     pub token: String,
+
+    #[validate(custom(function = "validate_access_mode"))]
+    pub access_mode: String,
+}
+
+fn validate_access_mode(mode: &str) -> Result<(), validator::ValidationError> {
+    match mode {
+        "direct" | "cloudflare" | "domain" | "relay" => Ok(()),
+        _ => {
+            let mut err = validator::ValidationError::new("invalid_access_mode");
+            err.message = Some("Access mode must be: direct, cloudflare, domain, or relay".into());
+            Err(err)
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Validate)]

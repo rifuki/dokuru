@@ -101,6 +101,12 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
               >
                 {isOnline ? "●" : "○"} {isOnline ? "UP" : "DOWN"}
               </span>
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-[11px] font-medium border-blue-500/30 bg-blue-500/10 text-blue-400">
+                {agent.access_mode === 'cloudflare' && '☁️ Cloudflare'}
+                {agent.access_mode === 'direct' && '🔗 Direct'}
+                {agent.access_mode === 'domain' && '🌐 Domain'}
+                {agent.access_mode === 'relay' && '🔄 Relay'}
+              </span>
               {info && (
                 <span className="text-[12px] text-muted-foreground font-mono font-medium">
                   Docker {info.docker_version}
