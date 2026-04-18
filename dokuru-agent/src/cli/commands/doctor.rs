@@ -69,6 +69,8 @@ pub fn run_doctor(args: DoctorArgs) -> Result<()> {
         )?;
     }
 
+    check_tunnel_connectivity(&log_item)?;
+
     // Config note
     let mut config_lines = vec![
         format!("Port:           {}", config.port),
@@ -94,6 +96,52 @@ pub fn run_doctor(args: DoctorArgs) -> Result<()> {
     ))?;
 
     outro("Diagnostics complete.")?;
+    Ok(())
+}
+
+fn check_tunnel_connectivity(log_item: &impl Fn(bool, &str, &str) -> Result<()>) -> Result<()> {
+    let Some(cfg) = crate::api::Config::load().ok() else {
+        return Ok(());
+    };
+
+    let tunnel_active = command_success("systemctl", &["is-active", "dokuru-tunnel"]);
+    log_item(
+        tunnel_active,
+        "Tunnel service",
+        if tunnel_active { "active" } else { "inactive" },
+    )?;
+
+    if cfg.access.url.is_empty() {
+        return Ok(());
+    }
+
+    let health_url = format!("{}/health", cfg.access.url.trim_end_matches('/'));
+    let reachable = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .ok()
+        .and_then(|c| c.get(&health_url).send().ok())
+        .is_some_and(|r| r.status().is_success());
+
+    log_item(
+        reachable,
+        "Agent /health",
+        if reachable {
+            &health_url
+        } else {
+            "unreachable — tunnel may be down or URL has changed"
+        },
+    )?;
+
+    if !reachable && tunnel_active {
+        cliclack::log::info(
+            "Tunnel is running but URL may have changed.\n  \
+             Fix: sudo dokuru configure → Access → Refresh Tunnel URL",
+        )?;
+    } else if !reachable {
+        cliclack::log::info("Restart: sudo systemctl restart dokuru-tunnel")?;
+    }
+
     Ok(())
 }
 
