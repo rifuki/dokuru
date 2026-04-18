@@ -19,7 +19,7 @@ fn main() {
         .map(|s| s.trim().to_string())
         .unwrap_or_else(|| "v0.1.0".to_string());
 
-    println!("cargo:rustc-env=GIT_HASH={}", git_hash);
-    println!("cargo:rustc-env=GIT_TAG={}", git_tag);
+    println!("cargo:rustc-env=GIT_HASH={git_hash}");
+    println!("cargo:rustc-env=GIT_TAG={git_tag}");
     println!("cargo:rerun-if-changed=.git/HEAD");
 }
