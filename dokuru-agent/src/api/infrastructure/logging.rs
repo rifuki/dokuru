@@ -27,26 +27,45 @@ pub fn setup() -> (impl SubscriberInitExt, ReloadFilterHandle) {
         .with_thread_ids(false)
         .with_thread_names(false);
 
-    // File layer (daily rotation, no ANSI)
+    // File layer (daily rotation, no ANSI) - optional
     let prod_log_dir = PathBuf::from("/var/log/dokuru");
-    let log_dir = if create_dir_all(&prod_log_dir).is_ok() {
-        prod_log_dir
+
+    // Test if directory is writable
+    let file_layer = if create_dir_all(&prod_log_dir).is_ok()
+        && std::fs::write(prod_log_dir.join(".test"), "test").is_ok()
+    {
+        let _ = std::fs::remove_file(prod_log_dir.join(".test"));
+        println!("Logs will be written to: {}", prod_log_dir.display());
+        let file_appender = RollingFileAppender::new(Rotation::DAILY, prod_log_dir, "backend.log");
+        Some(
+            fmt::layer()
+                .with_writer(file_appender)
+                .with_ansi(false)
+                .with_target(true)
+                .with_file(true)
+                .with_line_number(true),
+        )
     } else {
         let fallback = std::env::temp_dir().join("dokuru");
-        if let Err(e) = create_dir_all(&fallback) {
-            eprintln!("Failed to create log directory: {e}");
+        if create_dir_all(&fallback).is_ok()
+            && std::fs::write(fallback.join(".test"), "test").is_ok()
+        {
+            let _ = std::fs::remove_file(fallback.join(".test"));
+            println!("Logs will be written to: {}", fallback.display());
+            let file_appender = RollingFileAppender::new(Rotation::DAILY, fallback, "backend.log");
+            Some(
+                fmt::layer()
+                    .with_writer(file_appender)
+                    .with_ansi(false)
+                    .with_target(true)
+                    .with_file(true)
+                    .with_line_number(true),
+            )
+        } else {
+            eprintln!("Failed to create writable log directory, using stdout only");
+            None
         }
-        fallback
     };
-    println!("Logs will be written to: {}", log_dir.display());
-
-    let file_appender = RollingFileAppender::new(Rotation::DAILY, log_dir, "backend.log");
-    let file_layer = fmt::layer()
-        .with_writer(file_appender)
-        .with_ansi(false)
-        .with_target(true)
-        .with_file(true)
-        .with_line_number(true);
 
     let subscriber = tracing_subscriber::registry()
         .with(filter_layer)
