@@ -315,12 +315,12 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
                 "Direct HTTP",
                 "Use your own reverse proxy for HTTPS",
             )
+            .item("relay", "Relay Mode", "Through dokuru-server")
             .item(
                 "domain",
                 "Custom Domain",
                 "Auto SSL with your domain (coming soon)",
             )
-            .item("relay", "Relay Mode", "Through dokuru-server (coming soon)")
             .initial_value("cloudflare")
             .interact()?;
 
