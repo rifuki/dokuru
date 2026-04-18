@@ -375,7 +375,29 @@ pub fn configure_service_section(config: &mut InstallerConfig) -> Result<()> {
 pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
     use crate::cli::CloudflareTunnel;
 
+    // Read current config to detect access mode
+    let config_path = runtime_config_path(config);
+    let current_mode = if let Ok(content) = std::fs::read_to_string(&config_path) {
+        if let Ok(runtime_config) = toml::from_str::<crate::api::Config>(&content) {
+            Some(runtime_config.access.mode)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let current_mode_str = current_mode
+        .as_ref()
+        .map_or("cloudflare", |mode| match mode {
+            crate::api::AccessMode::Cloudflare => "cloudflare",
+            crate::api::AccessMode::Direct => "direct",
+            crate::api::AccessMode::Relay => "relay",
+            crate::api::AccessMode::Domain => "domain",
+        });
+
     let access_mode = select("How should this agent be accessible?")
+        .item("keep", "Keep current", "No changes to access mode")
         .item(
             "cloudflare",
             "Cloudflare Tunnel",
@@ -392,10 +414,13 @@ pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
             "Refresh Tunnel URL",
             "Get URL from running tunnel (Cloudflare only)",
         )
-        .initial_value("cloudflare")
+        .initial_value(current_mode_str)
         .interact()?;
 
     match access_mode {
+        "keep" => {
+            note("Access Mode", "✓ No changes made")?;
+        }
         "cloudflare" => {
             if !CloudflareTunnel::is_installed() {
                 let spinner = cliclack::spinner();
