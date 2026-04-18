@@ -5,6 +5,7 @@ use cliclack::{intro, log, note, outro};
 use eyre::Result;
 use std::path::Path;
 
+#[allow(clippy::too_many_lines)]
 pub fn run_status() -> Result<()> {
     let config_dir = default_config_dir();
     let saved = load_saved_runtime_config(&config_dir);
@@ -15,14 +16,13 @@ pub fn run_status() -> Result<()> {
     );
 
     // Get access config
-    let access_mode = saved
-        .as_ref()
-        .map(|c| format!("{:?}", c.access.mode))
-        .unwrap_or_else(|_| "Unknown".to_string());
+    let access_mode = saved.as_ref().map_or_else(
+        |_| "Unknown".to_string(),
+        |c| format!("{:?}", c.access.mode),
+    );
     let access_url = saved
         .as_ref()
-        .map(|c| c.access.url.clone())
-        .unwrap_or_else(|_| "Not configured".to_string());
+        .map_or_else(|_| "Not configured".to_string(), |c| c.access.url.clone());
 
     let binary_path = Path::new("/usr/local/bin/dokuru");
     let version = binary_version(binary_path).unwrap_or_else(|| "unknown".to_string());
