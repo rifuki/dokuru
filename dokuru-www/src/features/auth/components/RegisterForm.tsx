@@ -73,9 +73,9 @@ export function RegisterForm() {
     username.length >= 3 && !usernameCheck.isLoading && usernameCheck.data;
 
   return (
-    <div className="w-full max-w-[400px]">
+    <div className="w-full max-w-100">
       <div className="flex items-center justify-center gap-2 mb-10">
-        <img src="/favicon.ico" alt="Dokuru" className="w-10 h-10" />
+        <img src="/favicon.svg" alt="Dokuru" className="w-10 h-10" />
         <span className="text-2xl font-bold tracking-tight">Dokuru</span>
       </div>
 

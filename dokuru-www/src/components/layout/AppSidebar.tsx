@@ -107,7 +107,7 @@ export function AppSidebar() {
             <div className="flex items-center justify-between">
               <SidebarMenuButton size="lg" asChild>
                 <Link to={isAdmin ? "/admin" : "/"}>
-                  <img src="/favicon.ico" alt="Dokuru Logo" className="aspect-square size-8" />
+                  <img src="/favicon.svg" alt="Dokuru Logo" className="aspect-square size-8" />
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-semibold">Dokuru</span>
                     <span className="truncate text-xs text-muted-foreground">
