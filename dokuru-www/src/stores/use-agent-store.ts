@@ -10,6 +10,7 @@ interface AgentState {
 
   fetchAgents: () => Promise<void>;
   createAgent: (dto: CreateAgentDto) => Promise<Agent>;
+  updateAgent: (updated: Agent) => void;
   deleteAgent: (id: string) => Promise<void>;
   clearError: () => void;
   setAgentOnline: (id: string, online: boolean) => void;
@@ -51,6 +52,11 @@ export const useAgentStore = create<AgentState>((set) => ({
       throw error;
     }
   },
+
+  updateAgent: (updated: Agent) =>
+    set((state) => ({
+      agents: state.agents.map((a) => (a.id === updated.id ? updated : a)),
+    })),
 
   deleteAgent: async (id: string) => {
     set({ isLoading: true, error: null });

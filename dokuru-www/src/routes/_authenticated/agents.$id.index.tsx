@@ -23,7 +23,7 @@ export const Route = createFileRoute("/_authenticated/agents/$id/")({
 function AgentDetail() {
     const { id } = Route.useParams();
     const navigate = useNavigate();
-    const { deleteAgent } = useAgentStore();
+    const { deleteAgent, updateAgent } = useAgentStore();
     const [agent, setAgent] = useState<Agent | null>(null);
     const [dockerInfo, setDockerInfo] = useState<DockerInfo | null>(null);
     const [auditResults, setAuditResults] = useState<AuditResponse | null>(null);
@@ -39,29 +39,30 @@ function AgentDetail() {
     const [showToken, setShowToken] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
+    const fetchDockerInfo = async (agentUrl: string, agentId: string) => {
+        const token = getAgentToken(agentId);
+        if (!token) {
+            toast.error("Agent token not found");
+            return;
+        }
+        setIsLoadingDocker(true);
+        setDockerInfo(null);
+        try {
+            const info = await agentDirectApi.getInfo(agentUrl, token);
+            setDockerInfo(info);
+        } catch {
+            // silently fail — UI shows offline state
+        } finally {
+            setIsLoadingDocker(false);
+        }
+    };
+
     useEffect(() => {
         const fetchAgent = async () => {
             try {
                 const data = await agentApi.getById(id);
                 setAgent(data);
-                
-                // Fetch Docker info from agent directly
-                const token = getAgentToken(data.id);
-                if (!token) {
-                    toast.error("Agent token not found");
-                    setIsLoadingDocker(false);
-                    return;
-                }
-
-                setIsLoadingDocker(true);
-                try {
-                    const info = await agentDirectApi.getInfo(data.url, token);
-                    setDockerInfo(info);
-                } catch {
-                    toast.error("Failed to connect to agent");
-                } finally {
-                    setIsLoadingDocker(false);
-                }
+                await fetchDockerInfo(data.url, data.id);
             } catch {
                 toast.error("Failed to load agent");
                 navigate({ to: "/" });
@@ -71,6 +72,7 @@ function AgentDetail() {
         };
 
         fetchAgent();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id, navigate]);
 
     const handleDelete = async () => {
@@ -104,8 +106,11 @@ function AgentDetail() {
             });
             if (editToken) setAgentToken(id, editToken);
             setAgent(updated);
+            updateAgent(updated);
             setEditDialogOpen(false);
             toast.success("Agent updated");
+            // Re-fetch docker info in case URL or token changed
+            await fetchDockerInfo(updated.url, updated.id);
         } catch {
             toast.error("Failed to update agent");
         } finally {

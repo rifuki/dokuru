@@ -277,7 +277,7 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
 
 function AgentsList() {
   const navigate = useNavigate();
-  const { agents, isLoading, fetchAgents } = useAgentStore();
+  const { agents, isLoading, fetchAgents, updateAgent } = useAgentStore();
   const [localAgents, setLocalAgents] = useState<Agent[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [agentInfos, setAgentInfos] = useState<Record<string, { info: DockerInfo | null; loading: boolean }>>({});
@@ -291,7 +291,7 @@ function AgentsList() {
   }, [agents]);
 
   const handleAgentUpdated = (updated: Agent) => {
-    setLocalAgents(prev => prev.map(a => a.id === updated.id ? updated : a));
+    updateAgent(updated);
   };
 
   useEffect(() => {
