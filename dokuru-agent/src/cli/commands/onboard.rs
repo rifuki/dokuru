@@ -315,7 +315,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
                 "Direct HTTP",
                 "Use your own reverse proxy for HTTPS",
             )
-            .item("relay", "Relay Mode", "Through dokuru-server")
+            .item("relay", "Relay Mode", "Through dokuru-server via WebSocket")
             .item(
                 "domain",
                 "Custom Domain",
