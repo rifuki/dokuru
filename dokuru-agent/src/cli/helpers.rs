@@ -1,7 +1,5 @@
 use super::types::{SetupArgs, SetupMode, SharedArgs};
-use crate::api::{
-    AccessConfig, AuthConfig, Config as RuntimeConfig, DockerConfig, ServerConfig, config_path_in,
-};
+use crate::api::{AuthConfig, Config as RuntimeConfig, DockerConfig, ServerConfig, config_path_in};
 use cliclack::{confirm, input, note, select, spinner};
 use eyre::{Result, WrapErr, bail};
 use sha2::{Digest, Sha256};
@@ -659,6 +657,13 @@ pub fn write_config_file(config: &InstallerConfig, token_hash: Option<String>) -
 
     let config_path = runtime_config_path(config);
 
+    // Preserve existing token and access config when not explicitly replaced
+    let existing = crate::api::Config::load().ok();
+    let resolved_token = token_hash
+        .or_else(|| existing.as_ref().map(|c| c.auth.token_hash.clone()))
+        .unwrap_or_default();
+    let existing_access = existing.map(|c| c.access).unwrap_or_default();
+
     let runtime_config = RuntimeConfig {
         server: ServerConfig {
             port: config.port,
@@ -669,9 +674,9 @@ pub fn write_config_file(config: &InstallerConfig, token_hash: Option<String>) -
             socket: config.docker_socket.clone(),
         },
         auth: AuthConfig {
-            token_hash: token_hash.unwrap_or_default(),
+            token_hash: resolved_token,
         },
-        access: AccessConfig::default(),
+        access: existing_access,
     };
     let toml_content = toml::to_string_pretty(&runtime_config)
         .wrap_err("Failed to serialize Dokuru config to TOML")?;

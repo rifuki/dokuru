@@ -17,30 +17,24 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
     let source_binary =
         std::env::current_exe().wrap_err("Failed to resolve current Dokuru binary path")?;
 
-    // Only switch to Configure mode if config already exists
-    // Binary existence alone doesn't mean it's configured
-    let has_config = runtime_config_path(&config).exists();
-    let effective_mode = if matches!(mode, SetupMode::Onboard) && has_config {
-        SetupMode::Configure
-    } else {
-        mode
-    };
     let mut preflight = collect_preflight(&config);
 
-    intro(format!("🐳 Dokuru  {}", effective_mode.heading()))?;
+    intro(format!("🐳 Dokuru  {}", mode.heading()))?;
 
-    if matches!(mode, SetupMode::Onboard) && matches!(effective_mode, SetupMode::Configure) {
-        cliclack::log::warning("Existing configuration found — switching to configure mode")?;
+    if matches!(mode, SetupMode::Onboard) && runtime_config_path(&config).exists() {
+        cliclack::log::warning(
+            "Existing configuration found — onboarding will replace it and generate a new token",
+        )?;
     }
 
-    if matches!(effective_mode, SetupMode::Onboard) {
+    if matches!(mode, SetupMode::Onboard) {
         show_preflight(&config, &preflight)?;
     }
 
     if !preflight.running_as_root {
         outro_cancel(format!(
             "Root privileges required. Re-run with: sudo dokuru {}",
-            effective_mode.command_name()
+            mode.command_name()
         ))?;
         bail!("root privileges required");
     }
@@ -122,7 +116,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         }
     }
 
-    config = prompt_for_config(effective_mode, config)?;
+    config = prompt_for_config(mode, config)?;
 
     if !config.skip_service && !preflight.has_systemd {
         cliclack::log::warning("systemd not detected — continuing without a managed service")?;
@@ -154,7 +148,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
     note("Configuration", summary_lines.join("\n"))?;
 
     // Confirm before applying
-    let prompt = match effective_mode {
+    let prompt = match mode {
         SetupMode::Onboard => {
             let source_binary = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("dokuru"));
             if source_binary == config.install_path {
@@ -174,7 +168,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         bail!("cancelled");
     }
 
-    if effective_mode.should_install_binary() && source_binary != config.install_path {
+    if mode.should_install_binary() && source_binary != config.install_path {
         run_step("Installing Dokuru binary", || {
             install_binary(&source_binary, &config.install_path)
         })?;
@@ -190,12 +184,16 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         cliclack::log::info("→ /var/log/dokuru")?;
     }
 
-    // Generate agent token
-    let agent_token = generate_agent_token();
-    let token_hash = hash_token(&agent_token);
+    // Generate token only for fresh onboard; configure preserves the existing token
+    let agent_token = if matches!(mode, SetupMode::Onboard) {
+        Some(generate_agent_token())
+    } else {
+        None
+    };
+    let token_hash = agent_token.as_deref().map(hash_token);
 
     run_step("Writing Dokuru configuration", || {
-        write_config_file(&config, Some(token_hash))
+        write_config_file(&config, token_hash.clone())
     })?;
     if stderr().is_terminal() {
         cliclack::log::info(format!("→ {}", runtime_config_path(&config).display()))?;
@@ -434,9 +432,11 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
     next_steps.push(format!(
         "Agent URL: {access_url}\n           → Add this as a new environment in your Dokuru dashboard"
     ));
-    next_steps.push(format!(
-        "Token:     {agent_token}\n           → Copy this token (shown once only)"
-    ));
+    if let Some(token) = agent_token {
+        next_steps.push(format!(
+            "Token:     {token}\n           → Copy this token (shown once only)"
+        ));
+    }
 
     note("Next steps", next_steps.join("\n"))?;
     outro("Dokuru is ready.")?;
