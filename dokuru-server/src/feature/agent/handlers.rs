@@ -58,9 +58,14 @@ pub async fn get_agent(
         .await
         .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
-    agent.map_or_else(|| Err(ApiError::default()
-            .with_code(StatusCode::NOT_FOUND)
-            .with_message("Agent not found")), |agent| Ok(ApiSuccess::default().with_data(agent)))
+    agent.map_or_else(
+        || {
+            Err(ApiError::default()
+                .with_code(StatusCode::NOT_FOUND)
+                .with_message("Agent not found"))
+        },
+        |agent| Ok(ApiSuccess::default().with_data(agent)),
+    )
 }
 
 pub async fn update_agent(
@@ -78,9 +83,14 @@ pub async fn update_agent(
         .await
         .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
-    agent.map_or_else(|| Err(ApiError::default()
-            .with_code(StatusCode::NOT_FOUND)
-            .with_message("Agent not found")), |agent| Ok(ApiSuccess::default().with_data(agent)))
+    agent.map_or_else(
+        || {
+            Err(ApiError::default()
+                .with_code(StatusCode::NOT_FOUND)
+                .with_message("Agent not found"))
+        },
+        |agent| Ok(ApiSuccess::default().with_data(agent)),
+    )
 }
 
 pub async fn delete_agent(

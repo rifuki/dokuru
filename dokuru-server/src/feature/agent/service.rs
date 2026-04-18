@@ -57,9 +57,10 @@ impl AgentService {
         let agent = self.agent_repo.find_by_id(pool, id).await?;
 
         if let Some(agent) = agent
-            && agent.user_id == user_id {
-                return Ok(Some(Self::to_response(agent)));
-            }
+            && agent.user_id == user_id
+        {
+            return Ok(Some(Self::to_response(agent)));
+        }
 
         Ok(None)
     }

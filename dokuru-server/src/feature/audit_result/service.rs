@@ -24,7 +24,8 @@ impl AuditResultService {
         user_id: Uuid,
         dto: SaveAuditDto,
     ) -> Result<AuditResultResponse> {
-        let ran_at = DateTime::parse_from_rfc3339(&dto.timestamp).map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc));
+        let ran_at = DateTime::parse_from_rfc3339(&dto.timestamp)
+            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc));
 
         let record = AuditResultRecord {
             id: Uuid::new_v4(),

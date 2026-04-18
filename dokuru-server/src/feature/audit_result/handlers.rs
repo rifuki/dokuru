@@ -120,7 +120,12 @@ pub async fn get_audit_by_id(
         .await
         .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
-    result.map_or_else(|| Err(ApiError::default()
-            .with_code(StatusCode::NOT_FOUND)
-            .with_message("Audit not found")), |audit| Ok(ApiSuccess::default().with_data(audit)))
+    result.map_or_else(
+        || {
+            Err(ApiError::default()
+                .with_code(StatusCode::NOT_FOUND)
+                .with_message("Audit not found"))
+        },
+        |audit| Ok(ApiSuccess::default().with_data(audit)),
+    )
 }

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use dashmap::DashMap;
 use eyre::WrapErr;
 
 use crate::{
@@ -8,7 +9,7 @@ use crate::{
             stats::{StatsRepository, StatsRepositoryImpl, StatsService},
             user::{AdminUserRepository, AdminUserRepositoryImpl},
         },
-        agent::{AgentRepository, AgentRepositoryImpl, AgentService},
+        agent::{AgentRepository, AgentRepositoryImpl, AgentService, relay::AgentRegistry},
         audit_result::{AuditResultRepository, AuditResultRepositoryImpl, AuditResultService},
         auth::{
             auth_method::{AuthMethodRepositoryImpl, AuthMethodService},
@@ -40,6 +41,7 @@ pub struct AppState {
     pub user_profile_repo: Arc<dyn UserProfileRepository>,
     pub admin_user_repo: Arc<dyn AdminUserRepository>,
     pub agent_service: Arc<AgentService>,
+    pub agent_registry: AgentRegistry,
     pub audit_service: Arc<AuditResultService>,
     pub stats_service: Arc<StatsService>,
     pub storage: Arc<dyn StorageProvider>,
@@ -123,6 +125,8 @@ impl AppState {
             &config.upload.base_url,
         ));
 
+        let agent_registry = Arc::new(DashMap::new());
+
         Ok(Self {
             config: Arc::new(config),
             db,
@@ -131,6 +135,7 @@ impl AppState {
             user_profile_repo,
             admin_user_repo,
             agent_service,
+            agent_registry,
             audit_service,
             stats_service,
             storage,
@@ -187,6 +192,8 @@ impl AppState {
             &config.upload.base_url,
         ));
 
+        let agent_registry = Arc::new(DashMap::new());
+
         Self {
             config: Arc::new(config),
             db,
@@ -195,6 +202,7 @@ impl AppState {
             user_profile_repo,
             admin_user_repo,
             agent_service,
+            agent_registry,
             audit_service,
             stats_service,
             storage,
