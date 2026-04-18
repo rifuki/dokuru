@@ -12,7 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, RefreshCw, Container, Box, HardDrive, Search, ChevronDown, ArrowUpDown, Edit, Trash2, Cpu, Server, Eye, EyeOff, Globe, Link2 } from "lucide-react";
+import { Plus, RefreshCw, Container, Box, HardDrive, Search, ChevronDown, ArrowUpDown, Edit, Trash2, Cpu, Server, Eye, EyeOff, Cloud, Globe, Link2 } from "lucide-react";
 import { AddAgentModal } from "@/components/agents/AddAgentModal";
 import { agentDirectApi, type DockerInfo } from "@/lib/api/agent-direct";
 import { agentApi } from "@/lib/api/agent";
@@ -102,7 +102,7 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
                 {isOnline ? "●" : "○"} {isOnline ? "UP" : "DOWN"}
               </span>
               <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-[11px] font-medium border-blue-500/30 bg-blue-500/10 text-blue-400">
-                {agent.access_mode === 'cloudflare' && <><img src="/cloudflare.svg" alt="Cloudflare" className="h-3 w-3" /> Cloudflare</>}
+                {agent.access_mode === 'cloudflare' && <><Cloud className="h-3 w-3" /> Cloudflare</>}
                 {agent.access_mode === 'direct' && <><Globe className="h-3 w-3" /> Direct</>}
                 {agent.access_mode === 'domain' && <><Globe className="h-3 w-3" /> Domain</>}
                 {agent.access_mode === 'relay' && <><Link2 className="h-3 w-3" /> Relay</>}

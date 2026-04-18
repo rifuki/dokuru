@@ -18,7 +18,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Globe, Link2, Loader2 } from "lucide-react";
+import { Cloud, Globe, Link2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface AddAgentModalProps {
@@ -105,7 +105,7 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                             <SelectContent>
                                 <SelectItem value="cloudflare">
                                     <div className="flex items-center gap-2">
-                                        <img src="/cloudflare.svg" alt="Cloudflare" className="h-4 w-4" />
+                                        <Cloud className="h-4 w-4" />
                                         Cloudflare Tunnel (Recommended)
                                     </div>
                                 </SelectItem>
@@ -115,16 +115,16 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                                         Direct HTTP (Bring Your Own Proxy)
                                     </div>
                                 </SelectItem>
-                                <SelectItem value="domain" disabled>
-                                    <div className="flex items-center gap-2">
-                                        <Globe className="h-4 w-4" />
-                                        Custom Domain (Coming Soon)
-                                    </div>
-                                </SelectItem>
                                 <SelectItem value="relay">
                                     <div className="flex items-center gap-2">
                                         <Link2 className="h-4 w-4" />
                                         Relay Mode (No Public URL Needed)
+                                    </div>
+                                </SelectItem>
+                                <SelectItem value="domain" disabled>
+                                    <div className="flex items-center gap-2">
+                                        <Globe className="h-4 w-4" />
+                                        Custom Domain (Coming Soon)
                                     </div>
                                 </SelectItem>
                             </SelectContent>
