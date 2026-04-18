@@ -57,40 +57,20 @@ pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> 
 }
 
 /// Handle WebSocket connection
+#[allow(clippy::cognitive_complexity)]
 async fn handle_socket(socket: WebSocket, state: AppState) {
     let (mut sender, mut receiver) = socket.split();
     let (tx, mut rx) = mpsc::unbounded_channel::<String>();
 
     // Wait for auth message
-    let auth_result = match receiver.next().await {
-        Some(Ok(Message::Text(text))) => match serde_json::from_str::<WsMessage>(&text) {
-            Ok(WsMessage::Auth { token }) => authenticate_agent(&state, &token).await,
-            _ => {
-                let _ = sender
-                    .send(Message::Text(
-                        serde_json::to_string(&WsMessage::AuthFailed {
-                            reason: "First message must be auth".to_string(),
-                        })
-                        .unwrap()
-                        .into(),
-                    ))
-                    .await;
-                return;
-            }
-        },
-        _ => {
-            warn!("Agent connection closed before auth");
-            return;
-        }
-    };
-
-    let (agent_id, token) = match auth_result {
-        Some((id, tok)) => (id, tok),
-        None => {
+    let auth_result = if let Some(Ok(Message::Text(text))) = receiver.next().await {
+        if let Ok(WsMessage::Auth { token }) = serde_json::from_str::<WsMessage>(&text) {
+            authenticate_agent(&state, &token).await
+        } else {
             let _ = sender
                 .send(Message::Text(
                     serde_json::to_string(&WsMessage::AuthFailed {
-                        reason: "Invalid token".to_string(),
+                        reason: "First message must be auth".to_string(),
                     })
                     .unwrap()
                     .into(),
@@ -98,6 +78,22 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                 .await;
             return;
         }
+    } else {
+        warn!("Agent connection closed before auth");
+        return;
+    };
+
+    let Some((agent_id, token)) = auth_result else {
+        let _ = sender
+            .send(Message::Text(
+                serde_json::to_string(&WsMessage::AuthFailed {
+                    reason: "Invalid token".to_string(),
+                })
+                .unwrap()
+                .into(),
+            ))
+            .await;
+        return;
     };
 
     // Send auth success
@@ -165,12 +161,10 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 /// Authenticate agent by token
 async fn authenticate_agent(state: &AppState, token: &str) -> Option<(Uuid, String)> {
     // Query database for agent with this token (runtime query)
-    let result = sqlx::query_as::<_, (Uuid,)>(
-        "SELECT id FROM agents WHERE token_hash = $1"
-    )
-    .bind(hash_token(token))
-    .fetch_optional(state.db.pool())
-    .await;
+    let result = sqlx::query_as::<_, (Uuid,)>("SELECT id FROM agents WHERE token_hash = $1")
+        .bind(hash_token(token))
+        .fetch_optional(state.db.pool())
+        .await;
 
     match result {
         Ok(Some((id,))) => Some((id, token.to_string())),
