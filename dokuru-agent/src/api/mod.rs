@@ -6,6 +6,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 // Internal modules
 mod feature;
 mod infrastructure;
+pub mod relay;
 mod routes;
 mod state;
 
@@ -21,6 +22,14 @@ pub async fn serve() -> eyre::Result<()> {
     subscriber.init();
 
     let config = infrastructure::config::Config::load()?;
+
+    // Check if relay mode
+    if config.access.mode == AccessMode::Relay {
+        info!("Starting in relay mode");
+        return relay::start_relay_mode(config).await;
+    }
+
+    // Normal local API mode
     let docker = Docker::connect_with_unix(&config.docker.socket, 120, API_DEFAULT_VERSION)?;
 
     // Load persisted environments from disk

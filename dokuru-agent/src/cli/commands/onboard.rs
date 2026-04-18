@@ -401,8 +401,18 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
             }
 
             "relay" => {
-                note("Relay Mode", "Coming soon in Phase 6")?;
-                return Err(eyre::eyre!("Relay mode not yet implemented"));
+                note(
+                    "Relay Mode",
+                    "Agent connects to dokuru-server via WebSocket.\n\
+                     No public URL needed - works behind firewall/NAT.\n\
+                     \n\
+                     Server: wss://api.dokuru.rifuki.dev",
+                )?;
+
+                // For relay mode, URL is the server WebSocket endpoint
+                let relay_url = "wss://api.dokuru.rifuki.dev/ws/agent".to_string();
+
+                (relay_url, crate::api::AccessMode::Relay)
             }
 
             _ => unreachable!(),
