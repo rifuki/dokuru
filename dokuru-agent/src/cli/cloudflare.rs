@@ -128,24 +128,25 @@ WantedBy=multi-user.target
         Ok(())
     }
 
-    /// Start tunnel service
+    /// Start (or restart if already running) the tunnel service
     pub fn start_service() -> Result<()> {
-        let output = Command::new("sudo")
-            .args(["systemctl", "start", "dokuru-tunnel"])
-            .output()
-            .wrap_err("Failed to start dokuru-tunnel service")?;
-
-        if !output.status.success() {
-            return Err(eyre::eyre!(
-                "Failed to start service: {}",
-                String::from_utf8_lossy(&output.stderr)
-            ));
-        }
-
         Command::new("sudo")
             .args(["systemctl", "enable", "dokuru-tunnel"])
             .output()
             .wrap_err("Failed to enable dokuru-tunnel service")?;
+
+        // Use restart so a stale running instance is replaced
+        let output = Command::new("sudo")
+            .args(["systemctl", "restart", "dokuru-tunnel"])
+            .output()
+            .wrap_err("Failed to restart dokuru-tunnel service")?;
+
+        if !output.status.success() {
+            return Err(eyre::eyre!(
+                "Failed to restart service: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
 
         Ok(())
     }
