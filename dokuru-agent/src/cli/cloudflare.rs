@@ -1,5 +1,4 @@
 use eyre::{Result, WrapErr};
-use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 
 pub struct CloudflareTunnel;
@@ -52,36 +51,6 @@ impl CloudflareTunnel {
             .wrap_err("Failed to install cloudflared to /usr/local/bin")?;
 
         Ok(())
-    }
-
-    /// Start quick tunnel (temporary URL, no login needed)
-    pub fn start_quick_tunnel(port: u16) -> Result<String> {
-        let mut child = Command::new("cloudflared")
-            .args(["tunnel", "--url", &format!("http://localhost:{port}")])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .wrap_err("Failed to start cloudflared tunnel")?;
-
-        // Parse stderr to extract URL
-        let stderr = child.stderr.take().unwrap();
-        let reader = BufReader::new(stderr);
-
-        for line in reader.lines() {
-            let line = line?;
-
-            // Look for URL in output
-            // Example: "2024-04-18T14:00:00Z INF |  https://xxx.trycloudflare.com"
-            if let Some(url) = extract_url(&line) {
-                // Detach process (let it run in background)
-                std::mem::forget(child);
-                return Ok(url);
-            }
-        }
-
-        Err(eyre::eyre!(
-            "Failed to extract tunnel URL from cloudflared output"
-        ))
     }
 
     /// Create systemd service for cloudflared
@@ -151,10 +120,16 @@ WantedBy=multi-user.target
         Ok(())
     }
 
-    /// Get tunnel URL from running service
+    /// Get the tunnel URL from recent journal entries (last 60 seconds only).
     pub fn get_tunnel_url() -> Result<String> {
         let output = Command::new("journalctl")
-            .args(["-u", "dokuru-tunnel", "-n", "100", "--no-pager"])
+            .args([
+                "-u",
+                "dokuru-tunnel",
+                "--since",
+                "60 seconds ago",
+                "--no-pager",
+            ])
             .output()
             .wrap_err("Failed to read tunnel logs")?;
 
@@ -167,7 +142,24 @@ WantedBy=multi-user.target
         }
 
         Err(eyre::eyre!(
-            "Tunnel URL not found in logs. Service may still be starting."
+            "Tunnel URL not found in recent logs. Service may still be starting."
+        ))
+    }
+
+    /// Poll journal until a fresh tunnel URL appears, up to `timeout_secs`.
+    pub fn wait_for_url(timeout_secs: u64) -> Result<String> {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
+
+        while std::time::Instant::now() < deadline {
+            if let Ok(url) = Self::get_tunnel_url() {
+                return Ok(url);
+            }
+            std::thread::sleep(std::time::Duration::from_secs(2));
+        }
+
+        Err(eyre::eyre!(
+            "Timed out after {timeout_secs}s waiting for tunnel URL. \
+             Check: journalctl -u dokuru-tunnel -f"
         ))
     }
 

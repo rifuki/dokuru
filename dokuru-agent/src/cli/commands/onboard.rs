@@ -326,34 +326,26 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
             "cloudflare" => {
                 use crate::cli::CloudflareTunnel;
 
-                // Check if cloudflared installed
                 if !CloudflareTunnel::is_installed() {
                     let spinner = cliclack::spinner();
                     spinner.start("Installing cloudflared...");
-
                     CloudflareTunnel::install().wrap_err("Failed to install cloudflared")?;
-
                     spinner.stop("✓ cloudflared installed");
                 }
 
-                // Start tunnel
                 let spinner = cliclack::spinner();
                 spinner.start("Starting Cloudflare Tunnel...");
 
-                let url = CloudflareTunnel::start_quick_tunnel(config.port)
-                    .wrap_err("Failed to start Cloudflare Tunnel")?;
-
-                spinner.stop(format!("✓ Tunnel started: {url}"));
-
-                // Create systemd service
-                let spinner = cliclack::spinner();
-                spinner.start("Creating tunnel systemd service...");
-
+                // Create service file first, then restart — one process, managed by systemd
                 CloudflareTunnel::create_systemd_service(config.port)
                     .wrap_err("Failed to create systemd service")?;
                 CloudflareTunnel::start_service().wrap_err("Failed to start tunnel service")?;
 
-                spinner.stop("✓ Tunnel service enabled");
+                // Wait for the systemd-managed process to publish its URL
+                let url = CloudflareTunnel::wait_for_url(30)
+                    .wrap_err("Timed out waiting for Cloudflare Tunnel URL")?;
+
+                spinner.stop(format!("✓ Tunnel started: {url}"));
 
                 (url, crate::api::AccessMode::Cloudflare)
             }
