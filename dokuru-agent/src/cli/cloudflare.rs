@@ -81,7 +81,7 @@ impl CloudflareTunnel {
 
         for line in reader.lines() {
             let line = line?;
-            
+
             // Look for URL in output
             // Example: "2024-04-18T14:00:00Z INF |  https://xxx.trycloudflare.com"
             if let Some(url) = extract_url(&line) {
@@ -91,7 +91,9 @@ impl CloudflareTunnel {
             }
         }
 
-        Err(eyre::eyre!("Failed to extract tunnel URL from cloudflared output"))
+        Err(eyre::eyre!(
+            "Failed to extract tunnel URL from cloudflared output"
+        ))
     }
 
     /// Create systemd service for cloudflared
@@ -168,7 +170,9 @@ WantedBy=multi-user.target
             }
         }
 
-        Err(eyre::eyre!("Tunnel URL not found in logs. Service may still be starting."))
+        Err(eyre::eyre!(
+            "Tunnel URL not found in logs. Service may still be starting."
+        ))
     }
 
     /// Check if tunnel service is running
@@ -188,20 +192,18 @@ fn extract_url(line: &str) -> Option<String> {
     // Look for https://xxx.trycloudflare.com
     if let Some(start) = line.find("https://") {
         let url_part = &line[start..];
-        
+
         // Find end of URL (whitespace or end of line)
-        let end = url_part
-            .find(char::is_whitespace)
-            .unwrap_or(url_part.len());
-        
+        let end = url_part.find(char::is_whitespace).unwrap_or(url_part.len());
+
         let url = url_part[..end].trim();
-        
+
         // Validate it's a trycloudflare.com URL
         if url.contains("trycloudflare.com") {
             return Some(url.to_string());
         }
     }
-    
+
     None
 }
 
@@ -217,7 +219,8 @@ mod tests {
             Some("https://abc-123.trycloudflare.com".to_string())
         );
 
-        let line2 = "Your quick Tunnel has been created! Visit it at: https://test.trycloudflare.com";
+        let line2 =
+            "Your quick Tunnel has been created! Visit it at: https://test.trycloudflare.com";
         assert_eq!(
             extract_url(line2),
             Some("https://test.trycloudflare.com".to_string())

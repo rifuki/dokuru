@@ -1,5 +1,7 @@
 use super::types::{SetupArgs, SetupMode, SharedArgs};
-use crate::api::{AccessConfig, AuthConfig, Config as RuntimeConfig, DockerConfig, ServerConfig, config_path_in};
+use crate::api::{
+    AccessConfig, AuthConfig, Config as RuntimeConfig, DockerConfig, ServerConfig, config_path_in,
+};
 use cliclack::{confirm, input, note, select, spinner};
 use eyre::{Result, WrapErr, bail};
 use sha2::{Digest, Sha256};
