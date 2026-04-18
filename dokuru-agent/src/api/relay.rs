@@ -36,11 +36,12 @@ enum WsMessage {
 }
 
 /// Start relay mode - connect to server via WebSocket
+#[allow(clippy::cognitive_complexity)]
 pub async fn start_relay_mode(config: Config) -> Result<()> {
     info!("Starting relay mode, connecting to {}", RELAY_SERVER);
 
     // Get agent token from config
-    let token = generate_agent_token(&config)?;
+    let token = generate_agent_token(&config);
 
     loop {
         match connect_and_run(&token).await {
@@ -59,6 +60,7 @@ pub async fn start_relay_mode(config: Config) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::cognitive_complexity)]
 async fn connect_and_run(token: &str) -> Result<()> {
     // Connect to relay server
     let (ws_stream, _) = connect_async(RELAY_SERVER)
@@ -142,7 +144,7 @@ async fn handle_message(
             info!("Received command: {} (id: {})", command, id);
 
             // Execute command
-            let result = execute_command(&command, payload).await;
+            let result = execute_command(&command, payload);
 
             // Send response
             let response = WsMessage::Response {
@@ -166,7 +168,7 @@ async fn handle_message(
     Ok(())
 }
 
-async fn execute_command(command: &str, _payload: serde_json::Value) -> Result<serde_json::Value> {
+fn execute_command(command: &str, _payload: serde_json::Value) -> Result<serde_json::Value> {
     match command {
         "health" => Ok(serde_json::json!({ "status": "healthy" })),
         "audit" => {
@@ -177,8 +179,8 @@ async fn execute_command(command: &str, _payload: serde_json::Value) -> Result<s
     }
 }
 
-fn generate_agent_token(config: &Config) -> Result<String> {
+fn generate_agent_token(config: &Config) -> String {
     // For relay mode, we need to generate a token from the hash
     // This is a placeholder - in production, token should be stored separately
-    Ok(format!("dok_{}", &config.auth.token_hash[..32]))
+    format!("dok_{}", &config.auth.token_hash[..32])
 }

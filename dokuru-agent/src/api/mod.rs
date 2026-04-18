@@ -16,6 +16,7 @@ pub use infrastructure::config::{
 };
 
 // Only expose serve function
+#[allow(clippy::cognitive_complexity)]
 pub async fn serve() -> eyre::Result<()> {
     let _ = color_eyre::install();
     let (subscriber, _reload_handle) = infrastructure::logging::setup();
