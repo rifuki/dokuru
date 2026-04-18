@@ -40,7 +40,7 @@ pub struct AccessConfig {
     pub cloudflare_tunnel_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum AccessMode {
     Direct,

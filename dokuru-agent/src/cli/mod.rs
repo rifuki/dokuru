@@ -20,4 +20,4 @@ pub use commands::{
 pub use types::{DoctorArgs, SetupArgs, SetupMode, SharedArgs, UninstallArgs, UpdateArgs};
 
 // Internal use only
-pub(crate) use cloudflare::CloudflareTunnel;
+pub use cloudflare::CloudflareTunnel;

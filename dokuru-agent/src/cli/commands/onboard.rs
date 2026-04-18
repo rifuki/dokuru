@@ -344,7 +344,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
             let url = CloudflareTunnel::start_quick_tunnel(config.port)
                 .wrap_err("Failed to start Cloudflare Tunnel")?;
 
-            spinner.stop(format!("✓ Tunnel started: {}", url));
+            spinner.stop(format!("✓ Tunnel started: {url}"));
 
             // Create systemd service
             let spinner = cliclack::spinner();
@@ -413,8 +413,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
     // ─── Next Steps ──────────────────────────────────────────────────────────
 
     next_steps.push(format!(
-        "Agent URL: {}\n           → Add this as a new environment in your Dokuru dashboard",
-        access_url
+        "Agent URL: {access_url}\n           → Add this as a new environment in your Dokuru dashboard"
     ));
     next_steps.push(format!(
         "Token:     {agent_token}\n           → Copy this token (shown once only)"

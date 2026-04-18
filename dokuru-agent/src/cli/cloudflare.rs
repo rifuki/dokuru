@@ -21,7 +21,7 @@ impl CloudflareTunnel {
         let os = std::env::consts::OS;
         let arch = std::env::consts::ARCH;
 
-        let (binary_name, download_url) = match (os, arch) {
+        let (_binary_name, download_url) = match (os, arch) {
             ("linux", "x86_64") => (
                 "cloudflared-linux-amd64",
                 "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64",
@@ -30,11 +30,7 @@ impl CloudflareTunnel {
                 "cloudflared-linux-arm64",
                 "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64",
             ),
-            ("macos", "x86_64") => (
-                "cloudflared-darwin-amd64.tgz",
-                "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-amd64.tgz",
-            ),
-            ("macos", "aarch64") => (
+            ("macos", "x86_64") | ("macos", "aarch64") => (
                 "cloudflared-darwin-amd64.tgz",
                 "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-amd64.tgz",
             ),
@@ -69,7 +65,7 @@ impl CloudflareTunnel {
     /// Start quick tunnel (temporary URL, no login needed)
     pub fn start_quick_tunnel(port: u16) -> Result<String> {
         let mut child = Command::new("cloudflared")
-            .args(["tunnel", "--url", &format!("http://localhost:{}", port)])
+            .args(["tunnel", "--url", &format!("http://localhost:{port}")])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -99,14 +95,14 @@ impl CloudflareTunnel {
     /// Create systemd service for cloudflared
     pub fn create_systemd_service(port: u16) -> Result<()> {
         let service_content = format!(
-            r#"[Unit]
+            r"[Unit]
 Description=Cloudflare Tunnel for Dokuru Agent
 After=network.target
 
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/cloudflared tunnel --url http://localhost:{}
+ExecStart=/usr/local/bin/cloudflared tunnel --url http://localhost:{port}
 Restart=always
 RestartSec=5
 StandardOutput=journal
@@ -114,8 +110,7 @@ StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
-"#,
-            port
+"
         );
 
         std::fs::write("/tmp/dokuru-tunnel.service", &service_content)
@@ -156,6 +151,7 @@ WantedBy=multi-user.target
     }
 
     /// Get tunnel URL from running service
+    #[allow(dead_code)]
     pub fn get_tunnel_url() -> Result<String> {
         let output = Command::new("journalctl")
             .args(["-u", "dokuru-tunnel", "-n", "100", "--no-pager"])
@@ -176,6 +172,7 @@ WantedBy=multi-user.target
     }
 
     /// Check if tunnel service is running
+    #[allow(dead_code)]
     pub fn is_service_running() -> bool {
         Command::new("systemctl")
             .args(["is-active", "dokuru-tunnel"])
