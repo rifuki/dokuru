@@ -17,23 +17,12 @@ impl CloudflareTunnel {
 
     /// Install cloudflared binary
     pub fn install() -> Result<()> {
-        let os = std::env::consts::OS;
         let arch = std::env::consts::ARCH;
 
-        let (_binary_name, download_url) = match (os, arch) {
-            ("linux", "x86_64") => (
-                "cloudflared-linux-amd64",
-                "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64",
-            ),
-            ("linux", "aarch64") => (
-                "cloudflared-linux-arm64",
-                "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64",
-            ),
-            ("macos", "x86_64" | "aarch64") => (
-                "cloudflared-darwin-amd64.tgz",
-                "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-amd64.tgz",
-            ),
-            _ => return Err(eyre::eyre!("Unsupported platform: {} {}", os, arch)),
+        let download_url = match arch {
+            "x86_64" => "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64",
+            "aarch64" => "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64",
+            _ => return Err(eyre::eyre!("Unsupported architecture: {}", arch)),
         };
 
         // Download
