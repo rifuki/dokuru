@@ -4,12 +4,7 @@ mod api;
 mod audit;
 mod cli;
 
-const VERSION: &str = concat!(
-    env!("CARGO_PKG_VERSION"),
-    " (",
-    env!("GIT_HASH"),
-    ")"
-);
+const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", env!("GIT_HASH"), ")");
 
 /// Dokuru - Docker Security Hardening Agent (CIS Benchmark v1.8.0)
 #[derive(Parser)]
