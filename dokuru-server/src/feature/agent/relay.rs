@@ -164,16 +164,16 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 
 /// Authenticate agent by token
 async fn authenticate_agent(state: &AppState, token: &str) -> Option<(Uuid, String)> {
-    // Query database for agent with this token
-    let result = sqlx::query!(
-        "SELECT id FROM agents WHERE token_hash = $1",
-        hash_token(token)
+    // Query database for agent with this token (runtime query)
+    let result = sqlx::query_as::<_, (Uuid,)>(
+        "SELECT id FROM agents WHERE token_hash = $1"
     )
+    .bind(hash_token(token))
     .fetch_optional(state.db.pool())
     .await;
 
     match result {
-        Ok(Some(row)) => Some((row.id, token.to_string())),
+        Ok(Some((id,))) => Some((id, token.to_string())),
         _ => None,
     }
 }
