@@ -371,6 +371,7 @@ pub fn configure_service_section(config: &mut InstallerConfig) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
     use crate::cli::CloudflareTunnel;
 
