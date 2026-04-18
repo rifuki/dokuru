@@ -7,8 +7,7 @@ fn main() {
         .output()
         .ok()
         .and_then(|output| String::from_utf8(output.stdout).ok())
-        .map(|s| s.trim().to_string())
-        .unwrap_or_else(|| "unknown".to_string());
+        .map_or_else(|| "unknown".to_string(), |s| s.trim().to_string());
 
     // Get git tag (version)
     let git_tag = Command::new("git")
@@ -16,8 +15,7 @@ fn main() {
         .output()
         .ok()
         .and_then(|output| String::from_utf8(output.stdout).ok())
-        .map(|s| s.trim().to_string())
-        .unwrap_or_else(|| "v0.1.0".to_string());
+        .map_or_else(|| "v0.1.0".to_string(), |s| s.trim().to_string());
 
     println!("cargo:rustc-env=GIT_HASH={git_hash}");
     println!("cargo:rustc-env=GIT_TAG={git_tag}");
