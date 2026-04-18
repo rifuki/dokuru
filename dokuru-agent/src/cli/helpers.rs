@@ -373,7 +373,7 @@ pub fn configure_service_section(config: &mut InstallerConfig) -> Result<()> {
     Ok(())
 }
 
-pub fn configure_access_section(config: &mut InstallerConfig) -> Result<()> {
+pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
     use crate::cli::CloudflareTunnel;
 
     let access_mode = select("How should this agent be accessible?")
