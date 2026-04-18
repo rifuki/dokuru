@@ -14,18 +14,42 @@ pub fn run_status() -> Result<()> {
         |c| c.docker.socket.clone(),
     );
 
+    // Get access config
+    let access_mode = saved
+        .as_ref()
+        .map(|c| format!("{:?}", c.access.mode))
+        .unwrap_or_else(|_| "Unknown".to_string());
+    let access_url = saved
+        .as_ref()
+        .map(|c| c.access.url.clone())
+        .unwrap_or_else(|_| "Not configured".to_string());
+
     let binary_path = Path::new("/usr/local/bin/dokuru");
     let version = binary_version(binary_path).unwrap_or_else(|| "unknown".to_string());
 
     let service_active = command_success("systemctl", &["is-active", "dokuru"]);
     let service_enabled = command_success("systemctl", &["is-enabled", "dokuru"]);
     let docker_running = Path::new(&docker_socket).exists();
+
+    // Check local API health
     let api_base = format!("http://localhost:{port}");
     let api_healthy = reqwest::blocking::Client::new()
         .get(format!("{api_base}/health"))
         .timeout(std::time::Duration::from_secs(2))
         .send()
         .is_ok();
+
+    // Check tunnel health (if Cloudflare mode)
+    let tunnel_healthy = if access_mode.contains("Cloudflare") && access_url.starts_with("https://")
+    {
+        reqwest::blocking::Client::new()
+            .get(format!("{access_url}/health"))
+            .timeout(std::time::Duration::from_secs(5))
+            .send()
+            .is_ok()
+    } else {
+        false
+    };
 
     let host_ip = std::net::UdpSocket::bind("0.0.0.0:0")
         .and_then(|s| {
@@ -61,6 +85,28 @@ pub fn run_status() -> Result<()> {
         ),
     )?;
 
+    // Access section
+    let access_status = if access_mode.contains("Cloudflare") {
+        if tunnel_healthy {
+            "✓ Tunnel healthy"
+        } else {
+            "✗ Tunnel unreachable (may be expired)"
+        }
+    } else {
+        "Direct mode"
+    };
+
+    note(
+        "Access",
+        format!("Mode      {access_mode}\nURL       {access_url}\nStatus    {access_status}"),
+    )?;
+
+    if !tunnel_healthy && access_mode.contains("Cloudflare") {
+        log::warning(
+            "Tunnel URL may be expired. Run: sudo dokuru configure → Access → Refresh Tunnel URL",
+        )?;
+    }
+
     if api_healthy
         && let Ok(resp) = reqwest::blocking::Client::new()
             .get(format!("{api_base}/api/v1/audit"))
@@ -88,7 +134,7 @@ pub fn run_status() -> Result<()> {
         )?;
     }
 
-    log::info(format!("Agent: {host_ip}:{port}"))?;
+    log::info(format!("Local: {host_ip}:{port}"))?;
     outro("Done.")?;
     Ok(())
 }
