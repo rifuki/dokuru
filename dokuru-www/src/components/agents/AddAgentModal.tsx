@@ -37,8 +37,15 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!name.trim() || !url.trim() || !token.trim()) {
-            toast.error("All fields are required");
+        // Validate required fields
+        if (!name.trim() || !token.trim()) {
+            toast.error("Name and token are required");
+            return;
+        }
+
+        // URL required for non-relay modes
+        if (accessMode !== "relay" && !url.trim()) {
+            toast.error("Agent URL is required");
             return;
         }
 
@@ -51,7 +58,7 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
         try {
             await createAgent({
                 name: name.trim(),
-                url: url.trim(),
+                url: accessMode === "relay" ? "relay" : url.trim(),
                 token: token.trim(),
                 access_mode: accessMode,
             });
@@ -106,8 +113,8 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                                 <SelectItem value="domain" disabled>
                                     Custom Domain (Coming Soon)
                                 </SelectItem>
-                                <SelectItem value="relay" disabled>
-                                    Relay Mode (Coming Soon)
+                                <SelectItem value="relay">
+                                    🔗 Relay Mode (No Public URL Needed)
                                 </SelectItem>
                             </SelectContent>
                         </Select>
@@ -137,23 +144,36 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                                 </AlertDescription>
                             </Alert>
                         )}
+
+                        {accessMode === "relay" && (
+                            <Alert>
+                                <Info className="h-4 w-4" />
+                                <AlertDescription>
+                                    Agent connects via WebSocket to dokuru-server.
+                                    <br />
+                                    No public URL needed - works behind firewall/NAT.
+                                </AlertDescription>
+                            </Alert>
+                        )}
                     </div>
 
-                    <div className="space-y-2">
-                        <Label htmlFor="url">Agent URL</Label>
-                        <Input
-                            id="url"
-                            placeholder={
-                                accessMode === "cloudflare"
-                                    ? "https://xxx.trycloudflare.com"
-                                    : "https://agent.yourdomain.com"
-                            }
-                            value={url}
-                            onChange={(e) => setUrl(e.target.value)}
-                            disabled={isLoading}
-                            autoComplete="off"
-                        />
-                    </div>
+                    {accessMode !== "relay" && (
+                        <div className="space-y-2">
+                            <Label htmlFor="url">Agent URL</Label>
+                            <Input
+                                id="url"
+                                placeholder={
+                                    accessMode === "cloudflare"
+                                        ? "https://xxx.trycloudflare.com"
+                                        : "https://agent.yourdomain.com"
+                                }
+                                value={url}
+                                onChange={(e) => setUrl(e.target.value)}
+                                disabled={isLoading}
+                                autoComplete="off"
+                            />
+                        </div>
+                    )}
 
                     <div className="space-y-2">
                         <Label htmlFor="token">Agent Token</Label>
