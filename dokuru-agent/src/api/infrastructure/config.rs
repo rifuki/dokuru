@@ -9,6 +9,7 @@ pub struct Config {
     pub server: ServerConfig,
     pub docker: DockerConfig,
     pub auth: AuthConfig,
+    pub access: AccessConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,6 +30,39 @@ pub struct DockerConfig {
 #[serde(default)]
 pub struct AuthConfig {
     pub token_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AccessConfig {
+    pub mode: AccessMode,
+    pub url: String,
+    pub cloudflare_tunnel_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum AccessMode {
+    Direct,
+    Cloudflare,
+    Domain,
+    Relay,
+}
+
+impl Default for AccessConfig {
+    fn default() -> Self {
+        Self {
+            mode: AccessMode::Cloudflare,
+            url: String::new(),
+            cloudflare_tunnel_id: None,
+        }
+    }
+}
+
+impl Default for AccessMode {
+    fn default() -> Self {
+        Self::Cloudflare
+    }
 }
 
 impl Default for ServerConfig {

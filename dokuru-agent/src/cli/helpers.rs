@@ -1,5 +1,5 @@
 use super::types::{SetupArgs, SetupMode, SharedArgs};
-use crate::api::{AuthConfig, Config as RuntimeConfig, DockerConfig, ServerConfig, config_path_in};
+use crate::api::{AccessConfig, AuthConfig, Config as RuntimeConfig, DockerConfig, ServerConfig, config_path_in};
 use cliclack::{confirm, input, note, select, spinner};
 use eyre::{Result, WrapErr, bail};
 use sha2::{Digest, Sha256};
@@ -535,6 +535,7 @@ pub fn write_config_file(config: &InstallerConfig, token_hash: Option<String>) -
         auth: AuthConfig {
             token_hash: token_hash.unwrap_or_default(),
         },
+        access: AccessConfig::default(),
     };
     let toml_content = toml::to_string_pretty(&runtime_config)
         .wrap_err("Failed to serialize Dokuru config to TOML")?;

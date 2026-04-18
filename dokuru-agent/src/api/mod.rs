@@ -10,7 +10,7 @@ mod routes;
 mod state;
 
 // Expose config types for CLI
-pub use infrastructure::config::{AuthConfig, Config, DockerConfig, ServerConfig, config_path_in};
+pub use infrastructure::config::{AccessConfig, AccessMode, AuthConfig, Config, DockerConfig, ServerConfig, config_path_in};
 
 // Only expose serve function
 pub async fn serve() -> eyre::Result<()> {
