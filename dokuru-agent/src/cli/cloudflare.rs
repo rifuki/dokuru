@@ -20,8 +20,12 @@ impl CloudflareTunnel {
         let arch = std::env::consts::ARCH;
 
         let download_url = match arch {
-            "x86_64" => "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64",
-            "aarch64" => "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64",
+            "x86_64" => {
+                "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
+            }
+            "aarch64" => {
+                "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64"
+            }
             _ => return Err(eyre::eyre!("Unsupported architecture: {}", arch)),
         };
 
