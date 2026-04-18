@@ -301,114 +301,123 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         })
         .is_some();
 
-    // ─── Access Mode Selection ───────────────────────────────────────────────
+    // ─── Access Mode Selection (Onboard only) ────────────────────────────────
 
-    let access_mode = select("How should this agent be accessible?")
-        .item(
-            "cloudflare",
-            "Cloudflare Tunnel",
-            "Auto HTTPS, no domain needed (recommended)",
-        )
-        .item(
-            "direct",
-            "Direct HTTP",
-            "Use your own reverse proxy for HTTPS",
-        )
-        .item(
-            "domain",
-            "Custom Domain",
-            "Auto SSL with your domain (coming soon)",
-        )
-        .item("relay", "Relay Mode", "Through dokuru-server (coming soon)")
-        .initial_value("cloudflare")
-        .interact()?;
+    let (access_url, access_mode_enum) = if mode == SetupMode::Onboard {
+        let access_mode = select("How should this agent be accessible?")
+            .item(
+                "cloudflare",
+                "Cloudflare Tunnel",
+                "Auto HTTPS, no domain needed (recommended)",
+            )
+            .item(
+                "direct",
+                "Direct HTTP",
+                "Use your own reverse proxy for HTTPS",
+            )
+            .item(
+                "domain",
+                "Custom Domain",
+                "Auto SSL with your domain (coming soon)",
+            )
+            .item("relay", "Relay Mode", "Through dokuru-server (coming soon)")
+            .initial_value("cloudflare")
+            .interact()?;
 
-    let (access_url, access_mode_enum) = match access_mode {
-        "cloudflare" => {
-            use crate::cli::CloudflareTunnel;
+        match access_mode {
+            "cloudflare" => {
+                use crate::cli::CloudflareTunnel;
 
-            // Check if cloudflared installed
-            if !CloudflareTunnel::is_installed() {
+                // Check if cloudflared installed
+                if !CloudflareTunnel::is_installed() {
+                    let spinner = cliclack::spinner();
+                    spinner.start("Installing cloudflared...");
+
+                    CloudflareTunnel::install().wrap_err("Failed to install cloudflared")?;
+
+                    spinner.stop("✓ cloudflared installed");
+                }
+
+                // Start tunnel
                 let spinner = cliclack::spinner();
-                spinner.start("Installing cloudflared...");
+                spinner.start("Starting Cloudflare Tunnel...");
 
-                CloudflareTunnel::install().wrap_err("Failed to install cloudflared")?;
+                let url = CloudflareTunnel::start_quick_tunnel(config.port)
+                    .wrap_err("Failed to start Cloudflare Tunnel")?;
 
-                spinner.stop("✓ cloudflared installed");
+                spinner.stop(format!("✓ Tunnel started: {url}"));
+
+                // Create systemd service
+                let spinner = cliclack::spinner();
+                spinner.start("Creating tunnel systemd service...");
+
+                CloudflareTunnel::create_systemd_service(config.port)
+                    .wrap_err("Failed to create systemd service")?;
+                CloudflareTunnel::start_service().wrap_err("Failed to start tunnel service")?;
+
+                spinner.stop("✓ Tunnel service enabled");
+
+                (url, crate::api::AccessMode::Cloudflare)
             }
 
-            // Start tunnel
-            let spinner = cliclack::spinner();
-            spinner.start("Starting Cloudflare Tunnel...");
+            "direct" => {
+                note(
+                    "Direct HTTP Mode",
+                    "⚠️  Agent will serve HTTP on port 3939.\n\
+                     \n\
+                     For HTTPS access:\n\
+                     1. Setup reverse proxy (Nginx/Caddy/Traefik)\n\
+                     2. Configure SSL certificate (Let's Encrypt)\n\
+                     3. Proxy to http://localhost:3939\n\
+                     \n\
+                     Example Caddy config:\n\
+                     agent.yourdomain.com {\n\
+                         reverse_proxy localhost:3939\n\
+                     }",
+                )?;
 
-            let url = CloudflareTunnel::start_quick_tunnel(config.port)
-                .wrap_err("Failed to start Cloudflare Tunnel")?;
+                let host_ip = if is_cloud {
+                    reqwest::blocking::get("https://api.ipify.org")
+                        .and_then(reqwest::blocking::Response::text)
+                        .unwrap_or_else(|_| "localhost".to_string())
+                } else {
+                    std::net::UdpSocket::bind("0.0.0.0:0")
+                        .and_then(|s| {
+                            s.connect("8.8.8.8:80")?;
+                            s.local_addr()
+                        })
+                        .map_or_else(|_| "localhost".to_string(), |a| a.ip().to_string())
+                };
 
-            spinner.stop(format!("✓ Tunnel started: {url}"));
+                (
+                    format!("http://{}:{}", host_ip, config.port),
+                    crate::api::AccessMode::Direct,
+                )
+            }
 
-            // Create systemd service
-            let spinner = cliclack::spinner();
-            spinner.start("Creating tunnel systemd service...");
+            "domain" => {
+                note("Custom Domain", "Coming soon in Phase 6")?;
+                return Err(eyre::eyre!("Custom domain not yet implemented"));
+            }
 
-            CloudflareTunnel::create_systemd_service(config.port)
-                .wrap_err("Failed to create systemd service")?;
-            CloudflareTunnel::start_service().wrap_err("Failed to start tunnel service")?;
+            "relay" => {
+                note("Relay Mode", "Coming soon in Phase 6")?;
+                return Err(eyre::eyre!("Relay mode not yet implemented"));
+            }
 
-            spinner.stop("✓ Tunnel service enabled");
-
-            (url, crate::api::AccessMode::Cloudflare)
+            _ => unreachable!(),
         }
-
-        "direct" => {
-            note(
-                "Direct HTTP Mode",
-                "⚠️  Agent will serve HTTP on port 3939.\n\
-                 \n\
-                 For HTTPS access:\n\
-                 1. Setup reverse proxy (Nginx/Caddy/Traefik)\n\
-                 2. Configure SSL certificate (Let's Encrypt)\n\
-                 3. Proxy to http://localhost:3939\n\
-                 \n\
-                 Example Caddy config:\n\
-                 agent.yourdomain.com {\n\
-                     reverse_proxy localhost:3939\n\
-                 }",
-            )?;
-
-            let host_ip = if is_cloud {
-                reqwest::blocking::get("https://api.ipify.org")
-                    .and_then(reqwest::blocking::Response::text)
-                    .unwrap_or_else(|_| "localhost".to_string())
-            } else {
-                std::net::UdpSocket::bind("0.0.0.0:0")
-                    .and_then(|s| {
-                        s.connect("8.8.8.8:80")?;
-                        s.local_addr()
-                    })
-                    .map_or_else(|_| "localhost".to_string(), |a| a.ip().to_string())
-            };
-
-            (
-                format!("http://{}:{}", host_ip, config.port),
-                crate::api::AccessMode::Direct,
-            )
-        }
-
-        "domain" => {
-            note("Custom Domain", "Coming soon in Phase 6")?;
-            return Err(eyre::eyre!("Custom domain not yet implemented"));
-        }
-
-        "relay" => {
-            note("Relay Mode", "Coming soon in Phase 6")?;
-            return Err(eyre::eyre!("Relay mode not yet implemented"));
-        }
-
-        _ => unreachable!(),
+    } else {
+        // Configure mode: skip access mode selection, keep existing
+        // Read existing config to get current access mode and URL
+        let existing_config = crate::api::Config::load().unwrap_or_default();
+        (existing_config.access.url, existing_config.access.mode)
     };
 
-    // Update config with access mode
-    update_config_access_mode(&config, access_mode_enum, &access_url)?;
+    // Update config with access mode (only if onboarding)
+    if mode == SetupMode::Onboard {
+        update_config_access_mode(&config, access_mode_enum, &access_url)?;
+    }
 
     // ─── Next Steps ──────────────────────────────────────────────────────────
 

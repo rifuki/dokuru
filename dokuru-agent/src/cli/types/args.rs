@@ -77,7 +77,7 @@ pub struct UninstallArgs {
     pub shared: SharedArgs,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SetupMode {
     Onboard,
     Configure,
