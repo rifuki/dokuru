@@ -377,15 +377,10 @@ pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
 
     // Read current config to detect access mode
     let config_path = runtime_config_path(config);
-    let current_mode = if let Ok(content) = std::fs::read_to_string(&config_path) {
-        if let Ok(runtime_config) = toml::from_str::<crate::api::Config>(&content) {
-            Some(runtime_config.access.mode)
-        } else {
-            None
-        }
-    } else {
-        None
-    };
+    let current_mode = std::fs::read_to_string(&config_path)
+        .ok()
+        .and_then(|content| toml::from_str::<crate::api::Config>(&content).ok())
+        .map(|runtime_config| runtime_config.access.mode);
 
     let current_mode_str = current_mode
         .as_ref()
