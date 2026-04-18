@@ -378,15 +378,20 @@ pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
         .item(
             "cloudflare",
             "Cloudflare Tunnel",
-            "Restart tunnel and get new URL",
+            "Auto HTTPS, no domain needed (recommended)",
         )
+        .item(
+            "direct",
+            "Direct HTTP",
+            "Use your own reverse proxy for HTTPS",
+        )
+        .item("relay", "Relay Mode", "Through dokuru-server via WebSocket")
         .item(
             "refresh",
             "Refresh Tunnel URL",
-            "Get URL from running tunnel",
+            "Get URL from running tunnel (Cloudflare only)",
         )
-        .item("direct", "Direct HTTP", "Use your own reverse proxy")
-        .initial_value("refresh")
+        .initial_value("cloudflare")
         .interact()?;
 
     match access_mode {
@@ -459,6 +464,18 @@ pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
             note(
                 "Direct Mode",
                 format!("URL: {url}\n\n✓ Config updated\nSetup reverse proxy for HTTPS"),
+            )?;
+        }
+        "relay" => {
+            update_config_access_mode(config, crate::api::AccessMode::Relay, "relay")?;
+            note(
+                "Relay Mode",
+                "✓ Config updated\n\
+                 \n\
+                 Agent will connect to: wss://api.dokuru.rifuki.dev/ws/agent\n\
+                 No public URL needed - works behind firewall/NAT\n\
+                 \n\
+                 Restart service: sudo systemctl restart dokuru",
             )?;
         }
         _ => unreachable!(),
