@@ -4,10 +4,17 @@ mod api;
 mod audit;
 mod cli;
 
+const VERSION: &str = concat!(
+    env!("CARGO_PKG_VERSION"),
+    " (",
+    env!("GIT_HASH"),
+    ")"
+);
+
 /// Dokuru - Docker Security Hardening Agent (CIS Benchmark v1.8.0)
 #[derive(Parser)]
 #[command(name = "dokuru")]
-#[command(version)]
+#[command(version = VERSION)]
 #[command(about = "Agent-Based Security Hardening Tool for Docker containers", long_about = None)]
 struct Cli {
     #[command(subcommand)]
