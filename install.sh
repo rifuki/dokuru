@@ -175,7 +175,22 @@ run_root() {
 }
 
 installed_binary_supports_onboard() {
-  [ -x "${INSTALL_PATH}" ] && "${INSTALL_PATH}" onboard --help >/dev/null 2>&1
+  if [ ! -x "${INSTALL_PATH}" ]; then
+    return 1
+  fi
+  
+  # Check if binary supports onboard command
+  if ! "${INSTALL_PATH}" onboard --help >/dev/null 2>&1; then
+    return 1
+  fi
+  
+  # Check version - if version command fails, it's old binary
+  if ! "${INSTALL_PATH}" --version >/dev/null 2>&1; then
+    note "Installed binary is outdated (no version support)"
+    return 1
+  fi
+  
+  return 0
 }
 
 prepare_environment() {

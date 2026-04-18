@@ -4,9 +4,10 @@ mod api;
 mod audit;
 mod cli;
 
-/// Dokuru 0.1.0 - Docker Security Hardening Agent (CIS Benchmark v1.8.0)
+/// Dokuru - Docker Security Hardening Agent (CIS Benchmark v1.8.0)
 #[derive(Parser)]
 #[command(name = "dokuru")]
+#[command(version)]
 #[command(about = "Agent-Based Security Hardening Tool for Docker containers", long_about = None)]
 struct Cli {
     #[command(subcommand)]
