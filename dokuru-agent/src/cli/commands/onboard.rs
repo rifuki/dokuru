@@ -1,7 +1,7 @@
 use super::super::helpers::{
-    InstallerConfig, collect_preflight, enable_service, generate_agent_token, hash_token,
-    install_binary, install_docker, offer_docker_installation, prompt_for_config, reload_systemd,
-    resolve_config, restart_service, run_command, run_step, runtime_config_path, service_unit_path,
+    collect_preflight, enable_service, generate_agent_token, hash_token, install_binary,
+    install_docker, offer_docker_installation, prompt_for_config, reload_systemd, resolve_config,
+    restart_service, run_command, run_step, runtime_config_path, service_unit_path,
     setup_dokuru_user, setup_log_directory, show_preflight, update_config_access_mode,
     user_in_docker_group, write_config_file, write_systemd_unit,
 };
