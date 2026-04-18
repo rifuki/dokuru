@@ -783,16 +783,30 @@ pub fn setup_log_directory() -> Result<()> {
         run_command("mkdir", &["-p", "/var/log/dokuru"])?;
     }
 
-    // Set ownership to dokuru:dokuru (ignore error if user doesn't exist yet)
-    let _ = run_command("chown", &["dokuru:dokuru", "/var/log/dokuru"]);
+    // Set ownership to dokuru:dokuru
+    run_command("chown", &["dokuru:dokuru", "/var/log/dokuru"])
+        .wrap_err("Failed to set ownership of log directory to dokuru:dokuru")?;
 
     // Set permissions to 755
     run_command("chmod", &["755", "/var/log/dokuru"])?;
 
-    // Test write permission
+    // Test write permission as the dokuru user (not as root)
     let test_file = log_dir.join(".test");
-    std::fs::write(&test_file, "test").wrap_err("Log directory is not writable")?;
-    std::fs::remove_file(&test_file)?;
+    run_command(
+        "su",
+        &[
+            "-s",
+            "/bin/sh",
+            "-c",
+            &format!(
+                "touch {} && rm {}",
+                test_file.display(),
+                test_file.display()
+            ),
+            "dokuru",
+        ],
+    )
+    .wrap_err("Log directory is not writable by dokuru user")?;
 
     Ok(())
 }
