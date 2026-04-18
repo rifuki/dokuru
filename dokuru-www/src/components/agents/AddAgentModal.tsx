@@ -119,18 +119,6 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                             </SelectContent>
                         </Select>
 
-                        {accessMode === "cloudflare" && (
-                            <Alert>
-                                <Info className="h-4 w-4" />
-                                <AlertDescription>
-                                    URL from agent onboarding:{" "}
-                                    <code className="text-xs">
-                                        https://xxx.trycloudflare.com
-                                    </code>
-                                </AlertDescription>
-                            </Alert>
-                        )}
-
                         {accessMode === "direct" && (
                             <Alert>
                                 <AlertTriangle className="h-4 w-4" />
