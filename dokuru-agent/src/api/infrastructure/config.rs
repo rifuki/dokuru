@@ -40,10 +40,11 @@ pub struct AccessConfig {
     pub cloudflare_tunnel_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum AccessMode {
     Direct,
+    #[default]
     Cloudflare,
     Domain,
     Relay,
@@ -56,12 +57,6 @@ impl Default for AccessConfig {
             url: String::new(),
             cloudflare_tunnel_id: None,
         }
-    }
-}
-
-impl Default for AccessMode {
-    fn default() -> Self {
-        Self::Cloudflare
     }
 }
 
