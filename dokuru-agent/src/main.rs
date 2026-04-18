@@ -31,6 +31,12 @@ enum Commands {
         #[command(subcommand)]
         action: TokenAction,
     },
+    /// Restart Dokuru service (and tunnel if running)
+    Restart {
+        /// Only restart the main dokuru service, skip the tunnel
+        #[arg(long)]
+        service_only: bool,
+    },
     /// Update Dokuru from the rolling latest release
     Update(cli::UpdateArgs),
     /// Remove Dokuru from this host
@@ -70,6 +76,7 @@ async fn main() -> eyre::Result<()> {
             TokenAction::Show(shared) => cli::run_token_show(shared)?,
             TokenAction::Rotate(shared) => cli::run_token_rotate(shared)?,
         },
+        Commands::Restart { service_only } => cli::run_restart(*service_only)?,
         Commands::Update(args) => cli::run_update(args)?,
         Commands::Uninstall(args) => cli::run_uninstall(args)?,
         Commands::Serve => {
