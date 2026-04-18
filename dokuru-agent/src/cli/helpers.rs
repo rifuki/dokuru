@@ -431,7 +431,7 @@ pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
             let spinner = cliclack::spinner();
             spinner.start("Getting URL from logs...");
 
-            match CloudflareTunnel::get_tunnel_url() {
+            match CloudflareTunnel::get_current_url() {
                 Ok(url) => {
                     spinner.stop(format!("✓ Found: {url}"));
                     update_config_access_mode(config, crate::api::AccessMode::Cloudflare, &url)?;
