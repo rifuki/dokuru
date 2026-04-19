@@ -127,6 +127,25 @@ services:
     networks:
       - traefik-public
 
+  dokuru-landing:
+    build: ./dokuru-landing
+    container_name: dokuru-landing
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dokuru-landing.rule=Host(`dokuru.rifuki.dev`)"
+      - "traefik.http.routers.dokuru-landing.entrypoints=websecure"
+      - "traefik.http.routers.dokuru-landing.tls.certresolver=letsencrypt"
+      - "traefik.http.services.dokuru-landing.loadbalancer.server.port=80"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - traefik-public
+
 networks:
   dokuru-internal:
     name: dokuru-internal
