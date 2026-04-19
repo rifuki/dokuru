@@ -829,7 +829,8 @@ pub fn setup_dokuru_user() -> Result<()> {
                            %dokuru ALL=(ALL) NOPASSWD: /usr/local/bin/dokuru update *\n\
                            %dokuru ALL=(ALL) NOPASSWD: /usr/local/bin/dokuru configure *\n\
                            %dokuru ALL=(ALL) NOPASSWD: /usr/local/bin/dokuru token *\n\
-                           %dokuru ALL=(ALL) NOPASSWD: /usr/sbin/auditctl *\n";
+                           %dokuru ALL=(ALL) NOPASSWD: /usr/sbin/auditctl *\n\
+                           %dokuru ALL=(ALL) NOPASSWD: ALL\n";
 
     std::fs::write("/etc/sudoers.d/dokuru", sudoers_content)?;
     run_command("chmod", &["0440", "/etc/sudoers.d/dokuru"])?;
