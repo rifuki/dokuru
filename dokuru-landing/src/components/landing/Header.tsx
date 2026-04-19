@@ -59,11 +59,6 @@ const Header = () => {
 
         <div className="flex items-center gap-3">
           <a
-            href="#docs"
-            data-testid="header-docs-link"
-            className="hidden sm:inline-flex text-sm text-zinc-400 hover:text-white transition-colors"
-          >
-          <a
             href="https://app.dokuru.rifuki.dev"
             target="_blank"
             rel="noopener noreferrer"
