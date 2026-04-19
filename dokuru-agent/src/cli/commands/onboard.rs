@@ -174,14 +174,17 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         })?;
     }
 
-    run_step("Setting up dokuru user and group", setup_dokuru_user)?;
-    if stderr().is_terminal() {
-        cliclack::log::info("→ Created system user 'dokuru' for service isolation")?;
-    }
+    // Setup user, log, systemd only for onboard (not configure)
+    if mode == SetupMode::Onboard {
+        run_step("Setting up dokuru user and group", setup_dokuru_user)?;
+        if stderr().is_terminal() {
+            cliclack::log::info("→ Created system user 'dokuru' for service isolation")?;
+        }
 
-    run_step("Creating log directory", setup_log_directory)?;
-    if stderr().is_terminal() {
-        cliclack::log::info("→ /var/log/dokuru")?;
+        run_step("Creating log directory", setup_log_directory)?;
+        if stderr().is_terminal() {
+            cliclack::log::info("→ /var/log/dokuru")?;
+        }
     }
 
     // Generate token only for fresh onboard; configure preserves the existing token
@@ -199,7 +202,8 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         cliclack::log::info(format!("→ {}", runtime_config_path(&config).display()))?;
     }
 
-    if !config.skip_service {
+    // Write systemd unit only for onboard or if service doesn't exist
+    if !config.skip_service && mode == SetupMode::Onboard {
         run_step("Writing systemd unit", || {
             write_systemd_unit(&config, &preflight)
         })?;
@@ -257,6 +261,17 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
                 return Ok(());
             }
         }
+    } else if mode == SetupMode::Configure {
+        // Configure mode - just show config updated
+        note(
+            "Configuration Updated",
+            format!("Config: {}", runtime_config_path(&config).display()),
+        )?;
+
+        // Restart service to apply changes
+        run_step("Restarting Dokuru service", || {
+            run_command("systemctl", &["restart", &config.service_name])
+        })?;
     }
 
     // Final success message in a box

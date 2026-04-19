@@ -46,22 +46,26 @@ function ScoreRing({ score }: { score: number }) {
     const offset = circ - (score / 100) * circ;
     const color = score >= 80 ? "#22c55e" : score >= 60 ? "#f59e0b" : "#ef4444";
     const label = score >= 80 ? "Secure" : score >= 60 ? "At Risk" : "Critical";
+    const labelColor = score >= 80 ? "text-green-500" : score >= 60 ? "text-yellow-500" : "text-red-500";
 
     return (
-        <div className="relative flex items-center justify-center">
-            <svg width="128" height="128" viewBox="0 0 120 120">
-                <circle cx="60" cy="60" r={r} fill="none" stroke="currentColor" strokeWidth="10"
-                    className="text-muted-foreground/10" />
-                <circle cx="60" cy="60" r={r} fill="none" stroke={color} strokeWidth="10"
-                    strokeDasharray={circ} strokeDashoffset={offset}
-                    strokeLinecap="round" transform="rotate(-90 60 60)"
-                    style={{ transition: "stroke-dashoffset 0.8s ease" }}
-                />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-3xl font-bold leading-none">{score}</span>
-                <span className="text-xs text-muted-foreground mt-1">{label}</span>
+        <div className="flex flex-col items-center gap-1.5">
+            <div className="relative flex items-center justify-center">
+                <svg width="128" height="128" viewBox="0 0 120 120">
+                    <circle cx="60" cy="60" r={r} fill="none" stroke="currentColor" strokeWidth="10"
+                        className="text-muted-foreground/10" />
+                    <circle cx="60" cy="60" r={r} fill="none" stroke={color} strokeWidth="10"
+                        strokeDasharray={circ} strokeDashoffset={offset}
+                        strokeLinecap="round" transform="rotate(-90 60 60)"
+                        style={{ transition: "stroke-dashoffset 0.8s ease" }}
+                    />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-3xl font-bold leading-none">{score}</span>
+                </div>
             </div>
+            <span className={cn("text-xs font-semibold", labelColor)}>{label}</span>
+            <span className="text-[10px] text-muted-foreground">CIS Score</span>
         </div>
     );
 }
@@ -599,6 +603,15 @@ function AuditPage() {
         }))
         : {};
 
+    // Sort sections: worst pass% first, so problem areas appear at top
+    const sortedSections = [...sections].sort((a, b) => {
+        const statA = sectionStats[a] ?? { total: 0, passed: 0 };
+        const statB = sectionStats[b] ?? { total: 0, passed: 0 };
+        const pctA = statA.total > 0 ? statA.passed / statA.total : 1;
+        const pctB = statB.total > 0 ? statB.passed / statB.total : 1;
+        return pctA - pctB;
+    });
+
     const filteredResults = auditData?.results.filter(r => {
         const statusOk = statusFilter === "all" || r.status === statusFilter;
         const sectionOk = sectionFilter === "all" || r.rule.section === sectionFilter;
@@ -638,9 +651,8 @@ function AuditPage() {
                     {/* ── Summary ────────────────────────────────────── */}
                     <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-4">
                         {/* Score ring + meta */}
-                        <div className="flex flex-col items-center justify-center bg-card border rounded-2xl px-8 py-5 gap-2">
+                        <div className="flex flex-col items-center justify-center bg-card border rounded-2xl px-8 py-5">
                             <ScoreRing score={auditData.summary.score} />
-                            <span className="text-xs text-muted-foreground font-medium">CIS Score</span>
                         </div>
 
                         {/* Stats grid + metadata */}
@@ -671,8 +683,8 @@ function AuditPage() {
                                     <span className="text-3xl font-bold text-red-500">{auditData.summary.failed}</span>
                                     <span className="text-xs text-muted-foreground mt-1">Failed</span>
                                 </button>
-                                <div className="flex flex-col items-center justify-center rounded-xl border bg-card p-4">
-                                    <span className="text-3xl font-bold">{auditData.summary.total}</span>
+                                <div className="flex flex-col items-center justify-center rounded-xl border border-border/50 bg-muted/20 p-4 cursor-default select-none">
+                                    <span className="text-3xl font-bold text-muted-foreground">{auditData.summary.total}</span>
                                     <span className="text-xs text-muted-foreground mt-1">Total Rules</span>
                                 </div>
                             </div>
@@ -700,7 +712,7 @@ function AuditPage() {
                     {/* ── Section breakdown ───────────────────────────── */}
                     <div className="bg-card border rounded-2xl p-4 space-y-2.5">
                         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Section Breakdown</h3>
-                        {sections.map(s => (
+                        {sortedSections.map(s => (
                             <SectionHeader key={s} section={s}
                                 total={sectionStats[s]?.total ?? 0}
                                 passed={sectionStats[s]?.passed ?? 0}
@@ -718,7 +730,7 @@ function AuditPage() {
                         >
                             All
                         </button>
-                        {sections.map(s => {
+                        {sortedSections.map(s => {
                             const meta = sectionMeta(s);
                             return (
                                 <button key={s}
