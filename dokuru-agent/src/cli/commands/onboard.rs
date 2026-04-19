@@ -123,6 +123,50 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         config.skip_service = true;
     }
 
+    // ─── Access Mode Selection (Onboard only) ────────────────────────────────
+    // Ask for access mode BEFORE showing summary, but don't execute yet
+    let (access_mode_choice, access_mode_enum) = if mode == SetupMode::Onboard {
+        let choice = select("How should this agent be accessible?")
+            .item(
+                "cloudflare",
+                "Cloudflare Tunnel",
+                "Auto HTTPS, no domain needed (recommended)",
+            )
+            .item(
+                "direct",
+                "Direct HTTP",
+                "Use your own reverse proxy for HTTPS",
+            )
+            .item("relay", "Relay Mode", "Through dokuru-server via WebSocket")
+            .item(
+                "domain",
+                "Custom Domain",
+                "Auto SSL with your domain (coming soon)",
+            )
+            .initial_value("cloudflare")
+            .interact()?;
+
+        let mode_enum = match choice {
+            "cloudflare" => crate::api::AccessMode::Cloudflare,
+            "direct" => crate::api::AccessMode::Direct,
+            "relay" => crate::api::AccessMode::Relay,
+            "domain" => crate::api::AccessMode::Domain,
+            _ => unreachable!(),
+        };
+
+        (choice, mode_enum)
+    } else {
+        // Configure mode: keep existing
+        let existing_config = crate::api::Config::load().unwrap_or_default();
+        let choice = match existing_config.access.mode {
+            crate::api::AccessMode::Cloudflare => "cloudflare",
+            crate::api::AccessMode::Direct => "direct",
+            crate::api::AccessMode::Relay => "relay",
+            crate::api::AccessMode::Domain => "domain",
+        };
+        (choice, existing_config.access.mode)
+    };
+
     // Show summary before applying
     let mut summary_lines = vec![
         format!("Binary:  {}", config.install_path.display()),
@@ -131,6 +175,16 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         format!("Bind:    {}", config.host),
         format!("Docker:  {}", config.docker_socket),
         format!("CORS:    {}", config.cors_origins),
+        format!(
+            "Access:  {}",
+            match access_mode_choice {
+                "cloudflare" => "Cloudflare Tunnel",
+                "direct" => "Direct HTTP",
+                "relay" => "Relay Mode",
+                "domain" => "Custom Domain",
+                _ => "Unknown",
+            }
+        ),
     ];
 
     if config.skip_service {
@@ -314,30 +368,10 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         })
         .is_some();
 
-    // ─── Access Mode Selection (Onboard only) ────────────────────────────────
-
-    let (access_url, access_mode_enum) = if mode == SetupMode::Onboard {
-        let access_mode = select("How should this agent be accessible?")
-            .item(
-                "cloudflare",
-                "Cloudflare Tunnel",
-                "Auto HTTPS, no domain needed (recommended)",
-            )
-            .item(
-                "direct",
-                "Direct HTTP",
-                "Use your own reverse proxy for HTTPS",
-            )
-            .item("relay", "Relay Mode", "Through dokuru-server via WebSocket")
-            .item(
-                "domain",
-                "Custom Domain",
-                "Auto SSL with your domain (coming soon)",
-            )
-            .initial_value("cloudflare")
-            .interact()?;
-
-        match access_mode {
+    // ─── Access Mode Execution (Onboard only) ────────────────────────────────
+    // Execute the chosen access mode setup
+    let access_url = if mode == SetupMode::Onboard {
+        match access_mode_choice {
             "cloudflare" => {
                 use crate::cli::CloudflareTunnel;
 
@@ -351,36 +385,18 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
                 let spinner = cliclack::spinner();
                 spinner.start("Starting Cloudflare Tunnel...");
 
-                // Create service file first, then restart — one process, managed by systemd
                 CloudflareTunnel::create_systemd_service(config.port)
                     .wrap_err("Failed to create systemd service")?;
                 CloudflareTunnel::start_service().wrap_err("Failed to start tunnel service")?;
 
-                // Wait for the systemd-managed process to publish its URL
                 let url = CloudflareTunnel::wait_for_url(30)
                     .wrap_err("Timed out waiting for Cloudflare Tunnel URL")?;
 
                 spinner.stop(format!("✓ Tunnel started: {url}"));
-
-                (url, crate::api::AccessMode::Cloudflare)
+                url
             }
 
             "direct" => {
-                note(
-                    "Direct HTTP Mode",
-                    "⚠️  Agent will serve HTTP on port 3939.\n\
-                     \n\
-                     For HTTPS access:\n\
-                     1. Setup reverse proxy (Nginx/Caddy/Traefik)\n\
-                     2. Configure SSL certificate (Let's Encrypt)\n\
-                     3. Proxy to http://localhost:3939\n\
-                     \n\
-                     Example Caddy config:\n\
-                     agent.yourdomain.com {\n\
-                         reverse_proxy localhost:3939\n\
-                     }",
-                )?;
-
                 let host_ip = if is_cloud {
                     reqwest::blocking::get("https://api.ipify.org")
                         .and_then(reqwest::blocking::Response::text)
@@ -394,42 +410,24 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
                         .map_or_else(|_| "localhost".to_string(), |a| a.ip().to_string())
                 };
 
-                (
-                    format!("http://{}:{}", host_ip, config.port),
-                    crate::api::AccessMode::Direct,
-                )
+                format!("http://{}:{}", host_ip, config.port)
             }
+
+            "relay" => "wss://api.dokuru.rifuki.dev/ws/agent".to_string(),
 
             "domain" => {
-                note("Custom Domain", "Coming soon in Phase 6")?;
                 return Err(eyre::eyre!("Custom domain not yet implemented"));
-            }
-
-            "relay" => {
-                note(
-                    "Relay Mode",
-                    "Agent connects to dokuru-server via WebSocket.\n\
-                     No public URL needed - works behind firewall/NAT.\n\
-                     \n\
-                     Server: wss://api.dokuru.rifuki.dev",
-                )?;
-
-                // For relay mode, URL is the server WebSocket endpoint
-                let relay_url = "wss://api.dokuru.rifuki.dev/ws/agent".to_string();
-
-                (relay_url, crate::api::AccessMode::Relay)
             }
 
             _ => unreachable!(),
         }
     } else {
-        // Configure mode: skip access mode selection, keep existing
-        // Read existing config to get current access mode and URL
+        // Configure mode: keep existing URL
         let existing_config = crate::api::Config::load().unwrap_or_default();
-        (existing_config.access.url, existing_config.access.mode)
+        existing_config.access.url
     };
 
-    // Update config with access mode (only if onboarding)
+    // Update config with access mode
     if mode == SetupMode::Onboard {
         update_config_access_mode(&config, access_mode_enum, &access_url)?;
     }
