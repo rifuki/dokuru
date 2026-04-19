@@ -108,7 +108,7 @@ const Footer = () => {
             © 2026 Dokuru. All rights reserved.
           </div>
           <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-zinc-600">
-            dokuru / agent · backend · dashboard
+            dokuru / agent · dashboard
           </div>
         </div>
       </div>
