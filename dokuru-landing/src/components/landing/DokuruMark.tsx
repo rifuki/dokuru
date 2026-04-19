@@ -1,25 +1,30 @@
 
 /**
- * Dokuru brand mark: a layered hex stack with a Docker-blue accent line,
- * evoking container isolation layers.
+ * Dokuru brand mark: container stack logo
  */
 export const DokuruMark = ({ className = "h-7 w-7" }) => (
   <svg
-    viewBox="0 0 32 32"
     xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 32 32"
     className={className}
     aria-hidden="true"
   >
     <defs>
-      <linearGradient id="dku-g" x1="0" y1="0" x2="1" y2="1">
+      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
         <stop offset="0%" stopColor="#2496ED" />
-        <stop offset="100%" stopColor="#00E5FF" />
+        <stop offset="100%" stopColor="#14B8A6" />
       </linearGradient>
     </defs>
-    <rect x="4" y="4" width="24" height="24" rx="6" fill="#0B0B0D" stroke="rgba(255,255,255,0.12)" />
-    <rect x="8" y="10" width="16" height="3" rx="1" fill="rgba(255,255,255,0.18)" />
-    <rect x="8" y="15" width="10" height="3" rx="1" fill="rgba(255,255,255,0.28)" />
-    <rect x="8" y="20" width="13" height="3" rx="1" fill="url(#dku-g)" />
+    <rect x="2" y="2" width="28" height="28" rx="7" fill="#1f1f1f" stroke="url(#g)" strokeWidth="1.5" />
+    <g fill="url(#g)">
+      <rect x="6" y="17" width="4" height="4" rx="0.6" />
+      <rect x="11" y="17" width="4" height="4" rx="0.6" />
+      <rect x="16" y="17" width="4" height="4" rx="0.6" />
+      <rect x="21" y="17" width="4" height="4" rx="0.6" />
+      <rect x="11" y="12" width="4" height="4" rx="0.6" opacity="0.7" />
+      <rect x="16" y="12" width="4" height="4" rx="0.6" opacity="0.7" />
+      <rect x="16" y="7" width="4" height="4" rx="0.6" opacity="0.5" />
+    </g>
   </svg>
 );
 
