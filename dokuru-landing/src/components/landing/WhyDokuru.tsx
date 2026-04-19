@@ -89,23 +89,6 @@ const WhyDokuru = () => {
                   </li>
                 );
               })}
-              <li className="bg-[#09090B] p-7 flex flex-col justify-center items-start gap-2 sm:col-span-2 md:col-span-1">
-                <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-zinc-500">
-                  / stack
-                </div>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {["Rust", "React", "Docker"].map(
-                    (t) => (
-                      <span
-                        key={t}
-                        className="font-mono text-[11px] text-zinc-200 bg-white/[0.03] border border-white/10 rounded px-2 py-1"
-                      >
-                        {t}
-                      </span>
-                    )
-                  )}
-                </div>
-              </li>
             </ul>
           </div>
         </div>
