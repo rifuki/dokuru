@@ -1,4 +1,4 @@
-import { Github, Linkedin } from "lucide-react";
+import { Github } from "lucide-react";
 import DokuruMark from "./DokuruMark";
 
 const columns = [
@@ -65,14 +65,6 @@ const Footer = () => {
                 aria-label="GitHub"
               >
                 <Github size={16} />
-              </a>
-              <a
-                href="#linkedin"
-                data-testid="footer-social-linkedin"
-                className="w-9 h-9 rounded-md border border-white/10 hover:border-white/30 grid place-items-center text-zinc-400 hover:text-white transition-colors"
-                aria-label="LinkedIn"
-              >
-                <Linkedin size={16} />
               </a>
             </div>
           </div>
