@@ -1,4 +1,4 @@
-import { Cpu, KeyRound, Archive, Zap, Container } from "lucide-react";
+import { Cpu, KeyRound, Archive, Zap, Container, Code } from "lucide-react";
 
 const points = [
   {
@@ -25,6 +25,11 @@ const points = [
     icon: Container,
     title: "Docker-focused inspection model",
     body: "Not a generic server scanner. Dokuru understands Docker containers, namespaces, and cgroups.",
+  },
+  {
+    icon: Code,
+    title: "Open source and transparent",
+    body: "Full source code available. Review the audit logic, contribute improvements, and run it anywhere.",
   },
 ];
 
