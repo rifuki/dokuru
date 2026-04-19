@@ -190,7 +190,7 @@ function RuleCard({ result, agentUrl, token }: {
     const [fixStepIndex, setFixStepIndex] = useState(0);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    const { rule, status, message, affected, audit_command, raw_output, references, rationale, impact, remediation_kind, remediation_guide } = result;
+    const { rule, status, message, affected, audit_command, raw_output, references, rationale, impact, remediation_kind, remediation_guide, tags } = result;
     const meta = sectionMeta(rule.section);
     const steps = getFixSteps(rule.id);
     const needsRestart = requiresDockerRestart(rule.id);
@@ -317,6 +317,16 @@ function RuleCard({ result, agentUrl, token }: {
                                 <span className="inline-flex items-center gap-1 text-[10px] bg-orange-500/10 text-orange-500 border border-orange-500/30 px-1.5 py-0.5 rounded font-semibold">
                                     <AlertTriangle className="h-2.5 w-2.5" />
                                     {affected.length} affected
+                                </span>
+                            )}
+                            {tags?.includes("namespace") && (
+                                <span className="text-[10px] bg-purple-500/10 text-purple-500 border border-purple-500/30 px-1.5 py-0.5 rounded font-semibold">
+                                    Namespace
+                                </span>
+                            )}
+                            {tags?.includes("cgroup") && (
+                                <span className="text-[10px] bg-cyan-500/10 text-cyan-500 border border-cyan-500/30 px-1.5 py-0.5 rounded font-semibold">
+                                    Cgroup
                                 </span>
                             )}
                         </div>
