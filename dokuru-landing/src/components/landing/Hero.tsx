@@ -65,11 +65,13 @@ const Hero = () => {
             {/* CTAs */}
             <div className="mt-9 flex flex-wrap items-center gap-3">
               <a
-                href="#cta"
+                href="https://app.dokuru.rifuki.dev"
+                target="_blank"
+                rel="noopener noreferrer"
                 data-testid="hero-cta-primary"
                 className="group inline-flex items-center gap-2 bg-[#2496ED] hover:bg-[#1C7CBA] text-white font-medium px-5 py-3 rounded-md shadow-[0_0_40px_-6px_rgba(36,150,237,0.7)] transition-all"
               >
-                Start Free Audit
+                Enter App
                 <ArrowRight
                   size={16}
                   className="transition-transform group-hover:translate-x-0.5"
