@@ -39,7 +39,8 @@ function sectionMeta(section: string) {
 
 // ── Score Ring ───────────────────────────────────────────────────────────────
 
-function ScoreRing({ score }: { score: number }) {
+// Unused for now - keeping for future use
+// function ScoreRing({ score }: { score: number }) {
     const r = 52;
     const circ = 2 * Math.PI * r;
     const offset = circ - (score / 100) * circ;
@@ -67,7 +68,7 @@ function ScoreRing({ score }: { score: number }) {
             <span className="text-[10px] text-muted-foreground">CIS Score</span>
         </div>
     );
-}
+} */
 
 // ── Severity badge ───────────────────────────────────────────────────────────
 

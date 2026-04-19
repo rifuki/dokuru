@@ -72,7 +72,7 @@ function AgentDetail() {
         };
 
         fetchAgent();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     }, [id, navigate]);
 
     const handleDelete = async () => {
