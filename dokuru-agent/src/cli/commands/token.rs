@@ -1,6 +1,6 @@
 use super::super::helpers::{
-    generate_agent_token, hash_token, load_saved_runtime_config, resolve_shared_config,
-    restart_service, run_step, write_config_file,
+    generate_agent_token, hash_token, load_saved_runtime_config, nix_like_is_root,
+    resolve_shared_config, restart_service, run_step, write_config_file,
 };
 use super::super::types::SharedArgs;
 use cliclack::{intro, note, outro, outro_cancel};
@@ -31,6 +31,12 @@ pub fn run_token_show(shared: &SharedArgs) -> Result<()> {
 
 pub fn run_token_rotate(shared: &SharedArgs) -> Result<()> {
     intro("🔄 Dokuru  token rotate")?;
+
+    // Check if running as root
+    if !nix_like_is_root() {
+        outro_cancel("Token rotation requires root privileges. Run with sudo.")?;
+        bail!("not running as root");
+    }
 
     let config = resolve_shared_config(shared, None)?;
 

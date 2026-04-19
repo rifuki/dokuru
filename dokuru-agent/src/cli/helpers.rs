@@ -429,11 +429,11 @@ pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
             CloudflareTunnel::create_systemd_service(config.port)?;
             let _ = run_command("systemctl", &["stop", "dokuru-tunnel"]);
             CloudflareTunnel::start_service()?;
-            std::thread::sleep(std::time::Duration::from_secs(3));
-            spinner.stop("✓ Tunnel restarted");
 
-            match CloudflareTunnel::get_tunnel_url() {
+            // Wait for tunnel to start and get URL
+            match CloudflareTunnel::wait_for_url(30) {
                 Ok(url) => {
+                    spinner.stop(format!("✓ Tunnel restarted: {url}"));
                     update_config_access_mode(config, crate::api::AccessMode::Cloudflare, &url)?;
                     note(
                         "Tunnel URL Updated",
@@ -441,6 +441,7 @@ pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
                     )?;
                 }
                 Err(e) => {
+                    spinner.stop("✗ Tunnel started but URL not found");
                     cliclack::log::warning(format!("Could not get URL: {e}"))?;
                     cliclack::log::info(
                         "Run: sudo journalctl -u dokuru-tunnel -n 50 | grep https://",
