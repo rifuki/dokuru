@@ -190,7 +190,7 @@ function RuleCard({ result, agentUrl, token }: {
     const [fixStepIndex, setFixStepIndex] = useState(0);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    const { rule, status, message, affected, audit_command, raw_output, references, rationale, impact, remediation_kind } = result;
+    const { rule, status, message, affected, audit_command, raw_output, references, rationale, impact, remediation_kind, remediation_guide } = result;
     const meta = sectionMeta(rule.section);
     const steps = getFixSteps(rule.id);
     const needsRestart = requiresDockerRestart(rule.id);
@@ -413,6 +413,18 @@ function RuleCard({ result, agentUrl, token }: {
                                 <Wrench className="h-3.5 w-3.5" /> Remediation
                             </h5>
                             <p className="text-sm text-muted-foreground bg-muted/40 rounded-lg p-3 font-mono whitespace-pre-wrap">{rule.remediation}</p>
+                        </div>
+                    )}
+
+                    {/* Fix Guide */}
+                    {remediation_guide && (
+                        <div>
+                            <h5 className="flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wide text-blue-500 mb-1.5">
+                                <BookOpen className="h-3.5 w-3.5" /> Fix Guide
+                            </h5>
+                            <div className="text-sm bg-blue-500/5 border border-blue-500/20 rounded-lg p-3 space-y-2">
+                                <pre className="whitespace-pre-wrap font-mono text-xs text-muted-foreground leading-relaxed">{remediation_guide}</pre>
+                            </div>
                         </div>
                     )}
 

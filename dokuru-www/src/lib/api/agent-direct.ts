@@ -41,6 +41,7 @@ export interface AuditResult {
   rationale?: string;
   impact?: string;
   tags?: string[];
+  remediation_guide?: string;
 }
 
 export interface FixOutcome {
