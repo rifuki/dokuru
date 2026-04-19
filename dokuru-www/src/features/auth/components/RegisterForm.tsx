@@ -155,17 +155,25 @@ export function RegisterForm() {
                 minLength={8}
                 className="h-11 pr-10 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"
               />
-              <button
-                type="button"
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                onClick={() => setShowPassword(!showPassword)}
-              >
-                {showPassword ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                {password.length > 0 && password.length < 8 && (
+                  <XCircle className="h-4 w-4 text-red-500" />
                 )}
-              </button>
+                {password.length >= 8 && (
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                )}
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -174,6 +182,7 @@ export function RegisterForm() {
             className="w-full h-11 bg-gradient-to-r from-miku-primary to-miku-accent hover:opacity-90 transition-opacity text-base font-medium shadow-md hover:shadow-lg"
             disabled={
               register.isPending ||
+              password.length < 8 ||
               (usernameCheck.data && !usernameCheck.data.available)
             }
           >
