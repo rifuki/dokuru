@@ -128,7 +128,7 @@ services:
       - traefik-public
 
   dokuru-landing:
-    build: ./dokuru-landing
+    image: ghcr.io/rifuki/dokuru-landing:${VERSION:-latest}
     container_name: dokuru-landing
     restart: unless-stopped
     labels:
