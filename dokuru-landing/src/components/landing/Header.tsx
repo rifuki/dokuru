@@ -63,14 +63,14 @@ const Header = () => {
             data-testid="header-docs-link"
             className="hidden sm:inline-flex text-sm text-zinc-400 hover:text-white transition-colors"
           >
-            Docs
-          </a>
           <a
-            href="#cta"
-            data-testid="header-cta-start-audit"
+            href="https://app.dokuru.rifuki.dev"
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="header-cta-enter-app"
             className="inline-flex items-center gap-2 bg-[#2496ED] hover:bg-[#1C7CBA] text-white text-sm font-medium px-4 py-2 rounded-md shadow-[0_0_24px_-4px_rgba(36,150,237,0.5)] transition-all"
           >
-            Start Free Audit
+            Enter App
           </a>
           <button
             data-testid="header-mobile-toggle"

@@ -5,7 +5,6 @@ import Features from "../components/landing/Features";
 import HowItWorks from "../components/landing/HowItWorks";
 import Coverage from "../components/landing/Coverage";
 import WhyDokuru from "../components/landing/WhyDokuru";
-import UseCases from "../components/landing/UseCases";
 import FinalCTA from "../components/landing/FinalCTA";
 import Footer from "../components/landing/Footer";
 
@@ -23,7 +22,6 @@ const Landing = () => {
         <HowItWorks />
         <Coverage />
         <WhyDokuru />
-        <UseCases />
         <FinalCTA />
       </main>
       <Footer />
