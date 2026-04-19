@@ -94,7 +94,7 @@ const WhyDokuru = () => {
                   / stack
                 </div>
                 <div className="flex flex-wrap gap-2 mt-1">
-                  {["Rust", "Axum", "PostgreSQL", "Redis", "React", "Bollard"].map(
+                  {["Rust", "React", "Docker"].map(
                     (t) => (
                       <span
                         key={t}
