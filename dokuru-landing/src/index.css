@@ -1,18 +1,13 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:is(.dark *));
-
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
-
+  --radius: 0.625rem;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
@@ -22,113 +17,197 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-
-  /* Docker Blue — exact same as main app */
-  --color-docker-blue: #2496ED;
-  --color-docker-blue-light: #3BA5EF;
-  --color-docker-blue-dark: #1E7FCC;
-  --color-docker-teal: #14B8A6;
-  --color-docker-teal-dark: #0D9488;
-
-  /* CIS section colors */
-  --color-audit-blue: #3B82F6;
-  --color-audit-violet: #8B5CF6;
-  --color-audit-orange: #F97316;
-  --color-audit-teal: #14B8A6;
-  --color-audit-indigo: #6366F1;
 }
 
-/* ── Light mode ─────────────────────────────────────────────── */
 :root {
-  --radius: 0.625rem;
-
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.65 0.15 240);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.75 0.12 190);
-  --secondary-foreground: oklch(0.2 0.05 190);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.94 0.02 240);
-  --accent-foreground: oklch(0.3 0.08 240);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.65 0.15 240);
+  color-scheme: dark;
+  --background: 0 0% 2%;
+  --foreground: 0 0% 98%;
+  --card: 240 5% 6%;
+  --card-foreground: 0 0% 98%;
+  --popover: 240 5% 6%;
+  --popover-foreground: 0 0% 98%;
+  --primary: 209 84% 54%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 240 4% 10%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 240 4% 10%;
+  --muted-foreground: 240 5% 65%;
+  --accent: 187 100% 50%;
+  --accent-foreground: 0 0% 9%;
+  --destructive: 348 89% 60%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 240 5% 14%;
+  --input: 240 5% 14%;
+  --ring: 209 84% 54%;
 }
 
-/* ── Dark mode ──────────────────────────────────────────────── */
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.65 0.15 240);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.45 0.1 190);
-  --secondary-foreground: oklch(0.85 0.08 190);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.3 0.06 240);
-  --accent-foreground: oklch(0.85 0.08 240);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.65 0.15 240);
+html,
+body {
+  background: #050505;
+}
+
+body {
+  margin: 0;
+  font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: #ffffff;
+  background-color: #050505;
+  background-image:
+    radial-gradient(
+      ellipse 1000px 500px at 15% -10%,
+      rgba(36, 150, 237, 0.12),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 800px 400px at 95% 5%,
+      rgba(0, 229, 255, 0.06),
+      transparent 60%
+    );
+  background-repeat: no-repeat;
+}
+
+code,
+pre,
+.font-mono {
+  font-family:
+    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    monospace;
+}
+
+.font-heading {
+  font-family: "Chivo", "IBM Plex Sans", sans-serif;
+  letter-spacing: -0.03em;
+}
+
+.bg-grid {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.04) 1px,
+      transparent 1px
+    );
+  background-size: 48px 48px;
+}
+
+.bg-grid-fine {
+  background-image:
+    linear-gradient(
+      to right,
+      rgba(255, 255, 255, 0.035) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.035) 1px,
+      transparent 1px
+    );
+  background-size: 24px 24px;
+}
+
+.mask-fade-b {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    black 40%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
+}
+
+.mask-fade-edges {
+  -webkit-mask-image: radial-gradient(
+    ellipse 70% 60% at 50% 50%,
+    black 50%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    ellipse 70% 60% at 50% 50%,
+    black 50%,
+    transparent 100%
+  );
+}
+
+@keyframes dokuru-pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.pulse-dot {
+  animation: dokuru-pulse 2s ease-in-out infinite;
+}
+
+@keyframes dokuru-scan {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100%);
+  }
+}
+
+.scan-line {
+  animation: dokuru-scan 6s linear infinite;
+}
+
+@keyframes dokuru-cursor {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.terminal-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 14px;
+  background: #00e5ff;
+  margin-left: 4px;
+  vertical-align: -2px;
+  animation: dokuru-cursor 1s steps(1) infinite;
+}
+
+::selection {
+  background: rgba(36, 150, 237, 0.35);
+  color: #ffffff;
+}
+
+/* Custom scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #09090b;
+}
+::-webkit-scrollbar-thumb {
+  background: #1f1f22;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2a2a2e;
 }
 
 @layer base {
-  html {
-    font-family: "Inter", system-ui, sans-serif;
-    scroll-behavior: smooth;
-  }
   * {
-    @apply border-border;
+    @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground antialiased;
-  }
-}
-
-@layer utilities {
-  .font-mono {
-    font-family: "JetBrains Mono", "Fira Code", monospace;
-  }
-
-  /* Dot-grid background */
-  .bg-dot-grid {
-    background-image: radial-gradient(circle, oklch(0.65 0.15 240 / 0.15) 1px, transparent 1px);
-    background-size: 28px 28px;
-  }
-  .dark .bg-dot-grid {
-    background-image: radial-gradient(circle, oklch(0.65 0.15 240 / 0.12) 1px, transparent 1px);
-  }
-
-  /* Glow effects */
-  .glow-primary {
-    box-shadow: 0 0 40px -10px oklch(0.65 0.15 240 / 0.4);
-  }
-  .dark .glow-primary {
-    box-shadow: 0 0 60px -12px oklch(0.65 0.15 240 / 0.35);
-  }
-  .glow-sm {
-    box-shadow: 0 0 20px -6px oklch(0.65 0.15 240 / 0.3);
-  }
-
-  /* Gradient text */
-  .gradient-text {
-    @apply bg-clip-text text-transparent;
-    background-image: linear-gradient(135deg, #2496ED 0%, #14B8A6 100%);
-  }
-
-  /* Glass card */
-  .glass-card {
-    @apply bg-card/80 backdrop-blur-sm border border-border;
+    @apply text-foreground;
   }
 }
