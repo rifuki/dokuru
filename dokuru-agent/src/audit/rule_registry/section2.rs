@@ -66,6 +66,7 @@ impl Section2 {
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                     })
                 })
             },
@@ -209,6 +210,7 @@ STEP 5: Recreate existing containers with new user namespace mapping
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                     })
                 })
             },

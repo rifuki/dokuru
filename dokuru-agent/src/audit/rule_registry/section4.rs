@@ -45,6 +45,7 @@ impl Section4 {
             rationale: None,
             impact: None,
             tags: None,
+            ..Default::default()
         }
     }
 
@@ -118,6 +119,7 @@ impl Section4 {
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                     })
                 })
             },
@@ -211,6 +213,7 @@ Or use the --user flag at runtime:
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                     })
                 })
             },

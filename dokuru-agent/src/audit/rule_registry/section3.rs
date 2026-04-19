@@ -76,6 +76,7 @@ impl Section3 {
                 rationale: None,
                 impact: None,
                 tags: None,
+                ..Default::default()
             },
             Some((uid, gid, _)) => {
                 let ok = uid == 0 && gid == 0;
@@ -107,6 +108,7 @@ impl Section3 {
                     rationale: None,
                     impact: None,
                     tags: None,
+                    ..Default::default()
                 }
             }
         }
@@ -141,6 +143,7 @@ impl Section3 {
                 rationale: None,
                 impact: None,
                 tags: None,
+                ..Default::default()
             },
             Some((_, _, mode)) => {
                 let ok = Self::perms_ok(mode, max_mode);
@@ -174,6 +177,7 @@ impl Section3 {
                     rationale: None,
                     impact: None,
                     tags: None,
+                    ..Default::default()
                 }
             }
         }

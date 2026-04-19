@@ -94,6 +94,7 @@ impl Section1 {
             rationale: None,
             impact: None,
             tags: None,
+            ..Default::default()
         }
     }
 
@@ -142,6 +143,7 @@ impl Section1 {
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                     })
                 })
             },
@@ -213,6 +215,7 @@ impl Section1 {
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                     })
                 })
             },
@@ -590,6 +593,7 @@ impl Section1 {
                             rationale: None,
                             impact: None,
                             tags: None,
+                ..Default::default()
                         });
                     }
                     let raw = Self::read_audit_rules();
@@ -656,6 +660,7 @@ impl Section1 {
                             rationale: None,
                             impact: None,
                             tags: None,
+                ..Default::default()
                         });
                     }
                     let raw = Self::read_audit_rules();
@@ -722,6 +727,7 @@ impl Section1 {
                             rationale: None,
                             impact: None,
                             tags: None,
+                ..Default::default()
                         });
                     }
                     let raw = Self::read_audit_rules();

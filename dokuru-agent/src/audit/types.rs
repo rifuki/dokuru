@@ -67,6 +67,35 @@ pub struct CheckResult {
     pub impact: Option<String>, // Impact of implementing this rule
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub tags: Option<Vec<String>>, // Tags for categorization
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub remediation_guide: Option<String>, // Step-by-step fix guide
+}
+
+impl Default for CheckResult {
+    fn default() -> Self {
+        Self {
+            rule: CisRule {
+                id: String::new(),
+                title: String::new(),
+                category: RuleCategory::Files,
+                severity: Severity::Low,
+                section: String::new(),
+                description: String::new(),
+                remediation: String::new(),
+            },
+            status: CheckStatus::Pass,
+            message: String::new(),
+            affected: Vec::new(),
+            remediation_kind: RemediationKind::Manual,
+            audit_command: None,
+            raw_output: None,
+            references: None,
+            rationale: None,
+            impact: None,
+            tags: None,
+            remediation_guide: None,
+        }
+    }
 }
 
 impl CheckResult {
@@ -92,6 +121,7 @@ impl CheckResult {
             rationale: None,
             impact: None,
             tags: None,
+            remediation_guide: None,
         }
     }
 

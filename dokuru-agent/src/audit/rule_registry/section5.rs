@@ -72,6 +72,7 @@ impl Section5 {
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                         });
                     }
 
@@ -118,6 +119,7 @@ impl Section5 {
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                     })
                 })
             },
@@ -185,6 +187,7 @@ Example (incorrect — avoid):
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                         });
                     }
 
@@ -231,6 +234,7 @@ Example (incorrect — avoid):
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                     })
                 })
             },
@@ -299,6 +303,7 @@ Or in docker-compose.yml:
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                         });
                     }
 
@@ -346,6 +351,7 @@ Or in docker-compose.yml:
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                     })
                 })
             },
@@ -417,6 +423,7 @@ Or in docker-compose.yml:
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                         });
                     }
 
@@ -463,6 +470,7 @@ Or in docker-compose.yml:
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                     })
                 })
             },
@@ -530,6 +538,7 @@ To inspect processes in a container, use docker exec instead:
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                         });
                     }
 
@@ -576,6 +585,7 @@ To inspect processes in a container, use docker exec instead:
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                     })
                 })
             },
@@ -644,6 +654,7 @@ Example (acceptable for inter-container sharing):
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                         });
                     }
 
@@ -690,6 +701,7 @@ Example (acceptable for inter-container sharing):
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                     })
                 })
             },
@@ -755,6 +767,7 @@ By default, each container gets its own UTS namespace with an isolated hostname.
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                         });
                     }
 
@@ -813,6 +826,7 @@ By default, each container gets its own UTS namespace with an isolated hostname.
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                     })
                 })
             },
@@ -877,6 +891,7 @@ Example:
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                         });
                     }
 
@@ -924,6 +939,7 @@ Example:
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                     })
                 })
             },
@@ -994,6 +1010,7 @@ A reasonable value for most workloads is 50-200."#.into(),
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                         });
                     }
 
@@ -1040,6 +1057,7 @@ A reasonable value for most workloads is 50-200."#.into(),
                         rationale: None,
                         impact: None,
                         tags: None,
+                ..Default::default()
                     })
                 })
             },
