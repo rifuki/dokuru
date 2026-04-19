@@ -1,0 +1,134 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Docker Blue — exact same as main app */
+  --color-docker-blue: #2496ED;
+  --color-docker-blue-light: #3BA5EF;
+  --color-docker-blue-dark: #1E7FCC;
+  --color-docker-teal: #14B8A6;
+  --color-docker-teal-dark: #0D9488;
+
+  /* CIS section colors */
+  --color-audit-blue: #3B82F6;
+  --color-audit-violet: #8B5CF6;
+  --color-audit-orange: #F97316;
+  --color-audit-teal: #14B8A6;
+  --color-audit-indigo: #6366F1;
+}
+
+/* ── Light mode ─────────────────────────────────────────────── */
+:root {
+  --radius: 0.625rem;
+
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.65 0.15 240);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.75 0.12 190);
+  --secondary-foreground: oklch(0.2 0.05 190);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.94 0.02 240);
+  --accent-foreground: oklch(0.3 0.08 240);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.65 0.15 240);
+}
+
+/* ── Dark mode ──────────────────────────────────────────────── */
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.65 0.15 240);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.45 0.1 190);
+  --secondary-foreground: oklch(0.85 0.08 190);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.3 0.06 240);
+  --accent-foreground: oklch(0.85 0.08 240);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.65 0.15 240);
+}
+
+@layer base {
+  html {
+    font-family: "Inter", system-ui, sans-serif;
+    scroll-behavior: smooth;
+  }
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+@layer utilities {
+  .font-mono {
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+  }
+
+  /* Dot-grid background */
+  .bg-dot-grid {
+    background-image: radial-gradient(circle, oklch(0.65 0.15 240 / 0.15) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+  .dark .bg-dot-grid {
+    background-image: radial-gradient(circle, oklch(0.65 0.15 240 / 0.12) 1px, transparent 1px);
+  }
+
+  /* Glow effects */
+  .glow-primary {
+    box-shadow: 0 0 40px -10px oklch(0.65 0.15 240 / 0.4);
+  }
+  .dark .glow-primary {
+    box-shadow: 0 0 60px -12px oklch(0.65 0.15 240 / 0.35);
+  }
+  .glow-sm {
+    box-shadow: 0 0 20px -6px oklch(0.65 0.15 240 / 0.3);
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, #2496ED 0%, #14B8A6 100%);
+  }
+
+  /* Glass card */
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-sm border border-border;
+  }
+}

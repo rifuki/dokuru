@@ -816,6 +816,23 @@ pub fn setup_dokuru_user() -> Result<()> {
         run_command("usermod", &["-aG", "dokuru", &current_user])?;
     }
 
+    // Setup sudoers rule for dokuru group to manage service without password
+    let sudoers_content = "# Allow dokuru group to manage dokuru service and config\n\
+                           %dokuru ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart dokuru\n\
+                           %dokuru ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop dokuru\n\
+                           %dokuru ALL=(ALL) NOPASSWD: /usr/bin/systemctl start dokuru\n\
+                           %dokuru ALL=(ALL) NOPASSWD: /usr/bin/systemctl status dokuru\n\
+                           %dokuru ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart dokuru-tunnel\n\
+                           %dokuru ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop dokuru-tunnel\n\
+                           %dokuru ALL=(ALL) NOPASSWD: /usr/bin/systemctl start dokuru-tunnel\n\
+                           %dokuru ALL=(ALL) NOPASSWD: /usr/bin/systemctl status dokuru-tunnel\n\
+                           %dokuru ALL=(ALL) NOPASSWD: /usr/local/bin/dokuru update *\n\
+                           %dokuru ALL=(ALL) NOPASSWD: /usr/local/bin/dokuru configure *\n\
+                           %dokuru ALL=(ALL) NOPASSWD: /usr/local/bin/dokuru token *\n";
+
+    std::fs::write("/etc/sudoers.d/dokuru", sudoers_content)?;
+    run_command("chmod", &["0440", "/etc/sudoers.d/dokuru"])?;
+
     Ok(())
 }
 
