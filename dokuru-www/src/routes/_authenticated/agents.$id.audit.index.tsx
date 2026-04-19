@@ -38,37 +38,6 @@ function sectionMeta(section: string) {
     return SECTION_META[section] ?? { label: section, color: "text-gray-500", bg: "bg-gray-500/10", border: "border-gray-500/30" };
 }
 
-// ── Score Ring ───────────────────────────────────────────────────────────────
-
-function ScoreRing({ score }: { score: number }) {
-    const r = 52;
-    const circ = 2 * Math.PI * r;
-    const offset = circ - (score / 100) * circ;
-    const color = score >= 80 ? "#22c55e" : score >= 60 ? "#f59e0b" : "#ef4444";
-    const label = score >= 80 ? "Secure" : score >= 60 ? "At Risk" : "Critical";
-    const labelColor = score >= 80 ? "text-green-500" : score >= 60 ? "text-yellow-500" : "text-red-500";
-
-    return (
-        <div className="flex flex-col items-center gap-1.5">
-            <div className="relative flex items-center justify-center">
-                <svg width="128" height="128" viewBox="0 0 120 120">
-                    <circle cx="60" cy="60" r={r} fill="none" stroke="currentColor" strokeWidth="10"
-                        className="text-muted-foreground/10" />
-                    <circle cx="60" cy="60" r={r} fill="none" stroke={color} strokeWidth="10"
-                        strokeDasharray={circ} strokeDashoffset={offset}
-                        strokeLinecap="round" transform="rotate(-90 60 60)"
-                        style={{ transition: "stroke-dashoffset 0.8s ease" }}
-                    />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-3xl font-bold leading-none">{score}</span>
-                </div>
-            </div>
-            <span className={cn("text-xs font-semibold", labelColor)}>{label}</span>
-            <span className="text-[10px] text-muted-foreground">CIS Score</span>
-        </div>
-    );
-}
 
 // ── Severity badge ───────────────────────────────────────────────────────────
 
@@ -648,76 +617,107 @@ function AuditPage() {
 
             {auditData ? (
                 <>
-                    {/* ── Summary ────────────────────────────────────── */}
-                    <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-4">
-                        {/* Score ring + meta */}
-                        <div className="flex flex-col items-center justify-center bg-card border rounded-2xl px-8 py-5">
-                            <ScoreRing score={auditData.summary.score} />
+                    {/* ── Summary Card ────────────────────────────────── */}
+                    <div className="rounded-2xl border border-border bg-card overflow-hidden">
+                        {/* Terminal-style header */}
+                        <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-muted/20">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                                <div className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500/70" />
+                                <div className="h-2.5 w-2.5 shrink-0 rounded-full bg-yellow-500/70" />
+                                <div className="h-2.5 w-2.5 shrink-0 rounded-full bg-green-500/70" />
+                                <span className="ml-3 text-xs font-mono text-muted-foreground truncate">
+                                    {agent?.name ?? id} / {auditData.hostname}
+                                </span>
+                            </div>
+                            <span className="text-xs font-mono text-muted-foreground shrink-0 ml-4">
+                                audit · {fmtDate(auditData.timestamp).split(",")[1]?.trim() ?? fmtDate(auditData.timestamp)}
+                            </span>
                         </div>
 
-                        {/* Stats grid + metadata */}
-                        <div className="flex flex-col gap-3">
-                            {/* Pass / Fail / Total */}
-                            <div className="grid grid-cols-3 gap-3">
-                                <button
-                                    onClick={() => setStatusFilter(f => f === "Pass" ? "all" : "Pass")}
-                                    className={cn(
-                                        "flex flex-col items-center justify-center rounded-xl border p-4 transition-all",
-                                        statusFilter === "Pass"
-                                            ? "bg-green-500/20 border-green-500/50 ring-2 ring-green-500/30"
-                                            : "bg-green-500/5 border-green-500/20 hover:bg-green-500/10"
-                                    )}
-                                >
-                                    <span className="text-3xl font-bold text-green-500">{auditData.summary.passed}</span>
-                                    <span className="text-xs text-muted-foreground mt-1">Passed</span>
-                                </button>
-                                <button
-                                    onClick={() => setStatusFilter(f => f === "Fail" ? "all" : "Fail")}
-                                    className={cn(
-                                        "flex flex-col items-center justify-center rounded-xl border p-4 transition-all",
-                                        statusFilter === "Fail"
-                                            ? "bg-red-500/20 border-red-500/50 ring-2 ring-red-500/30"
-                                            : "bg-red-500/5 border-red-500/20 hover:bg-red-500/10"
-                                    )}
-                                >
-                                    <span className="text-3xl font-bold text-red-500">{auditData.summary.failed}</span>
-                                    <span className="text-xs text-muted-foreground mt-1">Failed</span>
-                                </button>
-                                <div className="flex flex-col items-center justify-center rounded-xl border border-border/50 bg-muted/20 p-4 cursor-default select-none">
-                                    <span className="text-3xl font-bold text-muted-foreground">{auditData.summary.total}</span>
-                                    <span className="text-xs text-muted-foreground mt-1">Total Rules</span>
+                        {/* Body: score left + breakdown right */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border">
+                            {/* Left: Score + stats + meta */}
+                            <div className="p-5 space-y-4">
+                                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Audit Score</p>
+                                <div className="flex items-baseline gap-2">
+                                    <span className={cn("text-5xl font-bold tabular-nums",
+                                        auditData.summary.score >= 80 ? "text-green-500"
+                                        : auditData.summary.score >= 60 ? "text-yellow-500"
+                                        : "text-red-500"
+                                    )}>
+                                        {auditData.summary.score}
+                                    </span>
+                                    <span className="text-sm text-muted-foreground font-mono">/ 100</span>
+                                </div>
+                                <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                                    <div
+                                        className={cn("h-full rounded-full transition-all duration-700",
+                                            auditData.summary.score >= 80 ? "bg-green-500"
+                                            : auditData.summary.score >= 60 ? "bg-yellow-500"
+                                            : "bg-red-500"
+                                        )}
+                                        style={{ width: `${auditData.summary.score}%` }}
+                                    />
+                                </div>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <button
+                                        onClick={() => setStatusFilter(f => f === "Pass" ? "all" : "Pass")}
+                                        className={cn(
+                                            "flex flex-col items-center py-2.5 rounded-xl border transition-all",
+                                            statusFilter === "Pass"
+                                                ? "bg-green-500/20 border-green-500/50 ring-2 ring-green-500/30"
+                                                : "bg-green-500/5 border-green-500/20 hover:bg-green-500/10"
+                                        )}
+                                    >
+                                        <span className="text-xl font-bold text-green-500">{auditData.summary.passed}</span>
+                                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Pass</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setStatusFilter(f => f === "Fail" ? "all" : "Fail")}
+                                        className={cn(
+                                            "flex flex-col items-center py-2.5 rounded-xl border transition-all",
+                                            statusFilter === "Fail"
+                                                ? "bg-red-500/20 border-red-500/50 ring-2 ring-red-500/30"
+                                                : "bg-red-500/5 border-red-500/20 hover:bg-red-500/10"
+                                        )}
+                                    >
+                                        <span className="text-xl font-bold text-red-500">{auditData.summary.failed}</span>
+                                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Fail</span>
+                                    </button>
+                                    <div className="flex flex-col items-center py-2.5 rounded-xl border border-border/50 bg-muted/20 cursor-default select-none">
+                                        <span className="text-xl font-bold text-muted-foreground">{auditData.summary.total}</span>
+                                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Total</span>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-1.5 pt-1">
+                                    {[
+                                        { icon: Server, label: "Host", value: auditData.hostname },
+                                        { icon: Cpu, label: "Docker", value: auditData.docker_version },
+                                        { icon: Container, label: "Containers", value: String(auditData.total_containers) },
+                                        { icon: Clock, label: "Ran at", value: fmtDate(auditData.timestamp).split(",")[1]?.trim() ?? fmtDate(auditData.timestamp) },
+                                    ].map(({ icon: Icon, label, value }) => (
+                                        <div key={label} className="bg-muted/30 rounded-lg px-3 py-2 flex items-center gap-2 min-w-0">
+                                            <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                            <div className="min-w-0">
+                                                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</p>
+                                                <p className="text-xs font-medium truncate">{value}</p>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
 
-                            {/* Meta info */}
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                {[
-                                    { icon: Server, label: "Host", value: auditData.hostname },
-                                    { icon: Cpu, label: "Docker", value: auditData.docker_version },
-                                    { icon: Container, label: "Containers", value: String(auditData.total_containers) },
-                                    { icon: Clock, label: "Ran at", value: fmtDate(auditData.timestamp).split(",")[1]?.trim() ?? fmtDate(auditData.timestamp) },
-                                ].map(({ icon: Icon, label, value }) => (
-                                    <div key={label} className="bg-muted/30 rounded-lg px-3 py-2 flex items-center gap-2 min-w-0">
-                                        <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                                        <div className="min-w-0">
-                                            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</p>
-                                            <p className="text-xs font-medium truncate">{value}</p>
-                                        </div>
-                                    </div>
+                            {/* Right: Section breakdown */}
+                            <div className="p-5 space-y-3">
+                                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Section Breakdown</p>
+                                {sortedSections.map(s => (
+                                    <SectionHeader key={s} section={s}
+                                        total={sectionStats[s]?.total ?? 0}
+                                        passed={sectionStats[s]?.passed ?? 0}
+                                    />
                                 ))}
                             </div>
                         </div>
-                    </div>
-
-                    {/* ── Section breakdown ───────────────────────────── */}
-                    <div className="bg-card border rounded-2xl p-4 space-y-2.5">
-                        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Section Breakdown</h3>
-                        {sortedSections.map(s => (
-                            <SectionHeader key={s} section={s}
-                                total={sectionStats[s]?.total ?? 0}
-                                passed={sectionStats[s]?.passed ?? 0}
-                            />
-                        ))}
                     </div>
 
                     {/* ── Filters ─────────────────────────────────────── */}

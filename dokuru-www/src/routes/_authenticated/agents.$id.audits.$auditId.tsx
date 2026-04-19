@@ -37,38 +37,6 @@ function sectionMeta(section: string) {
     return SECTION_META[section] ?? { label: section, color: "text-gray-500", bg: "bg-gray-500/10", border: "border-gray-500/30" };
 }
 
-// ── Score Ring ───────────────────────────────────────────────────────────────
-
-// Unused for now - keeping for future use
-// function ScoreRing({ score }: { score: number }) {
-    const r = 52;
-    const circ = 2 * Math.PI * r;
-    const offset = circ - (score / 100) * circ;
-    const color = score >= 80 ? "#22c55e" : score >= 60 ? "#f59e0b" : "#ef4444";
-    const label = score >= 80 ? "Secure" : score >= 60 ? "At Risk" : "Critical";
-    const labelColor = score >= 80 ? "text-green-500" : score >= 60 ? "text-yellow-500" : "text-red-500";
-
-    return (
-        <div className="flex flex-col items-center gap-1.5">
-            <div className="relative flex items-center justify-center">
-                <svg width="128" height="128" viewBox="0 0 120 120">
-                    <circle cx="60" cy="60" r={r} fill="none" stroke="currentColor" strokeWidth="10"
-                        className="text-muted-foreground/10" />
-                    <circle cx="60" cy="60" r={r} fill="none" stroke={color} strokeWidth="10"
-                        strokeDasharray={circ} strokeDashoffset={offset}
-                        strokeLinecap="round" transform="rotate(-90 60 60)"
-                        style={{ transition: "stroke-dashoffset 0.8s ease" }}
-                    />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-3xl font-bold leading-none">{score}</span>
-                </div>
-            </div>
-            <span className={cn("text-xs font-semibold", labelColor)}>{label}</span>
-            <span className="text-[10px] text-muted-foreground">CIS Score</span>
-        </div>
-    );
-} */
 
 // ── Severity badge ───────────────────────────────────────────────────────────
 
