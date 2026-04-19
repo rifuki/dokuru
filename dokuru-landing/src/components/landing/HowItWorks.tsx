@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { useState } from "react";
 import { Copy, Check } from "lucide-react";
 
 const steps = [
@@ -32,7 +33,7 @@ const TerminalLine = ({ prompt = "$", children, comment }) => (
 );
 
 const HowItWorks = () => {
-  const [copied, setCopied] = React.useState(false);
+  const [copied, setCopied] = useState(false);
   const handleCopy = () => {
     navigator.clipboard.writeText(
       "curl -fsSL https://get.dokuru.dev | sh\ndokuru onboard"
