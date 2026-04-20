@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 import { toast } from "sonner";
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
@@ -33,7 +33,7 @@ export function WebSocketProvider({ children, url, enabled = true }: WebSocketPr
     const reconnectAttemptsRef = useRef(0);
     const maxReconnectAttempts = 5;
 
-    const connect = () => {
+    const connect = useCallback(() => {
         if (!enabled || wsRef.current?.readyState === WebSocket.OPEN) return;
 
         setStatus("connecting");
@@ -81,15 +81,15 @@ export function WebSocketProvider({ children, url, enabled = true }: WebSocketPr
             console.error("Failed to create WebSocket:", error);
             setStatus("error");
         }
-    };
+    }, [url, enabled]);
 
-    const send = (data: unknown) => {
+    const send = useCallback((data: unknown) => {
         if (wsRef.current?.readyState === WebSocket.OPEN) {
             wsRef.current.send(JSON.stringify(data));
         } else {
             console.warn("WebSocket not connected, message not sent");
         }
-    };
+    }, []);
 
     useEffect(() => {
         if (enabled) {
@@ -104,7 +104,7 @@ export function WebSocketProvider({ children, url, enabled = true }: WebSocketPr
                 wsRef.current.close();
             }
         };
-    }, [url, enabled]);
+    }, [connect, enabled]);
 
     return (
         <WebSocketContext.Provider value={{ status, send, lastMessage }}>
