@@ -16,7 +16,7 @@ import {
     Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
     Terminal, Wrench, ExternalLink, AlertTriangle, Info, Server,
     ArrowLeft, Clock, Cpu, Container, Zap, BookOpen, CheckCircle2,
-    RotateCcw, ShieldAlert, XCircle, ListChecks, Search, X, Layers,
+    RotateCcw, ShieldAlert, XCircle, ListChecks, Search, X, Layers, ArrowLeftRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -519,19 +519,37 @@ function RuleCard({ result, agentUrl, token }: {
 
                     {/* References */}
                     {references && references.length > 0 && (
-                        <div>
-                            <h5 className="flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1.5">
-                                <ExternalLink className="h-3.5 w-3.5" /> References
+                        <div className="bg-white/[0.02] border border-white/10 rounded-lg p-4">
+                            <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-zinc-300 mb-3">
+                                <ExternalLink className="h-4 w-4" /> References
                             </h5>
-                            <div className="space-y-1">
-                                {references.map((ref, i) => (
-                                    <a key={i} href={ref.startsWith("http") ? ref : undefined}
-                                        target="_blank" rel="noopener noreferrer"
-                                        className="flex items-center gap-1.5 text-xs text-primary hover:underline">
-                                        <ExternalLink className="h-3 w-3 shrink-0" />
-                                        {ref}
-                                    </a>
-                                ))}
+                            <div className="space-y-2">
+                                {references.map((ref, i) => {
+                                    // Check if it's a CIS reference
+                                    const isCIS = ref.includes("CIS Docker Benchmark");
+                                    
+                                    if (isCIS) {
+                                        return (
+                                            <button
+                                                key={i}
+                                                onClick={() => toast.info("📄 CIS PDF viewer coming soon!", { description: "Upload PDF to backend and view inline" })}
+                                                className="flex items-center gap-2 text-sm text-[#2496ED] hover:text-[#1d7ac7] transition-colors group w-full text-left"
+                                            >
+                                                <BookOpen className="h-3.5 w-3.5 shrink-0 group-hover:scale-110 transition-transform" />
+                                                <span className="group-hover:underline">{ref}</span>
+                                            </button>
+                                        );
+                                    }
+                                    
+                                    return (
+                                        <a key={i} href={ref.startsWith("http") ? ref : undefined}
+                                            target="_blank" rel="noopener noreferrer"
+                                            className="flex items-center gap-2 text-sm text-[#2496ED] hover:text-[#1d7ac7] transition-colors group">
+                                            <ExternalLink className="h-3.5 w-3.5 shrink-0 group-hover:scale-110 transition-transform" />
+                                            <span className="group-hover:underline">{ref}</span>
+                                        </a>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
@@ -778,8 +796,9 @@ function AuditDetailPage() {
                                     </p>
                                     <button
                                         onClick={() => setViewMode(m => m === "pillar" ? "section" : "pillar")}
-                                        className="text-[10px] text-zinc-500 hover:text-[#2496ED] transition-colors font-medium"
+                                        className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-white/[0.02] border border-white/10 hover:bg-[#2496ED]/20 hover:border-[#2496ED]/50 hover:text-[#2496ED] transition-all text-zinc-400"
                                     >
+                                        <ArrowLeftRight className="h-3 w-3" />
                                         Switch to {viewMode === "pillar" ? "Sections" : "Pillars"}
                                     </button>
                                 </div>
@@ -953,7 +972,9 @@ function AuditDetailPage() {
                         </div>
                     ) : (
                         <div className="space-y-8">
-                            {Object.entries(groupedResults).map(([groupName, results]) => {
+                            {Object.entries(groupedResults)
+                                .filter(([, results]) => results.length > 0) // Only show groups with results
+                                .map(([groupName, results]) => {
                                 // Determine if this is a pillar or section group
                                 const isPillarView = viewMode === "pillar";
                                 
