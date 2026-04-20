@@ -68,17 +68,15 @@ const FinalCTA = () => {
                   <div>
                     <span className="text-[#2496ED]">$</span> curl -fsSL{" "}
                     <span className="text-[#00E5FF]">
-                      https://get.dokuru.dev
+                      https://dokuru.rifuki.dev/install
                     </span>{" "}
-                    | sh
+                    | bash
                   </div>
-                  <div>
-                    <span className="text-[#2496ED]">$</span> dokuru{" "}
-                    <span className="text-emerald-300">onboard</span>
+                  <div className="text-zinc-500 text-[11px] mt-2">
+                    # Copy URL + token, add to dashboard
                   </div>
-                  <div>
-                    <span className="text-[#2496ED]">$</span> dokuru{" "}
-                    <span className="text-emerald-300">audit</span>
+                  <div className="text-zinc-500 text-[11px]">
+                    # Run audits from app.dokuru.rifuki.dev
                     <span className="terminal-cursor" />
                   </div>
                 </div>

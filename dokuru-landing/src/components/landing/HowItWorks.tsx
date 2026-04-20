@@ -36,7 +36,7 @@ const HowItWorks = () => {
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
     navigator.clipboard.writeText(
-      "curl -fsSL https://get.dokuru.dev | sh\ndokuru onboard"
+      "curl -fsSL https://dokuru.rifuki.dev/install | bash"
     );
     setCopied(true);
     setTimeout(() => setCopied(false), 1800);
@@ -119,20 +119,20 @@ const HowItWorks = () => {
               </div>
 
               <div className="p-6 font-mono text-[13px] leading-7 space-y-4">
-                <TerminalLine comment="# install the Dokuru agent">
+                <TerminalLine comment="# install agent (auto-onboard)">
                   curl -fsSL{" "}
                   <span className="text-[#00E5FF]">
-                    https://get.dokuru.dev
+                    https://dokuru.rifuki.dev/install
                   </span>{" "}
-                  | sh
+                  | bash
                 </TerminalLine>
-                <TerminalLine comment="# generate host URL + access token">
-                  dokuru <span className="text-emerald-300">onboard</span>
+                <TerminalLine comment="# copy URL + token from output">
+                  <span className="text-zinc-600">Agent URL:</span>{" "}
+                  <span className="text-[#00E5FF]">https://xxx.trycloudflare.com</span>
                 </TerminalLine>
-                <TerminalLine comment="# run a CIS-aligned audit from the dashboard or CLI">
-                  dokuru <span className="text-emerald-300">audit</span>{" "}
-                  <span className="text-zinc-400">--policy</span>{" "}
-                  <span className="text-amber-300">cis-docker</span>
+                <TerminalLine comment="# add agent to dashboard">
+                  <span className="text-zinc-600">→</span> Go to{" "}
+                  <span className="text-[#2496ED]">app.dokuru.rifuki.dev</span>
                   <span className="terminal-cursor" />
                 </TerminalLine>
 
