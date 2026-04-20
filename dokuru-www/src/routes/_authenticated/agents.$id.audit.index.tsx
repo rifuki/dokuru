@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAgentStore } from "@/stores/use-agent-store";
 import { useEffect, useRef, useState } from "react";
 import { agentApi } from "@/lib/api/agent";
@@ -184,6 +185,7 @@ function RuleCard({ result, agentUrl, token }: {
     agentUrl: string;
     token?: string;
 }) {
+    const queryClient = useQueryClient();
     const [open, setOpen] = useState(false);
     const [fixing, setFixing] = useState(false);
     const [fixOutcome, setFixOutcome] = useState<FixOutcome | null>(null);
@@ -232,6 +234,8 @@ function RuleCard({ result, agentUrl, token }: {
             setFixOutcome(outcome);
             if (outcome.status === "Applied") {
                 toast.success(`Fix applied for rule ${rule.id}`);
+                // Refetch audit data to show updated status
+                queryClient.invalidateQueries({ queryKey: ["agent-audit"] });
             } else if (outcome.status === "Blocked") {
                 toast.error(`Rule ${rule.id}: ${outcome.message.slice(0, 80)}`);
             }
