@@ -859,6 +859,18 @@ function AuditDetailPage() {
                                         />
                                     ))
                                 )}
+
+                                {/* Quick Stats */}
+                                <div className="pt-4 mt-4 border-t border-white/10 grid grid-cols-2 gap-2">
+                                    <div className="bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2">
+                                        <p className="text-[9px] text-zinc-500 uppercase tracking-[0.15em]">Critical</p>
+                                        <p className="text-lg font-black text-rose-400">{auditData.results.filter(r => r.rule.severity === "HIGH" && r.status === "Fail").length}</p>
+                                    </div>
+                                    <div className="bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2">
+                                        <p className="text-[9px] text-zinc-500 uppercase tracking-[0.15em]">Medium</p>
+                                        <p className="text-lg font-black text-amber-400">{auditData.results.filter(r => r.rule.severity === "MEDIUM" && r.status === "Fail").length}</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
