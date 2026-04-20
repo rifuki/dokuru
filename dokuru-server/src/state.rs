@@ -30,6 +30,7 @@ use crate::{
         },
         storage::StorageProvider,
     },
+    websocket::WsManager,
 };
 
 #[derive(Clone)]
@@ -47,6 +48,7 @@ pub struct AppState {
     pub storage: Arc<dyn StorageProvider>,
     pub session_blacklist: Option<Arc<dyn SessionBlacklist>>,
     pub log_reload_handle: Arc<ReloadFilterHandle>,
+    pub ws_manager: WsManager,
 }
 
 impl std::fmt::Debug for AppState {
@@ -126,6 +128,7 @@ impl AppState {
         ));
 
         let agent_registry = Arc::new(DashMap::new());
+        let ws_manager = WsManager::new();
 
         Ok(Self {
             config: Arc::new(config),
@@ -141,6 +144,7 @@ impl AppState {
             storage,
             session_blacklist,
             log_reload_handle: Arc::new(log_reload_handle),
+            ws_manager,
         })
     }
 
@@ -193,6 +197,7 @@ impl AppState {
         ));
 
         let agent_registry = Arc::new(DashMap::new());
+        let ws_manager = WsManager::new();
 
         Self {
             config: Arc::new(config),
@@ -208,6 +213,7 @@ impl AppState {
             storage,
             session_blacklist: None,
             log_reload_handle: Arc::new(handle),
+            ws_manager,
         }
     }
 }

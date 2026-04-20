@@ -119,6 +119,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     );
 
     info!("Agent {} connected via relay", agent_id);
+    state.ws_manager.broadcast_agent_connected(agent_id);
 
     // Spawn task to send messages to agent
     let mut send_task = tokio::spawn(async move {
@@ -156,6 +157,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     // Cleanup
     registry.remove(&token);
     info!("Agent {} disconnected", agent_id);
+    state.ws_manager.broadcast_agent_disconnected(agent_id);
 }
 
 /// Authenticate agent by token

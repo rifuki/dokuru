@@ -39,6 +39,11 @@ pub async fn save_audit(
         .await
         .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
+    // Broadcast audit completion event
+    state
+        .ws_manager
+        .broadcast_audit_completed(agent_id, result.id);
+
     Ok(ApiSuccess::default()
         .with_code(StatusCode::CREATED)
         .with_data(result))
