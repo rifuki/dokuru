@@ -7,3 +7,6 @@ pub mod service;
 pub use dto::{AuditResultResponse, SaveAuditDto};
 pub use repository::{AuditResultRepository, AuditResultRepositoryImpl};
 pub use service::AuditResultService;
+
+#[cfg(test)]
+mod dto_tests;

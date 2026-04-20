@@ -116,3 +116,98 @@ impl AgentService {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hash_token_consistency() {
+        let token = "test-token-123";
+        let hash1 = AgentService::hash_token(token);
+        let hash2 = AgentService::hash_token(token);
+
+        assert_eq!(hash1, hash2, "Same token should produce same hash");
+        assert_ne!(hash1, token, "Hash should be different from original token");
+        assert_eq!(hash1.len(), 64, "SHA256 hash should be 64 hex characters");
+    }
+
+    #[test]
+    fn test_hash_token_different_inputs() {
+        let token1 = "token-1";
+        let token2 = "token-2";
+
+        let hash1 = AgentService::hash_token(token1);
+        let hash2 = AgentService::hash_token(token2);
+
+        assert_ne!(
+            hash1, hash2,
+            "Different tokens should produce different hashes"
+        );
+    }
+
+    #[test]
+    fn test_hash_token_empty_string() {
+        let token = "";
+        let hash = AgentService::hash_token(token);
+
+        assert!(!hash.is_empty(), "Hash of empty string should not be empty");
+        assert_eq!(hash.len(), 64);
+    }
+
+    #[test]
+    fn test_hash_token_known_value() {
+        let token = "test";
+        let hash = AgentService::hash_token(token);
+
+        // SHA256 of "test" should be this specific value
+        let expected = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+        assert_eq!(hash, expected);
+    }
+
+    #[test]
+    fn test_to_response_without_token() {
+        let agent = Agent {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
+            name: "Test Agent".to_string(),
+            url: "http://localhost:8080".to_string(),
+            token_hash: "hash123".to_string(),
+            access_mode: "direct".to_string(),
+            status: "online".to_string(),
+            last_seen: Some(chrono::Utc::now()),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+
+        let response = AgentService::to_response(agent.clone());
+
+        assert_eq!(response.id, agent.id);
+        assert_eq!(response.name, agent.name);
+        assert_eq!(response.url, agent.url);
+        assert!(response.token.is_none());
+    }
+
+    #[test]
+    fn test_to_response_with_token() {
+        let agent = Agent {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
+            name: "Test Agent".to_string(),
+            url: "http://localhost:8080".to_string(),
+            token_hash: "hash123".to_string(),
+            access_mode: "direct".to_string(),
+            status: "online".to_string(),
+            last_seen: Some(chrono::Utc::now()),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+
+        let token = "plain-token-123".to_string();
+        let response = AgentService::to_response_with_token(agent.clone(), Some(token.clone()));
+
+        assert_eq!(response.id, agent.id);
+        assert!(response.token.is_some());
+        assert_eq!(response.token.unwrap(), token);
+    }
+}

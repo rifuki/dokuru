@@ -85,7 +85,11 @@ mod tests {
         for mode in &["direct", "cloudflare", "domain", "relay"] {
             let dto = CreateAgentDto {
                 name: "Test Agent".to_string(),
-                url: if *mode == "relay" { "relay".to_string() } else { "http://localhost:8080".to_string() },
+                url: if *mode == "relay" {
+                    "relay".to_string()
+                } else {
+                    "http://localhost:8080".to_string()
+                },
                 token: "test-token".to_string(),
                 access_mode: mode.to_string(),
             };

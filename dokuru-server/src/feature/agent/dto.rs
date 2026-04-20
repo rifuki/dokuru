@@ -27,14 +27,14 @@ fn validate_agent_url(url: &str) -> Result<(), validator::ValidationError> {
     if url == "relay" {
         return Ok(());
     }
-    
+
     // Otherwise validate as URL
     if url::Url::parse(url).is_err() {
         let mut err = validator::ValidationError::new("invalid_url");
         err.message = Some("Invalid URL format".into());
         return Err(err);
     }
-    
+
     Ok(())
 }
 
