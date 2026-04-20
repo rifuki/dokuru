@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useState } from "react";
-import { Copy, Check, Zap, ShieldCheck } from "lucide-react";
+import { Copy, Check, Zap, ShieldCheck, Box, Gauge, Shield } from "lucide-react";
 
 const steps = [
   {
@@ -200,89 +200,118 @@ const HowItWorks = () => {
 
             {/* Step 3: Audit Results */}
             {activeStep === 2 && (
-              <div className="rounded-xl border border-white/10 bg-[#050505] shadow-[0_40px_80px_-20px_rgba(0,0,0,0.8)] overflow-hidden">
-                <div className="flex items-center px-4 py-3 border-b border-white/10 bg-[#0d0d0f]">
+              <div className="rounded-xl border border-white/10 bg-[#09090B] shadow-[0_40px_80px_-20px_rgba(0,0,0,0.8)] overflow-hidden">
+                <div className="flex items-center px-4 py-3 border-b border-white/10 bg-[#121214]">
                   <div className="flex gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-zinc-700" />
                     <span className="w-2.5 h-2.5 rounded-full bg-zinc-700" />
                     <span className="w-2.5 h-2.5 rounded-full bg-zinc-700" />
                   </div>
                   <span className="font-mono text-[11px] text-zinc-500 ml-3">
-                    Security Audit · CIS Docker Benchmark v1.8.0
+                    dokuru-agent <span className="text-zinc-700">~</span>{" "}
+                    <span className="text-zinc-400">target:</span>{" "}
+                    <span className="text-[#2496ED]">prod-cluster-01</span>
+                  </span>
+                  <span className="ml-auto inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-emerald-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot" />
+                    live
                   </span>
                 </div>
 
                 <div className="p-6 space-y-5">
-                  <div className="flex items-center justify-between">
+                  {/* Score */}
+                  <div className="flex items-end justify-between border-b border-white/5 pb-5">
                     <div>
-                      <h3 className="text-xl font-bold text-white mb-1">Audit Score</h3>
-                      <p className="text-sm text-zinc-400">Production Server · 2 containers</p>
+                      <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500 mb-1.5">
+                        audit score
+                      </div>
+                      <div className="flex items-baseline gap-1 font-heading">
+                        <span className="text-5xl font-black text-emerald-400 leading-none">78</span>
+                        <span className="text-lg text-zinc-600 font-bold">/ 100</span>
+                      </div>
+                      <div className="mt-2 text-xs text-zinc-500 font-mono">
+                        CIS-aligned · 42 rules evaluated
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-4xl font-black text-rose-400">45</div>
-                      <div className="text-sm text-zinc-500">/ 100</div>
+                    <div className="flex flex-col items-end gap-1.5 text-right">
+                      <div className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-sm bg-rose-500" />
+                        <span className="font-mono text-xs text-zinc-300">
+                          <span className="text-rose-400 font-semibold">7</span> failed
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-sm bg-amber-400" />
+                        <span className="font-mono text-xs text-zinc-300">
+                          <span className="text-amber-400 font-semibold">3</span> warnings
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-sm bg-emerald-400" />
+                        <span className="font-mono text-xs text-zinc-300">
+                          <span className="text-emerald-400 font-semibold">32</span> passed
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3 text-center">
-                      <div className="text-2xl font-bold text-emerald-400">16</div>
-                      <div className="text-xs text-zinc-400 mt-1">PASS</div>
+                  {/* Sections */}
+                  <div className="space-y-3">
+                    <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+                      security pillars
                     </div>
-                    <div className="bg-rose-500/10 border border-rose-500/30 rounded-lg p-3 text-center">
-                      <div className="text-2xl font-bold text-rose-400">19</div>
-                      <div className="text-xs text-zinc-400 mt-1">FAIL</div>
+
+                    {/* Namespace */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] px-2 py-1 rounded border text-blue-400 border-blue-500/30 bg-white/[0.02]">
+                          <Box size={11} />
+                          Namespace Isolation
+                        </span>
+                        <span className="font-mono text-[10px] text-zinc-600">1/5</span>
+                      </div>
+                      <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                        <div className="h-full bg-blue-500" style={{ width: "20%" }} />
+                      </div>
                     </div>
-                    <div className="bg-zinc-500/10 border border-zinc-500/30 rounded-lg p-3 text-center">
-                      <div className="text-2xl font-bold text-zinc-400">35</div>
-                      <div className="text-xs text-zinc-400 mt-1">TOTAL</div>
+
+                    {/* Cgroup */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] px-2 py-1 rounded border text-amber-400 border-amber-500/30 bg-white/[0.02]">
+                          <Gauge size={11} />
+                          Cgroup Controls
+                        </span>
+                        <span className="font-mono text-[10px] text-zinc-600">2/5</span>
+                      </div>
+                      <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                        <div className="h-full bg-amber-500" style={{ width: "40%" }} />
+                      </div>
+                    </div>
+
+                    {/* Runtime */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] px-2 py-1 rounded border text-rose-400 border-rose-500/30 bg-white/[0.02]">
+                          <Shield size={11} />
+                          Runtime Hardening
+                        </span>
+                        <span className="font-mono text-[10px] text-zinc-600">3/6</span>
+                      </div>
+                      <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                        <div className="h-full bg-rose-500" style={{ width: "50%" }} />
+                      </div>
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <div className="bg-[#0d0d0f] border border-rose-500/30 rounded-lg p-3 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 text-xs font-bold">
-                          2.10
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-white">User namespace support</div>
-                          <div className="text-xs text-zinc-500">Containers run as root on host</div>
-                        </div>
-                      </div>
-                      <button className="bg-[#2496ED] hover:bg-[#2496ED]/90 text-white text-xs font-semibold px-3 py-1.5 rounded flex items-center gap-1.5 transition-colors">
-                        <Zap size={12} /> Auto Fix
-                      </button>
+                  {/* Footer */}
+                  <div className="flex items-center justify-between border-t border-white/5 pt-4">
+                    <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-600">
+                      run · 2s ago
                     </div>
-
-                    <div className="bg-[#0d0d0f] border border-emerald-500/30 rounded-lg p-3 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 text-xs font-bold">
-                          3.8
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-white">File permissions secured</div>
-                          <div className="text-xs text-zinc-500">Docker files properly protected</div>
-                        </div>
-                      </div>
-                      <div className="text-emerald-400 flex items-center gap-1.5">
-                        <ShieldCheck size={16} />
-                      </div>
-                    </div>
-
-                    <div className="bg-[#0d0d0f] border border-rose-500/30 rounded-lg p-3 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 text-xs font-bold">
-                          5.12
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-white">Host PID namespace</div>
-                          <div className="text-xs text-zinc-500">Container shares host PID</div>
-                        </div>
-                      </div>
-                      <button className="bg-[#2496ED] hover:bg-[#2496ED]/90 text-white text-xs font-semibold px-3 py-1.5 rounded flex items-center gap-1.5 transition-colors">
-                        <Zap size={12} /> Auto Fix
-                      </button>
+                    <div className="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[#2496ED]">
+                      apply auto-fixes (3)
+                      <span>→</span>
                     </div>
                   </div>
                 </div>
