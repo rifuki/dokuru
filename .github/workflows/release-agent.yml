@@ -8,6 +8,8 @@ on:
       - '**/*.md'
       - 'LICENSE'
       - '.gitignore'
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
 
 env:
@@ -17,7 +19,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: latest-release-main
+  group: ${{ github.ref == 'refs/heads/main' && 'latest-release-main' || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -65,21 +67,39 @@ jobs:
         run: strip dokuru-agent/target/${{ matrix.target }}/release/dokuru
 
       - name: Rename binary
-        run: cp dokuru-agent/target/${{ matrix.target }}/release/dokuru ${{ matrix.artifact_name }}
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            cp dokuru-agent/target/${{ matrix.target }}/release/dokuru ${{ matrix.artifact_name }}-${VERSION}
+          else
+            cp dokuru-agent/target/${{ matrix.target }}/release/dokuru ${{ matrix.artifact_name }}
+          fi
 
       - name: Upload artifact
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+            echo "artifact_name=${{ matrix.artifact_name }}-${VERSION}" >> "$GITHUB_ENV"
+          else
+            echo "artifact_name=${{ matrix.artifact_name }}" >> "$GITHUB_ENV"
+          fi
+        
+      - name: Upload to artifacts
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_name }}
+          path: ${{ env.artifact_name }}
           retention-days: 1
           compression-level: 0
 
-  publish-latest:
-    name: Publish Rolling Latest Release
+  publish:
+    name: Publish Release
     runs-on: ubuntu-latest
     needs: build
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
       - name: Download release artifacts
         uses: actions/download-artifact@v8
         with:
@@ -89,40 +109,133 @@ jobs:
       - name: Generate checksums
         run: sha256sum dokuru-linux-* > SHA256SUMS
 
-      - name: Compute release metadata
-        id: meta
+      - name: Determine release type
+        id: release
         run: |
-          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          echo "published_at=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+            echo "type=version" >> "$GITHUB_OUTPUT"
+            echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "name=Dokuru $VERSION" >> "$GITHUB_OUTPUT"
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          else
+            SHORT_SHA="${GITHUB_SHA::7}"
+            PUBLISHED_AT="$(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+            echo "type=latest" >> "$GITHUB_OUTPUT"
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+            echo "name=Dokuru latest ($SHORT_SHA)" >> "$GITHUB_OUTPUT"
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+            echo "published_at=$PUBLISHED_AT" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Remove previous latest release
+        if: steps.release.outputs.type == 'latest'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release delete latest --yes --cleanup-tag || true
 
-      - name: Publish latest release
+      - name: Create release body
+        id: body
+        run: |
+          if [[ "${{ steps.release.outputs.type }}" == "version" ]]; then
+            cat > body.md <<'EOF'
+          ## 🎉 Dokuru ${{ steps.release.outputs.tag }}
+
+          ![Release](https://img.shields.io/badge/release-${{ steps.release.outputs.tag }}-blue?style=flat-square)
+          ![Platform](https://img.shields.io/badge/platform-linux-lightgrey?style=flat-square)
+          ![Arch](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-green?style=flat-square)
+
+          Stable release of Dokuru Agent - Docker Security Hardening Tool.
+
+          ### 📦 Installation
+
+          **Quick install (latest):**
+          ```bash
+          curl -fsSL https://dokuru.rifuki.dev/install | bash
+          ```
+
+          **Install this specific version:**
+          ```bash
+          # AMD64
+          curl -fsSL https://github.com/${{ github.repository }}/releases/download/${{ steps.release.outputs.tag }}/dokuru-linux-amd64-${{ steps.release.outputs.tag }} -o dokuru
+          chmod +x dokuru
+          sudo mv dokuru /usr/local/bin/
+
+          # ARM64
+          curl -fsSL https://github.com/${{ github.repository }}/releases/download/${{ steps.release.outputs.tag }}/dokuru-linux-arm64-${{ steps.release.outputs.tag }} -o dokuru
+          chmod +x dokuru
+          sudo mv dokuru /usr/local/bin/
+          ```
+
+          ### 🔐 Verify Checksums
+
+          ```bash
+          sha256sum -c SHA256SUMS
+          ```
+
+          ### 📋 Assets
+
+          | File | Platform | Architecture |
+          |------|----------|--------------|
+          | `dokuru-linux-amd64-${{ steps.release.outputs.tag }}` | Linux | x86_64 |
+          | `dokuru-linux-arm64-${{ steps.release.outputs.tag }}` | Linux | aarch64 |
+          | `SHA256SUMS` | - | Checksums |
+
+          ---
+
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/v0.0.0...${{ steps.release.outputs.tag }}
+          EOF
+          else
+            cat > body.md <<'EOF'
+          ## 🚀 Dokuru Latest (Rolling Release)
+
+          ![Latest](https://img.shields.io/badge/release-latest-orange?style=flat-square)
+          ![Status](https://img.shields.io/badge/status-prerelease-yellow?style=flat-square)
+          ![Platform](https://img.shields.io/badge/platform-linux-lightgrey?style=flat-square)
+
+          Rolling release built automatically from `main` branch.
+
+          **⚠️ This is a pre-release build** - Use versioned releases for production.
+
+          ### 📊 Build Info
+
+          - **Commit**: `${{ github.sha }}`
+          - **Short SHA**: `${{ steps.release.outputs.short_sha }}`
+          - **Published**: `${{ steps.release.outputs.published_at }}`
+
+          ### 📦 Installation
+
+          ```bash
+          curl -fsSL https://dokuru.rifuki.dev/install | bash
+          ```
+
+          ### 📋 Assets
+
+          | File | Platform | Architecture |
+          |------|----------|--------------|
+          | `dokuru-linux-amd64` | Linux | x86_64 |
+          | `dokuru-linux-arm64` | Linux | aarch64 |
+          | `SHA256SUMS` | - | Checksums |
+
+          ---
+
+          💡 **Tip**: For stable releases, use versioned tags like `v0.1.0`
+          EOF
+          fi
+
+      - name: Publish release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: latest
+          tag_name: ${{ steps.release.outputs.tag }}
           target_commitish: ${{ github.sha }}
-          name: Dokuru latest (${{ steps.meta.outputs.short_sha }})
-          body: |
-            ## Dokuru latest
-
-            Rolling release built automatically from `main`.
-
-            - Commit: `${{ github.sha }}`
-            - Published: `${{ steps.meta.outputs.published_at }}`
-
-            Install with:
-            ```bash
-            curl -fsSL https://dokuru.rifuki.dev/install | bash
-            ```
+          name: ${{ steps.release.outputs.name }}
+          body_path: body.md
           files: |
             dokuru-linux-amd64
             dokuru-linux-arm64
             SHA256SUMS
           draft: false
-          prerelease: true
+          prerelease: ${{ steps.release.outputs.prerelease }}
           make_latest: true
-          generate_release_notes: false
+          generate_release_notes: ${{ steps.release.outputs.type == 'version' }}

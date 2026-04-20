@@ -12,7 +12,7 @@ pub struct CreateAgentDto {
     ))]
     pub name: String,
 
-    #[validate(url(message = "Invalid URL format"))]
+    #[validate(custom(function = "validate_agent_url"))]
     pub url: String,
 
     #[validate(length(min = 1, message = "Token is required"))]
@@ -20,6 +20,22 @@ pub struct CreateAgentDto {
 
     #[validate(custom(function = "validate_access_mode"))]
     pub access_mode: String,
+}
+
+fn validate_agent_url(url: &str) -> Result<(), validator::ValidationError> {
+    // Allow "relay" for relay mode
+    if url == "relay" {
+        return Ok(());
+    }
+    
+    // Otherwise validate as URL
+    if url::Url::parse(url).is_err() {
+        let mut err = validator::ValidationError::new("invalid_url");
+        err.message = Some("Invalid URL format".into());
+        return Err(err);
+    }
+    
+    Ok(())
 }
 
 fn validate_access_mode(mode: &str) -> Result<(), validator::ValidationError> {
@@ -42,7 +58,7 @@ pub struct UpdateAgentDto {
     ))]
     pub name: String,
 
-    #[validate(url(message = "Invalid URL format"))]
+    #[validate(custom(function = "validate_agent_url"))]
     pub url: String,
 
     /// If provided, token will be re-hashed and updated
