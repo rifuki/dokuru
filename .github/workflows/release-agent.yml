@@ -232,8 +232,7 @@ jobs:
           name: ${{ steps.release.outputs.name }}
           body_path: body.md
           files: |
-            dokuru-linux-amd64
-            dokuru-linux-arm64
+            dokuru-linux-*
             SHA256SUMS
           draft: false
           prerelease: ${{ steps.release.outputs.prerelease }}
