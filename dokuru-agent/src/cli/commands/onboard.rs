@@ -429,13 +429,24 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
 
     // ─── Next Steps ──────────────────────────────────────────────────────────
 
-    next_steps.push(format!(
-        "Agent URL: {access_url}\n           → Add this as a new environment in your Dokuru dashboard"
-    ));
-    if let Some(token) = agent_token {
+    if access_url == "relay" {
+        next_steps.push(
+            "Mode:      Relay Mode (No Public URL Needed)\n           → Agent connects to: wss://api.dokuru.rifuki.dev/ws/agent".to_string()
+        );
+        if let Some(token) = agent_token {
+            next_steps.push(format!(
+                "Token:     {token}\n           → Use this token when adding agent in dashboard"
+            ));
+        }
+    } else {
         next_steps.push(format!(
-            "Token:     {token}\n           → Copy this token (shown once only)"
+            "Agent URL: {access_url}\n           → Add this as a new environment in your Dokuru dashboard"
         ));
+        if let Some(token) = agent_token {
+            next_steps.push(format!(
+                "Token:     {token}\n           → Copy this token (shown once only)"
+            ));
+        }
     }
 
     note("Next steps", next_steps.join("\n"))?;
