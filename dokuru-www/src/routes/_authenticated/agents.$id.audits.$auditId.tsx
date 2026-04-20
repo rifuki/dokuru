@@ -7,7 +7,6 @@ import type { Agent } from "@/types/agent";
 import { getAgentToken } from "@/stores/use-agent-store";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -16,11 +15,10 @@ import {
     Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
     Terminal, Wrench, ExternalLink, AlertTriangle, Info, Server,
     ArrowLeft, Clock, Cpu, Container, Zap, BookOpen, CheckCircle2,
-    RotateCcw, ShieldAlert, XCircle, ListChecks, Search, X, Layers,
+    RotateCcw, ShieldAlert, XCircle, ListChecks,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { PILLAR_META, getRulePillar, groupResultsByPillar, type SecurityPillar } from "@/lib/audit-pillars";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/audits/$auditId")({
     component: AuditDetailPage,
