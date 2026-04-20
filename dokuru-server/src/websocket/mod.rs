@@ -7,6 +7,8 @@ use tokio::sync::broadcast;
 use uuid::Uuid;
 
 pub mod handler;
+#[cfg(test)]
+mod tests;
 
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct WsEvent {
