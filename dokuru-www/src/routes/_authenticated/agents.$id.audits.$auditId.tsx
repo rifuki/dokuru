@@ -16,7 +16,7 @@ import {
     Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
     Terminal, Wrench, ExternalLink, AlertTriangle, Info, Server,
     ArrowLeft, Clock, Cpu, Container, Zap, BookOpen, CheckCircle2,
-    RotateCcw, ShieldAlert, XCircle, ListChecks, Search, X, Layers, ArrowLeftRight,
+    RotateCcw, ShieldAlert, XCircle, ListChecks, Search, X, Layers, ArrowLeftRight, Link,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -521,7 +521,7 @@ function RuleCard({ result, agentUrl, token }: {
                     {references && references.length > 0 && (
                         <div className="bg-white/[0.02] border border-white/10 rounded-lg p-4">
                             <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-zinc-300 mb-3">
-                                <ExternalLink className="h-4 w-4" /> References
+                                <BookOpen className="h-4 w-4" /> References
                             </h5>
                             <div className="space-y-2">
                                 {references.map((ref, i) => {
@@ -545,8 +545,8 @@ function RuleCard({ result, agentUrl, token }: {
                                         <a key={i} href={ref.startsWith("http") ? ref : undefined}
                                             target="_blank" rel="noopener noreferrer"
                                             className="flex items-center gap-2 text-sm text-[#2496ED] hover:text-[#1d7ac7] transition-colors group">
-                                            <ExternalLink className="h-3.5 w-3.5 shrink-0 group-hover:scale-110 transition-transform" />
-                                            <span className="group-hover:underline">{ref}</span>
+                                            <Link className="h-3.5 w-3.5 shrink-0 group-hover:scale-110 transition-transform" />
+                                            <span className="group-hover:underline break-all">{ref}</span>
                                         </a>
                                     );
                                 })}
