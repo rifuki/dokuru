@@ -881,75 +881,76 @@ function AuditDetailPage() {
                             {Object.entries(groupedResults).map(([groupName, results]) => {
                                 // Determine if this is a pillar or section group
                                 const isPillarView = viewMode === "pillar";
-                                const meta = isPillarView 
-                                    ? (() => {
-                                        const pillar = (Object.keys(PILLAR_META) as SecurityPillar[]).find(p => PILLAR_META[p].name === groupName);
-                                        if (!pillar) return null;
-                                        const m = PILLAR_META[pillar];
-                                        const Icon = m.icon;
-                                        return { ...m, icon: <Icon size={14} />, num: "" };
-                                      })()
-                                    : sectionMeta(groupName);
                                 
-                                if (!meta) return null;
+                                if (isPillarView) {
+                                    // Pillar view
+                                    const pillar = (Object.keys(PILLAR_META) as SecurityPillar[]).find(p => PILLAR_META[p].name === groupName);
+                                    if (!pillar) return null;
+                                    const meta = PILLAR_META[pillar];
+                                    const Icon = meta.icon;
 
-                                return (
-                                    <div key={groupName}>
-                                        <div className="flex items-center gap-2 mb-3">
-                                            {isPillarView && meta.icon}
-                                            <span className={cn("text-xs font-bold px-2 py-1 rounded-md border inline-flex items-center gap-1.5", meta.bg, meta.color, meta.border)}>
-                                                {meta.num && `${meta.num} `}{isPillarView ? groupName : meta.label}
-                                            </span>
-                                            {!isPillarView && <span className="text-xs text-muted-foreground">{groupName}</span>}
-                                            <Badge variant="outline" className="text-[10px] ml-auto font-mono">
-                                                {results.filter(r => r.status === "Pass").length}/{results.length}
-                                            </Badge>
+                                    return (
+                                        <div key={groupName}>
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <Icon size={14} />
+                                                <span className={cn("text-xs font-bold px-2 py-1 rounded-md border inline-flex items-center gap-1.5", meta.bg, meta.color, meta.border)}>
+                                                    {groupName}
+                                                </span>
+                                                <Badge variant="outline" className="text-[10px] ml-auto font-mono">
+                                                    {results.filter(r => r.status === "Pass").length}/{results.length}
+                                                </Badge>
+                                            </div>
+                                            <div className="space-y-2">
+                                                {results
+                                                    .sort((a, b) => {
+                                                        if (a.status !== b.status) return a.status === "Fail" ? -1 : 1;
+                                                        return a.rule.id.localeCompare(b.rule.id, undefined, { numeric: true });
+                                                    })
+                                                    .map(r => (
+                                                        <RuleCard
+                                                            key={r.rule.id}
+                                                            result={r}
+                                                            agentUrl={agent?.url ?? ""}
+                                                            token={token}
+                                                        />
+                                                    ))
+                                                }
+                                            </div>
                                         </div>
-                                        <div className="space-y-2">
-                                            {results
-                                                .sort((a, b) => {
-                                                    if (a.status !== b.status) return a.status === "Fail" ? -1 : 1;
-                                                    return a.rule.id.localeCompare(b.rule.id, undefined, { numeric: true });
-                                                })
-                                                .map(r => (
-                                                    <RuleCard
-                                                        key={r.rule.id}
-                                                        result={r}
-                                                        agentUrl={agent?.url ?? ""}
-                                                        token={token}
-                                                    />
-                                                ))
-                                            }
+                                    );
+                                } else {
+                                    // Section view
+                                    const meta = sectionMeta(groupName);
+                                    return (
+                                        <div key={groupName}>
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <span className={cn("text-xs font-bold px-2 py-1 rounded-md border", meta.bg, meta.color, meta.border)}>
+                                                    {meta.num} {meta.label}
+                                                </span>
+                                                <span className="text-xs text-muted-foreground">{groupName}</span>
+                                                <Badge variant="outline" className="text-[10px] ml-auto font-mono">
+                                                    {results.filter(r => r.status === "Pass").length}/{results.length}
+                                                </Badge>
+                                            </div>
+                                            <div className="space-y-2">
+                                                {results
+                                                    .sort((a, b) => {
+                                                        if (a.status !== b.status) return a.status === "Fail" ? -1 : 1;
+                                                        return a.rule.id.localeCompare(b.rule.id, undefined, { numeric: true });
+                                                    })
+                                                    .map(r => (
+                                                        <RuleCard
+                                                            key={r.rule.id}
+                                                            result={r}
+                                                            agentUrl={agent?.url ?? ""}
+                                                            token={token}
+                                                        />
+                                                    ))
+                                                }
+                                            </div>
                                         </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                                            </span>
-                                            <span className="text-xs text-muted-foreground">{section}</span>
-                                            <Badge variant="outline" className="text-[10px] ml-auto font-mono">
-                                                {results.filter(r => r.status === "Pass").length}/{results.length}
-                                            </Badge>
-                                        </div>
-                                        <div className="space-y-2">
-                                            {results
-                                                .sort((a, b) => {
-                                                    if (a.status !== b.status) return a.status === "Fail" ? -1 : 1;
-                                                    return a.rule.id.localeCompare(b.rule.id, undefined, { numeric: true });
-                                                })
-                                                .map(r => (
-                                                    <RuleCard
-                                                        key={r.rule.id}
-                                                        result={r}
-                                                        agentUrl={agent?.url ?? ""}
-                                                        token={token}
-                                                    />
-                                                ))
-                                            }
-                                        </div>
-                                    </div>
-                                );
+                                    );
+                                }
                             })}
                         </div>
                     )}
