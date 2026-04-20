@@ -11,7 +11,7 @@ const WS_URL: &str = "ws://localhost:9393/ws";
 #[ignore] // Run manually when server is running
 async fn test_websocket_connection() {
     let result = timeout(Duration::from_secs(5), connect_async(WS_URL)).await;
-    
+
     match result {
         Ok(Ok((ws_stream, _))) => {
             println!("✅ WebSocket connection successful");
@@ -26,7 +26,7 @@ async fn test_websocket_connection() {
 #[ignore]
 async fn test_websocket_send_receive() {
     use futures::{SinkExt, StreamExt};
-    
+
     let (ws_stream, _) = connect_async(WS_URL).await.expect("Failed to connect");
     let (mut write, mut read) = ws_stream.split();
 
@@ -52,7 +52,9 @@ async fn test_websocket_send_receive() {
 #[ignore]
 async fn test_websocket_reconnection() {
     // First connection
-    let (ws1, _) = connect_async(WS_URL).await.expect("First connection failed");
+    let (ws1, _) = connect_async(WS_URL)
+        .await
+        .expect("First connection failed");
     drop(ws1);
 
     // Wait a bit
@@ -69,9 +71,9 @@ async fn test_websocket_reconnection() {
 async fn test_websocket_multiple_clients() {
     let (ws1, _) = connect_async(WS_URL).await.expect("Client 1 failed");
     let (ws2, _) = connect_async(WS_URL).await.expect("Client 2 failed");
-    
+
     println!("✅ Multiple clients connected");
-    
+
     drop(ws1);
     drop(ws2);
 }
@@ -87,7 +89,7 @@ fn test_websocket_url_conversion() {
     let https_url = "https://api.dokuru.rifuki.dev/ws";
     let wss_url = https_url.replace("http", "ws");
     assert_eq!(wss_url, "wss://api.dokuru.rifuki.dev/ws");
-    
+
     println!("✅ URL conversion tests passed");
 }
 
@@ -98,7 +100,7 @@ fn test_exponential_backoff() {
         let delay = std::cmp::min(1000 * 2_u64.pow(i), 30000);
         delays.push(delay);
     }
-    
+
     assert_eq!(delays, vec![1000, 2000, 4000, 8000, 16000]);
     println!("✅ Exponential backoff calculation correct");
 }
@@ -107,11 +109,11 @@ fn test_exponential_backoff() {
 fn test_max_reconnect_attempts() {
     let max_attempts = 5;
     let mut attempts = 0;
-    
+
     while attempts < max_attempts {
         attempts += 1;
     }
-    
+
     assert_eq!(attempts, 5);
     println!("✅ Max reconnect attempts enforced");
 }
