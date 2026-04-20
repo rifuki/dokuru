@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { PILLAR_META, getRulePillar, groupResultsByPillar, type SecurityPillar } from "@/lib/audit-pillars";
+import { PILLAR_META, getRulePillar, type SecurityPillar } from "@/lib/audit-pillars";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/audits/$auditId")({
     component: AuditDetailPage,
