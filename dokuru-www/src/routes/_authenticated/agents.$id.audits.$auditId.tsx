@@ -40,12 +40,6 @@ function sectionMeta(section: string) {
     return SECTION_META[section] ?? { label: section, num: "", color: "text-gray-500", bg: "bg-gray-500/10", border: "border-gray-500/30" };
 }
 
-function pillarMeta(pillar: SecurityPillar) {
-    const meta = PILLAR_META[pillar];
-    const Icon = meta.icon;
-    return { ...meta, icon: <Icon size={14} /> };
-}
-
 
 // ── Severity badge ───────────────────────────────────────────────────────────
 
