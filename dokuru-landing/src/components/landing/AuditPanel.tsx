@@ -55,7 +55,7 @@ const RemediationPill = ({ kind }: { kind: RemediationKind }) => {
 const sections = [
   {
     name: "Namespace Isolation",
-    icon: <Box size={12} />,
+    icon: <Box size={10} />,
     color: "text-blue-400 border-blue-500/30",
     barColor: "bg-blue-500",
     passed: 1,
@@ -68,7 +68,7 @@ const sections = [
   },
   {
     name: "Cgroup Controls",
-    icon: <Gauge size={12} />,
+    icon: <Gauge size={10} />,
     color: "text-amber-400 border-amber-500/30",
     barColor: "bg-amber-500",
     passed: 2,
@@ -80,7 +80,7 @@ const sections = [
   },
   {
     name: "Runtime Hardening",
-    icon: <Shield size={12} />,
+    icon: <Shield size={10} />,
     color: "text-rose-400 border-rose-500/30",
     barColor: "bg-rose-500",
     passed: 3,
@@ -122,42 +122,42 @@ const AuditPanel = () => {
       </div>
 
       {/* Content */}
-      <div className="p-6 flex flex-col gap-6 relative">
+      <div className="p-4 flex flex-col gap-4 relative">
         {/* Score row */}
-        <div className="flex items-end justify-between gap-6 border-b border-white/5 pb-6">
+        <div className="flex items-end justify-between gap-4 border-b border-white/5 pb-4">
           <div>
-            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500 mb-1.5">
+            <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-zinc-500 mb-1">
               audit score
             </div>
             <div className="flex items-baseline gap-1 font-heading">
               <span
-                className="text-6xl font-black text-emerald-400 leading-none"
+                className="text-4xl font-black text-emerald-400 leading-none"
                 data-testid="audit-score-value"
               >
                 78
               </span>
-              <span className="text-xl text-zinc-600 font-bold">/ 100</span>
+              <span className="text-base text-zinc-600 font-bold">/ 100</span>
             </div>
-            <div className="mt-2 text-xs text-zinc-500 font-mono">
+            <div className="mt-1 text-[10px] text-zinc-500 font-mono">
               CIS-aligned · 42 rules evaluated
             </div>
           </div>
-          <div className="flex flex-col items-end gap-2 text-right">
-            <div className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-sm bg-rose-500" />
-              <span className="font-mono text-xs text-zinc-300">
+          <div className="flex flex-col items-end gap-1 text-right">
+            <div className="flex items-center gap-1.5">
+              <span className="w-1 h-1 rounded-sm bg-rose-500" />
+              <span className="font-mono text-[10px] text-zinc-300">
                 <span className="text-rose-400 font-semibold">7</span> failed
               </span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-sm bg-amber-400" />
-              <span className="font-mono text-xs text-zinc-300">
+            <div className="flex items-center gap-1.5">
+              <span className="w-1 h-1 rounded-sm bg-amber-400" />
+              <span className="font-mono text-[10px] text-zinc-300">
                 <span className="text-amber-400 font-semibold">3</span> warnings
               </span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-sm bg-emerald-400" />
-              <span className="font-mono text-xs text-zinc-300">
+            <div className="flex items-center gap-1.5">
+              <span className="w-1 h-1 rounded-sm bg-emerald-400" />
+              <span className="font-mono text-[10px] text-zinc-300">
                 <span className="text-emerald-400 font-semibold">32</span> passed
               </span>
             </div>
@@ -165,28 +165,28 @@ const AuditPanel = () => {
         </div>
 
         {/* Section breakdown */}
-        <div className="flex flex-col gap-3">
-          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500 mb-1">
+        <div className="flex flex-col gap-2">
+          <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-zinc-500 mb-0.5">
             security pillars
           </div>
 
           {sections.map((section, i) => (
-            <div key={i} className="flex flex-col gap-2">
+            <div key={i} className="flex flex-col gap-1.5">
               {/* Section header */}
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className={`inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] px-2 py-1 rounded border ${section.color} bg-white/[0.02]`}>
+                <div className="flex items-center gap-1.5">
+                  <span className={`inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.14em] px-1.5 py-0.5 rounded border ${section.color} bg-white/[0.02]`}>
                     {section.icon}
                     {section.name}
                   </span>
-                  <span className="font-mono text-[10px] text-zinc-600">
+                  <span className="font-mono text-[9px] text-zinc-600">
                     {section.passed}/{section.total}
                   </span>
                 </div>
               </div>
 
               {/* Progress bar */}
-              <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+              <div className="h-0.5 bg-white/5 rounded-full overflow-hidden">
                 <div 
                   className={`h-full ${section.barColor}`}
                   style={{ width: `${(section.passed / section.total) * 100}%` }}
@@ -197,15 +197,15 @@ const AuditPanel = () => {
               {section.rules.map((rule, j) => (
                 <div
                   key={j}
-                  className="flex items-center justify-between gap-2 p-2 rounded bg-white/[0.02] border border-white/5"
+                  className="flex items-center justify-between gap-2 p-1.5 rounded bg-white/[0.02] border border-white/5"
                 >
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
                     <SeverityChip kind={rule.sev} />
                     <div className="min-w-0 flex-1">
-                      <div className="font-mono text-[11px] text-zinc-200 truncate">
+                      <div className="font-mono text-[10px] text-zinc-200 truncate">
                         {rule.rule}
                       </div>
-                      <div className="font-mono text-[10px] text-zinc-500 truncate">
+                      <div className="font-mono text-[9px] text-zinc-500 truncate">
                         {rule.detail}
                       </div>
                     </div>
@@ -218,11 +218,11 @@ const AuditPanel = () => {
         </div>
 
         {/* footer bar */}
-        <div className="flex items-center justify-between border-t border-white/5 pt-4 -mb-2">
-          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-600">
+        <div className="flex items-center justify-between border-t border-white/5 pt-3 -mb-1">
+          <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-zinc-600">
             run · 2s ago
           </div>
-          <div className="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[#2496ED]">
+          <div className="inline-flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.2em] text-[#2496ED]">
             apply auto-fixes (3)
             <span>→</span>
           </div>
