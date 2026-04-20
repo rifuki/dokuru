@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { ShieldCheck, Wrench, LifeBuoy, Clock } from "lucide-react";
+import { ShieldCheck, Wrench, LifeBuoy, Clock, Box, Gauge, Shield } from "lucide-react";
 import type { ReactNode } from "react";
 
 type SeverityKind = "FAIL" | "PASS" | "WARN";
@@ -52,27 +52,43 @@ const RemediationPill = ({ kind }: { kind: RemediationKind }) => {
   );
 };
 
-const findings = [
+const sections = [
   {
-    rule: "5.4  Privileged containers detected",
-    group: "runtime",
-    sev: "FAIL",
-    rem: "AUTO",
-    detail: "2 containers running with --privileged",
+    name: "Namespace Isolation",
+    icon: <Box size={12} />,
+    color: "text-blue-400 border-blue-500/30",
+    barColor: "bg-blue-500",
+    passed: 1,
+    failed: 1,
+    total: 5,
+    rules: [
+      { rule: "2.8 User namespace remapping", sev: "PASS", rem: "OK", detail: "userns-remap: default" },
+      { rule: "5.9 Host network namespace", sev: "FAIL", rem: "GUIDED", detail: "1 container using --net=host" },
+    ],
   },
   {
-    rule: "2.8  User namespace remapping enabled",
-    group: "namespace",
-    sev: "PASS",
-    rem: "OK",
-    detail: "userns-remap: default",
+    name: "Cgroup Controls",
+    icon: <Gauge size={12} />,
+    color: "text-amber-400 border-amber-500/30",
+    barColor: "bg-amber-500",
+    passed: 2,
+    failed: 1,
+    total: 5,
+    rules: [
+      { rule: "5.11 Memory limit", sev: "WARN", rem: "AUTO", detail: "3 containers without --memory" },
+    ],
   },
   {
-    rule: "5.9  Host network namespace shared",
-    group: "namespace",
-    sev: "FAIL",
-    rem: "GUIDED",
-    detail: "1 container using network_mode: host",
+    name: "Runtime Hardening",
+    icon: <Shield size={12} />,
+    color: "text-rose-400 border-rose-500/30",
+    barColor: "bg-rose-500",
+    passed: 3,
+    failed: 2,
+    total: 6,
+    rules: [
+      { rule: "5.4 Privileged containers", sev: "FAIL", rem: "AUTO", detail: "2 containers with --privileged" },
+    ],
   },
 ];
 
@@ -148,35 +164,55 @@ const AuditPanel = () => {
           </div>
         </div>
 
-        {/* Findings list */}
-        <div className="flex flex-col gap-2.5">
-          <div className="flex items-center justify-between">
-            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
-              findings
-            </div>
-            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-600">
-              rule · evidence · fix
-            </div>
+        {/* Section breakdown */}
+        <div className="flex flex-col gap-3">
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500 mb-1">
+            security pillars
           </div>
 
-          {findings.map((f, i) => (
-            <div
-              key={i}
-              data-testid={`finding-row-${i}`}
-              className="group flex items-center justify-between gap-3 p-3 rounded-md bg-white/[0.02] border border-white/5 hover:border-white/15 hover:bg-white/[0.04] transition-colors"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <SeverityChip kind={f.sev} />
-                <div className="min-w-0">
-                  <div className="font-mono text-[13px] text-zinc-200 truncate">
-                    {f.rule}
-                  </div>
-                  <div className="font-mono text-[11px] text-zinc-500 truncate">
-                    {f.detail}
-                  </div>
+          {sections.map((section, i) => (
+            <div key={i} className="flex flex-col gap-2">
+              {/* Section header */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] px-2 py-1 rounded border ${section.color} bg-white/[0.02]`}>
+                    {section.icon}
+                    {section.name}
+                  </span>
+                  <span className="font-mono text-[10px] text-zinc-600">
+                    {section.passed}/{section.total}
+                  </span>
                 </div>
               </div>
-              <RemediationPill kind={f.rem} />
+
+              {/* Progress bar */}
+              <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full ${section.barColor}`}
+                  style={{ width: `${(section.passed / section.total) * 100}%` }}
+                />
+              </div>
+
+              {/* Sample rules */}
+              {section.rules.map((rule, j) => (
+                <div
+                  key={j}
+                  className="flex items-center justify-between gap-2 p-2 rounded bg-white/[0.02] border border-white/5"
+                >
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <SeverityChip kind={rule.sev} />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-mono text-[11px] text-zinc-200 truncate">
+                        {rule.rule}
+                      </div>
+                      <div className="font-mono text-[10px] text-zinc-500 truncate">
+                        {rule.detail}
+                      </div>
+                    </div>
+                  </div>
+                  <RemediationPill kind={rule.rem} />
+                </div>
+              ))}
             </div>
           ))}
         </div>
