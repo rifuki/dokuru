@@ -16,7 +16,7 @@ import {
     Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
     Terminal, Wrench, AlertTriangle, Info, Server,
     ArrowLeft, Clock, Cpu, Container, Zap, BookOpen, CheckCircle2,
-    RotateCcw, ShieldAlert, XCircle, ListChecks, Search, X, Layers, ArrowLeftRight, Link,
+    RotateCcw, ShieldAlert, XCircle, ListChecks, Search, X, Layers, ArrowLeftRight, Link, FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -424,14 +424,9 @@ function RuleCard({ result, agentUrl, token }: {
                         </div>
                     )}
 
-                    {/* Message full */}
-                    <div className={fixing || fixOutcome ? "" : "pt-3"}>
-                        <p className="text-muted-foreground">{message}</p>
-                    </div>
-
                     {/* Description */}
                     {rule.description && (
-                        <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
+                        <div className={cn("bg-blue-500/5 border border-blue-500/20 rounded-lg p-4", fixing || fixOutcome ? "" : "mt-3")}>
                             <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-blue-400 mb-2">
                                 <Info className="h-4 w-4" /> About
                             </h5>
@@ -446,12 +441,24 @@ function RuleCard({ result, agentUrl, token }: {
                                 <AlertTriangle className="h-4 w-4" /> Affected ({affected.length})
                             </h5>
                             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                                {affected.map((item, i) => (
-                                    <div key={i} className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 group hover:bg-amber-500/15 transition-colors">
-                                        <Container className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                                        <code className="text-xs text-amber-300 font-mono truncate">{item}</code>
-                                    </div>
-                                ))}
+                                {affected.map((item, i) => {
+                                    // Smart icon detection
+                                    let IconComponent = Container;
+                                    if (item.includes('dockerd') || item.includes('/usr/bin/') || item.includes('daemon')) {
+                                        IconComponent = Server;
+                                    } else if (item.includes('.sock') || item.includes('.socket')) {
+                                        IconComponent = Link;
+                                    } else if (item.includes('/etc/') || item.includes('.conf') || item.includes('.json') || item.includes('.service')) {
+                                        IconComponent = FileText;
+                                    }
+                                    
+                                    return (
+                                        <div key={i} className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 group hover:bg-amber-500/15 transition-colors">
+                                            <IconComponent className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                                            <code className="text-xs text-amber-300 font-mono truncate">{item}</code>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
@@ -491,7 +498,9 @@ function RuleCard({ result, agentUrl, token }: {
                     {/* Raw Output */}
                     {raw_output && (
                         <div className="bg-white/[0.02] border border-white/10 rounded-lg p-4">
-                            <h5 className="font-bold text-sm uppercase tracking-wide text-zinc-300 mb-2">Raw Output</h5>
+                            <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-zinc-300 mb-2">
+                                <Terminal className="h-4 w-4" /> Raw Output
+                            </h5>
                             <pre className="text-xs bg-black/50 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap font-mono text-zinc-400 border border-white/10">
                                 {raw_output}
                             </pre>
