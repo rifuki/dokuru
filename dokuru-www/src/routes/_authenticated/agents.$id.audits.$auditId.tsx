@@ -7,6 +7,7 @@ import type { Agent } from "@/types/agent";
 import { getAgentToken } from "@/stores/use-agent-store";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -15,10 +16,11 @@ import {
     Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
     Terminal, Wrench, ExternalLink, AlertTriangle, Info, Server,
     ArrowLeft, Clock, Cpu, Container, Zap, BookOpen, CheckCircle2,
-    RotateCcw, ShieldAlert, XCircle, ListChecks,
+    RotateCcw, ShieldAlert, XCircle, ListChecks, Search, X, Layers,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { PILLAR_META, getRulePillar, groupResultsByPillar, type SecurityPillar } from "@/lib/audit-pillars";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/audits/$auditId")({
     component: AuditDetailPage,
@@ -538,6 +540,7 @@ function SectionHeader({ section, total, passed }: { section: string; total: num
 // ── Main Page ────────────────────────────────────────────────────────────────
 
 type StatusFilter = "all" | "Pass" | "Fail";
+type ViewMode = "pillar" | "section";
 
 function AuditDetailPage() {
     const { id, auditId } = Route.useParams();
@@ -547,6 +550,9 @@ function AuditDetailPage() {
     const [auditData, setAuditData] = useState<AuditResponse | null>(null);
     const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
     const [sectionFilter, setSectionFilter] = useState<string>("all");
+    const [pillarFilter, setPillarFilter] = useState<SecurityPillar | "all">("all");
+    const [searchQuery, setSearchQuery] = useState("");
+    const [viewMode, setViewMode] = useState<ViewMode>("pillar");
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -593,14 +599,26 @@ function AuditDetailPage() {
     const filteredResults = auditData?.results.filter(r => {
         const statusOk = statusFilter === "all" || r.status === statusFilter;
         const sectionOk = sectionFilter === "all" || r.rule.section === sectionFilter;
-        return statusOk && sectionOk;
+        const pillarOk = pillarFilter === "all" || getRulePillar(r.rule.id) === pillarFilter;
+        const searchOk = !searchQuery || 
+            r.rule.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            r.rule.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            r.message.toLowerCase().includes(searchQuery.toLowerCase());
+        return statusOk && sectionOk && pillarOk && searchOk;
     }) ?? [];
 
-    // Group filtered results by section
-    const groupedResults = filteredResults.reduce<Record<string, AuditResult[]>>((acc, r) => {
-        (acc[r.rule.section] ??= []).push(r);
-        return acc;
-    }, {});
+    // Group filtered results by section OR pillar based on viewMode
+    const groupedResults = viewMode === "section"
+        ? filteredResults.reduce<Record<string, AuditResult[]>>((acc, r) => {
+            (acc[r.rule.section] ??= []).push(r);
+            return acc;
+          }, {})
+        : filteredResults.reduce<Record<string, AuditResult[]>>((acc, r) => {
+            const pillar = getRulePillar(r.rule.id);
+            const pillarName = PILLAR_META[pillar].name;
+            (acc[pillarName] ??= []).push(r);
+            return acc;
+          }, {});
 
     const fmtDate = (ts: string) => {
         try { return new Date(ts).toLocaleString(); } catch { return ts; }
@@ -732,54 +750,182 @@ function AuditDetailPage() {
                         </div>
                     </div>
 
-                    {/* ── Filters ─────────────────────────────────────── */}
-                    <div className="flex flex-wrap gap-2 items-center">
-                        <span className="text-xs text-muted-foreground mr-1">Section:</span>
-                        <button
-                            onClick={() => setSectionFilter("all")}
-                            className={cn("text-xs px-2.5 py-1 rounded-full border font-medium transition-all",
-                                sectionFilter === "all" ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border hover:bg-muted")}
-                        >
-                            All
-                        </button>
-                        {sortedSections.map(s => {
-                            const meta = sectionMeta(s);
-                            return (
-                                <button key={s}
-                                    onClick={() => setSectionFilter(f => f === s ? "all" : s)}
-                                    className={cn("text-xs px-2.5 py-1 rounded-full border font-medium transition-all",
-                                        sectionFilter === s
-                                            ? cn(meta.bg, meta.color, meta.border)
-                                            : "bg-card border-border hover:bg-muted")}
+                    {/* ── Search & Filters ────────────────────────────── */}
+                    <div className="space-y-3">
+                        {/* Search bar */}
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                type="text"
+                                placeholder="Search rules by ID, title, or message..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="pl-10 pr-10"
+                            />
+                            {searchQuery && (
+                                <button
+                                    onClick={() => setSearchQuery("")}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                                 >
-                                    {meta.num} {meta.label}
+                                    <X className="h-4 w-4" />
                                 </button>
-                            );
-                        })}
-                        {(statusFilter !== "all" || sectionFilter !== "all") && (
-                            <button
-                                onClick={() => { setStatusFilter("all"); setSectionFilter("all"); }}
-                                className="text-xs px-2.5 py-1 text-muted-foreground hover:text-foreground ml-auto"
-                            >
-                                Clear filters
-                            </button>
-                        )}
+                            )}
+                        </div>
+
+                        {/* View mode toggle + filters */}
+                        <div className="flex flex-wrap gap-3 items-center">
+                            {/* View mode toggle */}
+                            <div className="flex items-center gap-2 border rounded-lg p-1">
+                                <button
+                                    onClick={() => setViewMode("pillar")}
+                                    className={cn("flex items-center gap-1.5 text-xs px-3 py-1.5 rounded font-medium transition-all",
+                                        viewMode === "pillar" ? "bg-primary text-primary-foreground" : "hover:bg-muted")}
+                                >
+                                    <Layers className="h-3.5 w-3.5" />
+                                    Pillars
+                                </button>
+                                <button
+                                    onClick={() => setViewMode("section")}
+                                    className={cn("flex items-center gap-1.5 text-xs px-3 py-1.5 rounded font-medium transition-all",
+                                        viewMode === "section" ? "bg-primary text-primary-foreground" : "hover:bg-muted")}
+                                >
+                                    <Terminal className="h-3.5 w-3.5" />
+                                    Sections
+                                </button>
+                            </div>
+
+                            <div className="h-6 w-px bg-border" />
+
+                            {/* Pillar filters (only show in pillar view) */}
+                            {viewMode === "pillar" && (
+                                <>
+                                    <span className="text-xs text-muted-foreground">Pillar:</span>
+                                    <button
+                                        onClick={() => setPillarFilter("all")}
+                                        className={cn("text-xs px-2.5 py-1 rounded-full border font-medium transition-all",
+                                            pillarFilter === "all" ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border hover:bg-muted")}
+                                    >
+                                        All
+                                    </button>
+                                    {(Object.keys(PILLAR_META) as SecurityPillar[]).map(pillar => {
+                                        const meta = PILLAR_META[pillar];
+                                        const Icon = meta.icon;
+                                        return (
+                                            <button key={pillar}
+                                                onClick={() => setPillarFilter(f => f === pillar ? "all" : pillar)}
+                                                className={cn("inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border font-medium transition-all",
+                                                    pillarFilter === pillar
+                                                        ? cn(meta.bg, meta.color, meta.border)
+                                                        : "bg-card border-border hover:bg-muted")}
+                                            >
+                                                <Icon size={12} />
+                                                {meta.name}
+                                            </button>
+                                        );
+                                    })}
+                                </>
+                            )}
+
+                            {/* Section filters (only show in section view) */}
+                            {viewMode === "section" && (
+                                <>
+                                    <span className="text-xs text-muted-foreground">Section:</span>
+                                    <button
+                                        onClick={() => setSectionFilter("all")}
+                                        className={cn("text-xs px-2.5 py-1 rounded-full border font-medium transition-all",
+                                            sectionFilter === "all" ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border hover:bg-muted")}
+                                    >
+                                        All
+                                    </button>
+                                    {sortedSections.map(s => {
+                                        const meta = sectionMeta(s);
+                                        return (
+                                            <button key={s}
+                                                onClick={() => setSectionFilter(f => f === s ? "all" : s)}
+                                                className={cn("text-xs px-2.5 py-1 rounded-full border font-medium transition-all",
+                                                    sectionFilter === s
+                                                        ? cn(meta.bg, meta.color, meta.border)
+                                                        : "bg-card border-border hover:bg-muted")}
+                                            >
+                                                {meta.num} {meta.label}
+                                            </button>
+                                        );
+                                    })}
+                                </>
+                            )}
+
+                            {/* Clear filters */}
+                            {(statusFilter !== "all" || sectionFilter !== "all" || pillarFilter !== "all" || searchQuery) && (
+                                <button
+                                    onClick={() => { 
+                                        setStatusFilter("all"); 
+                                        setSectionFilter("all"); 
+                                        setPillarFilter("all");
+                                        setSearchQuery("");
+                                    }}
+                                    className="text-xs px-2.5 py-1 text-muted-foreground hover:text-foreground ml-auto"
+                                >
+                                    Clear all
+                                </button>
+                            )}
+                        </div>
                     </div>
 
-                    {/* ── Results grouped by section ──────────────────── */}
+                    {/* ── Results grouped by pillar or section ───────── */}
                     {Object.keys(groupedResults).length === 0 ? (
                         <div className="text-center py-12 text-muted-foreground text-sm">
                             No results match the current filters.
                         </div>
                     ) : (
                         <div className="space-y-6">
-                            {Object.entries(groupedResults).map(([section, results]) => {
-                                const meta = sectionMeta(section);
+                            {Object.entries(groupedResults).map(([groupName, results]) => {
+                                // Determine if this is a pillar or section group
+                                const isPillarView = viewMode === "pillar";
+                                const meta = isPillarView 
+                                    ? (() => {
+                                        const pillar = (Object.keys(PILLAR_META) as SecurityPillar[]).find(p => PILLAR_META[p].name === groupName);
+                                        if (!pillar) return null;
+                                        const m = PILLAR_META[pillar];
+                                        const Icon = m.icon;
+                                        return { ...m, icon: <Icon size={14} />, num: "" };
+                                      })()
+                                    : sectionMeta(groupName);
+                                
+                                if (!meta) return null;
+
                                 return (
-                                    <div key={section}>
+                                    <div key={groupName}>
                                         <div className="flex items-center gap-2 mb-3">
-                                            <span className={cn("text-xs font-bold px-2 py-1 rounded-md border", meta.bg, meta.color, meta.border)}>
-                                                {meta.num} {meta.label}
+                                            {isPillarView && meta.icon}
+                                            <span className={cn("text-xs font-bold px-2 py-1 rounded-md border inline-flex items-center gap-1.5", meta.bg, meta.color, meta.border)}>
+                                                {meta.num && `${meta.num} `}{isPillarView ? groupName : meta.label}
+                                            </span>
+                                            {!isPillarView && <span className="text-xs text-muted-foreground">{groupName}</span>}
+                                            <Badge variant="outline" className="text-[10px] ml-auto font-mono">
+                                                {results.filter(r => r.status === "Pass").length}/{results.length}
+                                            </Badge>
+                                        </div>
+                                        <div className="space-y-2">
+                                            {results
+                                                .sort((a, b) => {
+                                                    if (a.status !== b.status) return a.status === "Fail" ? -1 : 1;
+                                                    return a.rule.id.localeCompare(b.rule.id, undefined, { numeric: true });
+                                                })
+                                                .map(r => (
+                                                    <RuleCard
+                                                        key={r.rule.id}
+                                                        result={r}
+                                                        agentUrl={agent?.url ?? ""}
+                                                        token={token}
+                                                    />
+                                                ))
+                                            }
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
                                             </span>
                                             <span className="text-xs text-muted-foreground">{section}</span>
                                             <Badge variant="outline" className="text-[10px] ml-auto font-mono">
