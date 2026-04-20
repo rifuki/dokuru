@@ -228,3 +228,197 @@ pub fn extract_user_id(claims: &Claims) -> Result<Uuid, JwtError> {
 pub fn extract_session_id(claims: &Claims) -> String {
     claims.sid.clone()
 }
+#[cfg(test)]
+mod tests {
+    use super::{
+        JwtError, create_token_pair, create_token_pair_with_session, extract_session_id,
+        extract_user_id, validate_access_token, validate_refresh_token,
+    };
+    use crate::feature::auth::types::claims::{Role, TokenType};
+    use std::env;
+    use uuid::Uuid;
+
+    fn setup_test_env() {
+        unsafe {
+            env::set_var(
+                "JWT_ACCESS_SECRET",
+                "test-access-secret-key-at-least-32-chars",
+            );
+            env::set_var(
+                "JWT_REFRESH_SECRET",
+                "test-refresh-secret-key-at-least-32-chars",
+            );
+            env::set_var("JWT_ACCESS_EXPIRY_SECS", "3600");
+            env::set_var("JWT_REFRESH_EXPIRY_SECS", "86400");
+        }
+    }
+
+    #[test]
+    fn test_create_token_pair() {
+        setup_test_env();
+        let user_id = Uuid::new_v4();
+        let email = "test@example.com";
+        let roles = vec![Role::User];
+
+        let result = create_token_pair(user_id, email, &roles);
+        assert!(result.is_ok());
+
+        let token_pair = result.unwrap();
+        assert!(!token_pair.access_token.is_empty());
+        assert!(!token_pair.refresh_token.is_empty());
+        assert_ne!(token_pair.access_token, token_pair.refresh_token);
+        assert_eq!(token_pair.expires_in, 3600);
+        assert!(!token_pair.session_id.is_empty());
+    }
+
+    #[test]
+    fn test_validate_access_token_valid() {
+        setup_test_env();
+        let user_id = Uuid::new_v4();
+        let roles = vec![Role::User];
+
+        let token_pair = create_token_pair(user_id, "test@example.com", &roles).unwrap();
+
+        let claims = validate_access_token(&token_pair.access_token);
+        assert!(claims.is_ok());
+
+        let claims = claims.unwrap();
+        assert_eq!(claims.sub, user_id.to_string());
+        assert_eq!(claims.token_type, TokenType::Access);
+        assert_eq!(claims.roles, roles);
+    }
+
+    #[test]
+    fn test_validate_access_token_invalid() {
+        setup_test_env();
+        let result = validate_access_token("invalid.token.here");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_refresh_token_valid() {
+        setup_test_env();
+        let user_id = Uuid::new_v4();
+        let roles = vec![Role::User];
+
+        let token_pair = create_token_pair(user_id, "test@example.com", &roles).unwrap();
+
+        let claims = validate_refresh_token(&token_pair.refresh_token);
+        assert!(claims.is_ok());
+
+        let claims = claims.unwrap();
+        assert_eq!(claims.sub, user_id.to_string());
+        assert_eq!(claims.token_type, TokenType::Refresh);
+    }
+
+    #[test]
+    fn test_validate_refresh_token_invalid() {
+        setup_test_env();
+        let result = validate_refresh_token("invalid.refresh.token");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_wrong_token_type() {
+        setup_test_env();
+        let user_id = Uuid::new_v4();
+        let roles = vec![Role::User];
+
+        let token_pair = create_token_pair(user_id, "test@example.com", &roles).unwrap();
+
+        // Try to validate access token as refresh token
+        let result = validate_refresh_token(&token_pair.access_token);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), JwtError::WrongType));
+
+        // Try to validate refresh token as access token
+        let result = validate_access_token(&token_pair.refresh_token);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), JwtError::WrongType));
+    }
+
+    #[test]
+    fn test_extract_user_id() {
+        setup_test_env();
+        let user_id = Uuid::new_v4();
+        let roles = vec![Role::User];
+
+        let token_pair = create_token_pair(user_id, "test@example.com", &roles).unwrap();
+        let claims = validate_access_token(&token_pair.access_token).unwrap();
+
+        let extracted_id = extract_user_id(&claims);
+        assert!(extracted_id.is_ok());
+        assert_eq!(extracted_id.unwrap(), user_id);
+    }
+
+    #[test]
+    fn test_extract_session_id() {
+        setup_test_env();
+        let user_id = Uuid::new_v4();
+        let roles = vec![Role::User];
+
+        let token_pair = create_token_pair(user_id, "test@example.com", &roles).unwrap();
+        let claims = validate_access_token(&token_pair.access_token).unwrap();
+
+        let session_id = extract_session_id(&claims);
+        assert_eq!(session_id, token_pair.session_id);
+    }
+
+    #[test]
+    fn test_create_token_pair_with_session() {
+        setup_test_env();
+        let user_id = Uuid::new_v4();
+        let email = "test@example.com";
+        let roles = vec![Role::Admin];
+        let session_id = Uuid::new_v4().to_string();
+        let session_iat = chrono::Utc::now().timestamp();
+
+        let result =
+            create_token_pair_with_session(user_id, email, &roles, &session_id, session_iat);
+        assert!(result.is_ok());
+
+        let token_pair = result.unwrap();
+        assert_eq!(token_pair.session_id, session_id);
+        assert_eq!(token_pair.session_iat, session_iat);
+
+        // Validate tokens have correct session info
+        let access_claims = validate_access_token(&token_pair.access_token).unwrap();
+        assert_eq!(access_claims.sid, session_id);
+        assert_eq!(access_claims.s_iat, session_iat);
+    }
+
+    #[test]
+    fn test_multiple_roles() {
+        setup_test_env();
+        let user_id = Uuid::new_v4();
+        let roles = vec![Role::User, Role::Admin];
+
+        let token_pair = create_token_pair(user_id, "admin@example.com", &roles).unwrap();
+        let claims = validate_access_token(&token_pair.access_token).unwrap();
+
+        assert_eq!(claims.roles.len(), 2);
+        assert!(claims.roles.contains(&Role::User));
+        assert!(claims.roles.contains(&Role::Admin));
+    }
+
+    #[test]
+    fn test_different_users_different_tokens() {
+        setup_test_env();
+        let user1 = Uuid::new_v4();
+        let user2 = Uuid::new_v4();
+        let roles = vec![Role::User];
+
+        let token1 = create_token_pair(user1, "user1@example.com", &roles).unwrap();
+        let token2 = create_token_pair(user2, "user2@example.com", &roles).unwrap();
+
+        assert_ne!(token1.access_token, token2.access_token);
+        assert_ne!(token1.refresh_token, token2.refresh_token);
+        assert_ne!(token1.session_id, token2.session_id);
+
+        let claims1 = validate_access_token(&token1.access_token).unwrap();
+        let claims2 = validate_access_token(&token2.access_token).unwrap();
+
+        assert_eq!(extract_user_id(&claims1).unwrap(), user1);
+        assert_eq!(extract_user_id(&claims2).unwrap(), user2);
+    }
+}
