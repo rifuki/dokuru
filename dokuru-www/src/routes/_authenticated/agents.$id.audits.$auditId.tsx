@@ -194,7 +194,7 @@ function RuleCard({ result, agentUrl, token }: {
     const [fixStepIndex, setFixStepIndex] = useState(0);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    const { rule, status, message, affected, audit_command, raw_output, references, rationale, impact, remediation_kind, remediation_guide, tags } = result;
+    const { rule, status, message, affected, audit_command, raw_output, references, rationale, impact, remediation_kind, remediation_guide } = result;
     const meta = sectionMeta(rule.section);
     const steps = getFixSteps(rule.id);
     const needsRestart = requiresDockerRestart(rule.id);
@@ -267,7 +267,7 @@ function RuleCard({ result, agentUrl, token }: {
                     });
                 }
             }
-        } catch (error) {
+        } catch {
             if (intervalRef.current) clearInterval(intervalRef.current);
             toast.error("Failed to connect to agent", {
                 description: "Check if the agent is running and accessible",
