@@ -1,5 +1,7 @@
 // @ts-nocheck
 import { ShieldCheck, Wrench, History, ServerCog } from "lucide-react";
+import { motion } from "framer-motion";
+import ScrollReveal from "./ScrollReveal";
 
 const features = [
   {
@@ -43,18 +45,27 @@ const features = [
 const FeatureCard = ({ f, i }) => {
   const Icon = f.icon;
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, y: 30 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-100px" }}
+      transition={{ duration: 0.5, delay: i * 0.1 }}
+      whileHover={{ y: -8, scale: 1.02 }}
       data-testid={`feature-card-${i}`}
-      className="group relative bg-[#09090B] border border-white/10 rounded-xl p-8 transition-all duration-300 hover:-translate-y-1 hover:border-[#2496ED]/40 hover:shadow-[0_30px_60px_-20px_rgba(36,150,237,0.25)]"
+      className="group relative bg-[#09090B] border border-white/10 rounded-xl p-8 transition-all duration-300 hover:border-[#2496ED]/40 hover:shadow-[0_30px_60px_-20px_rgba(36,150,237,0.25)]"
     >
       {/* corner ticks */}
       <span className="absolute top-0 left-0 h-3 w-3 border-t border-l border-[#2496ED]/50" />
       <span className="absolute bottom-0 right-0 h-3 w-3 border-b border-r border-[#2496ED]/50" />
 
       <div className="flex items-center justify-between mb-6">
-        <div className="w-11 h-11 rounded-lg bg-[#2496ED]/10 border border-[#2496ED]/20 grid place-items-center text-[#2496ED] group-hover:bg-[#2496ED]/15 transition-colors">
+        <motion.div
+          whileHover={{ rotate: 360 }}
+          transition={{ duration: 0.6 }}
+          className="w-11 h-11 rounded-lg bg-[#2496ED]/10 border border-[#2496ED]/20 grid place-items-center text-[#2496ED] group-hover:bg-[#2496ED]/15 transition-colors"
+        >
           <Icon size={20} strokeWidth={1.75} />
-        </div>
+        </motion.div>
         <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-zinc-500">
           {f.label}
         </span>
@@ -75,7 +86,7 @@ const FeatureCard = ({ f, i }) => {
           </li>
         ))}
       </ul>
-    </div>
+    </motion.div>
   );
 };
 
@@ -87,7 +98,7 @@ const Features = () => {
       className="relative py-24 md:py-32 border-t border-white/5"
     >
       <div className="max-w-7xl mx-auto px-6 md:px-10">
-        <div className="max-w-3xl mb-14">
+        <ScrollReveal className="max-w-3xl mb-14">
           <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#2496ED] mb-4">
             / features
           </div>
@@ -100,7 +111,7 @@ const Features = () => {
             Dokuru is built around four things and tries to do them well — no
             generic container management, no vague monitoring.
           </p>
-        </div>
+        </ScrollReveal>
 
         <div className="grid md:grid-cols-2 gap-6">
           {features.map((f, i) => (

@@ -49,6 +49,7 @@
 html,
 body {
   background: #050505;
+  scroll-behavior: smooth;
 }
 
 body {
@@ -172,6 +173,24 @@ pre,
   }
 }
 
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(36, 150, 237, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(36, 150, 237, 0.6);
+  }
+}
+
 .terminal-cursor {
   display: inline-block;
   width: 8px;
@@ -180,6 +199,14 @@ pre,
   margin-left: 4px;
   vertical-align: -2px;
   animation: dokuru-cursor 1s steps(1) infinite;
+}
+
+.float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.glow {
+  animation: glow 2s ease-in-out infinite;
 }
 
 ::selection {
