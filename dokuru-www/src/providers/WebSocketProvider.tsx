@@ -11,14 +11,6 @@ interface WebSocketContextType {
 
 const WebSocketContext = createContext<WebSocketContextType | null>(null);
 
-export function useWebSocket() {
-    const context = useContext(WebSocketContext);
-    if (!context) {
-        throw new Error("useWebSocket must be used within WebSocketProvider");
-    }
-    return context;
-}
-
 interface WebSocketProviderProps {
     children: ReactNode;
     url: string;
@@ -32,56 +24,7 @@ export function WebSocketProvider({ children, url, enabled = true }: WebSocketPr
     const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
     const reconnectAttemptsRef = useRef(0);
     const maxReconnectAttempts = 5;
-
-    const connect = useCallback(() => {
-        if (!enabled || wsRef.current?.readyState === WebSocket.OPEN) return;
-
-        setStatus("connecting");
-
-        try {
-            // Try WSS first (Cloudflare), fallback to HTTPS
-            const wsUrl = url.replace(/^http/, "ws");
-            wsRef.current = new WebSocket(wsUrl);
-
-            wsRef.current.onopen = () => {
-                setStatus("connected");
-                reconnectAttemptsRef.current = 0;
-                console.log("✅ WebSocket connected:", wsUrl);
-            };
-
-            wsRef.current.onmessage = (event) => {
-                setLastMessage(event);
-            };
-
-            wsRef.current.onerror = (error) => {
-                console.error("❌ WebSocket error:", error);
-                setStatus("error");
-            };
-
-            wsRef.current.onclose = () => {
-                setStatus("disconnected");
-                console.log("🔌 WebSocket disconnected");
-
-                // Auto-reconnect with exponential backoff
-                if (enabled && reconnectAttemptsRef.current < maxReconnectAttempts) {
-                    const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
-                    reconnectAttemptsRef.current++;
-                    
-                    reconnectTimeoutRef.current = setTimeout(() => {
-                        console.log(`🔄 Reconnecting... (attempt ${reconnectAttemptsRef.current})`);
-                        connect();
-                    }, delay);
-                } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-                    toast.error("WebSocket connection failed", {
-                        description: "Falling back to HTTP polling"
-                    });
-                }
-            };
-        } catch (error) {
-            console.error("Failed to create WebSocket:", error);
-            setStatus("error");
-        }
-    }, [url, enabled]);
+    const connectRef = useRef<(() => void) | null>(null);
 
     const send = useCallback((data: unknown) => {
         if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -92,6 +35,56 @@ export function WebSocketProvider({ children, url, enabled = true }: WebSocketPr
     }, []);
 
     useEffect(() => {
+        const connect = () => {
+            if (!enabled || wsRef.current?.readyState === WebSocket.OPEN) return;
+
+            setStatus("connecting");
+
+            try {
+                const wsUrl = url.replace(/^http/, "ws");
+                wsRef.current = new WebSocket(wsUrl);
+
+                wsRef.current.onopen = () => {
+                    setStatus("connected");
+                    reconnectAttemptsRef.current = 0;
+                    console.log("✅ WebSocket connected:", wsUrl);
+                };
+
+                wsRef.current.onmessage = (event) => {
+                    setLastMessage(event);
+                };
+
+                wsRef.current.onerror = (error) => {
+                    console.error("❌ WebSocket error:", error);
+                    setStatus("error");
+                };
+
+                wsRef.current.onclose = () => {
+                    setStatus("disconnected");
+                    console.log("🔌 WebSocket disconnected");
+
+                    if (enabled && reconnectAttemptsRef.current < maxReconnectAttempts) {
+                        const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
+                        reconnectAttemptsRef.current++;
+                        
+                        reconnectTimeoutRef.current = setTimeout(() => {
+                            console.log(`🔄 Reconnecting... (attempt ${reconnectAttemptsRef.current})`);
+                            connectRef.current?.();
+                        }, delay);
+                    } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+                        toast.error("WebSocket connection failed", {
+                            description: "Falling back to HTTP polling"
+                        });
+                    }
+                };
+            } catch (error) {
+                console.error("Failed to create WebSocket:", error);
+                setStatus("error");
+            }
+        };
+
+        connectRef.current = connect;
+
         if (enabled) {
             connect();
         }
@@ -104,11 +97,19 @@ export function WebSocketProvider({ children, url, enabled = true }: WebSocketPr
                 wsRef.current.close();
             }
         };
-    }, [connect, enabled]);
+    }, [url, enabled]);
 
     return (
         <WebSocketContext.Provider value={{ status, send, lastMessage }}>
             {children}
         </WebSocketContext.Provider>
     );
+}
+
+export function useWebSocket() {
+    const context = useContext(WebSocketContext);
+    if (!context) {
+        throw new Error("useWebSocket must be used within WebSocketProvider");
+    }
+    return context;
 }
