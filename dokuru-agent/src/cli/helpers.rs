@@ -758,7 +758,7 @@ pub fn write_systemd_unit(config: &InstallerConfig, preflight: &Preflight) -> Re
         .join(format!("{}.service", config.service_name));
 
     let unit_content = format!(
-        "[Unit]\nDescription=Dokuru Docker Hardening Agent\nDocumentation={}\nAfter={}\nWants={}\n\n[Service]\nType=simple\nUser=dokuru\nGroup=dokuru\nSupplementaryGroups=docker\nLogsDirectory=dokuru\nEnvironment=DOKURU_CONFIG={}\nExecStart={} serve\nRestart=on-failure\nRestartSec=5s\nStandardOutput=journal\nStandardError=journal\nSyslogIdentifier={}\n\n[Install]\nWantedBy=multi-user.target\n",
+        "[Unit]\nDescription=Dokuru Docker Hardening Agent\nDocumentation={}\nAfter={}\nWants={}\n\n[Service]\nType=simple\nUser=root\nLogsDirectory=dokuru\nEnvironment=DOKURU_CONFIG={}\nExecStart={} serve\nRestart=on-failure\nRestartSec=5s\nStandardOutput=journal\nStandardError=journal\nSyslogIdentifier={}\n\n[Install]\nWantedBy=multi-user.target\n",
         REPO_URL,
         after_targets,
         wants_targets,
@@ -771,73 +771,6 @@ pub fn write_systemd_unit(config: &InstallerConfig, preflight: &Preflight) -> Re
         .wrap_err_with(|| format!("Failed to write {}", unit_path.display()))
 }
 
-pub fn setup_dokuru_user() -> Result<()> {
-    // Create dokuru group if it doesn't exist
-    if !command_success("getent", &["group", "dokuru"]) {
-        run_command("groupadd", &["--system", "dokuru"])?;
-    }
-
-    // Check if docker group exists before adding user
-    let has_docker_group = command_success("getent", &["group", "docker"]);
-
-    // Create dokuru user if it doesn't exist
-    if command_success("getent", &["passwd", "dokuru"]) {
-        // User exists, add to docker group if it exists
-        if has_docker_group {
-            run_command("usermod", &["-aG", "docker", "dokuru"])?;
-        }
-    } else {
-        let mut args = vec![
-            "--system",
-            "--gid",
-            "dokuru",
-            "--no-create-home",
-            "--shell",
-            "/usr/sbin/nologin",
-            "--comment",
-            "Dokuru service account",
-        ];
-
-        // Only add to docker group if it exists
-        if has_docker_group {
-            args.insert(3, "docker");
-            args.insert(3, "--groups");
-        }
-
-        args.push("dokuru");
-        run_command("useradd", &args)?;
-    }
-
-    // Add current user to dokuru group for config access
-    if let Ok(current_user) = std::env::var("SUDO_USER").or_else(|_| std::env::var("USER"))
-        && !current_user.is_empty()
-        && current_user != "root"
-    {
-        run_command("usermod", &["-aG", "dokuru", &current_user])?;
-    }
-
-    // Setup sudoers rule for dokuru group to manage service without password
-    let sudoers_content = "# Allow dokuru group to manage dokuru service and config\n\
-                           %dokuru ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart dokuru\n\
-                           %dokuru ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop dokuru\n\
-                           %dokuru ALL=(ALL) NOPASSWD: /usr/bin/systemctl start dokuru\n\
-                           %dokuru ALL=(ALL) NOPASSWD: /usr/bin/systemctl status dokuru\n\
-                           %dokuru ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart dokuru-tunnel\n\
-                           %dokuru ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop dokuru-tunnel\n\
-                           %dokuru ALL=(ALL) NOPASSWD: /usr/bin/systemctl start dokuru-tunnel\n\
-                           %dokuru ALL=(ALL) NOPASSWD: /usr/bin/systemctl status dokuru-tunnel\n\
-                           %dokuru ALL=(ALL) NOPASSWD: /usr/local/bin/dokuru update *\n\
-                           %dokuru ALL=(ALL) NOPASSWD: /usr/local/bin/dokuru configure *\n\
-                           %dokuru ALL=(ALL) NOPASSWD: /usr/local/bin/dokuru token *\n\
-                           %dokuru ALL=(ALL) NOPASSWD: /usr/sbin/auditctl *\n\
-                           %dokuru ALL=(ALL) NOPASSWD: ALL\n";
-
-    std::fs::write("/etc/sudoers.d/dokuru", sudoers_content)?;
-    run_command("chmod", &["0440", "/etc/sudoers.d/dokuru"])?;
-
-    Ok(())
-}
-
 pub fn setup_log_directory() -> Result<()> {
     let log_dir = Path::new("/var/log/dokuru");
 
@@ -846,30 +779,8 @@ pub fn setup_log_directory() -> Result<()> {
         run_command("mkdir", &["-p", "/var/log/dokuru"])?;
     }
 
-    // Set ownership to dokuru:dokuru
-    run_command("chown", &["dokuru:dokuru", "/var/log/dokuru"])
-        .wrap_err("Failed to set ownership of log directory to dokuru:dokuru")?;
-
-    // Set permissions to 755
+    // Set permissions to 755 (root owned, world readable)
     run_command("chmod", &["755", "/var/log/dokuru"])?;
-
-    // Test write permission as the dokuru user (not as root)
-    let test_file = log_dir.join(".test");
-    run_command(
-        "su",
-        &[
-            "-s",
-            "/bin/sh",
-            "-c",
-            &format!(
-                "touch {} && rm {}",
-                test_file.display(),
-                test_file.display()
-            ),
-            "dokuru",
-        ],
-    )
-    .wrap_err("Log directory is not writable by dokuru user")?;
 
     Ok(())
 }
