@@ -431,25 +431,26 @@ function RuleCard({ result, agentUrl, token }: {
 
                     {/* Description */}
                     {rule.description && (
-                        <div>
-                            <h5 className="flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1.5">
-                                <Info className="h-3.5 w-3.5" /> About
+                        <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
+                            <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-blue-400 mb-2">
+                                <Info className="h-4 w-4" /> About
                             </h5>
-                            <p className="text-sm text-muted-foreground">{rule.description}</p>
+                            <p className="text-sm text-zinc-300 leading-relaxed">{rule.description}</p>
                         </div>
                     )}
 
                     {/* Affected */}
                     {affected.length > 0 && (
-                        <div>
-                            <h5 className="flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wide text-orange-500 mb-1.5">
-                                <AlertTriangle className="h-3.5 w-3.5" /> Affected ({affected.length})
+                        <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4">
+                            <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-amber-400 mb-3">
+                                <AlertTriangle className="h-4 w-4" /> Affected ({affected.length})
                             </h5>
-                            <div className="flex flex-wrap gap-1.5">
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                                 {affected.map((item, i) => (
-                                    <code key={i} className="text-xs bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20 px-2 py-0.5 rounded">
-                                        {item}
-                                    </code>
+                                    <div key={i} className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 group hover:bg-amber-500/15 transition-colors">
+                                        <Container className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                                        <code className="text-xs text-amber-300 font-mono truncate">{item}</code>
+                                    </div>
                                 ))}
                             </div>
                         </div>
@@ -457,33 +458,31 @@ function RuleCard({ result, agentUrl, token }: {
 
                     {/* Remediation */}
                     {rule.remediation && (
-                        <div>
-                            <h5 className="flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1.5">
-                                <Wrench className="h-3.5 w-3.5" /> Remediation
+                        <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-4">
+                            <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-emerald-400 mb-2">
+                                <Wrench className="h-4 w-4" /> Remediation
                             </h5>
-                            <p className="text-sm text-muted-foreground bg-muted/40 rounded-lg p-3 font-mono whitespace-pre-wrap">{rule.remediation}</p>
+                            <p className="text-sm text-zinc-300 bg-black/30 rounded-lg p-3 font-mono leading-relaxed">{rule.remediation}</p>
                         </div>
                     )}
 
                     {/* Fix Guide */}
                     {remediation_guide && (
-                        <div>
-                            <h5 className="flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wide text-blue-500 mb-1.5">
-                                <BookOpen className="h-3.5 w-3.5" /> Fix Guide
+                        <div className="bg-[#2496ED]/5 border border-[#2496ED]/20 rounded-lg p-4">
+                            <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-[#2496ED] mb-2">
+                                <BookOpen className="h-4 w-4" /> Fix Guide
                             </h5>
-                            <div className="text-sm bg-blue-500/5 border border-blue-500/20 rounded-lg p-3 space-y-2">
-                                <pre className="whitespace-pre-wrap font-mono text-xs text-muted-foreground leading-relaxed">{remediation_guide}</pre>
-                            </div>
+                            <pre className="text-sm bg-black/30 rounded-lg p-3 font-mono text-zinc-300 leading-relaxed whitespace-pre-wrap">{remediation_guide}</pre>
                         </div>
                     )}
 
                     {/* Audit Command */}
                     {audit_command && (
-                        <div>
-                            <h5 className="flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1.5">
-                                <Terminal className="h-3.5 w-3.5" /> Audit Command
+                        <div className="bg-white/[0.02] border border-white/10 rounded-lg p-4">
+                            <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-zinc-300 mb-2">
+                                <Terminal className="h-4 w-4" /> Audit Command
                             </h5>
-                            <code className="block text-xs bg-zinc-900 dark:bg-zinc-950 text-green-400 p-3 rounded-lg overflow-x-auto font-mono">
+                            <code className="block text-sm bg-black/50 text-emerald-400 p-3 rounded-lg overflow-x-auto font-mono border border-emerald-500/20">
                                 $ {audit_command}
                             </code>
                         </div>
@@ -491,9 +490,9 @@ function RuleCard({ result, agentUrl, token }: {
 
                     {/* Raw Output */}
                     {raw_output && (
-                        <div>
-                            <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Raw Output</h5>
-                            <pre className="text-xs bg-muted/50 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap font-mono text-muted-foreground">
+                        <div className="bg-white/[0.02] border border-white/10 rounded-lg p-4">
+                            <h5 className="font-bold text-sm uppercase tracking-wide text-zinc-300 mb-2">Raw Output</h5>
+                            <pre className="text-xs bg-black/50 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap font-mono text-zinc-400 border border-white/10">
                                 {raw_output}
                             </pre>
                         </div>
@@ -501,17 +500,21 @@ function RuleCard({ result, agentUrl, token }: {
 
                     {/* Rationale + Impact */}
                     {(rationale || impact) && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {rationale && (
-                                <div className="bg-muted/30 rounded-lg p-3">
-                                    <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1">Rationale</h5>
-                                    <p className="text-xs text-muted-foreground leading-relaxed">{rationale}</p>
+                                <div className="bg-violet-500/5 border border-violet-500/20 rounded-lg p-4">
+                                    <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-violet-400 mb-2">
+                                        <Info className="h-4 w-4" /> Rationale
+                                    </h5>
+                                    <p className="text-sm text-zinc-300 leading-relaxed">{rationale}</p>
                                 </div>
                             )}
                             {impact && (
-                                <div className="bg-muted/30 rounded-lg p-3">
-                                    <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1">Impact</h5>
-                                    <p className="text-xs text-muted-foreground leading-relaxed">{impact}</p>
+                                <div className="bg-rose-500/5 border border-rose-500/20 rounded-lg p-4">
+                                    <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-rose-400 mb-2">
+                                        <AlertTriangle className="h-4 w-4" /> Impact
+                                    </h5>
+                                    <p className="text-sm text-zinc-300 leading-relaxed">{impact}</p>
                                 </div>
                             )}
                         </div>
