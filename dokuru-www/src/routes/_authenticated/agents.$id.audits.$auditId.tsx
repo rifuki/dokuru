@@ -235,6 +235,8 @@ function RuleCard({ result, agentUrl, token }: {
                 toast.success(`Fix applied for rule ${rule.id}`);
                 // Refetch audit data to show updated status
                 queryClient.invalidateQueries({ queryKey: ["agent-audit"] });
+                // Clear fix outcome after delay to allow refetch
+                setTimeout(() => setFixOutcome(null), 3000);
             } else if (outcome.status === "Blocked") {
                 toast.error(`Rule ${rule.id}: ${outcome.message.slice(0, 80)}`);
             }
@@ -245,10 +247,6 @@ function RuleCard({ result, agentUrl, token }: {
             setFixing(false);
         }
     };
-
-    const fixButtonStyle = remediation_kind === "auto"
-        ? "bg-blue-500 hover:bg-blue-600 text-white border-blue-500"
-        : "bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-400 border-amber-500/40";
 
     return (
         <>
@@ -343,24 +341,33 @@ function RuleCard({ result, agentUrl, token }: {
                 <div className="flex items-center gap-2 shrink-0 mt-0.5">
                     {/* Fix button — only for failed rules */}
                     {status === "Fail" && (
-                        <button
-                            onClick={openConfirm}
-                            disabled={fixing}
-                            className={cn(
-                                "inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-md border transition-all",
-                                fixButtonStyle,
-                                fixing && "opacity-60 cursor-not-allowed"
+                        <>
+                            {remediation_kind === "auto" && (
+                                <button
+                                    onClick={openConfirm}
+                                    disabled={fixing}
+                                    className={cn(
+                                        "inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-md border transition-all",
+                                        "bg-blue-500 hover:bg-blue-600 text-white border-blue-500",
+                                        fixing && "opacity-60 cursor-not-allowed"
+                                    )}
+                                >
+                                    {fixing ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                        <Zap className="h-3 w-3" />
+                                    )}
+                                    {fixing ? "Fixing…" : "Auto Fix"}
+                                </button>
                             )}
-                        >
-                            {fixing ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : remediation_kind === "auto" ? (
-                                <Zap className="h-3 w-3" />
-                            ) : (
-                                <Wrench className="h-3 w-3" />
-                            )}
-                            {fixing ? "Fixing…" : remediation_kind === "auto" ? "Auto Fix" : "Fix Guide"}
-                        </button>
+                            <button
+                                onClick={() => setOpen(true)}
+                                className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-md border transition-all bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-400 border-amber-500/40"
+                            >
+                                <BookOpen className="h-3 w-3" />
+                                Manual Guide
+                            </button>
+                        </>
                     )}
 
                     <button onClick={() => setOpen(v => !v)}>
