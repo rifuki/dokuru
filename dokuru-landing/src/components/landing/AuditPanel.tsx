@@ -74,20 +74,6 @@ const findings = [
     rem: "GUIDED",
     detail: "1 container using network_mode: host",
   },
-  {
-    rule: "5.11 Memory limit not set",
-    group: "cgroup",
-    sev: "WARN",
-    rem: "AUTO",
-    detail: "3 containers without --memory",
-  },
-  {
-    rule: "5.31 Docker socket mounted",
-    group: "runtime",
-    sev: "FAIL",
-    rem: "MANUAL",
-    detail: "/var/run/docker.sock bind-mount",
-  },
 ];
 
 const AuditPanel = () => {
