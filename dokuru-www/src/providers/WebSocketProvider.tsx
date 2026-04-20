@@ -22,7 +22,7 @@ export function WebSocketProvider({ children, url, enabled = true }: WebSocketPr
     const [status, setStatus] = useState<ConnectionStatus>("disconnected");
     const [lastMessage, setLastMessage] = useState<MessageEvent | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
-    const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+    const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const reconnectAttemptsRef = useRef(0);
     const maxReconnectAttempts = 5;
     const connectRef = useRef<(() => void) | null>(null);
