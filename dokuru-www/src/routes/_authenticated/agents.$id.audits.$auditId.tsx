@@ -499,7 +499,7 @@ function RuleCard({ result, agentUrl, token }: {
                     {raw_output && (
                         <div className="bg-white/[0.02] border border-white/10 rounded-lg p-4">
                             <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-zinc-300 mb-2">
-                                <Terminal className="h-4 w-4" /> Raw Output
+                                <FileText className="h-4 w-4" /> Raw Output
                             </h5>
                             <pre className="text-xs bg-black/50 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap font-mono text-zinc-400 border border-white/10">
                                 {raw_output}
