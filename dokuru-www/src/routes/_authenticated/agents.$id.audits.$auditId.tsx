@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
     Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
-    Terminal, Wrench, ExternalLink, AlertTriangle, Info, Server,
+    Terminal, Wrench, AlertTriangle, Info, Server,
     ArrowLeft, Clock, Cpu, Container, Zap, BookOpen, CheckCircle2,
     RotateCcw, ShieldAlert, XCircle, ListChecks, Search, X, Layers, ArrowLeftRight, Link,
 } from "lucide-react";
