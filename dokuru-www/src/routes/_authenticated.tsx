@@ -1,5 +1,6 @@
 import { createFileRoute, Outlet, useNavigate, useLocation } from "@tanstack/react-router";
 import { AuthProvider } from "@/providers/AuthProvider";
+import { WebSocketProvider } from "@/providers/WebSocketProvider";
 import { useIsAuthenticated, useAuthUser } from "@/stores/use-auth-store";
 import { useEffect, useState } from "react";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
@@ -31,6 +32,8 @@ const userNotifications = [
   { id: 2, title: "Announcement", description: "Scheduled maintenance on Sunday", time: "2 days ago", unread: false },
 ];
 
+const WS_URL = import.meta.env.VITE_WS_URL || "wss://api.dokuru.rifuki.dev/ws";
+
 export const Route = createFileRoute("/_authenticated")({
     component: AppLayout,
 });
@@ -39,7 +42,9 @@ function AppLayout() {
     return (
         <AuthProvider>
             <RequireAuth>
-                <DashboardLayout />
+                <WebSocketProvider url={WS_URL}>
+                    <DashboardLayout />
+                </WebSocketProvider>
             </RequireAuth>
         </AuthProvider>
     );
