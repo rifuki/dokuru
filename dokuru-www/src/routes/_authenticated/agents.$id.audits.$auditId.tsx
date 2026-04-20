@@ -195,7 +195,6 @@ function RuleCard({ result, agentUrl, token }: {
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const { rule, status, message, affected, audit_command, raw_output, references, rationale, impact, remediation_kind, remediation_guide } = result;
-    const meta = sectionMeta(rule.section);
     const steps = getFixSteps(rule.id);
     const needsRestart = requiresDockerRestart(rule.id);
 
