@@ -44,6 +44,10 @@ pub fn app_routes(state: AppState) -> Router {
 
     Router::new()
         .nest("/health", health::health_routes())
+        .route(
+            "/ws",
+            axum::routing::get(crate::websocket::handler::ws_handler),
+        )
         .route("/ws/agent", axum::routing::get(agent::relay::ws_handler))
         .nest("/api/v1", api_routes)
         .nest_service("/media", ServeDir::new("uploads"))
