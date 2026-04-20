@@ -324,21 +324,21 @@ function RuleCard({ result, agentUrl, token }: {
             </AlertDialogContent>
         </AlertDialog>
 
-        <div className={cn("rounded-xl border border-border bg-card border-l-4 transition-shadow hover:shadow-sm", borderLeft)}>
+        <div className={cn("rounded-xl border bg-gradient-to-br from-[#0A0A0B] to-[#111113] border-l-4 transition-all hover:shadow-lg hover:scale-[1.01]", borderLeft)}>
             {/* Header row */}
             <div
                 className={cn(
-                    "px-4 py-3.5 flex items-start gap-3",
-                    status === "Pass" ? "hover:bg-green-500/5" : status === "Fail" ? "hover:bg-red-500/5" : "hover:bg-orange-500/5",
-                    "rounded-xl transition-colors"
+                    "px-5 py-4 flex items-start gap-4",
+                    status === "Pass" ? "hover:bg-emerald-500/5" : status === "Fail" ? "hover:bg-rose-500/5" : "hover:bg-amber-500/5",
+                    "rounded-xl transition-all duration-200"
                 )}
             >
                 {/* Clickable area */}
                 <button onClick={() => setOpen(v => !v)} className="flex items-start gap-3 flex-1 min-w-0 text-left">
                     <StatusIcon status={status} />
                     <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5 mb-1">
-                            <span className="font-mono text-[11px] font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                            <span className="font-mono text-xs font-black text-zinc-400 bg-white/5 px-2 py-1 rounded border border-white/10">
                                 {rule.id}
                             </span>
                             {/* Pillar badge */}
@@ -347,26 +347,22 @@ function RuleCard({ result, agentUrl, token }: {
                                 const pillarMeta = PILLAR_META[pillar];
                                 const PillarIcon = pillarMeta.icon;
                                 return (
-                                    <span className={cn("inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border", pillarMeta.bg, pillarMeta.color, pillarMeta.border)}>
-                                        <PillarIcon size={10} />
+                                    <span className={cn("inline-flex items-center gap-1.5 text-xs font-bold px-2 py-1 rounded border", pillarMeta.bg, pillarMeta.color, pillarMeta.border)}>
+                                        <PillarIcon size={12} />
                                         {pillarMeta.name}
                                     </span>
                                 );
                             })()}
-                            {/* Section badge (smaller, secondary) */}
-                            <span className={cn("text-[9px] font-medium px-1.5 py-0.5 rounded border opacity-60", meta.bg, meta.color, meta.border)}>
-                                {meta.num}
-                            </span>
                             <SeverityBadge severity={rule.severity} />
                             {affected.length > 0 && (
-                                <span className="inline-flex items-center gap-1 text-[10px] bg-orange-500/10 text-orange-500 border border-orange-500/30 px-1.5 py-0.5 rounded font-semibold">
-                                    <AlertTriangle className="h-2.5 w-2.5" />
+                                <span className="inline-flex items-center gap-1 text-[10px] bg-amber-500/15 text-amber-400 border border-amber-500/40 px-2 py-1 rounded font-bold">
+                                    <AlertTriangle className="h-3 w-3" />
                                     {affected.length} affected
                                 </span>
                             )}
                         </div>
-                        <p className="font-medium text-sm leading-snug">{rule.title}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{message}</p>
+                        <p className="font-semibold text-base leading-snug text-zinc-100">{rule.title}</p>
+                        <p className="text-sm text-zinc-400 mt-1 line-clamp-1">{message}</p>
                     </div>
                 </button>
 
@@ -380,24 +376,24 @@ function RuleCard({ result, agentUrl, token }: {
                                     onClick={openConfirm}
                                     disabled={fixing}
                                     className={cn(
-                                        "inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-md border transition-all",
-                                        "bg-blue-500 hover:bg-blue-600 text-white border-blue-500",
+                                        "inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg border transition-all shadow-sm",
+                                        "bg-[#2496ED] hover:bg-[#1d7ac7] text-white border-[#2496ED]/50 hover:shadow-[0_0_12px_rgba(36,150,237,0.4)]",
                                         fixing && "opacity-60 cursor-not-allowed"
                                     )}
                                 >
                                     {fixing ? (
-                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                     ) : (
-                                        <Zap className="h-3 w-3" />
+                                        <Zap className="h-3.5 w-3.5" />
                                     )}
                                     {fixing ? "Fixing…" : "Auto Fix"}
                                 </button>
                             )}
                             <button
                                 onClick={() => setOpen(true)}
-                                className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-md border transition-all bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-400 border-amber-500/40"
+                                className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg border transition-all bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border-amber-500/40 hover:shadow-sm"
                             >
-                                <BookOpen className="h-3 w-3" />
+                                <BookOpen className="h-3.5 w-3.5" />
                                 Manual Guide
                             </button>
                         </>
@@ -831,21 +827,21 @@ function AuditDetailPage() {
                     </div>
 
                     {/* ── Search & Filters ────────────────────────────── */}
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                         {/* Search bar */}
                         <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
                             <Input
                                 type="text"
                                 placeholder="Search rules by ID, title, or message..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-10 pr-10"
+                                className="pl-11 pr-11 h-11 bg-white/[0.02] border-white/10 text-zinc-200 placeholder:text-zinc-500 focus:border-[#2496ED]/50 focus:ring-[#2496ED]/20"
                             />
                             {searchQuery && (
                                 <button
                                     onClick={() => setSearchQuery("")}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
                                 >
                                     <X className="h-4 w-4" />
                                 </button>
@@ -855,35 +851,35 @@ function AuditDetailPage() {
                         {/* View mode toggle + filters */}
                         <div className="flex flex-wrap gap-3 items-center">
                             {/* View mode toggle */}
-                            <div className="flex items-center gap-2 border rounded-lg p-1">
+                            <div className="flex items-center gap-1 border border-white/10 rounded-lg p-1 bg-white/[0.02]">
                                 <button
                                     onClick={() => setViewMode("pillar")}
-                                    className={cn("flex items-center gap-1.5 text-xs px-3 py-1.5 rounded font-medium transition-all",
-                                        viewMode === "pillar" ? "bg-primary text-primary-foreground" : "hover:bg-muted")}
+                                    className={cn("flex items-center gap-1.5 text-xs px-3 py-2 rounded font-bold transition-all",
+                                        viewMode === "pillar" ? "bg-[#2496ED] text-white shadow-[0_0_12px_rgba(36,150,237,0.3)]" : "hover:bg-white/5 text-zinc-400")}
                                 >
                                     <Layers className="h-3.5 w-3.5" />
                                     Pillars
                                 </button>
                                 <button
                                     onClick={() => setViewMode("section")}
-                                    className={cn("flex items-center gap-1.5 text-xs px-3 py-1.5 rounded font-medium transition-all",
-                                        viewMode === "section" ? "bg-primary text-primary-foreground" : "hover:bg-muted")}
+                                    className={cn("flex items-center gap-1.5 text-xs px-3 py-2 rounded font-bold transition-all",
+                                        viewMode === "section" ? "bg-[#2496ED] text-white shadow-[0_0_12px_rgba(36,150,237,0.3)]" : "hover:bg-white/5 text-zinc-400")}
                                 >
                                     <Terminal className="h-3.5 w-3.5" />
                                     Sections
                                 </button>
                             </div>
 
-                            <div className="h-6 w-px bg-border" />
+                            <div className="h-6 w-px bg-white/10" />
 
                             {/* Pillar filters (only show in pillar view) */}
                             {viewMode === "pillar" && (
                                 <>
-                                    <span className="text-xs text-muted-foreground">Pillar:</span>
+                                    <span className="text-xs text-zinc-500 font-semibold">Pillar:</span>
                                     <button
                                         onClick={() => setPillarFilter("all")}
-                                        className={cn("text-xs px-2.5 py-1 rounded-full border font-medium transition-all",
-                                            pillarFilter === "all" ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border hover:bg-muted")}
+                                        className={cn("text-xs px-3 py-1.5 rounded-lg border font-bold transition-all",
+                                            pillarFilter === "all" ? "bg-[#2496ED] text-white border-[#2496ED]/50 shadow-[0_0_12px_rgba(36,150,237,0.3)]" : "bg-white/[0.02] border-white/10 text-zinc-400 hover:bg-white/5")}
                                     >
                                         All
                                     </button>
@@ -893,10 +889,10 @@ function AuditDetailPage() {
                                         return (
                                             <button key={pillar}
                                                 onClick={() => setPillarFilter(f => f === pillar ? "all" : pillar)}
-                                                className={cn("inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border font-medium transition-all",
+                                                className={cn("inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-bold transition-all",
                                                     pillarFilter === pillar
-                                                        ? cn(meta.bg, meta.color, meta.border)
-                                                        : "bg-card border-border hover:bg-muted")}
+                                                        ? cn(meta.bg, meta.color, meta.border, "shadow-sm")
+                                                        : "bg-white/[0.02] border-white/10 text-zinc-400 hover:bg-white/5")}
                                             >
                                                 <Icon size={12} />
                                                 {meta.name}
@@ -909,11 +905,11 @@ function AuditDetailPage() {
                             {/* Section filters (only show in section view) */}
                             {viewMode === "section" && (
                                 <>
-                                    <span className="text-xs text-muted-foreground">Section:</span>
+                                    <span className="text-xs text-zinc-500 font-semibold">Section:</span>
                                     <button
                                         onClick={() => setSectionFilter("all")}
-                                        className={cn("text-xs px-2.5 py-1 rounded-full border font-medium transition-all",
-                                            sectionFilter === "all" ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border hover:bg-muted")}
+                                        className={cn("text-xs px-3 py-1.5 rounded-lg border font-bold transition-all",
+                                            sectionFilter === "all" ? "bg-[#2496ED] text-white border-[#2496ED]/50 shadow-[0_0_12px_rgba(36,150,237,0.3)]" : "bg-white/[0.02] border-white/10 text-zinc-400 hover:bg-white/5")}
                                     >
                                         All
                                     </button>
@@ -922,10 +918,10 @@ function AuditDetailPage() {
                                         return (
                                             <button key={s}
                                                 onClick={() => setSectionFilter(f => f === s ? "all" : s)}
-                                                className={cn("text-xs px-2.5 py-1 rounded-full border font-medium transition-all",
+                                                className={cn("text-xs px-3 py-1.5 rounded-lg border font-bold transition-all",
                                                     sectionFilter === s
-                                                        ? cn(meta.bg, meta.color, meta.border)
-                                                        : "bg-card border-border hover:bg-muted")}
+                                                        ? cn(meta.bg, meta.color, meta.border, "shadow-sm")
+                                                        : "bg-white/[0.02] border-white/10 text-zinc-400 hover:bg-white/5")}
                                             >
                                                 {meta.num} {meta.label}
                                             </button>
@@ -943,7 +939,7 @@ function AuditDetailPage() {
                                         setPillarFilter("all");
                                         setSearchQuery("");
                                     }}
-                                    className="text-xs px-2.5 py-1 text-muted-foreground hover:text-foreground ml-auto"
+                                    className="text-xs px-3 py-1.5 text-zinc-400 hover:text-rose-400 ml-auto font-bold transition-colors"
                                 >
                                     Clear all
                                 </button>
@@ -953,11 +949,11 @@ function AuditDetailPage() {
 
                     {/* ── Results grouped by pillar or section ───────── */}
                     {Object.keys(groupedResults).length === 0 ? (
-                        <div className="text-center py-12 text-muted-foreground text-sm">
+                        <div className="text-center py-16 text-zinc-500 text-sm">
                             No results match the current filters.
                         </div>
                     ) : (
-                        <div className="space-y-6">
+                        <div className="space-y-8">
                             {Object.entries(groupedResults).map(([groupName, results]) => {
                                 // Determine if this is a pillar or section group
                                 const isPillarView = viewMode === "pillar";
@@ -971,16 +967,16 @@ function AuditDetailPage() {
 
                                     return (
                                         <div key={groupName}>
-                                            <div className="flex items-center gap-2 mb-3">
-                                                <Icon size={14} />
-                                                <span className={cn("text-xs font-bold px-2 py-1 rounded-md border inline-flex items-center gap-1.5", meta.bg, meta.color, meta.border)}>
+                                            <div className="flex items-center gap-3 mb-4 pb-3 border-b border-white/10">
+                                                <Icon size={16} className={meta.color} />
+                                                <span className={cn("text-sm font-black px-3 py-1.5 rounded-lg border inline-flex items-center gap-2", meta.bg, meta.color, meta.border)}>
                                                     {groupName}
                                                 </span>
-                                                <Badge variant="outline" className="text-[10px] ml-auto font-mono">
+                                                <Badge variant="outline" className="text-xs ml-auto font-mono font-bold bg-white/[0.02] border-white/10 text-zinc-400">
                                                     {results.filter(r => r.status === "Pass").length}/{results.length}
                                                 </Badge>
                                             </div>
-                                            <div className="space-y-2">
+                                            <div className="space-y-3">
                                                 {results
                                                     .sort((a, b) => {
                                                         if (a.status !== b.status) return a.status === "Fail" ? -1 : 1;
@@ -1003,16 +999,16 @@ function AuditDetailPage() {
                                     const meta = sectionMeta(groupName);
                                     return (
                                         <div key={groupName}>
-                                            <div className="flex items-center gap-2 mb-3">
-                                                <span className={cn("text-xs font-bold px-2 py-1 rounded-md border", meta.bg, meta.color, meta.border)}>
+                                            <div className="flex items-center gap-3 mb-4 pb-3 border-b border-white/10">
+                                                <span className={cn("text-sm font-black px-3 py-1.5 rounded-lg border", meta.bg, meta.color, meta.border)}>
                                                     {meta.num} {meta.label}
                                                 </span>
-                                                <span className="text-xs text-muted-foreground">{groupName}</span>
-                                                <Badge variant="outline" className="text-[10px] ml-auto font-mono">
+                                                <span className="text-sm text-zinc-400 font-medium">{groupName}</span>
+                                                <Badge variant="outline" className="text-xs ml-auto font-mono font-bold bg-white/[0.02] border-white/10 text-zinc-400">
                                                     {results.filter(r => r.status === "Pass").length}/{results.length}
                                                 </Badge>
                                             </div>
-                                            <div className="space-y-2">
+                                            <div className="space-y-3">
                                                 {results
                                                     .sort((a, b) => {
                                                         if (a.status !== b.status) return a.status === "Fail" ? -1 : 1;
