@@ -233,18 +233,46 @@ function RuleCard({ result, agentUrl, token }: {
             const outcome = await agentDirectApi.applyFix(agentUrl, rule.id, token);
             if (intervalRef.current) clearInterval(intervalRef.current);
             setFixOutcome(outcome);
+            
             if (outcome.status === "Applied") {
-                toast.success(`Fix applied for rule ${rule.id}`);
-                // Refetch audit data to show updated status
-                queryClient.invalidateQueries({ queryKey: ["agent-audit"] });
-                // Clear fix outcome after delay to allow refetch
-                setTimeout(() => setFixOutcome(null), 3000);
+                toast.success(`✅ Fix applied for rule ${rule.id}! Refreshing audit...`, {
+                    duration: 4000,
+                });
+                
+                // Force immediate refetch of audit data
+                await queryClient.invalidateQueries({ queryKey: ["agent-audit"] });
+                await queryClient.refetchQueries({ queryKey: ["agent-audit"] });
+                
+                // Show success message after refresh
+                setTimeout(() => {
+                    toast.info("Audit data refreshed with latest status", {
+                        duration: 3000,
+                    });
+                    setFixOutcome(null);
+                }, 2000);
+                
             } else if (outcome.status === "Blocked") {
-                toast.error(`Rule ${rule.id}: ${outcome.message.slice(0, 80)}`);
+                const needsSudo = outcome.message.toLowerCase().includes("permission") || 
+                                 outcome.message.toLowerCase().includes("sudo") ||
+                                 outcome.message.toLowerCase().includes("elevated");
+                
+                if (needsSudo) {
+                    toast.error(`⚠️ Rule ${rule.id}: Requires sudo/root access`, {
+                        description: "Please run the agent with elevated privileges",
+                        duration: 5000,
+                    });
+                } else {
+                    toast.error(`❌ Rule ${rule.id}: ${outcome.message.slice(0, 80)}`, {
+                        duration: 5000,
+                    });
+                }
             }
-        } catch {
+        } catch (error) {
             if (intervalRef.current) clearInterval(intervalRef.current);
-            toast.error("Failed to connect to agent");
+            toast.error("Failed to connect to agent", {
+                description: "Check if the agent is running and accessible",
+                duration: 4000,
+            });
         } finally {
             setFixing(false);
         }
@@ -313,24 +341,27 @@ function RuleCard({ result, agentUrl, token }: {
                             <span className="font-mono text-[11px] font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
                                 {rule.id}
                             </span>
-                            <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded border", meta.bg, meta.color, meta.border)}>
-                                {meta.num} {meta.label}
+                            {/* Pillar badge */}
+                            {(() => {
+                                const pillar = getRulePillar(rule.id);
+                                const pillarMeta = PILLAR_META[pillar];
+                                const PillarIcon = pillarMeta.icon;
+                                return (
+                                    <span className={cn("inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border", pillarMeta.bg, pillarMeta.color, pillarMeta.border)}>
+                                        <PillarIcon size={10} />
+                                        {pillarMeta.name}
+                                    </span>
+                                );
+                            })()}
+                            {/* Section badge (smaller, secondary) */}
+                            <span className={cn("text-[9px] font-medium px-1.5 py-0.5 rounded border opacity-60", meta.bg, meta.color, meta.border)}>
+                                {meta.num}
                             </span>
                             <SeverityBadge severity={rule.severity} />
                             {affected.length > 0 && (
                                 <span className="inline-flex items-center gap-1 text-[10px] bg-orange-500/10 text-orange-500 border border-orange-500/30 px-1.5 py-0.5 rounded font-semibold">
                                     <AlertTriangle className="h-2.5 w-2.5" />
                                     {affected.length} affected
-                                </span>
-                            )}
-                            {tags?.includes("namespace") && (
-                                <span className="text-[10px] bg-purple-500/10 text-purple-500 border border-purple-500/30 px-1.5 py-0.5 rounded font-semibold">
-                                    Namespace
-                                </span>
-                            )}
-                            {tags?.includes("cgroup") && (
-                                <span className="text-[10px] bg-cyan-500/10 text-cyan-500 border border-cyan-500/30 px-1.5 py-0.5 rounded font-semibold">
-                                    Cgroup
                                 </span>
                             )}
                         </div>
@@ -737,15 +768,55 @@ function AuditDetailPage() {
                                 </div>
                             </div>
 
-                            {/* Right: Section breakdown */}
+                            {/* Right: Pillar/Section breakdown with toggle */}
                             <div className="p-5 space-y-3">
-                                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Section Breakdown</p>
-                                {sortedSections.map(s => (
-                                    <SectionHeader key={s} section={s}
-                                        total={sectionStats[s]?.total ?? 0}
-                                        passed={sectionStats[s]?.passed ?? 0}
-                                    />
-                                ))}
+                                <div className="flex items-center justify-between mb-2">
+                                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                                        {viewMode === "pillar" ? "Security Pillars" : "CIS Sections"}
+                                    </p>
+                                    <button
+                                        onClick={() => setViewMode(m => m === "pillar" ? "section" : "pillar")}
+                                        className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                                    >
+                                        Switch to {viewMode === "pillar" ? "Sections" : "Pillars"}
+                                    </button>
+                                </div>
+                                
+                                {viewMode === "pillar" ? (
+                                    // Pillar breakdown
+                                    (Object.keys(PILLAR_META) as SecurityPillar[]).map(pillar => {
+                                        const meta = PILLAR_META[pillar];
+                                        const Icon = meta.icon;
+                                        const pillarRules = auditData.results.filter(r => getRulePillar(r.rule.id) === pillar);
+                                        const total = pillarRules.length;
+                                        const passed = pillarRules.filter(r => r.status === "Pass").length;
+                                        const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
+                                        
+                                        return (
+                                            <div key={pillar} className="space-y-1.5">
+                                                <div className="flex items-center gap-2">
+                                                    <Icon size={12} className={meta.color} />
+                                                    <span className="text-xs font-medium text-foreground">{meta.name}</span>
+                                                    <span className="text-xs text-muted-foreground font-mono ml-auto">{passed}/{total}</span>
+                                                </div>
+                                                <div className="h-1 bg-muted rounded-full overflow-hidden">
+                                                    <div
+                                                        className={cn("h-full rounded-full transition-all", meta.barColor)}
+                                                        style={{ width: `${pct}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                ) : (
+                                    // Section breakdown
+                                    sortedSections.map(s => (
+                                        <SectionHeader key={s} section={s}
+                                            total={sectionStats[s]?.total ?? 0}
+                                            passed={sectionStats[s]?.passed ?? 0}
+                                        />
+                                    ))
+                                )}
                             </div>
                         </div>
                     </div>
