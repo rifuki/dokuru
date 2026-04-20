@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { useState } from "react";
 import { Copy, Check, Zap, ShieldCheck, Box, Gauge, Shield } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import ScrollReveal from "./ScrollReveal";
 
 const steps = [
   {

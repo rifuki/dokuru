@@ -578,17 +578,24 @@ function SectionHeader({ section, total, passed }: { section: string; total: num
     const meta = sectionMeta(section);
     const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
     return (
-        <div className="flex items-center gap-3 py-1">
-            <span className={cn("text-xs font-bold px-2 py-1 rounded-md border", meta.bg, meta.color, meta.border)}>
-                {meta.num} {meta.label}
-            </span>
-            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                <div
-                    className={cn("h-full rounded-full transition-all", pct === 100 ? "bg-green-500" : pct >= 50 ? "bg-yellow-500" : "bg-red-500")}
-                    style={{ width: `${pct}%` }}
-                />
+        <div className="space-y-2">
+            <div className="flex items-center gap-3">
+                <span className={cn("text-sm font-bold px-3 py-1.5 rounded-lg border shrink-0", meta.bg, meta.color, meta.border)}>
+                    {meta.num}
+                </span>
+                <span className="text-sm font-semibold text-zinc-200 min-w-[120px]">{meta.label}</span>
+                <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden shadow-inner">
+                    <div
+                        className={cn("h-full rounded-full transition-all duration-700", 
+                            pct === 100 ? "bg-emerald-500 shadow-[0_0_8px_rgba(52,211,153,0.6)]" 
+                            : pct >= 50 ? "bg-amber-500 shadow-[0_0_8px_rgba(251,191,36,0.6)]" 
+                            : "bg-rose-500 shadow-[0_0_8px_rgba(251,113,133,0.6)]"
+                        )}
+                        style={{ width: `${pct}%` }}
+                    />
+                </div>
+                <span className="text-xs text-zinc-500 font-mono shrink-0 min-w-[50px] text-right">{passed}<span className="text-zinc-600">/</span>{total}</span>
             </div>
-            <span className="text-xs text-muted-foreground font-mono">{passed}/{total}</span>
         </div>
     );
 }

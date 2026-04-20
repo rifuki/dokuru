@@ -1,4 +1,6 @@
 import { AlertTriangle } from "lucide-react";
+import { motion } from "framer-motion";
+import ScrollReveal from "./ScrollReveal";
 
 const pains = [
   {
@@ -32,7 +34,7 @@ const Problem = () => {
     >
       <div className="max-w-7xl mx-auto px-6 md:px-10">
         <div className="grid lg:grid-cols-12 gap-10">
-          <div className="lg:col-span-5">
+          <ScrollReveal className="lg:col-span-5">
             <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.22em] text-[#2496ED] mb-5">
               <AlertTriangle size={12} />
               <span>/ the problem</span>
@@ -51,13 +53,18 @@ const Problem = () => {
               namespaces, cgroup constraints, and runtime flags that have to
               agree with each other on every host.
             </p>
-          </div>
+          </ScrollReveal>
 
           <div className="lg:col-span-7 lg:pl-6">
             <ul className="divide-y divide-white/5 border-y border-white/5">
-              {pains.map((p) => (
-                <li
+              {pains.map((p, i) => (
+                <motion.li
                   key={p.num}
+                  initial={{ opacity: 0, x: 30 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true, margin: "-100px" }}
+                  transition={{ duration: 0.5, delay: i * 0.1 }}
+                  whileHover={{ x: 10 }}
                   data-testid={`problem-item-${p.num}`}
                   className="py-6 md:py-7 grid grid-cols-[auto_1fr] gap-5 md:gap-8 group"
                 >
@@ -72,7 +79,7 @@ const Problem = () => {
                       {p.body}
                     </p>
                   </div>
-                </li>
+                </motion.li>
               ))}
             </ul>
           </div>

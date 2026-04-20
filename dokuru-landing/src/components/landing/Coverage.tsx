@@ -1,4 +1,6 @@
 import { Boxes, Gauge, Lock } from "lucide-react";
+import { motion } from "framer-motion";
+import ScrollReveal from "./ScrollReveal";
 
 const groups = [
   {
@@ -50,7 +52,7 @@ const Coverage = () => {
       className="relative py-24 md:py-32 border-t border-white/5"
     >
       <div className="max-w-7xl mx-auto px-6 md:px-10">
-        <div className="flex items-end justify-between flex-wrap gap-6 mb-12">
+        <ScrollReveal className="flex items-end justify-between flex-wrap gap-6 mb-12">
           <div className="max-w-2xl">
             <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#2496ED] mb-4">
               / coverage
@@ -69,21 +71,30 @@ const Coverage = () => {
           <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-zinc-500 border border-white/10 rounded px-3 py-1.5 bg-white/[0.02]">
             CIS Docker Benchmark v1.8.0 · aligned, not certified
           </span>
-        </div>
+        </ScrollReveal>
 
         <div className="grid md:grid-cols-3 gap-px bg-white/10 border border-white/10 rounded-xl overflow-hidden">
           {groups.map((g, i) => {
             const Icon = g.icon;
             return (
-              <div
+              <motion.div
                 key={g.title}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-100px" }}
+                transition={{ duration: 0.5, delay: i * 0.15 }}
+                whileHover={{ y: -5 }}
                 data-testid={`coverage-group-${i}`}
                 className="bg-[#09090B] p-8 flex flex-col"
               >
                 <div className="flex items-center justify-between mb-6">
-                  <div className="w-10 h-10 rounded-md bg-[#2496ED]/10 border border-[#2496ED]/20 grid place-items-center text-[#2496ED]">
+                  <motion.div
+                    whileHover={{ rotate: 360 }}
+                    transition={{ duration: 0.6 }}
+                    className="w-10 h-10 rounded-md bg-[#2496ED]/10 border border-[#2496ED]/20 grid place-items-center text-[#2496ED]"
+                  >
                     <Icon size={18} strokeWidth={1.75} />
-                  </div>
+                  </motion.div>
                   <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-zinc-500">
                     {g.label}
                   </span>
@@ -96,17 +107,21 @@ const Coverage = () => {
                 </p>
 
                 <ul className="mt-6 flex flex-col gap-2 border-t border-white/5 pt-5">
-                  {g.rules.map((r) => (
-                    <li
+                  {g.rules.map((r, idx) => (
+                    <motion.li
                       key={r}
+                      initial={{ opacity: 0, x: -10 }}
+                      whileInView={{ opacity: 1, x: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 0.3, delay: i * 0.15 + idx * 0.05 }}
                       className="flex items-start gap-2.5 font-mono text-[13px] text-zinc-300"
                     >
                       <span className="mt-[6px] h-1 w-1 rounded-full bg-[#2496ED] shrink-0" />
                       <span>{r}</span>
-                    </li>
+                    </motion.li>
                   ))}
                 </ul>
-              </div>
+              </motion.div>
             );
           })}
         </div>

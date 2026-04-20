@@ -1,4 +1,6 @@
 import { Cpu, KeyRound, Archive, Zap, Container, Code } from "lucide-react";
+import { motion } from "framer-motion";
+import ScrollReveal from "./ScrollReveal";
 
 const points = [
   {
@@ -42,7 +44,7 @@ const WhyDokuru = () => {
     >
       <div className="max-w-7xl mx-auto px-6 md:px-10">
         <div className="grid lg:grid-cols-12 gap-10">
-          <div className="lg:col-span-4">
+          <ScrollReveal className="lg:col-span-4">
             <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#2496ED] mb-4">
               / why dokuru
             </div>
@@ -58,7 +60,13 @@ const WhyDokuru = () => {
               inside the audit-fix-review loop your team actually runs.
             </p>
 
-            <div className="mt-8 p-5 rounded-xl border border-white/10 bg-white/[0.02]">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.3 }}
+              className="mt-8 p-5 rounded-xl border border-white/10 bg-white/[0.02]"
+            >
               <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-zinc-500 mb-2">
                 honest scope
               </div>
@@ -67,31 +75,38 @@ const WhyDokuru = () => {
                 orchestrator, or infrastructure monitor. It is a Docker
                 security audit tool with a clear focus.
               </p>
-            </div>
-          </div>
+            </motion.div>
+          </ScrollReveal>
 
           <div className="lg:col-span-8">
             <ul className="grid sm:grid-cols-2 gap-px bg-white/10 border border-white/10 rounded-xl overflow-hidden">
               {points.map((p, i) => {
                 const Icon = p.icon;
                 return (
-                  <li
+                  <motion.li
                     key={p.title}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    whileInView={{ opacity: 1, scale: 1 }}
+                    viewport={{ once: true, margin: "-100px" }}
+                    transition={{ duration: 0.4, delay: i * 0.1 }}
+                    whileHover={{ scale: 1.05, backgroundColor: "#0c0c0f" }}
                     data-testid={`trust-point-${i}`}
-                    className="bg-[#09090B] p-7 flex flex-col gap-3 hover:bg-[#0c0c0f] transition-colors"
+                    className="bg-[#09090B] p-7 flex flex-col gap-3 transition-colors"
                   >
-                    <Icon
-                      size={20}
-                      strokeWidth={1.75}
-                      className="text-[#2496ED]"
-                    />
+                    <motion.div whileHover={{ rotate: 360 }} transition={{ duration: 0.6 }}>
+                      <Icon
+                        size={20}
+                        strokeWidth={1.75}
+                        className="text-[#2496ED]"
+                      />
+                    </motion.div>
                     <h3 className="font-heading text-lg font-bold text-white">
                       {p.title}
                     </h3>
                     <p className="text-zinc-400 text-[14px] leading-relaxed">
                       {p.body}
                     </p>
-                  </li>
+                  </motion.li>
                 );
               })}
             </ul>
