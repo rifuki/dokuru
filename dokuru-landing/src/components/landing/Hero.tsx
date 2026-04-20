@@ -14,7 +14,7 @@ const Hero = () => {
     <section
       id="top"
       data-testid="hero-section"
-      className="relative pt-28 md:pt-36 pb-20 md:pb-28 overflow-hidden"
+      className="relative pt-20 md:pt-24 pb-20 md:pb-28 overflow-hidden"
     >
       {/* background grid */}
       <div className="absolute inset-0 bg-grid-fine mask-fade-b pointer-events-none" />

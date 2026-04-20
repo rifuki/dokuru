@@ -40,7 +40,7 @@ const Header = () => {
             dokuru
           </span>
           <span className="hidden sm:inline-block font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500 border border-white/10 rounded px-1.5 py-0.5 ml-1">
-            v1.8
+            v1
           </span>
         </a>
 
