@@ -1007,19 +1007,17 @@ pub fn is_socket(path: &Path) -> bool {
 }
 
 pub fn nix_like_is_root() -> bool {
-    matches!(std::env::var("USER"), Ok(user) if user == "root") || uid_via_id() == Some(0)
-}
-
-pub fn uid_via_id() -> Option<u32> {
-    let output = Command::new("id").arg("-u").output().ok()?;
-    if !output.status.success() {
-        return None;
+    // Use libc geteuid() - most reliable way to check root
+    #[cfg(unix)]
+    {
+        unsafe { libc::geteuid() == 0 }
     }
-    std::str::from_utf8(&output.stdout)
-        .ok()?
-        .trim()
-        .parse()
-        .ok()
+
+    #[cfg(not(unix))]
+    {
+        // Fallback for non-Unix systems
+        matches!(std::env::var("USER"), Ok(user) if user == "root")
+    }
 }
 
 pub fn detect_distro() -> String {
