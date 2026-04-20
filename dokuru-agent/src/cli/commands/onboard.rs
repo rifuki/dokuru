@@ -2,8 +2,8 @@ use super::super::helpers::{
     collect_preflight, enable_service, generate_agent_token, hash_token, install_binary,
     install_docker, offer_docker_installation, prompt_for_config, reload_systemd, resolve_config,
     restart_service, run_command, run_step, runtime_config_path, service_unit_path,
-    setup_dokuru_user, setup_log_directory, show_preflight, update_config_access_mode,
-    user_in_docker_group, write_config_file, write_systemd_unit,
+    setup_log_directory, show_preflight, update_config_access_mode, user_in_docker_group,
+    write_config_file, write_systemd_unit,
 };
 use super::super::types::{SetupArgs, SetupMode};
 use cliclack::{confirm, intro, note, outro, outro_cancel, select};
@@ -228,13 +228,8 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         })?;
     }
 
-    // Setup user, log, systemd only for onboard (not configure)
+    // Setup log, systemd only for onboard (not configure)
     if mode == SetupMode::Onboard {
-        run_step("Setting up dokuru user and group", setup_dokuru_user)?;
-        if stderr().is_terminal() {
-            cliclack::log::info("→ Created system user 'dokuru' for service isolation")?;
-        }
-
         run_step("Creating log directory", setup_log_directory)?;
         if stderr().is_terminal() {
             cliclack::log::info("→ /var/log/dokuru")?;
