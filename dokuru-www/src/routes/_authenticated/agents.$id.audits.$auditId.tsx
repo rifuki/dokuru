@@ -679,89 +679,96 @@ function AuditDetailPage() {
             {auditData ? (
                 <>
                     {/* ── Summary Card ────────────────────────────────── */}
-                    <div className="rounded-2xl border border-border bg-card overflow-hidden">
-                        {/* Terminal-style header */}
-                        <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-muted/20">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                                <div className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500/70" />
-                                <div className="h-2.5 w-2.5 shrink-0 rounded-full bg-yellow-500/70" />
-                                <div className="h-2.5 w-2.5 shrink-0 rounded-full bg-green-500/70" />
-                                <span className="ml-3 text-xs font-mono text-muted-foreground truncate">
-                                    {agent?.name ?? id} / {auditData.hostname}
+                    <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-[#0A0A0B] via-[#111113] to-[#0A0A0B] overflow-hidden shadow-2xl">
+                        {/* Terminal-style header with glow */}
+                        <div className="flex items-center justify-between px-5 py-3 border-b border-white/10 bg-[#09090B]/80 backdrop-blur-sm">
+                            <div className="flex items-center gap-2 min-w-0">
+                                <div className="flex gap-1.5">
+                                    <div className="h-3 w-3 shrink-0 rounded-full bg-red-500/80 shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
+                                    <div className="h-3 w-3 shrink-0 rounded-full bg-yellow-500/80 shadow-[0_0_8px_rgba(234,179,8,0.5)]" />
+                                    <div className="h-3 w-3 shrink-0 rounded-full bg-green-500/80 shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
+                                </div>
+                                <span className="ml-2 text-sm font-mono text-zinc-400 truncate">
+                                    {agent?.name ?? id} <span className="text-zinc-600">/</span> <span className="text-[#2496ED]">{auditData.hostname}</span>
                                 </span>
                             </div>
-                            <span className="text-xs font-mono text-muted-foreground shrink-0 ml-4">
-                                audit · {fmtDate(auditData.timestamp).split(",")[1]?.trim() ?? fmtDate(auditData.timestamp)}
+                            <span className="text-xs font-mono text-zinc-500 shrink-0 ml-4">
+                                {fmtDate(auditData.timestamp).split(",")[1]?.trim() ?? fmtDate(auditData.timestamp)}
                             </span>
                         </div>
 
                         {/* Body: score left + breakdown right */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border">
-                            {/* Left: Score + stats + meta */}
-                            <div className="p-5 space-y-4">
-                                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Audit Score</p>
-                                <div className="flex items-baseline gap-2">
-                                    <span className={cn("text-5xl font-bold tabular-nums",
-                                        auditData.summary.score >= 80 ? "text-green-500"
-                                        : auditData.summary.score >= 60 ? "text-yellow-500"
-                                        : "text-red-500"
-                                    )}>
-                                        {auditData.summary.score}
-                                    </span>
-                                    <span className="text-sm text-muted-foreground font-mono">/ 100</span>
+                        <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-white/10">
+                            {/* Left: Score + stats */}
+                            <div className="p-6 space-y-5">
+                                <div>
+                                    <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-zinc-500 mb-3">Audit Score</p>
+                                    <div className="flex items-baseline gap-3">
+                                        <span className={cn("text-7xl font-black tabular-nums leading-none",
+                                            auditData.summary.score >= 80 ? "text-emerald-400 drop-shadow-[0_0_20px_rgba(52,211,153,0.5)]"
+                                            : auditData.summary.score >= 60 ? "text-amber-400 drop-shadow-[0_0_20px_rgba(251,191,36,0.5)]"
+                                            : "text-rose-400 drop-shadow-[0_0_20px_rgba(251,113,133,0.5)]"
+                                        )}>
+                                            {auditData.summary.score}
+                                        </span>
+                                        <span className="text-xl text-zinc-600 font-bold">/ 100</span>
+                                    </div>
+                                    <div className="mt-3 h-2 w-full rounded-full bg-white/5 overflow-hidden shadow-inner">
+                                        <div
+                                            className={cn("h-full rounded-full transition-all duration-1000 ease-out",
+                                                auditData.summary.score >= 80 ? "bg-gradient-to-r from-emerald-500 to-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.6)]"
+                                                : auditData.summary.score >= 60 ? "bg-gradient-to-r from-amber-500 to-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.6)]"
+                                                : "bg-gradient-to-r from-rose-500 to-rose-400 shadow-[0_0_12px_rgba(251,113,133,0.6)]"
+                                            )}
+                                            style={{ width: `${auditData.summary.score}%` }}
+                                        />
+                                    </div>
+                                    <p className="mt-2 text-xs text-zinc-500 font-mono">CIS Docker Benchmark v1.8.0 · {auditData.summary.total} rules</p>
                                 </div>
-                                <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                                    <div
-                                        className={cn("h-full rounded-full transition-all duration-700",
-                                            auditData.summary.score >= 80 ? "bg-green-500"
-                                            : auditData.summary.score >= 60 ? "bg-yellow-500"
-                                            : "bg-red-500"
-                                        )}
-                                        style={{ width: `${auditData.summary.score}%` }}
-                                    />
-                                </div>
-                                <div className="grid grid-cols-3 gap-2">
+
+                                <div className="grid grid-cols-3 gap-3">
                                     <button
                                         onClick={() => setStatusFilter(f => f === "Pass" ? "all" : "Pass")}
                                         className={cn(
-                                            "flex flex-col items-center py-2.5 rounded-xl border transition-all",
+                                            "flex flex-col items-center py-3 rounded-xl border transition-all duration-200",
                                             statusFilter === "Pass"
-                                                ? "bg-green-500/20 border-green-500/50 ring-2 ring-green-500/30"
-                                                : "bg-green-500/5 border-green-500/20 hover:bg-green-500/10"
+                                                ? "bg-emerald-500/20 border-emerald-500/50 ring-2 ring-emerald-500/30 shadow-[0_0_20px_rgba(52,211,153,0.3)]"
+                                                : "bg-emerald-500/5 border-emerald-500/20 hover:bg-emerald-500/10 hover:border-emerald-500/30"
                                         )}
                                     >
-                                        <span className="text-xl font-bold text-green-500">{auditData.summary.passed}</span>
-                                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Pass</span>
+                                        <span className="text-2xl font-black text-emerald-400">{auditData.summary.passed}</span>
+                                        <span className="text-[9px] text-zinc-400 uppercase tracking-[0.15em] mt-1">Pass</span>
                                     </button>
                                     <button
                                         onClick={() => setStatusFilter(f => f === "Fail" ? "all" : "Fail")}
                                         className={cn(
-                                            "flex flex-col items-center py-2.5 rounded-xl border transition-all",
+                                            "flex flex-col items-center py-3 rounded-xl border transition-all duration-200",
                                             statusFilter === "Fail"
-                                                ? "bg-red-500/20 border-red-500/50 ring-2 ring-red-500/30"
-                                                : "bg-red-500/5 border-red-500/20 hover:bg-red-500/10"
+                                                ? "bg-rose-500/20 border-rose-500/50 ring-2 ring-rose-500/30 shadow-[0_0_20px_rgba(251,113,133,0.3)]"
+                                                : "bg-rose-500/5 border-rose-500/20 hover:bg-rose-500/10 hover:border-rose-500/30"
                                         )}
                                     >
-                                        <span className="text-xl font-bold text-red-500">{auditData.summary.failed}</span>
-                                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Fail</span>
+                                        <span className="text-2xl font-black text-rose-400">{auditData.summary.failed}</span>
+                                        <span className="text-[9px] text-zinc-400 uppercase tracking-[0.15em] mt-1">Fail</span>
                                     </button>
-                                    <div className="flex flex-col items-center py-2.5 rounded-xl border border-border/50 bg-muted/20 cursor-default select-none">
-                                        <span className="text-xl font-bold text-muted-foreground">{auditData.summary.total}</span>
-                                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">Total</span>
+                                    <div className="flex flex-col items-center py-3 rounded-xl border border-white/10 bg-white/[0.02]">
+                                        <span className="text-2xl font-black text-zinc-400">{auditData.summary.total}</span>
+                                        <span className="text-[9px] text-zinc-500 uppercase tracking-[0.15em] mt-1">Total</span>
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-2 gap-1.5 pt-1">
+
+                                <div className="grid grid-cols-2 gap-2 pt-2">
                                     {[
                                         { icon: Server, label: "Host", value: auditData.hostname },
                                         { icon: Cpu, label: "Docker", value: auditData.docker_version },
                                         { icon: Container, label: "Containers", value: String(auditData.total_containers) },
-                                        { icon: Clock, label: "Ran at", value: fmtDate(auditData.timestamp).split(",")[1]?.trim() ?? fmtDate(auditData.timestamp) },
+                                        { icon: Clock, label: "Ran", value: fmtDate(auditData.timestamp).split(",")[1]?.trim() ?? fmtDate(auditData.timestamp) },
                                     ].map(({ icon: Icon, label, value }) => (
-                                        <div key={label} className="bg-muted/30 rounded-lg px-3 py-2 flex items-center gap-2 min-w-0">
-                                            <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                        <div key={label} className="bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2 flex items-center gap-2 min-w-0 hover:bg-white/[0.04] transition-colors">
+                                            <Icon className="h-4 w-4 text-zinc-500 shrink-0" />
                                             <div className="min-w-0">
-                                                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</p>
-                                                <p className="text-xs font-medium truncate">{value}</p>
+                                                <p className="text-[9px] text-zinc-500 uppercase tracking-[0.15em]">{label}</p>
+                                                <p className="text-xs font-semibold text-zinc-300 truncate">{value}</p>
                                             </div>
                                         </div>
                                     ))}
@@ -769,14 +776,14 @@ function AuditDetailPage() {
                             </div>
 
                             {/* Right: Pillar/Section breakdown with toggle */}
-                            <div className="p-5 space-y-3">
-                                <div className="flex items-center justify-between mb-2">
-                                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                            <div className="p-6 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-zinc-500">
                                         {viewMode === "pillar" ? "Security Pillars" : "CIS Sections"}
                                     </p>
                                     <button
                                         onClick={() => setViewMode(m => m === "pillar" ? "section" : "pillar")}
-                                        className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                                        className="text-[10px] text-zinc-500 hover:text-[#2496ED] transition-colors font-medium"
                                     >
                                         Switch to {viewMode === "pillar" ? "Sections" : "Pillars"}
                                     </button>
@@ -793,15 +800,17 @@ function AuditDetailPage() {
                                         const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
                                         
                                         return (
-                                            <div key={pillar} className="space-y-1.5">
+                                            <div key={pillar} className="space-y-2">
                                                 <div className="flex items-center gap-2">
-                                                    <Icon size={12} className={meta.color} />
-                                                    <span className="text-xs font-medium text-foreground">{meta.name}</span>
-                                                    <span className="text-xs text-muted-foreground font-mono ml-auto">{passed}/{total}</span>
+                                                    <Icon size={14} className={meta.color} />
+                                                    <span className="text-sm font-semibold text-zinc-200">{meta.name}</span>
+                                                    <span className="text-xs text-zinc-500 font-mono ml-auto">{passed}<span className="text-zinc-600">/</span>{total}</span>
                                                 </div>
-                                                <div className="h-1 bg-muted rounded-full overflow-hidden">
+                                                <div className="h-1.5 bg-white/5 rounded-full overflow-hidden shadow-inner">
                                                     <div
-                                                        className={cn("h-full rounded-full transition-all", meta.barColor)}
+                                                        className={cn("h-full rounded-full transition-all duration-700", meta.barColor, 
+                                                            pct > 0 && "shadow-[0_0_8px_currentColor]"
+                                                        )}
                                                         style={{ width: `${pct}%` }}
                                                     />
                                                 </div>
