@@ -166,3 +166,57 @@ pub struct FixOutcome {
     pub restart_command: Option<String>,
     pub requires_elevation: bool,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_severity_serialization() {
+        assert_eq!(serde_json::to_string(&Severity::High).unwrap(), "\"High\"");
+        assert_eq!(
+            serde_json::to_string(&Severity::Medium).unwrap(),
+            "\"Medium\""
+        );
+        assert_eq!(serde_json::to_string(&Severity::Low).unwrap(), "\"Low\"");
+    }
+
+    #[test]
+    fn test_check_status_variants() {
+        assert_eq!(CheckStatus::Pass, CheckStatus::Pass);
+        assert_ne!(CheckStatus::Pass, CheckStatus::Fail);
+    }
+
+    #[test]
+    fn test_remediation_kind_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&RemediationKind::Auto).unwrap(),
+            "\"auto\""
+        );
+        assert_eq!(
+            serde_json::to_string(&RemediationKind::Guided).unwrap(),
+            "\"guided\""
+        );
+    }
+
+    #[test]
+    fn test_check_result_default() {
+        let result = CheckResult::default();
+        assert_eq!(result.status, CheckStatus::Pass);
+        assert!(result.affected.is_empty());
+    }
+
+    #[test]
+    fn test_cis_rule_creation() {
+        let rule = CisRule {
+            id: "5.11".to_string(),
+            title: "Test".to_string(),
+            category: RuleCategory::Cgroup,
+            severity: Severity::Medium,
+            section: "Runtime".to_string(),
+            description: "Test".to_string(),
+            remediation: "Fix".to_string(),
+        };
+        assert_eq!(rule.id, "5.11");
+    }
+}

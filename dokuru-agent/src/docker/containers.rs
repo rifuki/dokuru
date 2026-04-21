@@ -175,3 +175,48 @@ async fn container_stats(Path(id): Path<String>) -> Result<Json<Value>, StatusCo
 
     Err(StatusCode::INTERNAL_SERVER_ERROR)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_container_response_creation() {
+        let response = ContainerResponse {
+            id: "abc123".to_string(),
+            names: vec!["/nginx".to_string()],
+            image: "nginx:latest".to_string(),
+            state: "running".to_string(),
+            status: "Up 2 hours".to_string(),
+            created: 1234567890,
+        };
+        assert_eq!(response.id, "abc123");
+        assert_eq!(response.state, "running");
+    }
+
+    #[test]
+    fn test_list_query_default() {
+        let query = ListQuery { all: None };
+        assert!(query.all.is_none());
+    }
+
+    #[test]
+    fn test_list_query_all_true() {
+        let query = ListQuery { all: Some(true) };
+        assert_eq!(query.all, Some(true));
+    }
+
+    #[test]
+    fn test_container_response_serialization() {
+        let response = ContainerResponse {
+            id: "test123".to_string(),
+            names: vec!["/test".to_string()],
+            image: "alpine".to_string(),
+            state: "exited".to_string(),
+            status: "Exited".to_string(),
+            created: 1700000000,
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("test123"));
+    }
+}

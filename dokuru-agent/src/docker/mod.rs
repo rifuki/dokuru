@@ -4,6 +4,9 @@ pub mod images;
 pub mod networks;
 pub mod volumes;
 
+#[cfg(test)]
+mod containers_tests;
+
 use bollard::Docker;
 use eyre::Result;
 
