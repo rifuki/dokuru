@@ -40,7 +40,7 @@ where
     Router::new()
         .route("/docker/images", get(list_images))
         .route(
-            "/docker/images/:id",
+            "/docker/images/{id}",
             get(inspect_image).delete(remove_image),
         )
         .route("/docker/images/pull", post(pull_image))
