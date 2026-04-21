@@ -26,7 +26,7 @@ export function SettingsLayout() {
     }, [navigate, user?.role]);
 
     return (
-        <div className="flex h-screen w-full bg-background overflow-hidden relative">
+        <div className="fixed inset-0 z-50 flex w-full bg-background overflow-hidden">
             {/* Sidebar Area */}
             <aside className="flex w-[230px] md:w-[280px] lg:w-[30%] lg:min-w-[280px] lg:max-w-[340px] justify-end bg-muted/30 pb-10 border-r border-border/50">
                 <nav className="w-full max-w-[240px] px-2 md:px-4 pt-16 flex flex-col gap-0.5">
