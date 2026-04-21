@@ -39,7 +39,7 @@ function ImagesPage() {
 
   const removeMutation = useMutation({
     mutationFn: (imageId: string) => {
-      if (!agent) throw new Error("Agent not loaded");
+      if (!agent?.token) throw new Error("Agent token not available");
       return dockerApi.removeImage(agent.url, agent.token, imageId);
     },
     onSuccess: () => {
@@ -51,7 +51,7 @@ function ImagesPage() {
 
   const pruneMutation = useMutation({
     mutationFn: () => {
-      if (!agent) throw new Error("Agent not loaded");
+      if (!agent?.token) throw new Error("Agent token not available");
       return dockerApi.pruneImages(agent.url, agent.token);
     },
     onSuccess: () => {
