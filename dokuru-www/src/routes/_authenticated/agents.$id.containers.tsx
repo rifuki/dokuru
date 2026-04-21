@@ -1,6 +1,7 @@
 import "@xterm/xterm/css/xterm.css";
 
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Play,
@@ -58,10 +59,12 @@ function ContainerOverview({
   agentUrl,
   token,
   containerId,
+  agentId,
 }: {
   agentUrl: string;
   token: string;
   containerId: string;
+  agentId: string;
 }) {
   const { data, isLoading } = useQuery({
     queryKey: ["container-inspect", containerId],
@@ -121,11 +124,17 @@ function ContainerOverview({
             </h4>
             <div className="space-y-2">
               {Object.entries(networks).map(([name, net]) => {
-                const networkData = net as { IPAddress?: string };
+                const networkData = net as { IPAddress?: string; NetworkID?: string };
                 return (
                   <div key={name} className="bg-muted/50 rounded-lg p-3">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="bg-primary/10 text-primary border border-primary/20 rounded-md px-2 py-1 text-xs font-mono font-medium">{name}</span>
+                      <Link
+                        to="/agents/$id/networks/$networkId"
+                        params={{ id: agentId, networkId: networkData.NetworkID || name }}
+                        className="bg-primary/10 text-primary border border-primary/20 rounded-md px-2 py-1 text-xs font-mono font-medium hover:bg-primary/20 transition-colors"
+                      >
+                        {name}
+                      </Link>
                     </div>
                     {networkData.IPAddress && (
                       <div className="text-xs font-mono text-muted-foreground mt-2">
@@ -457,18 +466,64 @@ function ContainerTerminal({
   );
 }
 
+// ─── Inspect tab ───────────────────────────────────────────────────────────
+
+function ContainerInspect({
+  agentUrl,
+  token,
+  containerId,
+}: {
+  agentUrl: string;
+  token: string;
+  containerId: string;
+}) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["container-inspect", containerId],
+    queryFn: async () => {
+      const res = await dockerApi.inspectContainer(agentUrl, token, containerId);
+      return res.data;
+    },
+    staleTime: 10_000,
+  });
+
+  if (isLoading) return <p className="text-sm text-muted-foreground p-6">Loading…</p>;
+
+  return (
+    <div className="p-5">
+      <div className="rounded-lg border overflow-hidden">
+        <div className="bg-[#0d1117] px-4 py-2 border-b border-white/10 flex items-center justify-between">
+          <span className="text-xs text-muted-foreground font-mono">Docker Inspect JSON</span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs px-3 hover:bg-white/10"
+            onClick={() => navigator.clipboard.writeText(JSON.stringify(data, null, 2))}
+          >
+            Copy
+          </Button>
+        </div>
+        <pre className="bg-[#0d1117] p-4 overflow-auto max-h-[600px] text-xs font-mono text-gray-300">
+          {JSON.stringify(data, null, 2)}
+        </pre>
+      </div>
+    </div>
+  );
+}
+
 // ─── Detail panel (tabs) ───────────────────────────────────────────────────
 
-type Tab = "overview" | "logs" | "stats" | "terminal";
+type Tab = "overview" | "logs" | "stats" | "terminal" | "inspect";
 
 function ContainerDetail({
   container,
   agentUrl,
   token,
+  agentId,
 }: {
   container: Container;
   agentUrl: string;
   token: string;
+  agentId: string;
 }) {
   const [tab, setTab] = useState<Tab>("overview");
   const isRunning = container.state.toLowerCase() === "running";
@@ -478,6 +533,7 @@ function ContainerDetail({
     { id: "logs", label: "Logs", icon: <FileText className="h-4 w-4" /> },
     { id: "stats", label: "Stats", icon: <BarChart2 className="h-4 w-4" />, disabled: !isRunning },
     { id: "terminal", label: "Terminal", icon: <TerminalIcon className="h-4 w-4" />, disabled: !isRunning },
+    { id: "inspect", label: "Inspect", icon: <Info className="h-4 w-4" /> },
   ];
 
   return (
@@ -506,7 +562,7 @@ function ContainerDetail({
       {/* Tab content */}
       <div className="bg-background rounded-tr-lg">
         {tab === "overview" && (
-          <ContainerOverview agentUrl={agentUrl} token={token} containerId={container.id} />
+          <ContainerOverview agentUrl={agentUrl} token={token} containerId={container.id} agentId={agentId} />
         )}
         {tab === "logs" && (
           <div className="p-5">
@@ -526,6 +582,9 @@ function ContainerDetail({
             />
           </div>
         )}
+        {tab === "inspect" && (
+          <ContainerInspect agentUrl={agentUrl} token={token} containerId={container.id} />
+        )}
       </div>
     </div>
   );
@@ -537,6 +596,7 @@ function ContainerRow({
   container,
   agentUrl,
   token,
+  agentId,
   onStart,
   onStop,
   onRestart,
@@ -546,6 +606,7 @@ function ContainerRow({
   container: Container;
   agentUrl: string;
   token: string;
+  agentId: string;
   onStart: (id: string) => void;
   onStop: (id: string) => void;
   onRestart: (id: string) => void;
@@ -577,7 +638,12 @@ function ContainerRow({
               <span className="font-semibold text-sm truncate">{name}</span>
               <span className="text-xs text-muted-foreground font-mono truncate">{container.id.slice(0, 12)}</span>
             </div>
-            <span className="text-sm text-muted-foreground truncate font-mono">{container.image}</span>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm text-muted-foreground truncate font-mono">{container.image}</span>
+              <span className="text-xs text-muted-foreground truncate">
+                Created: {new Date(container.created * 1000).toLocaleString()}
+              </span>
+            </div>
             <span className="text-xs text-muted-foreground truncate font-mono">{stackName}</span>
             <Badge variant="outline" className={`text-xs font-medium w-fit ${stateColor(container.state)}`}>
               {container.state}
@@ -667,7 +733,7 @@ function ContainerRow({
         {/* Expanded detail */}
         {expanded && (
           <div className="animate-in slide-in-from-top-2 duration-200">
-            <ContainerDetail container={container} agentUrl={agentUrl} token={token} />
+            <ContainerDetail container={container} agentUrl={agentUrl} token={token} agentId={agentId} />
           </div>
         )}
       </div>
@@ -824,6 +890,7 @@ function ContainersPage() {
               container={container}
               agentUrl={agent?.url ?? ""}
               token={agent?.token ?? ""}
+              agentId={id}
               onStart={(cid) => startMutation.mutate(cid)}
               onStop={(cid) => stopMutation.mutate(cid)}
               onRestart={(cid) => restartMutation.mutate(cid)}
