@@ -41,11 +41,11 @@ const Problem = () => {
             </div>
             <h2 className="font-heading text-4xl md:text-5xl font-black tracking-tighter leading-[1.05] text-white">
               Docker misconfigurations
-              <br />
+              <br className="hidden sm:block" />
               are <span className="text-rose-400">easy to miss</span> —
-              <br />
+              <br className="hidden sm:block" />
               and expensive to find
-              <br />
+              <br className="hidden sm:block" />
               the hard way.
             </h2>
             <p className="mt-6 text-zinc-400 leading-relaxed max-w-md">

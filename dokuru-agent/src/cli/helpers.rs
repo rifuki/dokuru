@@ -471,7 +471,7 @@ pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
                     note(
                         "Access Updated",
                         format!(
-                            "Mode:    Cloudflare Tunnel\nURL:     {url}\n✓ Config saved & service restarted\n⚠️  Update in dashboard"
+                            "Mode:    Cloudflare Tunnel\nURL:     {url}\n\n✓ Config saved & service restarted\n→ Update in dashboard"
                         ),
                     )?;
                     // Restart service to apply changes
@@ -498,7 +498,7 @@ pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
             note(
                 "Access Updated",
                 format!(
-                    "Mode:    Direct HTTP\nURL:     {url}\n✓ Config saved & service restarted\nSetup reverse proxy for HTTPS"
+                    "Mode:    Direct HTTP\nURL:     {url}\n\n✓ Config saved & service restarted\nSetup reverse proxy for HTTPS"
                 ),
             )?;
             // Restart service to apply changes

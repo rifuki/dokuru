@@ -62,7 +62,7 @@ const Hero = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.3 }}
               data-testid="hero-headline"
-              className="font-heading text-5xl sm:text-6xl lg:text-7xl font-black tracking-tighter leading-[0.95] text-white"
+              className="font-heading text-4xl sm:text-5xl lg:text-7xl font-black tracking-tighter leading-[0.95] text-white"
             >
               Monitor Docker
               <br />

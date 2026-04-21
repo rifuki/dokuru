@@ -104,7 +104,7 @@ const Features = () => {
           </div>
           <h2 className="font-heading text-4xl md:text-5xl font-black tracking-tighter text-white leading-[1.05]">
             A focused toolkit for Docker
-            <br />
+            <br className="hidden sm:block" />
             security posture.
           </h2>
           <p className="mt-5 text-zinc-400 text-lg max-w-2xl">

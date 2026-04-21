@@ -47,7 +47,7 @@ const HowItWorks = () => {
           </div>
           <h2 className="font-heading text-4xl md:text-5xl font-black tracking-tighter text-white leading-[1.05]">
             Three steps from
-            <br />
+            <br className="hidden sm:block" />
             install to audit.
           </h2>
         </div>
@@ -112,7 +112,7 @@ const HowItWorks = () => {
                   </button>
                 </div>
 
-                <div className="p-6 font-mono text-[13px] leading-7 space-y-3">
+                <div className="p-6 font-mono text-[13px] leading-7 space-y-3 overflow-x-auto">
                   <div className="flex items-start gap-3">
                     <span className="text-[#2496ED]">$</span>
                     <div className="flex-1">

@@ -50,9 +50,9 @@ const WhyDokuru = () => {
             </div>
             <h2 className="font-heading text-4xl md:text-5xl font-black tracking-tighter text-white leading-[1.05]">
               Built for practical
-              <br />
+              <br className="hidden sm:block" />
               Docker security
-              <br />
+              <br className="hidden sm:block" />
               workflows.
             </h2>
             <p className="mt-5 text-zinc-400 text-lg">
