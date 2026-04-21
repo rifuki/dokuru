@@ -291,90 +291,132 @@ function AgentDetail() {
                     </p>
                 </div>
             ) : dockerInfo ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* System Info */}
-                    <div className="rounded-lg border bg-card p-4">
-                        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                            <Monitor className="h-4 w-4 text-primary" />
-                            System Information
-                        </h3>
-                        <div className="space-y-2.5">
-                            <div className="flex items-center justify-between py-2 border-b border-border/50">
-                                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                                    <Monitor className="h-3 w-3" />
-                                    Operating System
-                                </span>
-                                <span className="text-sm font-medium text-right">{dockerInfo.os}</span>
+                <>
+                    {/* Docker Resources - Clickable Cards */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <button
+                            onClick={() => navigate({ to: "/agents/$id/containers", params: { id } })}
+                            className="p-4 rounded-lg border bg-card hover:bg-accent transition-colors text-left group"
+                        >
+                            <div className="flex items-center gap-2 mb-3">
+                                <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
+                                    <Container className="h-5 w-5 text-blue-500" />
+                                </div>
                             </div>
-                            <div className="flex items-center justify-between py-2 border-b border-border/50">
-                                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                                    <Cpu className="h-3 w-3" />
-                                    Architecture
-                                </span>
-                                <span className="text-sm font-medium text-right">{dockerInfo.architecture}</span>
+                            <p className="text-3xl font-bold mb-1">{dockerInfo.containers.total}</p>
+                            <p className="text-xs text-muted-foreground mb-2">Containers</p>
+                            <p className="text-xs">
+                                <span className="text-green-600 dark:text-green-400">{dockerInfo.containers.running} up</span>
+                                {" · "}
+                                <span className="text-muted-foreground">{dockerInfo.containers.stopped} down</span>
+                            </p>
+                        </button>
+
+                        <button
+                            onClick={() => navigate({ to: "/agents/$id/images", params: { id } })}
+                            className="p-4 rounded-lg border bg-card hover:bg-accent transition-colors text-left group"
+                        >
+                            <div className="flex items-center gap-2 mb-3">
+                                <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
+                                    <Box className="h-5 w-5 text-purple-500" />
+                                </div>
                             </div>
-                            <div className="flex items-center justify-between py-2 border-b border-border/50">
-                                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                                    <Cpu className="h-3 w-3" />
-                                    CPU Cores
-                                </span>
-                                <span className="text-sm font-medium text-right">{dockerInfo.cpu_count}</span>
+                            <p className="text-3xl font-bold mb-1">{dockerInfo.images}</p>
+                            <p className="text-xs text-muted-foreground">Images</p>
+                        </button>
+
+                        <button
+                            onClick={() => navigate({ to: "/agents/$id/volumes", params: { id } })}
+                            className="p-4 rounded-lg border bg-card hover:bg-accent transition-colors text-left group"
+                        >
+                            <div className="flex items-center gap-2 mb-3">
+                                <div className="h-10 w-10 rounded-lg bg-orange-500/10 flex items-center justify-center group-hover:bg-orange-500/20 transition-colors">
+                                    <HardDrive className="h-5 w-5 text-orange-500" />
+                                </div>
                             </div>
-                            <div className="flex items-center justify-between py-2">
-                                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                                    <MemoryStick className="h-3 w-3" />
-                                    Total Memory
-                                </span>
-                                <span className="text-sm font-medium text-right">
-                                    {(dockerInfo.memory_total / 1024 / 1024 / 1024).toFixed(1)} GB
-                                </span>
+                            <p className="text-3xl font-bold mb-1">{dockerInfo.volumes}</p>
+                            <p className="text-xs text-muted-foreground">Volumes</p>
+                        </button>
+
+                        <button
+                            onClick={() => navigate({ to: "/agents/$id/networks", params: { id } })}
+                            className="p-4 rounded-lg border bg-card hover:bg-accent transition-colors text-left group"
+                        >
+                            <div className="flex items-center gap-2 mb-3">
+                                <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center group-hover:bg-green-500/20 transition-colors">
+                                    <Network className="h-5 w-5 text-green-500" />
+                                </div>
                             </div>
-                        </div>
+                            <p className="text-3xl font-bold mb-1">{dockerInfo.networks}</p>
+                            <p className="text-xs text-muted-foreground">Networks</p>
+                        </button>
                     </div>
 
-                    {/* Docker Resources */}
-                    <div className="rounded-lg border bg-card p-4">
-                        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                            <Layers className="h-4 w-4 text-primary" />
-                            Docker Resources
-                        </h3>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="p-3 rounded-lg bg-muted/50 flex flex-col">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <Container className="h-4 w-4 text-primary shrink-0" />
-                                    <span className="text-xs text-muted-foreground">Containers</span>
+                    {/* Host & Engine Details */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Host Details */}
+                        <div className="rounded-lg border bg-card p-5">
+                            <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+                                <Monitor className="h-4 w-4 text-primary" />
+                                Host Details
+                            </h3>
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-start py-2 border-b border-border/50">
+                                    <span className="text-xs text-muted-foreground">Hostname</span>
+                                    <span className="text-sm font-medium font-mono text-right">{dockerInfo.hostname || "N/A"}</span>
                                 </div>
-                                <p className="text-2xl font-bold mb-1">{dockerInfo.containers.total}</p>
-                                <p className="text-xs">
-                                    <span className="text-green-600 dark:text-green-400">{dockerInfo.containers.running} up</span>
-                                    {" · "}
-                                    <span className="text-muted-foreground">{dockerInfo.containers.stopped} down</span>
-                                </p>
+                                <div className="flex justify-between items-start py-2 border-b border-border/50">
+                                    <span className="text-xs text-muted-foreground">OS Information</span>
+                                    <span className="text-sm font-medium text-right">{dockerInfo.os} {dockerInfo.architecture}</span>
+                                </div>
+                                <div className="flex justify-between items-start py-2 border-b border-border/50">
+                                    <span className="text-xs text-muted-foreground">Kernel Version</span>
+                                    <span className="text-sm font-medium font-mono text-right">{dockerInfo.kernel_version || "N/A"}</span>
+                                </div>
+                                <div className="flex justify-between items-start py-2 border-b border-border/50">
+                                    <span className="text-xs text-muted-foreground">Total CPU</span>
+                                    <span className="text-sm font-medium text-right">{dockerInfo.cpu_count}</span>
+                                </div>
+                                <div className="flex justify-between items-start py-2">
+                                    <span className="text-xs text-muted-foreground">Total Memory</span>
+                                    <span className="text-sm font-medium text-right">
+                                        {(dockerInfo.memory_total / 1024 / 1024 / 1024).toFixed(2)} GB
+                                    </span>
+                                </div>
                             </div>
-                            <div className="p-3 rounded-lg bg-muted/50 flex flex-col">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <Box className="h-4 w-4 text-primary shrink-0" />
-                                    <span className="text-xs text-muted-foreground">Images</span>
+                        </div>
+
+                        {/* Engine Details */}
+                        <div className="rounded-lg border bg-card p-5">
+                            <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+                                <Layers className="h-4 w-4 text-primary" />
+                                Engine Details
+                            </h3>
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-start py-2 border-b border-border/50">
+                                    <span className="text-xs text-muted-foreground">Version</span>
+                                    <span className="text-sm font-medium font-mono text-right">{dockerInfo.docker_version}</span>
                                 </div>
-                                <p className="text-2xl font-bold">{dockerInfo.images}</p>
-                            </div>
-                            <div className="p-3 rounded-lg bg-muted/50 flex flex-col">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <HardDrive className="h-4 w-4 text-primary shrink-0" />
-                                    <span className="text-xs text-muted-foreground">Volumes</span>
+                                <div className="flex justify-between items-start py-2 border-b border-border/50">
+                                    <span className="text-xs text-muted-foreground">API Version</span>
+                                    <span className="text-sm font-medium font-mono text-right">{dockerInfo.api_version || "N/A"}</span>
                                 </div>
-                                <p className="text-2xl font-bold">{dockerInfo.volumes}</p>
-                            </div>
-                            <div className="p-3 rounded-lg bg-muted/50 flex flex-col">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <Network className="h-4 w-4 text-primary shrink-0" />
-                                    <span className="text-xs text-muted-foreground">Networks</span>
+                                <div className="flex justify-between items-start py-2 border-b border-border/50">
+                                    <span className="text-xs text-muted-foreground">Root Directory</span>
+                                    <span className="text-sm font-medium font-mono text-right truncate max-w-[200px]">{dockerInfo.docker_root_dir || "/var/lib/docker"}</span>
                                 </div>
-                                <p className="text-2xl font-bold">{dockerInfo.networks}</p>
+                                <div className="flex justify-between items-start py-2 border-b border-border/50">
+                                    <span className="text-xs text-muted-foreground">Storage Driver</span>
+                                    <span className="text-sm font-medium font-mono text-right">{dockerInfo.storage_driver || "overlay2"}</span>
+                                </div>
+                                <div className="flex justify-between items-start py-2">
+                                    <span className="text-xs text-muted-foreground">Logging Driver</span>
+                                    <span className="text-sm font-medium font-mono text-right">{dockerInfo.logging_driver || "json-file"}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
+                </>
             ) : (
                 <div className="rounded-lg border border-dashed bg-card/50 p-12 text-center">
                     <h3 className="text-lg font-semibold text-foreground/80">
@@ -385,83 +427,6 @@ function AgentDetail() {
                     </p>
                 </div>
             )}
-
-            {/* Audit Section */}
-            <div className="rounded-lg border bg-card p-6">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold">Security Audit</h3>
-                    <Button
-                        onClick={handleRunAudit}
-                        disabled={isRunningAudit || !dockerInfo}
-                    >
-                        <Play className={`h-4 w-4 mr-2 ${isRunningAudit ? 'animate-spin' : ''}`} />
-                        {isRunningAudit ? "Running..." : "Run Audit"}
-                    </Button>
-                </div>
-
-                {auditResults ? (
-                    <div className="space-y-4">
-                        <div className="grid grid-cols-3 gap-4">
-                            <div className="flex items-center gap-2 p-3 rounded-lg bg-green-500/10">
-                                <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
-                                <div>
-                                    <p className="text-2xl font-bold">{auditResults.summary.passed}</p>
-                                    <p className="text-xs text-muted-foreground">Passed</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10">
-                                <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
-                                <div>
-                                    <p className="text-2xl font-bold">{auditResults.summary.failed}</p>
-                                    <p className="text-xs text-muted-foreground">Failed</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2 p-3 rounded-lg bg-yellow-500/10">
-                                <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-                                <div>
-                                    <p className="text-2xl font-bold">{auditResults.summary.failed}</p>
-                                    <p className="text-xs text-muted-foreground">Warnings</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="space-y-2 max-h-96 overflow-y-auto">
-                            {auditResults.results.map((result) => (
-                                <div
-                                    key={result.rule.id}
-                                    className={`p-3 rounded-lg border ${
-                                        result.status === "Pass"
-                                            ? "bg-green-500/5 border-green-500/20"
-                                            : result.status === "Fail"
-                                            ? "bg-red-500/5 border-red-500/20"
-                                            : "bg-yellow-500/5 border-yellow-500/20"
-                                    }`}
-                                >
-                                    <div className="flex items-start gap-2">
-                                        {result.status === "Pass" ? (
-                                            <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5" />
-                                        ) : result.status === "Fail" ? (
-                                            <XCircle className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5" />
-                                        ) : (
-                                            <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mt-0.5" />
-                                        )}
-                                        <div className="flex-1">
-                                            <p className="text-sm font-medium">{result.rule.title}</p>
-                                            <p className="text-xs text-muted-foreground mt-1">
-                                                {result.rule.id} • {result.message}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                ) : (
-                    <p className="text-sm text-muted-foreground text-center py-8">
-                        Click "Run Audit" to start CIS Docker Benchmark security audit
-                    </p>
-                )}
-            </div>
         </div>
     );
 }

@@ -30,6 +30,15 @@ export interface Image {
   created: number;
 }
 
+export interface ImageHistoryItem {
+  Id: string;
+  Created: number;
+  CreatedBy: string;
+  Tags: string[] | null;
+  Size: number;
+  Comment: string;
+}
+
 export interface Network {
   id: string;
   name: string;
@@ -93,6 +102,11 @@ export const dockerApi = {
 
   inspectImage: (agentUrl: string, token: string, id: string) =>
     axios.get(`${agentUrl}/docker/images/${id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
+  imageHistory: (agentUrl: string, token: string, id: string) =>
+    axios.get<ImageHistoryItem[]>(`${agentUrl}/docker/images/${encodeURIComponent(id)}/history`, {
       headers: { Authorization: `Bearer ${token}` },
     }),
 
