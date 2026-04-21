@@ -5,6 +5,13 @@ use uuid::Uuid;
 
 use super::entity::Agent;
 
+pub struct UpdateAgentParams<'a> {
+    pub name: &'a str,
+    pub url: &'a str,
+    pub token_hash: Option<&'a str>,
+    pub encrypted_token: Option<&'a str>,
+}
+
 #[async_trait]
 pub trait AgentRepository: Send + Sync {
     async fn create(&self, pool: &PgPool, agent: &Agent) -> Result<Agent>;
@@ -15,9 +22,7 @@ pub trait AgentRepository: Send + Sync {
         pool: &PgPool,
         id: Uuid,
         user_id: Uuid,
-        name: &str,
-        url: &str,
-        token_hash: Option<&str>,
+        params: UpdateAgentParams<'_>,
     ) -> Result<Option<Agent>>;
     async fn delete(&self, pool: &PgPool, id: Uuid, user_id: Uuid) -> Result<bool>;
 }
@@ -91,42 +96,42 @@ impl AgentRepository for AgentRepositoryImpl {
         pool: &PgPool,
         id: Uuid,
         user_id: Uuid,
-        name: &str,
-        url: &str,
-        token_hash: Option<&str>,
+        params: UpdateAgentParams<'_>,
     ) -> Result<Option<Agent>> {
-        let agent = if let Some(hash) = token_hash {
-            sqlx::query_as::<_, Agent>(
-                r"
+        let agent =
+            if let (Some(hash), Some(encrypted)) = (params.token_hash, params.encrypted_token) {
+                sqlx::query_as::<_, Agent>(
+                    r"
                 UPDATE agents
-                SET name = $1, url = $2, token_hash = $3, updated_at = NOW()
-                WHERE id = $4 AND user_id = $5
+                SET name = $1, url = $2, token_hash = $3, encrypted_token = $4, updated_at = NOW()
+                WHERE id = $5 AND user_id = $6
                 RETURNING *
                 ",
-            )
-            .bind(name)
-            .bind(url)
-            .bind(hash)
-            .bind(id)
-            .bind(user_id)
-            .fetch_optional(pool)
-            .await?
-        } else {
-            sqlx::query_as::<_, Agent>(
-                r"
+                )
+                .bind(params.name)
+                .bind(params.url)
+                .bind(hash)
+                .bind(encrypted)
+                .bind(id)
+                .bind(user_id)
+                .fetch_optional(pool)
+                .await?
+            } else {
+                sqlx::query_as::<_, Agent>(
+                    r"
                 UPDATE agents
                 SET name = $1, url = $2, updated_at = NOW()
                 WHERE id = $3 AND user_id = $4
                 RETURNING *
                 ",
-            )
-            .bind(name)
-            .bind(url)
-            .bind(id)
-            .bind(user_id)
-            .fetch_optional(pool)
-            .await?
-        };
+                )
+                .bind(params.name)
+                .bind(params.url)
+                .bind(id)
+                .bind(user_id)
+                .fetch_optional(pool)
+                .await?
+            };
 
         Ok(agent)
     }
