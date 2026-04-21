@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useRegister } from "@/features/auth/hooks/use-register";
 import { useUsernameAvailability } from "@/features/auth/hooks/use-username-availability";
+import { useEmailAvailability } from "@/features/auth/hooks/use-email-availability";
 
 export function RegisterForm() {
   const [username, setUsername] = useState(
@@ -30,11 +31,16 @@ export function RegisterForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [isTypingEmail, setIsTypingEmail] = useState(false);
   const typingTimerRef = useRef<number | null>(null);
+  const emailTypingTimerRef = useRef<number | null>(null);
   const register = useRegister();
 
   // Live username availability check with debounce
   const usernameCheck = useUsernameAvailability(username);
+  
+  // Live email availability check with debounce
+  const emailCheck = useEmailAvailability(email);
 
   // Track typing state for spinner
   const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -58,11 +64,35 @@ export function RegisterForm() {
     }
   };
 
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEmail(e.target.value);
+    
+    // Clear previous timer
+    if (emailTypingTimerRef.current) {
+      clearTimeout(emailTypingTimerRef.current);
+    }
+    
+    if (e.target.value.includes('@')) {
+      setIsTypingEmail(true);
+      // Reset after debounce time
+      emailTypingTimerRef.current = setTimeout(() => {
+        setIsTypingEmail(false);
+      }, 1000);
+    } else {
+      setIsTypingEmail(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Don't submit if username is taken
     if (usernameCheck.data && !usernameCheck.data.available) {
+      return;
+    }
+
+    // Don't submit if email is taken
+    if (emailCheck.data && !emailCheck.data.available) {
       return;
     }
 
@@ -78,6 +108,9 @@ export function RegisterForm() {
 
   const showUsernameStatus =
     username.length >= 3 && !usernameCheck.isLoading && usernameCheck.data;
+
+  const showEmailStatus =
+    email.includes('@') && !emailCheck.isLoading && emailCheck.data;
 
   return (
     <div className="w-full max-w-100">
@@ -136,15 +169,31 @@ export function RegisterForm() {
             <Label htmlFor="email" className="text-sm font-medium">
               Email
             </Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="h-11 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"
-            />
+            <div className="relative">
+              <Input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={handleEmailChange}
+                required
+                className="h-11 pr-10 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"
+              />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                {/* Show loading spinner while typing or checking */}
+                {(isTypingEmail || emailCheck.isLoading) && email.includes('@') && (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                )}
+                {/* Show checkmark if available */}
+                {!isTypingEmail && showEmailStatus && emailCheck.data.available && (
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                )}
+                {/* Show X if taken */}
+                {!isTypingEmail && showEmailStatus && !emailCheck.data.available && (
+                  <XCircle className="h-4 w-4 text-red-500" />
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="space-y-2">
