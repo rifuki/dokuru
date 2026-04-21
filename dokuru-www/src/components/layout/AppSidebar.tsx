@@ -183,7 +183,7 @@ export function AppSidebar() {
         {/* Agents — empty state */}
         {!isAdmin && agents.length === 0 && !isIconMode && (
           <SidebarGroup>
-            <SidebarGroupLabel>No Agent</SidebarGroupLabel>
+            <SidebarGroupLabel>Agents</SidebarGroupLabel>
             <div className="px-2">
               <Link
                 to="/"
@@ -198,19 +198,21 @@ export function AppSidebar() {
 
         {/* Agents — card per agent */}
         {!isAdmin && agents.length > 0 && (
-          <>
-            {agents.map((agent) => {
-              const isAgentActive = location.pathname.startsWith(`/agents/${agent.id}`);
-              const isOnline = !!agentOnlineStatus[agent.id];
-              const AgentIcon = isOnline ? Bot : BotOff;
-              return (
-                <SidebarGroup key={agent.id}>
-                  <SidebarGroupLabel>{agent.name}</SidebarGroupLabel>
+          <SidebarGroup>
+            <SidebarGroupLabel>Agents</SidebarGroupLabel>
+            <div className={isIconMode ? "flex flex-col gap-1.5" : "px-2 flex flex-col gap-1.5"}>
+              {agents.map((agent) => {
+                const isAgentActive = location.pathname.startsWith(`/agents/${agent.id}`);
+                const isOnline = !!agentOnlineStatus[agent.id];
+                const AgentIcon = isOnline ? Bot : BotOff;
+                const iconColor = isOnline ? "text-green-500" : "text-red-500";
+                return (
                   <Collapsible
+                    key={agent.id}
                     open={!!openAgents[agent.id]}
                     onOpenChange={() => toggleAgent(agent.id)}
                   >
-                    <div className={isIconMode ? "" : "px-2"}>
+                    <div>
                       {/* Card wrapper with border and background */}
                       <div
                         className={
@@ -226,7 +228,7 @@ export function AppSidebar() {
                         <CollapsibleTrigger asChild>
                           {isIconMode ? (
                             <SidebarMenuButton tooltip={agent.name} isActive={isAgentActive}>
-                              <AgentIcon className={`size-5 ${isOnline ? "text-green-500" : "text-muted-foreground"}`} />
+                              <AgentIcon className={`size-5 ${iconColor}`} />
                             </SidebarMenuButton>
                           ) : (
                             <button
@@ -237,7 +239,7 @@ export function AppSidebar() {
                                   : "text-sidebar-foreground hover:bg-sidebar-accent/40"
                               }`}
                             >
-                              <AgentIcon className={`size-5 shrink-0 ${isOnline ? "text-green-500" : "text-muted-foreground"}`} />
+                              <AgentIcon className={`size-5 shrink-0 ${iconColor}`} />
                               <span className="flex-1 truncate text-left">{agent.name}</span>
                               <ChevronDown
                                 className={`size-5 shrink-0 text-sidebar-foreground/50 transition-transform duration-200 ${
@@ -284,10 +286,10 @@ export function AppSidebar() {
                       </div>
                     </div>
                   </Collapsible>
-                </SidebarGroup>
-              );
-            })}
-          </>
+                );
+              })}
+            </div>
+          </SidebarGroup>
         )}
 
         {/* Settings */}
