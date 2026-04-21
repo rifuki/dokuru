@@ -41,8 +41,9 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useAuthUser } from "@/stores/use-auth-store";
-import { useAgentStore } from "@/stores/use-agent-store";
+import { useAgentStore, getAgentToken } from "@/stores/use-agent-store";
 import { agentDirectApi } from "@/lib/api/agent-direct";
+import { useRealtimeAgents } from "@/hooks/useRealtimeAgents";
 
 const agentNavItems = (agentId: string) => [
   { title: "Dashboard",  href: `/agents/${agentId}`,            icon: LayoutDashboard, requiresOnline: false },
@@ -63,6 +64,9 @@ export function AppSidebar() {
   const { state: sidebarState } = useSidebar();
   const isIconMode = sidebarState === "collapsed";
   const [openAgents, setOpenAgents] = useState<Record<string, boolean>>({});
+
+  // Live agent status via server WebSocket (agent:connected / agent:disconnected events)
+  useRealtimeAgents();
 
   useEffect(() => {
     if (!isAdmin) fetchAgents();
@@ -85,25 +89,25 @@ export function AppSidebar() {
     }
   }, [agents, location.pathname]);
 
+  // Seed online status on initial load.
+  // Relay agents can't be checked via HTTP (url is "relay", not a real URL).
+  // Their status comes exclusively from WS events (agent:connected / agent:disconnected).
+  // Non-relay agents are checked via getInfo (requires valid token, catches wrong-token errors).
   useEffect(() => {
     if (isAdmin || agents.length === 0) return;
-    
-    const checkAgentsHealth = () => {
-      for (const agent of agents) {
-        agentDirectApi.checkHealth(agent.url)
-          .then((ok) => setAgentOnline(agent.id, ok))
-          .catch(() => setAgentOnline(agent.id, false));
+    for (const agent of agents) {
+      if (agent.access_mode === "relay") {
+        setAgentOnline(agent.id, false);
+        continue;
       }
-    };
-    
-    // Initial check
-    checkAgentsHealth();
-    
-    // Periodic check every 10 seconds
-    const interval = setInterval(checkAgentsHealth, 10000);
-    
-    return () => clearInterval(interval);
-  }, [agents, isAdmin, setAgentOnline]);
+      // Use token from API response (server decrypts it); fall back to localStorage
+      const token = agent.token ?? getAgentToken(agent.id) ?? undefined;
+      agentDirectApi.getInfo(agent.url, token)
+        .then(() => setAgentOnline(agent.id, true))
+        .catch(() => setAgentOnline(agent.id, false));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agents.map(a => a.id).join(","), isAdmin]);
 
   const isActive = (href: string) => {
     if (href === "/admin") return location.pathname === "/admin";
