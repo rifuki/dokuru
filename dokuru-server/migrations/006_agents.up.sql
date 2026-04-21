@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS agents (
     name VARCHAR(255) NOT NULL,
     url TEXT NOT NULL,
     token_hash VARCHAR(255) NOT NULL,
+    encrypted_token TEXT NOT NULL DEFAULT '',
     access_mode VARCHAR(20) NOT NULL DEFAULT 'direct',
     status VARCHAR(20) NOT NULL DEFAULT 'unknown',
     last_seen TIMESTAMPTZ,
