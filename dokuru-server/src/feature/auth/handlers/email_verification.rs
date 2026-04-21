@@ -1,4 +1,4 @@
-use axum::{Extension, Json, extract::Query, http::StatusCode};
+use axum::{Json, extract::{Query, State}, http::StatusCode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -18,7 +18,7 @@ pub struct VerifyEmailResponse {
 }
 
 pub async fn verify_email(
-    Extension(state): Extension<AppState>,
+    State(state): State<AppState>,
     Query(query): Query<VerifyEmailQuery>,
 ) -> ApiResult<VerifyEmailResponse> {
     let verified = state
@@ -49,7 +49,7 @@ pub struct ResendVerificationRequest {
 }
 
 pub async fn resend_verification(
-    Extension(state): Extension<AppState>,
+    State(state): State<AppState>,
     Json(req): Json<ResendVerificationRequest>,
 ) -> ApiResult<VerifyEmailResponse> {
     // Find user
