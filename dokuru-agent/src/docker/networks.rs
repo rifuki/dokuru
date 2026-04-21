@@ -1,10 +1,4 @@
-use axum::{
-    Router,
-    extract::Path,
-    http::StatusCode,
-    response::Json,
-    routing::get,
-};
+use axum::{Router, extract::Path, http::StatusCode, response::Json, routing::get};
 use bollard::network::{CreateNetworkOptions, ListNetworksOptions};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
