@@ -148,6 +148,7 @@ WantedBy=multi-user.target
     /// Get the tunnel URL from the currently running session (up to 24 h back).
     /// Use this when the tunnel has been running for a while and you just want
     /// to know its current URL without restarting it.
+    #[allow(dead_code)]
     pub fn get_current_url() -> Result<String> {
         Self::get_tunnel_url_since("24 hours ago").map_err(|_| {
             eyre::eyre!(
@@ -175,6 +176,7 @@ WantedBy=multi-user.target
     }
 
     /// Check if tunnel service is running
+    #[allow(dead_code)]
     pub fn is_service_running() -> bool {
         Command::new("systemctl")
             .args(["is-active", "dokuru-tunnel"])

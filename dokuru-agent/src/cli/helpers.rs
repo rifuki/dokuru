@@ -263,9 +263,12 @@ pub fn collect_preflight(config: &InstallerConfig) -> Preflight {
 
 // ─── Interactive Prompts ──────────────────────────────────────────────────────
 
-pub fn prompt_for_config(mode: SetupMode, mut config: InstallerConfig) -> Result<InstallerConfig> {
+pub fn prompt_for_config(
+    mode: SetupMode,
+    mut config: InstallerConfig,
+) -> Result<(InstallerConfig, bool)> {
     if config.yes || !stderr().is_terminal() {
-        return Ok(config);
+        return Ok((config, false));
     }
 
     match mode {
@@ -273,6 +276,7 @@ pub fn prompt_for_config(mode: SetupMode, mut config: InstallerConfig) -> Result
             configure_server_section(&mut config)?;
             configure_docker_section(&mut config)?;
             configure_service_section(&mut config)?;
+            Ok((config, false))
         }
         SetupMode::Configure => {
             note(
@@ -289,11 +293,10 @@ pub fn prompt_for_config(mode: SetupMode, mut config: InstallerConfig) -> Result
                     },
                 ),
             )?;
-            run_configure_sections(&mut config)?;
+            let early_exit = run_configure_sections(&mut config)?;
+            Ok((config, early_exit))
         }
     }
-
-    Ok(config)
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -305,7 +308,7 @@ enum ConfigSection {
     Done,
 }
 
-pub fn run_configure_sections(config: &mut InstallerConfig) -> Result<()> {
+pub fn run_configure_sections(config: &mut InstallerConfig) -> Result<bool> {
     loop {
         let section = select("Select section to configure")
             .item(
@@ -327,11 +330,16 @@ pub fn run_configure_sections(config: &mut InstallerConfig) -> Result<()> {
             ConfigSection::Server => configure_server_section(config)?,
             ConfigSection::Docker => configure_docker_section(config)?,
             ConfigSection::Service => configure_service_section(config)?,
-            ConfigSection::Access => configure_access_section(config)?,
+            ConfigSection::Access => {
+                let should_exit = configure_access_section(config)?;
+                if should_exit {
+                    return Ok(true); // Signal early exit
+                }
+            }
             ConfigSection::Done => break,
         }
     }
-    Ok(())
+    Ok(false) // Normal flow
 }
 
 pub fn configure_server_section(config: &mut InstallerConfig) -> Result<()> {
@@ -372,7 +380,7 @@ pub fn configure_service_section(config: &mut InstallerConfig) -> Result<()> {
 }
 
 #[allow(clippy::too_many_lines)]
-pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
+pub fn configure_access_section(config: &InstallerConfig) -> Result<bool> {
     use crate::cli::CloudflareTunnel;
 
     // Read current config to detect access mode
@@ -392,7 +400,6 @@ pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
         });
 
     let access_mode = select("How should this agent be accessible?")
-        .item("keep", "Keep current", "No changes to access mode")
         .item(
             "cloudflare",
             "Cloudflare Tunnel",
@@ -404,18 +411,10 @@ pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
             "Use your own reverse proxy for HTTPS",
         )
         .item("relay", "Relay Mode", "Through dokuru-server via WebSocket")
-        .item(
-            "refresh",
-            "Refresh Tunnel URL",
-            "Get URL from running tunnel (Cloudflare only)",
-        )
         .initial_value(current_mode_str)
         .interact()?;
 
     match access_mode {
-        "keep" => {
-            note("Access Mode", "✓ No changes made")?;
-        }
         "cloudflare" => {
             if !CloudflareTunnel::is_installed() {
                 let spinner = cliclack::spinner();
@@ -439,6 +438,8 @@ pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
                         "Tunnel URL Updated",
                         format!("URL: {url}\n\n✓ Config updated\n⚠️  Update in dashboard"),
                     )?;
+                    // Restart service to apply changes
+                    run_command("systemctl", &["restart", &config.service_name])?;
                 }
                 Err(e) => {
                     spinner.stop("✗ Tunnel started but URL not found");
@@ -448,31 +449,7 @@ pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
                     )?;
                 }
             }
-        }
-        "refresh" => {
-            if !CloudflareTunnel::is_service_running() {
-                cliclack::log::error("Tunnel not running. Use 'Cloudflare Tunnel' option first.")?;
-                return Ok(());
-            }
-
-            let spinner = cliclack::spinner();
-            spinner.start("Getting URL from logs...");
-
-            match CloudflareTunnel::get_current_url() {
-                Ok(url) => {
-                    spinner.stop(format!("✓ Found: {url}"));
-                    update_config_access_mode(config, crate::api::AccessMode::Cloudflare, &url)?;
-                    note(
-                        "URL Refreshed",
-                        format!("URL: {url}\n\n✓ Config updated\n⚠️  Update in dashboard"),
-                    )?;
-                }
-                Err(e) => {
-                    spinner.stop("✗ Not found");
-                    cliclack::log::error(format!("{e}"))?;
-                    cliclack::log::info("Try: sudo systemctl restart dokuru-tunnel")?;
-                }
-            }
+            Ok(true) // Exit after access change
         }
         "direct" => {
             let host_ip = std::net::UdpSocket::bind("0.0.0.0:0")
@@ -487,6 +464,9 @@ pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
                 "Direct Mode",
                 format!("URL: {url}\n\n✓ Config updated\nSetup reverse proxy for HTTPS"),
             )?;
+            // Restart service to apply changes
+            run_command("systemctl", &["restart", &config.service_name])?;
+            Ok(true) // Exit after access change
         }
         "relay" => {
             update_config_access_mode(config, crate::api::AccessMode::Relay, "relay")?;
@@ -495,15 +475,14 @@ pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
                 "✓ Config updated\n\
                  \n\
                  Agent will connect to: wss://api.dokuru.rifuki.dev/ws/agent\n\
-                 No public URL needed - works behind firewall/NAT\n\
-                 \n\
-                 Restart service: sudo systemctl restart dokuru",
+                 No public URL needed - works behind firewall/NAT",
             )?;
+            // Restart service to apply changes
+            run_command("systemctl", &["restart", &config.service_name])?;
+            Ok(true) // Exit after access change
         }
         _ => unreachable!(),
     }
-
-    Ok(())
 }
 
 pub fn confirm_action(yes: bool, prompt: &str) -> Result<bool> {

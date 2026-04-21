@@ -116,7 +116,13 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         }
     }
 
-    config = prompt_for_config(mode, config)?;
+    let (mut config, early_exit) = prompt_for_config(mode, config)?;
+
+    // If configure mode and access was changed, exit early
+    if mode == SetupMode::Configure && early_exit {
+        outro("Dokuru is ready.")?;
+        return Ok(());
+    }
 
     if !config.skip_service && !preflight.has_systemd {
         cliclack::log::warning("systemd not detected — continuing without a managed service")?;
