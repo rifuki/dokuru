@@ -23,10 +23,11 @@ function NetworksPage() {
   const { data: networks, isLoading } = useQuery({
     queryKey: ["networks", id],
     queryFn: async () => {
+      if (!agent?.token) throw new Error("Agent token not available");
       const res = await dockerApi.listNetworks(agent!.url, agent!.token);
       return res.data;
     },
-    enabled: !!agent,
+    enabled: !!agent?.token,
   });
 
   const removeMutation = useMutation({
