@@ -3,6 +3,9 @@ use serde::Serialize;
 
 use crate::infrastructure::config::EmailConfig;
 
+const VERIFY_EMAIL_TEMPLATE: &str = include_str!("../../templates/email/verify_email.html");
+const RESET_PASSWORD_TEMPLATE: &str = include_str!("../../templates/email/reset_password.html");
+
 #[derive(Clone)]
 pub struct EmailService {
     config: EmailConfig,
@@ -26,30 +29,13 @@ impl EmailService {
     }
 
     pub async fn send_verification_email(&self, to: &str, verification_url: &str) -> Result<()> {
-        let html = format!(
-            r#"
-            <h2>Verify your email</h2>
-            <p>Click the link below to verify your email address:</p>
-            <a href="{verification_url}">{verification_url}</a>
-            <p>This link will expire in 24 hours.</p>
-            "#
-        );
-
-        self.send_email(to, "Verify your email", &html).await
+        let html = VERIFY_EMAIL_TEMPLATE.replace("{{verification_url}}", verification_url);
+        self.send_email(to, "Verify Your Email - Dokuru", &html).await
     }
 
     pub async fn send_password_reset_email(&self, to: &str, reset_url: &str) -> Result<()> {
-        let html = format!(
-            r#"
-            <h2>Reset your password</h2>
-            <p>Click the link below to reset your password:</p>
-            <a href="{reset_url}">{reset_url}</a>
-            <p>This link will expire in 1 hour.</p>
-            <p>If you didn't request this, please ignore this email.</p>
-            "#
-        );
-
-        self.send_email(to, "Reset your password", &html).await
+        let html = RESET_PASSWORD_TEMPLATE.replace("{{reset_url}}", reset_url);
+        self.send_email(to, "Reset Your Password - Dokuru", &html).await
     }
 
     async fn send_email(&self, to: &str, subject: &str, html: &str) -> Result<()> {
