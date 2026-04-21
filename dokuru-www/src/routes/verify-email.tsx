@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { apiClient } from "@/lib/api";
+import apiClient, { isApiErrorResponse } from "@/lib/api/axios-instance";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -36,18 +36,15 @@ function VerifyEmail() {
                 // Invalidate settings profile query to refresh user data
                 queryClient.invalidateQueries({ queryKey: ["settings", "profile"] });
             } catch (error: unknown) {
-                const msg = error instanceof Error && 'response' in error 
-                    ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
-                    : undefined;
-                
-                // Handle "already verified" as success
+                const msg = isApiErrorResponse(error) ? error.message : "Verification failed";
+
                 if (msg === "Email already verified") {
                     setStatus("success");
                     setMessage("Email is already verified!");
                     queryClient.invalidateQueries({ queryKey: ["settings", "profile"] });
                 } else {
                     setStatus("error");
-                    setMessage(msg || "Verification failed");
+                    setMessage(msg);
                 }
             }
         };
