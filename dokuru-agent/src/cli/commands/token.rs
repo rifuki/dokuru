@@ -1,7 +1,4 @@
-use super::super::helpers::{
-    generate_agent_token, hash_token, load_saved_runtime_config, nix_like_is_root,
-    resolve_shared_config, restart_service, run_step, write_config_file,
-};
+use super::super::helpers::{load_saved_runtime_config, nix_like_is_root, resolve_shared_config};
 use super::super::types::SharedArgs;
 use cliclack::{intro, note, outro, outro_cancel};
 use eyre::{Result, bail};
@@ -39,6 +36,15 @@ pub fn run_token_rotate(shared: &SharedArgs) -> Result<()> {
     }
 
     let config = resolve_shared_config(shared, None)?;
+    rotate_token_impl(&config)?;
+    outro("Token rotated successfully.")?;
+    Ok(())
+}
+
+pub fn rotate_token_impl(config: &super::super::helpers::InstallerConfig) -> Result<String> {
+    use super::super::helpers::{
+        generate_agent_token, hash_token, restart_service, run_step, write_config_file,
+    };
 
     // Generate new token
     let new_token = generate_agent_token();
@@ -46,7 +52,7 @@ pub fn run_token_rotate(shared: &SharedArgs) -> Result<()> {
 
     run_step("Generating new token", || Ok(()))?;
     run_step("Updating configuration", || {
-        write_config_file(&config, Some(new_hash))
+        write_config_file(config, Some(new_hash))
     })?;
 
     cliclack::log::info(format!("→ {}/config.toml", config.config_dir.display()))?;
@@ -70,6 +76,5 @@ pub fn run_token_rotate(shared: &SharedArgs) -> Result<()> {
         ),
     )?;
 
-    outro("Token rotated successfully.")?;
-    Ok(())
+    Ok(new_token)
 }

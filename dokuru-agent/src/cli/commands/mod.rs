@@ -5,7 +5,7 @@ mod onboard;
 mod restart;
 mod serve;
 mod status;
-mod token;
+pub mod token;
 mod uninstall;
 mod update;
 

@@ -287,6 +287,7 @@ enum ConfigSection {
     Docker,
     Service,
     Access,
+    Token,
     Done,
 }
 
@@ -321,6 +322,7 @@ pub fn run_configure_sections(config: &mut InstallerConfig) -> Result<()> {
                 "Access",
                 "access mode (Cloudflare/Direct)",
             )
+            .item(ConfigSection::Token, "Token", "rotate agent token")
             .item(ConfigSection::Done, "Exit", "finish configuration")
             .interact()?;
 
@@ -371,6 +373,9 @@ pub fn run_configure_sections(config: &mut InstallerConfig) -> Result<()> {
                 configure_access_section(config)?;
                 // Loop back like other sections
             }
+            ConfigSection::Token => {
+                configure_token_section(config)?;
+            }
             ConfigSection::Done => return Ok(()), // Exit
         }
     }
@@ -410,6 +415,24 @@ pub fn configure_service_section(config: &mut InstallerConfig) -> Result<()> {
         .initial_value(!config.skip_service)
         .interact()?;
     config.skip_service = !want_service;
+    Ok(())
+}
+
+pub fn configure_token_section(config: &InstallerConfig) -> Result<()> {
+    use crate::cli::commands::token::rotate_token_impl;
+
+    let confirmed = confirm("Rotate agent token? This will invalidate the old token.")
+        .initial_value(false)
+        .interact()?;
+
+    if !confirmed {
+        note("Token Rotation", "Cancelled")?;
+        return Ok(());
+    }
+
+    // Call the token rotation implementation
+    rotate_token_impl(config)?;
+
     Ok(())
 }
 
