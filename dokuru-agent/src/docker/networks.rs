@@ -26,7 +26,7 @@ where
     Router::new()
         .route("/docker/networks", get(list_networks).post(create_network))
         .route(
-            "/docker/networks/:id",
+            "/docker/networks/{id}",
             get(inspect_network).delete(remove_network),
         )
 }

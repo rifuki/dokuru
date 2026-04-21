@@ -31,7 +31,7 @@ where
     Router::new()
         .route("/docker/volumes", get(list_volumes).post(create_volume))
         .route(
-            "/docker/volumes/:name",
+            "/docker/volumes/{name}",
             get(inspect_volume).delete(remove_volume),
         )
         .route("/docker/volumes/prune", post(prune_volumes))
