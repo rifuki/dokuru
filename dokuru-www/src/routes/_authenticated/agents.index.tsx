@@ -286,7 +286,7 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
 
 function AgentsList() {
   const navigate = useNavigate();
-  const { agents, isLoading, fetchAgents, updateAgent, agentInfos, setAgentInfo, setAgentInfoLoading } = useAgentStore();
+  const { agents, isLoading, fetchAgents, updateAgent, agentInfos, setAgentInfo, setAgentInfoLoading, agentOnlineStatus } = useAgentStore();
   const [localAgents, setLocalAgents] = useState<Agent[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
@@ -302,29 +302,43 @@ function AgentsList() {
     updateAgent(updated);
   };
 
+  // Initial info fetch — runs once when agents load.
   useEffect(() => {
     if (agents.length === 0) return;
 
     for (const agent of agents) {
-      // Skip jika sudah ada cache yang valid (tidak loading)
       const cached = agentInfos[agent.id];
       if (cached && !cached.loading) continue;
 
-      const token = getAgentToken(agent.id);
-      if (!token) {
-        setAgentInfo(agent.id, null);
-        continue;
-      }
+      const token = agent.token ?? getAgentToken(agent.id);
+      if (!token) { setAgentInfo(agent.id, null); continue; }
 
       setAgentInfoLoading(agent.id, true);
-
-      agentDirectApi
-        .getInfo(agent.url, token)
+      agentDirectApi.getInfo(agent.url, token)
         .then((info) => setAgentInfo(agent.id, info))
         .catch(() => setAgentInfo(agent.id, null));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agents]);
+
+  // Sync agentInfos whenever real-time online status changes.
+  // - offline → clear info immediately so the card shows DOWN
+  // - online  → re-fetch Docker info so stats are fresh
+  useEffect(() => {
+    for (const agent of agents) {
+      const isOnline = agentOnlineStatus[agent.id];
+      if (isOnline === false) {
+        setAgentInfo(agent.id, null);
+      } else if (isOnline === true) {
+        const token = agent.token ?? getAgentToken(agent.id);
+        if (!token) continue;
+        agentDirectApi.getInfo(agent.url, token)
+          .then((info) => setAgentInfo(agent.id, info))
+          .catch(() => setAgentInfo(agent.id, null));
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentOnlineStatus]);
 
   const handleRefresh = () => {
     fetchAgents();
