@@ -199,7 +199,7 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                                         : "https://agent.yourdomain.com"
                                 }
                                 value={url}
-                                onChange={(e) => setUrl(e.target.value)}
+                                onChange={(e) => setUrl(e.target.value.trim())}
                                 disabled={isLoading}
                                 autoComplete="off"
                             />
@@ -219,7 +219,7 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                             type="password"
                             placeholder="dok_..."
                             value={token}
-                            onChange={(e) => setToken(e.target.value)}
+                            onChange={(e) => setToken(e.target.value.trim())}
                             disabled={isLoading}
                             autoComplete="off"
                             className="font-mono text-sm"
