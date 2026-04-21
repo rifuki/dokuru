@@ -81,7 +81,7 @@ export function WebSocketProvider({ children, url, enabled = true }: WebSocketPr
                         });
                     }
                 };
-            } catch (error) {
+            } catch {
                 if (!isCleaningUpRef.current) {
                     setStatus("error");
                 }
