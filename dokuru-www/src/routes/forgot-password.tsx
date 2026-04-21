@@ -3,7 +3,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Mail, Loader2, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Mail, CheckCircle2 } from "lucide-react";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -94,7 +95,7 @@ function ForgotPassword() {
                             disabled={isLoading}
                         >
                             {isLoading ? (
-                                <Loader2 className="h-5 w-5 animate-spin" />
+                                <LoadingDots />
                             ) : (
                                 "Send Reset Link"
                             )}

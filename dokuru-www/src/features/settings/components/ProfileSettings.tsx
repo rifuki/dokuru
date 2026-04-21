@@ -18,6 +18,7 @@ import {
 import { Camera, Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import { useProfile, settingsKeys } from "@/features/settings/hooks/use-profile";
 import { useUpdateProfile } from "@/features/settings/hooks/use-update-profile";
 import { useEmailChange } from "@/features/settings/hooks/use-email-change";
@@ -347,7 +348,7 @@ export function ProfileSettings() {
                         disabled={isUpdating || isChangingEmail || !isProfileChanged}
                         className="h-10 px-8 font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-md"
                     >
-                        {isUpdating || isChangingEmail ? "Saving..." : "Save Changes"}
+                        {isUpdating || isChangingEmail ? <LoadingDots /> : "Save Changes"}
                     </Button>
                 </div>
             </form>
