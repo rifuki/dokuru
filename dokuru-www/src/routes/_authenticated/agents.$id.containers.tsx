@@ -14,8 +14,6 @@ import {
   BarChart2,
   Info,
   Search,
-  Cpu,
-  MemoryStick,
 } from "lucide-react";
 import { dockerApi, type Container } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
@@ -366,7 +364,9 @@ function ContainerStats({
         <div className="space-y-3 p-5 rounded-lg border bg-card">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className={`h-2 w-2 rounded-full ${memPct > 80 ? "bg-red-500" : "bg-green-500"}`} />
+              <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${memPct > 80 ? "bg-red-500/10" : "bg-green-500/10"}`}>
+                <MemoryStick className={`h-4 w-4 ${memPct > 80 ? "text-red-500" : "text-green-500"}`} />
+              </div>
               <span className="text-sm font-semibold">Memory Usage</span>
             </div>
             <span className={`font-mono text-2xl font-bold ${memPct > 80 ? "text-red-500" : "text-green-500"}`}>
