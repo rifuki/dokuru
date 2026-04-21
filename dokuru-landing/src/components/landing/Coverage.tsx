@@ -59,7 +59,7 @@ const Coverage = () => {
             </div>
             <h2 className="font-heading text-4xl md:text-5xl font-black tracking-tighter text-white leading-[1.05]">
               Focused CIS-aligned coverage
-              <br />
+              <br className="hidden sm:block" />
               for Docker isolation.
             </h2>
             <p className="mt-5 text-zinc-400 text-lg">

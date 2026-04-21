@@ -31,7 +31,7 @@ const FinalCTA = () => {
               className="absolute -bottom-32 -left-32 w-[420px] h-[420px] rounded-full bg-[#00E5FF]/10 blur-[120px] pointer-events-none"
             />
 
-            <div className="relative p-10 md:p-16 grid lg:grid-cols-12 gap-10 items-center">
+            <div className="relative p-5 sm:p-10 md:p-16 grid lg:grid-cols-12 gap-10 items-center">
               <div className="lg:col-span-7">
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
@@ -50,7 +50,7 @@ const FinalCTA = () => {
                   className="font-heading text-4xl md:text-5xl lg:text-6xl font-black tracking-tighter text-white leading-[1.02]"
                 >
                   Start auditing Docker
-                  <br />
+                  <br className="hidden sm:block" />
                   security with Dokuru.
                 </motion.h2>
                 <motion.p
