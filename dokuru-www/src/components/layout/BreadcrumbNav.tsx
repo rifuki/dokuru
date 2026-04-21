@@ -46,7 +46,10 @@ export function BreadcrumbNav() {
         {segments.map((segment, index) => {
           const isLast = index === segments.length - 1;
           const href = basePath + "/" + segments.slice(0, index + 1).join("/");
-          const label = routeLabels[segment] || segment.charAt(0).toUpperCase() + segment.slice(1);
+          const decoded = decodeURIComponent(segment);
+          // Truncate long hashes/IDs (UUIDs, sha256, container IDs, etc.)
+          const truncated = decoded.length > 20 ? decoded.slice(0, 20) + "…" : decoded;
+          const label = routeLabels[segment] || truncated.charAt(0).toUpperCase() + truncated.slice(1);
 
           return (
             <div key={segment} className="flex items-center gap-2">
