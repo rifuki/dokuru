@@ -22,10 +22,7 @@ pub fn auth_routes() -> Router<AppState> {
             "/check-username",
             get(handlers::check_username_availability),
         )
-        .route(
-            "/check-email",
-            get(handlers::check_email_availability),
-        )
+        .route("/check-email", get(handlers::check_email_availability))
         .route("/verify-email", get(handlers::verify_email))
         .route("/resend-verification", post(handlers::resend_verification))
         .route("/forgot-password", post(handlers::forgot_password))

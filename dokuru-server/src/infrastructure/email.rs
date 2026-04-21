@@ -30,12 +30,14 @@ impl EmailService {
 
     pub async fn send_verification_email(&self, to: &str, verification_url: &str) -> Result<()> {
         let html = VERIFY_EMAIL_TEMPLATE.replace("{{verification_url}}", verification_url);
-        self.send_email(to, "Verify Your Email - Dokuru", &html).await
+        self.send_email(to, "Verify Your Email - Dokuru", &html)
+            .await
     }
 
     pub async fn send_password_reset_email(&self, to: &str, reset_url: &str) -> Result<()> {
         let html = RESET_PASSWORD_TEMPLATE.replace("{{reset_url}}", reset_url);
-        self.send_email(to, "Reset Your Password - Dokuru", &html).await
+        self.send_email(to, "Reset Your Password - Dokuru", &html)
+            .await
     }
 
     async fn send_email(&self, to: &str, subject: &str, html: &str) -> Result<()> {
