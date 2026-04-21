@@ -11,6 +11,8 @@ export const Route = createFileRoute("/_authenticated/agents/$id/images/$imageId
 
 function ImageDetailPage() {
   const { id, imageId } = Route.useParams();
+  // Decode the imageId in case it's URL encoded
+  const decodedImageId = decodeURIComponent(imageId);
 
   const { data: agent } = useQuery({
     queryKey: ["agent", id],
@@ -18,10 +20,10 @@ function ImageDetailPage() {
   });
 
   const { data: image, isLoading } = useQuery({
-    queryKey: ["image", id, imageId],
+    queryKey: ["image", id, decodedImageId],
     queryFn: async () => {
       if (!agent?.token) throw new Error("Agent token not available");
-      const res = await dockerApi.inspectImage(agent.url, agent.token, imageId);
+      const res = await dockerApi.inspectImage(agent.url, agent.token, decodedImageId);
       return res.data;
     },
     enabled: !!agent?.token,
