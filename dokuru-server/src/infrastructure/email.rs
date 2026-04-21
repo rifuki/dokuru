@@ -41,7 +41,11 @@ impl EmailService {
             .await
     }
 
-    pub async fn send_email_change_verification(&self, to: &str, verification_url: &str) -> Result<()> {
+    pub async fn send_email_change_verification(
+        &self,
+        to: &str,
+        verification_url: &str,
+    ) -> Result<()> {
         let html = EMAIL_CHANGE_TEMPLATE.replace("{{verification_url}}", verification_url);
         self.send_email(to, "Verify Your New Email - Dokuru", &html)
             .await
