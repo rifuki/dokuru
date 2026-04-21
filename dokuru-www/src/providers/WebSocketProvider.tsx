@@ -100,7 +100,13 @@ export function WebSocketProvider({ children, url, enabled = true }: WebSocketPr
                 clearTimeout(reconnectTimeoutRef.current);
             }
             if (wsRef.current) {
+                // Remove event listeners before closing to prevent error logs
+                wsRef.current.onopen = null;
+                wsRef.current.onmessage = null;
+                wsRef.current.onerror = null;
+                wsRef.current.onclose = null;
                 wsRef.current.close();
+                wsRef.current = null;
             }
         };
     }, [url, enabled]);
