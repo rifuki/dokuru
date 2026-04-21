@@ -1,12 +1,19 @@
 import { create } from "zustand";
 import { agentApi } from "@/lib/api/agent";
 import type { Agent, CreateAgentDto } from "@/types/agent";
+import type { DockerInfo } from "@/lib/api/agent-direct";
+
+export interface AgentInfoEntry {
+  info: DockerInfo | null;
+  loading: boolean;
+}
 
 interface AgentState {
   agents: Agent[];
   isLoading: boolean;
   error: string | null;
   agentOnlineStatus: Record<string, boolean>;
+  agentInfos: Record<string, AgentInfoEntry>;
 
   fetchAgents: () => Promise<void>;
   createAgent: (dto: CreateAgentDto) => Promise<Agent>;
@@ -14,6 +21,8 @@ interface AgentState {
   deleteAgent: (id: string) => Promise<void>;
   clearError: () => void;
   setAgentOnline: (id: string, online: boolean) => void;
+  setAgentInfo: (id: string, info: DockerInfo | null) => void;
+  setAgentInfoLoading: (id: string, loading: boolean) => void;
 }
 
 export const useAgentStore = create<AgentState>((set) => ({
@@ -21,6 +30,7 @@ export const useAgentStore = create<AgentState>((set) => ({
   isLoading: false,
   error: null,
   agentOnlineStatus: {},
+  agentInfos: {},
 
   fetchAgents: async () => {
     set({ isLoading: true, error: null });
@@ -75,6 +85,17 @@ export const useAgentStore = create<AgentState>((set) => ({
   clearError: () => set({ error: null }),
   setAgentOnline: (id, online) =>
     set((state) => ({ agentOnlineStatus: { ...state.agentOnlineStatus, [id]: online } })),
+  setAgentInfo: (id, info) =>
+    set((state) => ({
+      agentInfos: { ...state.agentInfos, [id]: { info, loading: false } },
+    })),
+  setAgentInfoLoading: (id, loading) =>
+    set((state) => ({
+      agentInfos: {
+        ...state.agentInfos,
+        [id]: { info: state.agentInfos[id]?.info ?? null, loading },
+      },
+    })),
 }));
 
 // Helper to get agent token from localStorage

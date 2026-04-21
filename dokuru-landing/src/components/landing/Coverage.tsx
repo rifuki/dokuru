@@ -73,16 +73,18 @@ const Coverage = () => {
           </span>
         </ScrollReveal>
 
-        <div className="grid md:grid-cols-3 gap-px bg-white/10 border border-white/10 rounded-xl overflow-hidden">
+        <motion.div
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.3 }}
+          className="grid md:grid-cols-3 gap-px bg-white/10 border border-white/10 rounded-xl overflow-hidden"
+        >
           {groups.map((g, i) => {
             const Icon = g.icon;
             return (
               <motion.div
                 key={g.title}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-100px" }}
-                transition={{ duration: 0.5, delay: i * 0.15 }}
                 whileHover={{ y: -5 }}
                 data-testid={`coverage-group-${i}`}
                 className="bg-[#09090B] p-8 flex flex-col"
@@ -108,23 +110,19 @@ const Coverage = () => {
 
                 <ul className="mt-6 flex flex-col gap-2 border-t border-white/5 pt-5">
                   {g.rules.map((r, idx) => (
-                    <motion.li
+                    <li
                       key={r}
-                      initial={{ opacity: 0, x: -10 }}
-                      whileInView={{ opacity: 1, x: 0 }}
-                      viewport={{ once: true }}
-                      transition={{ duration: 0.3, delay: i * 0.15 + idx * 0.05 }}
                       className="flex items-start gap-2.5 font-mono text-[13px] text-zinc-300"
                     >
                       <span className="mt-[6px] h-1 w-1 rounded-full bg-[#2496ED] shrink-0" />
                       <span>{r}</span>
-                    </motion.li>
+                    </li>
                   ))}
                 </ul>
               </motion.div>
             );
           })}
-        </div>
+        </motion.div>
       </div>
     </section>
   );

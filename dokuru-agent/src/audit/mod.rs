@@ -13,6 +13,9 @@ mod types;
 pub use rule_registry::RuleRegistry;
 pub use types::*;
 
+#[cfg(test)]
+mod types_tests;
+
 use bollard::{API_DEFAULT_VERSION, Docker};
 
 /// Run audit and return results (for agent mode)

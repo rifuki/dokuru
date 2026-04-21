@@ -79,16 +79,18 @@ const WhyDokuru = () => {
           </ScrollReveal>
 
           <div className="lg:col-span-8">
-            <ul className="grid sm:grid-cols-2 gap-px bg-white/10 border border-white/10 rounded-xl overflow-hidden">
+            <motion.ul
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 0.3 }}
+              className="grid sm:grid-cols-2 gap-px bg-white/10 border border-white/10 rounded-xl overflow-hidden"
+            >
               {points.map((p, i) => {
                 const Icon = p.icon;
                 return (
                   <motion.li
                     key={p.title}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    whileInView={{ opacity: 1, scale: 1 }}
-                    viewport={{ once: true, margin: "-100px" }}
-                    transition={{ duration: 0.4, delay: i * 0.1 }}
                     whileHover={{ scale: 1.05, backgroundColor: "#0c0c0f" }}
                     data-testid={`trust-point-${i}`}
                     className="bg-[#09090B] p-7 flex flex-col gap-3 transition-colors"
@@ -109,7 +111,7 @@ const WhyDokuru = () => {
                   </motion.li>
                 );
               })}
-            </ul>
+            </motion.ul>
           </div>
         </div>
       </div>
