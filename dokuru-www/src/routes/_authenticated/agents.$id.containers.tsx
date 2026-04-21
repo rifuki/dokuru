@@ -4,12 +4,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Play,
-  Square,
+  SquareIcon,
   RotateCw,
   Trash2,
   Container as ContainerIcon,
   ChevronDown,
-  ChevronRight,
   Terminal as TerminalIcon,
   FileText,
   BarChart2,
@@ -20,6 +19,12 @@ import { dockerApi, type Container } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { agentApi } from "@/lib/api/agent";
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -67,7 +72,7 @@ function ContainerOverview({
     staleTime: 10_000,
   });
 
-  if (isLoading) return <p className="text-sm text-muted-foreground p-4">Loading…</p>;
+  if (isLoading) return <p className="text-sm text-muted-foreground p-6">Loading…</p>;
   if (!data) return null;
 
   const cfg = data.Config as Record<string, unknown> | undefined;
@@ -82,48 +87,75 @@ function ContainerOverview({
   const binds = (hostCfg?.Binds as string[] | undefined) ?? [];
 
   return (
-    <div className="p-4 space-y-4 text-sm">
-      {/* Ports */}
-      {ports && Object.keys(ports).length > 0 && (
-        <section>
-          <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider mb-2">Ports</h4>
-          <div className="space-y-1">
-            {Object.entries(ports).map(([containerPort, bindings]) => (
-              <div key={containerPort} className="flex gap-2 font-mono text-xs">
-                <span className="text-muted-foreground">{containerPort}</span>
-                {bindings && bindings.length > 0 ? (
-                  <span>→ {bindings.map((b) => b.HostPort).join(", ")}</span>
-                ) : (
-                  <span className="text-muted-foreground">(not published)</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+    <div className="p-6 space-y-6 text-sm">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Ports */}
+        {ports && Object.keys(ports).length > 0 && (
+          <section className="space-y-3">
+            <h4 className="font-semibold text-sm flex items-center gap-2">
+              <div className="h-1 w-1 rounded-full bg-primary" />
+              Port Bindings
+            </h4>
+            <div className="space-y-2 bg-muted/50 rounded-lg p-4">
+              {Object.entries(ports).map(([containerPort, bindings]) => (
+                <div key={containerPort} className="flex items-center gap-3 font-mono text-xs">
+                  <span className="text-muted-foreground">{containerPort}</span>
+                  <span className="text-muted-foreground">→</span>
+                  {bindings && bindings.length > 0 ? (
+                    <span className="text-primary font-medium">{bindings.map((b) => b.HostPort).join(", ")}</span>
+                  ) : (
+                    <span className="text-muted-foreground italic">(not published)</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Networks & IP */}
+        {networks && Object.keys(networks).length > 0 && (
+          <section className="space-y-3">
+            <h4 className="font-semibold text-sm flex items-center gap-2">
+              <div className="h-1 w-1 rounded-full bg-primary" />
+              Networks & IP Address
+            </h4>
+            <div className="space-y-2">
+              {Object.entries(networks).map(([name, net]) => {
+                const networkData = net as { IPAddress?: string };
+                return (
+                  <div key={name} className="bg-muted/50 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="bg-primary/10 text-primary border border-primary/20 rounded-md px-2 py-1 text-xs font-mono font-medium">{name}</span>
+                    </div>
+                    {networkData.IPAddress && (
+                      <div className="text-xs font-mono text-muted-foreground mt-2">
+                        IP: <span className="text-foreground">{networkData.IPAddress}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+      </div>
 
       {/* Mounts / Binds */}
       {(mounts?.length || binds.length) > 0 && (
-        <section>
-          <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider mb-2">Mounts</h4>
-          <div className="space-y-1">
+        <section className="space-y-3">
+          <h4 className="font-semibold text-sm flex items-center gap-2">
+            <div className="h-1 w-1 rounded-full bg-primary" />
+            Volume Mounts
+          </h4>
+          <div className="space-y-2 bg-muted/50 rounded-lg p-4">
             {(mounts ?? []).map((m, i) => (
-              <div key={i} className="font-mono text-xs text-muted-foreground truncate">
-                <span className="text-foreground">{m.Destination}</span>{" "}
-                ← {m.Source} <span className="opacity-50">({m.Type})</span>
+              <div key={i} className="font-mono text-xs flex items-start gap-3 p-2 rounded hover:bg-background transition-colors">
+                <Badge variant="outline" className="text-[10px] mt-0.5">{m.Type}</Badge>
+                <div className="flex-1 min-w-0">
+                  <div className="text-foreground font-medium truncate">{m.Destination}</div>
+                  <div className="text-muted-foreground text-[11px] truncate mt-0.5">← {m.Source}</div>
+                </div>
               </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Networks */}
-      {networks && Object.keys(networks).length > 0 && (
-        <section>
-          <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider mb-2">Networks</h4>
-          <div className="flex flex-wrap gap-1">
-            {Object.keys(networks).map((n) => (
-              <span key={n} className="bg-muted rounded px-2 py-0.5 text-xs font-mono">{n}</span>
             ))}
           </div>
         </section>
@@ -131,16 +163,18 @@ function ContainerOverview({
 
       {/* Env */}
       {env.length > 0 && (
-        <section>
-          <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider mb-2">
-            Environment ({env.length})
+        <section className="space-y-3">
+          <h4 className="font-semibold text-sm flex items-center gap-2">
+            <div className="h-1 w-1 rounded-full bg-primary" />
+            Environment Variables
+            <Badge variant="secondary" className="text-[10px] ml-auto">{env.length}</Badge>
           </h4>
-          <div className="space-y-0.5 max-h-48 overflow-y-auto rounded bg-muted/40 p-2">
+          <div className="max-h-64 overflow-y-auto rounded-lg bg-muted/50 p-4 space-y-1">
             {env.map((e, i) => {
               const [key, ...rest] = e.split("=");
               return (
-                <div key={i} className="font-mono text-xs leading-relaxed truncate">
-                  <span className="text-blue-400">{key}</span>
+                <div key={i} className="font-mono text-xs leading-relaxed p-1.5 rounded hover:bg-background transition-colors">
+                  <span className="text-blue-400 font-medium">{key}</span>
                   {rest.length > 0 && <span className="text-muted-foreground">={rest.join("=")}</span>}
                 </div>
               );
@@ -151,14 +185,16 @@ function ContainerOverview({
 
       {/* Labels */}
       {Object.keys(labels).length > 0 && (
-        <section>
-          <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider mb-2">
-            Labels ({Object.keys(labels).length})
+        <section className="space-y-3">
+          <h4 className="font-semibold text-sm flex items-center gap-2">
+            <div className="h-1 w-1 rounded-full bg-primary" />
+            Labels
+            <Badge variant="secondary" className="text-[10px] ml-auto">{Object.keys(labels).length}</Badge>
           </h4>
-          <div className="space-y-0.5 max-h-32 overflow-y-auto rounded bg-muted/40 p-2">
+          <div className="max-h-48 overflow-y-auto rounded-lg bg-muted/50 p-4 space-y-1">
             {Object.entries(labels).map(([k, v]) => (
-              <div key={k} className="font-mono text-xs truncate">
-                <span className="text-purple-400">{k}</span>
+              <div key={k} className="font-mono text-xs p-1.5 rounded hover:bg-background transition-colors">
+                <span className="text-purple-400 font-medium">{k}</span>
                 <span className="text-muted-foreground">={v}</span>
               </div>
             ))}
@@ -195,18 +231,24 @@ function ContainerLogs({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
 
-  if (isLoading) return <p className="text-sm text-muted-foreground p-4">Loading…</p>;
+  if (isLoading) return <p className="text-sm text-muted-foreground p-6">Loading…</p>;
 
   return (
-    <div className="h-72 overflow-y-auto bg-black rounded p-3 font-mono text-xs leading-relaxed">
-      {(!logs || logs.length === 0) ? (
-        <span className="text-muted-foreground">No logs available.</span>
-      ) : (
-        logs.map((line, i) => (
-          <div key={i} className="whitespace-pre-wrap break-all text-gray-300">{line}</div>
-        ))
-      )}
-      <div ref={bottomRef} />
+    <div className="rounded-lg border overflow-hidden">
+      <div className="bg-[#0d1117] px-4 py-2 border-b border-white/10 flex items-center justify-between">
+        <span className="text-xs text-muted-foreground font-mono">Container Logs</span>
+        <Badge variant="secondary" className="text-[10px]">{logs?.length ?? 0} lines</Badge>
+      </div>
+      <div className="h-96 overflow-y-auto bg-[#0d1117] p-4 font-mono text-xs leading-relaxed">
+        {(!logs || logs.length === 0) ? (
+          <span className="text-muted-foreground italic">No logs available.</span>
+        ) : (
+          logs.map((line, i) => (
+            <div key={i} className="whitespace-pre-wrap break-all text-gray-300 hover:bg-white/5 px-2 py-0.5 rounded transition-colors">{line}</div>
+          ))
+        )}
+        <div ref={bottomRef} />
+      </div>
     </div>
   );
 }
@@ -231,8 +273,8 @@ function ContainerStats({
     refetchInterval: 2000,
   });
 
-  if (isLoading) return <p className="text-sm text-muted-foreground p-4">Loading…</p>;
-  if (!data) return <p className="text-sm text-muted-foreground p-4">No stats available.</p>;
+  if (isLoading) return <p className="text-sm text-muted-foreground p-6">Loading…</p>;
+  if (!data) return <p className="text-sm text-muted-foreground p-6">No stats available.</p>;
 
   const cpuDelta =
     data.cpu_stats.cpu_usage.total_usage -
@@ -253,34 +295,50 @@ function ContainerStats({
   }
 
   return (
-    <div className="p-4 space-y-5 text-sm">
-      {/* CPU */}
-      <div>
-        <div className="flex justify-between mb-1">
-          <span className="text-muted-foreground text-xs uppercase tracking-wider">CPU</span>
-          <span className="font-mono font-semibold">{cpuPct.toFixed(2)}%</span>
+    <div className="p-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* CPU */}
+        <div className="space-y-3 p-5 rounded-lg border bg-card">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-blue-500" />
+              <span className="text-sm font-semibold">CPU Usage</span>
+            </div>
+            <span className="font-mono text-2xl font-bold text-blue-500">{cpuPct.toFixed(1)}%</span>
+          </div>
+          <div className="h-3 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-500 shadow-lg shadow-blue-500/50"
+              style={{ width: `${Math.min(cpuPct, 100)}%` }}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">Real-time CPU utilization</p>
         </div>
-        <div className="h-2 bg-muted rounded-full overflow-hidden">
-          <div
-            className="h-full bg-blue-500 transition-all duration-500"
-            style={{ width: `${Math.min(cpuPct, 100)}%` }}
-          />
-        </div>
-      </div>
 
-      {/* Memory */}
-      <div>
-        <div className="flex justify-between mb-1">
-          <span className="text-muted-foreground text-xs uppercase tracking-wider">Memory</span>
-          <span className="font-mono font-semibold">
-            {fmtBytes(memUsage)} / {fmtBytes(memLimit)} ({memPct.toFixed(1)}%)
-          </span>
-        </div>
-        <div className="h-2 bg-muted rounded-full overflow-hidden">
-          <div
-            className={`h-full transition-all duration-500 ${memPct > 80 ? "bg-red-500" : "bg-green-500"}`}
-            style={{ width: `${Math.min(memPct, 100)}%` }}
-          />
+        {/* Memory */}
+        <div className="space-y-3 p-5 rounded-lg border bg-card">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className={`h-2 w-2 rounded-full ${memPct > 80 ? "bg-red-500" : "bg-green-500"}`} />
+              <span className="text-sm font-semibold">Memory Usage</span>
+            </div>
+            <span className={`font-mono text-2xl font-bold ${memPct > 80 ? "text-red-500" : "text-green-500"}`}>
+              {memPct.toFixed(1)}%
+            </span>
+          </div>
+          <div className="h-3 bg-muted rounded-full overflow-hidden">
+            <div
+              className={`h-full transition-all duration-500 shadow-lg ${
+                memPct > 80 
+                  ? "bg-gradient-to-r from-red-500 to-red-600 shadow-red-500/50" 
+                  : "bg-gradient-to-r from-green-500 to-green-600 shadow-green-500/50"
+              }`}
+              style={{ width: `${Math.min(memPct, 100)}%` }}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {fmtBytes(memUsage)} of {fmtBytes(memLimit)}
+          </p>
         </div>
       </div>
     </div>
@@ -377,19 +435,24 @@ function ContainerTerminal({
   }, [active, connect]);
 
   return (
-    <div className="bg-[#0d1117] rounded overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/10">
-        <span className="text-xs text-muted-foreground font-mono">/bin/sh — {containerId.slice(0, 12)}</span>
+    <div className="rounded-lg border overflow-hidden shadow-lg">
+      <div className="flex items-center justify-between px-4 py-2.5 bg-[#0d1117] border-b border-white/10">
+        <div className="flex items-center gap-3">
+          <TerminalIcon className="h-4 w-4 text-muted-foreground" />
+          <span className="text-xs text-muted-foreground font-mono">/bin/sh</span>
+          <Badge variant="secondary" className="text-[10px]">{containerId.slice(0, 12)}</Badge>
+        </div>
         <Button
           size="sm"
           variant="ghost"
-          className="h-6 text-xs px-2"
+          className="h-7 text-xs px-3 hover:bg-white/10"
           onClick={connect}
         >
+          <RotateCw className="h-3 w-3 mr-1.5" />
           Reconnect
         </Button>
       </div>
-      <div ref={wrapperRef} className="h-72" />
+      <div ref={wrapperRef} className="h-96 bg-[#0d1117]" />
     </div>
   );
 }
@@ -411,27 +474,27 @@ function ContainerDetail({
   const isRunning = container.state.toLowerCase() === "running";
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode; disabled?: boolean }[] = [
-    { id: "overview", label: "Overview", icon: <Info className="h-3.5 w-3.5" /> },
-    { id: "logs", label: "Logs", icon: <FileText className="h-3.5 w-3.5" /> },
-    { id: "stats", label: "Stats", icon: <BarChart2 className="h-3.5 w-3.5" />, disabled: !isRunning },
-    { id: "terminal", label: "Terminal", icon: <TerminalIcon className="h-3.5 w-3.5" />, disabled: !isRunning },
+    { id: "overview", label: "Overview", icon: <Info className="h-4 w-4" /> },
+    { id: "logs", label: "Logs", icon: <FileText className="h-4 w-4" /> },
+    { id: "stats", label: "Stats", icon: <BarChart2 className="h-4 w-4" />, disabled: !isRunning },
+    { id: "terminal", label: "Terminal", icon: <TerminalIcon className="h-4 w-4" />, disabled: !isRunning },
   ];
 
   return (
-    <div className="border-t bg-muted/20">
+    <div className="border-t bg-muted/30">
       {/* Tab bar */}
-      <div className="flex gap-0.5 px-4 pt-2 border-b">
+      <div className="flex gap-1 px-5 pt-3">
         {tabs.map((t) => (
           <button
             key={t.id}
             disabled={t.disabled}
             onClick={() => setTab(t.id)}
             className={`
-              flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-t transition-colors
-              ${t.disabled ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}
+              flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-all
+              ${t.disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}
               ${tab === t.id
-                ? "bg-background border border-b-background text-foreground -mb-px"
-                : "text-muted-foreground hover:text-foreground"}
+                ? "bg-background text-foreground shadow-sm border-t border-x"
+                : "text-muted-foreground hover:text-foreground hover:bg-background/50"}
             `}
           >
             {t.icon}
@@ -441,12 +504,12 @@ function ContainerDetail({
       </div>
 
       {/* Tab content */}
-      <div>
+      <div className="bg-background rounded-tr-lg">
         {tab === "overview" && (
           <ContainerOverview agentUrl={agentUrl} token={token} containerId={container.id} />
         )}
         {tab === "logs" && (
-          <div className="p-4">
+          <div className="p-5">
             <ContainerLogs agentUrl={agentUrl} token={token} containerId={container.id} />
           </div>
         )}
@@ -454,7 +517,7 @@ function ContainerDetail({
           <ContainerStats agentUrl={agentUrl} token={token} containerId={container.id} />
         )}
         {tab === "terminal" && (
-          <div className="p-4">
+          <div className="p-5">
             <ContainerTerminal
               agentUrl={agentUrl}
               token={token}
@@ -492,89 +555,123 @@ function ContainerRow({
   const [expanded, setExpanded] = useState(false);
   const isRunning = container.state.toLowerCase() === "running";
   const name = container.names[0]?.replace("/", "") || container.id.slice(0, 12);
+  
+  // Extract stack name from docker-compose labels
+  const labels = (container.labels as Record<string, string>) || {};
+  const stackName = labels["com.docker.compose.project"] || "-";
 
   return (
-    <div className="border-b last:border-b-0">
-      {/* Row header */}
-      <div
-        className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/30 transition-colors select-none"
-        onClick={() => setExpanded((v) => !v)}
-      >
-        <span className="text-muted-foreground">
-          {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        </span>
-
-        <div className="min-w-0 flex-1 grid grid-cols-[1fr_1fr_auto_1fr] gap-3 items-center">
-          <span className="font-medium truncate">{name}</span>
-          <span className="text-muted-foreground text-sm truncate">{container.image}</span>
-          <Badge variant="outline" className={`text-xs ${stateColor(container.state)}`}>
-            {container.state}
-          </Badge>
-          <span className="text-muted-foreground text-sm truncate hidden md:block">{container.status}</span>
-        </div>
-
-        {/* Actions — stop propagation so they don't toggle expand */}
+    <TooltipProvider>
+      <div className="group border rounded-lg bg-card hover:shadow-md transition-all duration-200 overflow-hidden">
+        {/* Row header */}
         <div
-          className="flex items-center gap-1"
-          onClick={(e) => e.stopPropagation()}
+          className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-accent/50 transition-colors select-none"
+          onClick={() => setExpanded((v) => !v)}
         >
-          {isRunning ? (
-            <>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-8 w-8 p-0"
-                title="Stop"
-                onClick={() => onStop(container.id)}
-                disabled={actionPending}
-              >
-                <Square className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-8 w-8 p-0"
-                title="Restart"
-                onClick={() => onRestart(container.id)}
-                disabled={actionPending}
-              >
-                <RotateCw className="h-3.5 w-3.5" />
-              </Button>
-            </>
-          ) : (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 w-8 p-0"
-              title="Start"
-              onClick={() => onStart(container.id)}
-              disabled={actionPending}
-            >
-              <Play className="h-3.5 w-3.5" />
-            </Button>
-          )}
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 w-8 p-0"
-            title="Remove"
-            onClick={() => {
-              if (confirm(`Remove container "${name}"?`)) {
-                onRemove(container.id);
-              }
-            }}
-            disabled={actionPending}
-          >
-            <Trash2 className="h-3.5 w-3.5 text-destructive" />
-          </Button>
-        </div>
-      </div>
+          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary/10 text-primary group-hover:bg-primary/20 transition-colors">
+            <ContainerIcon className="h-4 w-4" />
+          </div>
 
-      {/* Expanded detail */}
-      {expanded && (
-        <ContainerDetail container={container} agentUrl={agentUrl} token={token} />
-      )}
-    </div>
+          <div className="min-w-0 flex-1 grid grid-cols-1 md:grid-cols-[2fr_2fr_1fr_auto_2fr] gap-3 items-center">
+            <div className="flex flex-col gap-0.5">
+              <span className="font-semibold text-sm truncate">{name}</span>
+              <span className="text-xs text-muted-foreground font-mono truncate">{container.id.slice(0, 12)}</span>
+            </div>
+            <span className="text-sm text-muted-foreground truncate font-mono">{container.image}</span>
+            <span className="text-xs text-muted-foreground truncate font-mono">{stackName}</span>
+            <Badge variant="outline" className={`text-xs font-medium w-fit ${stateColor(container.state)}`}>
+              {container.state}
+            </Badge>
+            <span className="text-xs text-muted-foreground truncate hidden md:block">{container.status}</span>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <span className="text-muted-foreground transition-transform duration-200" style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+              <ChevronDown className="h-4 w-4" />
+            </span>
+          </div>
+
+          {/* Actions — stop propagation so they don't toggle expand */}
+          <div
+            className="flex items-center gap-1"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {isRunning ? (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-9 w-9 p-0 hover:bg-yellow-500/10 hover:text-yellow-500"
+                      onClick={() => onStop(container.id)}
+                      disabled={actionPending}
+                    >
+                      <SquareIcon className="h-4 w-4 fill-current" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Stop container</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-9 w-9 p-0 hover:bg-blue-500/10 hover:text-blue-500"
+                      onClick={() => onRestart(container.id)}
+                      disabled={actionPending}
+                    >
+                      <RotateCw className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Restart container</TooltipContent>
+                </Tooltip>
+              </>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-9 w-9 p-0 hover:bg-green-500/10 hover:text-green-500"
+                    onClick={() => onStart(container.id)}
+                    disabled={actionPending}
+                  >
+                    <Play className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Start container</TooltipContent>
+              </Tooltip>
+            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-9 w-9 p-0 hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => {
+                    if (confirm(`Remove container "${name}"?`)) {
+                      onRemove(container.id);
+                    }
+                  }}
+                  disabled={actionPending}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Remove container</TooltipContent>
+            </Tooltip>
+          </div>
+        </div>
+
+        {/* Expanded detail */}
+        {expanded && (
+          <div className="animate-in slide-in-from-top-2 duration-200">
+            <ContainerDetail container={container} agentUrl={agentUrl} token={token} />
+          </div>
+        )}
+      </div>
+    </TooltipProvider>
   );
 }
 
@@ -656,34 +753,43 @@ function ContainersPage() {
   const running = filtered.filter((c) => c.state.toLowerCase() === "running").length;
 
   return (
-    <div className="max-w-7xl mx-auto w-full space-y-4">
+    <div className="max-w-7xl mx-auto w-full space-y-6 p-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Containers</h2>
-          <p className="text-muted-foreground text-sm mt-0.5">
-            {isLoading
-              ? "Loading…"
-              : `${running} running · ${filtered.length} total`}
-          </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <h2 className="text-3xl font-bold tracking-tight">Containers</h2>
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            {isLoading ? (
+              <span>Loading…</span>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                  <span className="font-medium">{running} running</span>
+                </div>
+                <span className="text-muted-foreground/50">•</span>
+                <span>{filtered.length} total</span>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              className="pl-8 h-8 w-48 text-sm"
-              placeholder="Filter…"
+              className="pl-9 h-10 w-64 text-sm"
+              placeholder="Search containers..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
           {/* All toggle */}
           <Button
-            size="sm"
+            size="default"
             variant={showAll ? "default" : "outline"}
-            className="h-8 text-xs"
+            className="h-10 px-4"
             onClick={() => setShowAll((v) => !v)}
           >
             {showAll ? "All" : "Running"}
@@ -693,25 +799,25 @@ function ContainersPage() {
 
       {/* Container list */}
       {isLoading ? (
-        <div className="rounded-lg border bg-card animate-pulse h-32" />
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="rounded-lg border bg-card animate-pulse h-20" />
+          ))}
+        </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-xl border border-dashed bg-card/50 p-16 text-center">
-          <ContainerIcon className="h-12 w-12 text-muted-foreground/40 mb-4 mx-auto" />
-          <h3 className="text-lg font-semibold">No containers found</h3>
-          <p className="text-muted-foreground mt-2 text-sm">
-            {search ? "No containers match your filter." : "No Docker containers on this agent."}
+        <div className="rounded-xl border-2 border-dashed bg-muted/20 p-20 text-center">
+          <div className="flex justify-center mb-4">
+            <div className="h-16 w-16 rounded-full bg-muted/50 flex items-center justify-center">
+              <ContainerIcon className="h-8 w-8 text-muted-foreground/50" />
+            </div>
+          </div>
+          <h3 className="text-xl font-semibold mb-2">No containers found</h3>
+          <p className="text-muted-foreground text-sm max-w-md mx-auto">
+            {search ? "No containers match your search criteria." : "No Docker containers are running on this agent."}
           </p>
         </div>
       ) : (
-        <div className="rounded-lg border bg-card divide-y divide-border">
-          {/* Table header */}
-          <div className="hidden md:grid grid-cols-[1fr_1fr_auto_1fr] gap-3 px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider bg-muted/30 rounded-t-lg">
-            <span>Name</span>
-            <span>Image</span>
-            <span>State</span>
-            <span>Status</span>
-          </div>
-
+        <div className="space-y-3">
           {filtered.map((container) => (
             <ContainerRow
               key={container.id}

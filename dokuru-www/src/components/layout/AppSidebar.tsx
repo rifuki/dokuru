@@ -16,6 +16,7 @@ import {
   ChevronDown,
   Box,
   ShieldCheck,
+  Layers,
 } from "lucide-react";
 
 import {
@@ -44,6 +45,7 @@ const agentNavItems = (agentId: string) => [
   { title: "Dashboard",  href: `/agents/${agentId}`,            icon: LayoutDashboard, requiresOnline: false },
   { title: "Audit",      href: `/agents/${agentId}/audit`,      icon: ShieldCheck,     requiresOnline: false },
   { title: "Containers", href: `/agents/${agentId}/containers`, icon: Container,       requiresOnline: true },
+  { title: "Stacks",     href: `/agents/${agentId}/stacks`,     icon: Layers,          requiresOnline: true },
   { title: "Images",     href: `/agents/${agentId}/images`,     icon: Box,             requiresOnline: true },
   { title: "Networks",   href: `/agents/${agentId}/networks`,   icon: Network,         requiresOnline: true },
   { title: "Volumes",    href: `/agents/${agentId}/volumes`,    icon: HardDrive,       requiresOnline: true },
