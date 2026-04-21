@@ -35,14 +35,18 @@ export function ProfileSettings() {
     const [isResendingVerification, setIsResendingVerification] = useState(false);
 
     // Form fields
-    const [name, setName] = useState(user?.name || "");
-    const [username, setUsername] = useState(user?.username || "");
-    const [email, setEmail] = useState(user?.email || "");
+    const [name, setName] = useState("");
+    const [username, setUsername] = useState("");
+    const [email, setEmail] = useState("");
 
-    // Sync state once when user data is first fully loaded, preventing continuous overrides
-    if (!name && user?.name) setName(user.name);
-    if (!username && user?.username) setUsername(user.username);
-    if (!email && user?.email) setEmail(user.email);
+    // Sync form fields only when user ID changes (initial load), not on every render
+    const [initializedId, setInitializedId] = useState<string | null>(null);
+    if (user && user.id.toString() !== initializedId) {
+        setName(user.name || "");
+        setUsername(user.username || "");
+        setEmail(user.email || "");
+        setInitializedId(user.id.toString());
+    }
 
     if (isLoading || !user) {
         return (
