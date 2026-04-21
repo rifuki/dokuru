@@ -1,8 +1,15 @@
-use axum::{Router, extract::Path, http::StatusCode, response::Json, routing::get};
+use axum::{
+    Router,
+    extract::Path,
+    http::StatusCode,
+    response::{IntoResponse, Json, Response},
+    routing::get,
+};
 use bollard::container::ListContainersOptions;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use tracing::warn;
 
 use super::get_docker_client;
 
