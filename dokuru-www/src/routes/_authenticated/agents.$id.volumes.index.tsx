@@ -1,9 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { HardDrive, Trash2 } from "lucide-react";
+import { type ColumnDef } from "@tanstack/react-table";
+import { HardDrive, Trash2, Scissors } from "lucide-react";
 import { dockerApi, type Volume } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { DataTable } from "@/components/ui/data-table";
 import { toast } from "sonner";
 import { agentApi } from "@/lib/api/agent";
 
@@ -35,10 +37,7 @@ function VolumesPage() {
       if (!agent?.token) throw new Error("Agent token not available");
       return dockerApi.removeVolume(agent.url, agent.token, volumeName);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["volumes", id] });
-      toast.success("Volume removed");
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["volumes", id] }); toast.success("Volume removed"); },
     onError: () => toast.error("Failed to remove volume"),
   });
 
@@ -47,81 +46,104 @@ function VolumesPage() {
       if (!agent?.token) throw new Error("Agent token not available");
       return dockerApi.pruneVolumes(agent.url, agent.token);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["volumes", id] });
-      toast.success("Unused volumes pruned");
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["volumes", id] }); toast.success("Unused volumes pruned"); },
     onError: () => toast.error("Failed to prune volumes"),
   });
 
-  if (isLoading) return <div className="max-w-7xl mx-auto w-full">Loading...</div>;
+  const handleDeleteSelected = async (names: string[]) => {
+    for (const name of names) {
+      await removeMutation.mutateAsync(name).catch(() => {});
+    }
+    queryClient.invalidateQueries({ queryKey: ["volumes", id] });
+    toast.success(`Removed ${names.length} volume(s)`);
+  };
+
+  const columns: ColumnDef<Volume>[] = [
+    {
+      accessorKey: "name",
+      header: "Name",
+      cell: ({ row }) => (
+        <Link
+          to="/agents/$id/volumes/$volumeName"
+          params={{ id, volumeName: row.original.name }}
+          className="text-primary hover:underline font-medium text-sm"
+        >
+          {row.original.name}
+        </Link>
+      ),
+    },
+    {
+      accessorKey: "driver",
+      header: "Driver",
+      cell: ({ getValue }) => (
+        <Badge variant="outline" className="font-mono text-xs">{getValue() as string}</Badge>
+      ),
+    },
+    {
+      accessorKey: "mountpoint",
+      header: "Mountpoint",
+      cell: ({ getValue }) => (
+        <span className="font-mono text-xs text-muted-foreground truncate block max-w-xs">{getValue() as string}</span>
+      ),
+    },
+    {
+      id: "actions",
+      header: "",
+      cell: ({ row }) => (
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => { if (confirm("Remove this volume?")) removeMutation.mutate(row.original.name); }}
+            disabled={removeMutation.isPending}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      ),
+      enableSorting: false,
+      size: 48,
+    },
+  ];
 
   return (
     <div className="max-w-7xl mx-auto w-full space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Volumes</h2>
-          <p className="text-muted-foreground text-sm">{volumes?.length || 0} volumes found</p>
+          <h2 className="text-2xl font-bold tracking-tight">Volumes</h2>
+          <p className="text-muted-foreground text-sm mt-1">
+            {isLoading ? "Loading…" : `${volumes?.length ?? 0} volumes found`}
+          </p>
         </div>
         <Button
           variant="outline"
+          size="sm"
           onClick={() => { if (agent && confirm("Prune unused volumes?")) pruneMutation.mutate(); }}
           disabled={pruneMutation.isPending || !agent}
         >
-          <Trash2 className="h-4 w-4 mr-2" />
+          <Scissors className="h-4 w-4 mr-2" />
           Prune Unused
         </Button>
       </div>
 
-      {!volumes || volumes.length === 0 ? (
+      {isLoading ? (
+        <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-12 rounded-lg bg-card animate-pulse border" />)}</div>
+      ) : !volumes || volumes.length === 0 ? (
         <div className="rounded-xl border border-dashed bg-card/50 p-16 text-center">
           <HardDrive className="h-12 w-12 text-muted-foreground/40 mb-4 mx-auto" />
           <h3 className="text-lg font-semibold">No volumes found</h3>
         </div>
       ) : (
-        <div className="rounded-lg border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Driver</TableHead>
-                <TableHead>Mountpoint</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {volumes.map((volume: Volume) => (
-                <TableRow key={volume.name}>
-                  <TableCell className="font-medium">
-                    <Link
-                      to="/agents/$id/volumes/$volumeName"
-                      params={{ id, volumeName: volume.name }}
-                      className="text-primary hover:underline"
-                    >
-                      {volume.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{volume.driver}</TableCell>
-                  <TableCell className="text-muted-foreground text-sm">{volume.mountpoint}</TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        if (confirm("Remove this volume?")) {
-                          removeMutation.mutate(volume.name);
-                        }
-                      }}
-                      disabled={removeMutation.isPending}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <DataTable
+          data={volumes}
+          columns={columns}
+          rowId="name"
+          searchPlaceholder="Search by name or mountpoint…"
+          onDeleteSelected={handleDeleteSelected}
+          deleteLabel="Remove volumes"
+          isDeleting={removeMutation.isPending}
+        />
       )}
     </div>
   );
