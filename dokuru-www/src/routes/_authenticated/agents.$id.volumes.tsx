@@ -30,7 +30,10 @@ function VolumesPage() {
   });
 
   const removeMutation = useMutation({
-    mutationFn: (volumeName: string) => dockerApi.removeVolume(agent!.url, agent!.token, volumeName),
+    mutationFn: (volumeName: string) => {
+      if (!agent) throw new Error("Agent not loaded");
+      return dockerApi.removeVolume(agent.url, agent.token, volumeName);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["volumes", id] });
       toast.success("Volume removed");
@@ -39,7 +42,10 @@ function VolumesPage() {
   });
 
   const pruneMutation = useMutation({
-    mutationFn: () => dockerApi.pruneVolumes(agent!.url, agent!.token),
+    mutationFn: () => {
+      if (!agent) throw new Error("Agent not loaded");
+      return dockerApi.pruneVolumes(agent.url, agent.token);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["volumes", id] });
       toast.success("Unused volumes pruned");
