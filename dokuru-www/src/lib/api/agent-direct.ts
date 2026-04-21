@@ -2,8 +2,14 @@ import axios from "axios";
 
 export interface DockerInfo {
   docker_version: string;
+  api_version?: string;
   os: string;
   architecture: string;
+  hostname?: string;
+  kernel_version?: string;
+  docker_root_dir?: string;
+  storage_driver?: string;
+  logging_driver?: string;
   containers: {
     total: number;
     running: number;
