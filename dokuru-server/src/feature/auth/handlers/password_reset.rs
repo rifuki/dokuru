@@ -1,4 +1,4 @@
-use axum::{Extension, Json, http::StatusCode};
+use axum::{Json, extract::State, http::StatusCode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -18,7 +18,7 @@ pub struct ForgotPasswordResponse {
 }
 
 pub async fn forgot_password(
-    Extension(state): Extension<AppState>,
+    State(state): State<AppState>,
     Json(req): Json<ForgotPasswordRequest>,
 ) -> ApiResult<ForgotPasswordResponse> {
     // Find user
@@ -89,7 +89,7 @@ pub struct ResetPasswordResponse {
 }
 
 pub async fn reset_password(
-    Extension(state): Extension<AppState>,
+    State(state): State<AppState>,
     Json(req): Json<ResetPasswordRequest>,
 ) -> ApiResult<ResetPasswordResponse> {
     // Validate password
