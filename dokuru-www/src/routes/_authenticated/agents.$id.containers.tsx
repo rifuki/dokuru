@@ -14,6 +14,8 @@ import {
   BarChart2,
   Info,
   Search,
+  Cpu,
+  MemoryStick,
 } from "lucide-react";
 import { dockerApi, type Container } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
@@ -344,7 +346,9 @@ function ContainerStats({
         <div className="space-y-3 p-5 rounded-lg border bg-card">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-blue-500" />
+              <div className="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                <Cpu className="h-4 w-4 text-blue-500" />
+              </div>
               <span className="text-sm font-semibold">CPU Usage</span>
             </div>
             <span className="font-mono text-2xl font-bold text-blue-500">{cpuPct.toFixed(1)}%</span>
@@ -650,10 +654,6 @@ function ContainerRow({
   const [expanded, setExpanded] = useState(false);
   const isRunning = container.state.toLowerCase() === "running";
   const name = container.names[0]?.replace("/", "") || container.id.slice(0, 12);
-  
-  // Extract stack name from docker-compose labels
-  const labels = (container.labels as Record<string, string>) || {};
-  const stackName = labels["com.docker.compose.project"] || "-";
 
   return (
     <TooltipProvider>
