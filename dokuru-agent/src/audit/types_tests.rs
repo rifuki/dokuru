@@ -5,15 +5,27 @@ mod tests {
     #[test]
     fn test_severity_serialization() {
         assert_eq!(serde_json::to_string(&Severity::High).unwrap(), "\"High\"");
-        assert_eq!(serde_json::to_string(&Severity::Medium).unwrap(), "\"Medium\"");
+        assert_eq!(
+            serde_json::to_string(&Severity::Medium).unwrap(),
+            "\"Medium\""
+        );
         assert_eq!(serde_json::to_string(&Severity::Low).unwrap(), "\"Low\"");
     }
 
     #[test]
     fn test_severity_deserialization() {
-        assert_eq!(serde_json::from_str::<Severity>("\"High\"").unwrap(), Severity::High);
-        assert_eq!(serde_json::from_str::<Severity>("\"Medium\"").unwrap(), Severity::Medium);
-        assert_eq!(serde_json::from_str::<Severity>("\"Low\"").unwrap(), Severity::Low);
+        assert_eq!(
+            serde_json::from_str::<Severity>("\"High\"").unwrap(),
+            Severity::High
+        );
+        assert_eq!(
+            serde_json::from_str::<Severity>("\"Medium\"").unwrap(),
+            Severity::Medium
+        );
+        assert_eq!(
+            serde_json::from_str::<Severity>("\"Low\"").unwrap(),
+            Severity::Low
+        );
     }
 
     #[test]
@@ -26,9 +38,18 @@ mod tests {
 
     #[test]
     fn test_remediation_kind_snake_case() {
-        assert_eq!(serde_json::to_string(&RemediationKind::Auto).unwrap(), "\"auto\"");
-        assert_eq!(serde_json::to_string(&RemediationKind::Guided).unwrap(), "\"guided\"");
-        assert_eq!(serde_json::to_string(&RemediationKind::Manual).unwrap(), "\"manual\"");
+        assert_eq!(
+            serde_json::to_string(&RemediationKind::Auto).unwrap(),
+            "\"auto\""
+        );
+        assert_eq!(
+            serde_json::to_string(&RemediationKind::Guided).unwrap(),
+            "\"guided\""
+        );
+        assert_eq!(
+            serde_json::to_string(&RemediationKind::Manual).unwrap(),
+            "\"manual\""
+        );
     }
 
     #[test]
@@ -62,7 +83,7 @@ mod tests {
     #[test]
     fn test_check_result_default() {
         let result = CheckResult::default();
-        
+
         assert_eq!(result.status, CheckStatus::Pass);
         assert!(result.message.is_empty());
         assert!(result.affected.is_empty());
@@ -75,7 +96,7 @@ mod tests {
     fn test_check_result_with_affected_containers() {
         let mut result = CheckResult::default();
         result.affected = vec!["/nginx".to_string(), "/postgres".to_string()];
-        
+
         assert_eq!(result.affected.len(), 2);
         assert!(result.affected.contains(&"/nginx".to_string()));
     }
@@ -142,11 +163,7 @@ mod tests {
 
     #[test]
     fn test_fix_status_variants() {
-        let statuses = vec![
-            FixStatus::Applied,
-            FixStatus::Guided,
-            FixStatus::Blocked,
-        ];
+        let statuses = vec![FixStatus::Applied, FixStatus::Guided, FixStatus::Blocked];
         assert_eq!(statuses.len(), 3);
     }
 
@@ -161,7 +178,7 @@ mod tests {
     fn test_check_result_clone() {
         let result = CheckResult::default();
         let cloned = result.clone();
-        
+
         assert_eq!(result.status, cloned.status);
         assert_eq!(result.message, cloned.message);
     }
@@ -170,7 +187,8 @@ mod tests {
     fn test_cis_rule_serialization() {
         let rule = CisRule {
             id: "5.25".to_string(),
-            title: "Ensure container is restricted from acquiring additional privileges".to_string(),
+            title: "Ensure container is restricted from acquiring additional privileges"
+                .to_string(),
             category: RuleCategory::Runtime,
             severity: Severity::High,
             section: "Container Runtime".to_string(),
@@ -232,9 +250,18 @@ mod tests {
 
     #[test]
     fn test_check_status_serialization() {
-        assert_eq!(serde_json::to_string(&CheckStatus::Pass).unwrap(), "\"Pass\"");
-        assert_eq!(serde_json::to_string(&CheckStatus::Fail).unwrap(), "\"Fail\"");
-        assert_eq!(serde_json::to_string(&CheckStatus::Error).unwrap(), "\"Error\"");
+        assert_eq!(
+            serde_json::to_string(&CheckStatus::Pass).unwrap(),
+            "\"Pass\""
+        );
+        assert_eq!(
+            serde_json::to_string(&CheckStatus::Fail).unwrap(),
+            "\"Fail\""
+        );
+        assert_eq!(
+            serde_json::to_string(&CheckStatus::Error).unwrap(),
+            "\"Error\""
+        );
     }
 
     #[test]
