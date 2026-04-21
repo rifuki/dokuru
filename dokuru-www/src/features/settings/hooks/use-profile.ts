@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { userService } from "@/lib/api";
-import { useIsAuthenticated } from "@/stores/use-auth-store";
+import { useIsAuthenticated, useAuthStore } from "@/stores/use-auth-store";
 
 export const settingsKeys = {
   all: ["settings"] as const,
@@ -12,9 +12,15 @@ export function useProfile(options?: { enabled?: boolean }) {
 
   return useQuery({
     queryKey: settingsKeys.profile(),
-    queryFn: userService.getMe,
+    queryFn: async () => {
+      const user = await userService.getMe();
+      // Keep auth store in sync with latest server state
+      useAuthStore.getState().actions.setUser(user);
+      return user;
+    },
     enabled: isAuth && (options?.enabled ?? true),
-    staleTime: 30 * 1000, // 30 seconds instead of 5 minutes
-    refetchOnWindowFocus: true, // Refetch when user returns to tab
+    staleTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 }
