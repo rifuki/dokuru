@@ -66,11 +66,11 @@ export function RegisterForm() {
       return;
     }
 
-    // Auto-fill fullName from username (replace _ with space)
-    const fullName = username.replace(/[._-]/g, ' ');
+    // Auto-fill name from username (replace _ with space)
+    const name = username.replace(/[._-]/g, ' ');
 
     try {
-      await register.mutateAsync({ username, email, password, fullName });
+      await register.mutateAsync({ username, email, password, name });
     } catch {
       // Error handled by hook
     }
