@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { HardDrive, Trash2 } from "lucide-react";
-import { dockerApi } from "@/services/docker-api";
+import { dockerApi, type Volume } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
@@ -22,7 +22,10 @@ function VolumesPage() {
 
   const { data: volumes, isLoading } = useQuery({
     queryKey: ["volumes", id],
-    queryFn: () => dockerApi.listVolumes(agent!.url, agent!.token).then((res: any) => res.data),
+    queryFn: async () => {
+      const res = await dockerApi.listVolumes(agent!.url, agent!.token);
+      return res.data;
+    },
     enabled: !!agent,
   });
 
@@ -76,7 +79,7 @@ function VolumesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {volumes.map((volume: any) => (
+              {volumes.map((volume: Volume) => (
                 <TableRow key={volume.name}>
                   <TableCell className="font-medium">{volume.name}</TableCell>
                   <TableCell>{volume.driver}</TableCell>

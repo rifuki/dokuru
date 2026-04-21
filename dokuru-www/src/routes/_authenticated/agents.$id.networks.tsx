@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Network as NetworkIcon, Trash2 } from "lucide-react";
-import { dockerApi } from "@/services/docker-api";
+import { dockerApi, type Network } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
@@ -22,7 +22,10 @@ function NetworksPage() {
 
   const { data: networks, isLoading } = useQuery({
     queryKey: ["networks", id],
-    queryFn: () => dockerApi.listNetworks(agent!.url, agent!.token).then((res: any) => res.data),
+    queryFn: async () => {
+      const res = await dockerApi.listNetworks(agent!.url, agent!.token);
+      return res.data;
+    },
     enabled: !!agent,
   });
 
@@ -61,7 +64,7 @@ function NetworksPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {networks.map((network: any) => (
+              {networks.map((network: Network) => (
                 <TableRow key={network.id}>
                   <TableCell className="font-medium">{network.name}</TableCell>
                   <TableCell>{network.driver}</TableCell>
