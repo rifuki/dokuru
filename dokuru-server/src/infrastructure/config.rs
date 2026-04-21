@@ -159,6 +159,24 @@ impl UploadConfig {
 }
 
 #[derive(Debug, Clone)]
+pub struct EmailConfig {
+    pub resend_api_key: String,
+    pub from_email: String,
+}
+
+impl EmailConfig {
+    fn from_env() -> Result<Self> {
+        let resend_api_key = require_env("RESEND_API_KEY")?;
+        let from_email = require_env("RESEND_FROM_EMAIL")?;
+
+        Ok(Self {
+            resend_api_key,
+            from_email,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Config {
     pub rust_env: String,
     pub is_production: bool,
@@ -167,6 +185,7 @@ pub struct Config {
     pub redis_url: Option<String>,
     pub cookie: CookieConfig,
     pub upload: UploadConfig,
+    pub email: EmailConfig,
 }
 
 impl Config {
@@ -189,6 +208,7 @@ impl Config {
             redis_url,
             cookie: CookieConfig::from_env(is_production),
             upload: UploadConfig::from_env(),
+            email: EmailConfig::from_env()?,
         })
     }
 }

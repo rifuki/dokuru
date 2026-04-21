@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ImageUploadModal } from "./ImageUploadModal";
 import {
     AlertDialog,
@@ -15,7 +16,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Camera, Loader2 } from "lucide-react";
+import { Camera, Loader2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { useProfile, settingsKeys } from "@/features/settings/hooks/use-profile";
@@ -32,6 +33,7 @@ export function ProfileSettings() {
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [isRemoveModalOpen, setIsRemoveModalOpen] = useState(false);
     const [isRemovingAvatar, setIsRemovingAvatar] = useState(false);
+    const [isResendingVerification, setIsResendingVerification] = useState(false);
 
     // Form fields
     const [name, setName] = useState(user?.name || "");
@@ -96,6 +98,18 @@ export function ProfileSettings() {
             toast.error("Failed to remove avatar");
         } finally {
             setIsRemovingAvatar(false);
+        }
+    };
+
+    const handleResendVerification = async () => {
+        setIsResendingVerification(true);
+        try {
+            await apiClient.post('/auth/resend-verification', { email: user.email });
+            toast.success("Verification email sent! Check your inbox.");
+        } catch {
+            toast.error("Failed to send verification email");
+        } finally {
+            setIsResendingVerification(false);
         }
     };
 
@@ -266,6 +280,25 @@ export function ProfileSettings() {
                         <p className="text-[13px] text-muted-foreground mt-1">
                             We use this for authentication and notifications.
                         </p>
+                        
+                        {/* Email Verification Banner */}
+                        {!user.email_verified && (
+                            <Alert className="border-yellow-500/50 bg-yellow-500/10 mt-3">
+                                <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                                <AlertDescription>
+                                    <span className="text-sm">
+                                        Email not verified. Check your inbox or{" "}
+                                        <button
+                                            onClick={handleResendVerification}
+                                            disabled={isResendingVerification}
+                                            className="font-medium underline hover:no-underline disabled:opacity-50"
+                                        >
+                                            {isResendingVerification ? "Sending..." : "resend verification email"}
+                                        </button>
+                                    </span>
+                                </AlertDescription>
+                            </Alert>
+                        )}
                     </div>
                 </div>
 

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::feature::user::entity::{User, UserProfile, UserWithProfile};
     use crate::feature::auth::types::Role;
+    use crate::feature::user::entity::{User, UserProfile, UserWithProfile};
     use chrono::Utc;
     use uuid::Uuid;
 
@@ -214,7 +214,10 @@ mod tests {
         };
 
         assert_eq!(user_with_profile.email, "complete@example.com");
-        assert_eq!(user_with_profile.full_name, Some("Complete User".to_string()));
+        assert_eq!(
+            user_with_profile.full_name,
+            Some("Complete User".to_string())
+        );
     }
 
     #[test]

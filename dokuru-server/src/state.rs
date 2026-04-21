@@ -22,6 +22,7 @@ use crate::{
     },
     infrastructure::{
         config::Config,
+        email::EmailService,
         logging::ReloadFilterHandle,
         persistence::{
             Database,
@@ -46,6 +47,7 @@ pub struct AppState {
     pub audit_service: Arc<AuditResultService>,
     pub stats_service: Arc<StatsService>,
     pub storage: Arc<dyn StorageProvider>,
+    pub email_service: Arc<EmailService>,
     pub session_blacklist: Option<Arc<dyn SessionBlacklist>>,
     pub log_reload_handle: Arc<ReloadFilterHandle>,
     pub ws_manager: WsManager,
@@ -127,6 +129,8 @@ impl AppState {
             &config.upload.base_url,
         ));
 
+        let email_service = Arc::new(EmailService::new(config.email.clone()));
+
         let agent_registry = Arc::new(DashMap::new());
         let ws_manager = WsManager::new();
 
@@ -142,6 +146,7 @@ impl AppState {
             audit_service,
             stats_service,
             storage,
+            email_service,
             session_blacklist,
             log_reload_handle: Arc::new(log_reload_handle),
             ws_manager,
@@ -196,6 +201,8 @@ impl AppState {
             &config.upload.base_url,
         ));
 
+        let email_service = Arc::new(EmailService::new(config.email.clone()));
+
         let agent_registry = Arc::new(DashMap::new());
         let ws_manager = WsManager::new();
 
@@ -211,6 +218,7 @@ impl AppState {
             audit_service,
             stats_service,
             storage,
+            email_service,
             session_blacklist: None,
             log_reload_handle: Arc::new(handle),
             ws_manager,
