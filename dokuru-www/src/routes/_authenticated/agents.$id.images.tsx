@@ -38,7 +38,10 @@ function ImagesPage() {
   });
 
   const removeMutation = useMutation({
-    mutationFn: (imageId: string) => dockerApi.removeImage(agent!.url, agent!.token, imageId),
+    mutationFn: (imageId: string) => {
+      if (!agent) throw new Error("Agent not loaded");
+      return dockerApi.removeImage(agent.url, agent.token, imageId);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["images", id] });
       toast.success("Image removed");
@@ -47,7 +50,10 @@ function ImagesPage() {
   });
 
   const pruneMutation = useMutation({
-    mutationFn: () => dockerApi.pruneImages(agent!.url, agent!.token),
+    mutationFn: () => {
+      if (!agent) throw new Error("Agent not loaded");
+      return dockerApi.pruneImages(agent.url, agent.token);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["images", id] });
       toast.success("Unused images pruned");
