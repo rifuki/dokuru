@@ -11,20 +11,39 @@ use crate::api::state::AppState;
 
 /// Agent token authentication middleware.
 /// Validates Bearer token against stored hash using constant-time comparison.
+/// Also accepts `?token=` query parameter for WebSocket connections (browsers
+/// cannot set the `Authorization` header during WebSocket upgrades).
 pub async fn agent_auth_middleware(
     State(state): State<AppState>,
     request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    let auth_header = request
+    // Primary: Authorization: Bearer <token> header
+    let token_from_header = request
         .headers()
         .get("Authorization")
         .and_then(|v| v.to_str().ok())
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(str::to_owned);
 
-    let token = auth_header
-        .strip_prefix("Bearer ")
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+    // Fallback: ?token=<token> query parameter (for WebSocket upgrades)
+    let token = if let Some(t) = token_from_header {
+        t
+    } else {
+        let query = request.uri().query().unwrap_or("");
+        query
+            .split('&')
+            .find_map(|part| {
+                let mut kv = part.splitn(2, '=');
+                if kv.next() == Some("token") {
+                    kv.next().map(str::to_owned)
+                } else {
+                    None
+                }
+            })
+            .ok_or(StatusCode::UNAUTHORIZED)?
+    };
+    let token = token.as_str();
 
     // Hash the provided token
     let mut hasher = Sha256::new();
