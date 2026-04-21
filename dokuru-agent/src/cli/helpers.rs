@@ -473,7 +473,7 @@ pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
                     note(
                         "Access Updated",
                         format!(
-                            "Mode:  Cloudflare Tunnel\nURL:   {url}\n\n✓ Config saved & service restarted\n⚠️  Update in dashboard"
+                            "Mode:    Cloudflare Tunnel\nURL:     {url}\n\n✓ Config saved & service restarted\n⚠️  Update in dashboard"
                         ),
                     )?;
                     // Restart service to apply changes
@@ -500,7 +500,7 @@ pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
             note(
                 "Access Updated",
                 format!(
-                    "Mode:  Direct HTTP\nURL:   {url}\n\n✓ Config saved & service restarted\nSetup reverse proxy for HTTPS"
+                    "Mode:    Direct HTTP\nURL:     {url}\n\n✓ Config saved & service restarted\nSetup reverse proxy for HTTPS"
                 ),
             )?;
             // Restart service to apply changes
@@ -510,7 +510,7 @@ pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
             update_config_access_mode(config, crate::api::AccessMode::Relay, "relay")?;
             note(
                 "Access Updated",
-                "Mode:  Relay Mode\n\
+                "Mode:    Relay Mode\n\
                  \n\
                  Agent will connect to: wss://api.dokuru.rifuki.dev/ws/agent\n\
                  No public URL needed - works behind firewall/NAT\n\
