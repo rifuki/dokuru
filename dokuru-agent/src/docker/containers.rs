@@ -1,16 +1,21 @@
+use std::sync::Arc;
+
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::{
     Router,
     extract::{Path, Query},
     http::StatusCode,
-    response::Json,
+    response::{Json, Response},
     routing::{get, post},
 };
 use bollard::container::{
     ListContainersOptions, LogsOptions, RemoveContainerOptions, StartContainerOptions, StatsOptions,
 };
-use futures::StreamExt;
+use bollard::exec::{CreateExecOptions, ResizeExecOptions, StartExecOptions, StartExecResults};
+use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tokio::io::AsyncWriteExt;
 
 use super::get_docker_client;
 
@@ -44,6 +49,7 @@ where
         .route("/docker/containers/{id}/restart", post(restart_container))
         .route("/docker/containers/{id}/logs", get(container_logs))
         .route("/docker/containers/{id}/stats", get(container_stats))
+        .route("/docker/containers/{id}/exec", get(container_exec))
 }
 
 async fn list_containers(
@@ -174,6 +180,142 @@ async fn container_stats(Path(id): Path<String>) -> Result<Json<Value>, StatusCo
     }
 
     Err(StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+#[derive(Deserialize)]
+struct ExecQuery {
+    rows: Option<u16>,
+    cols: Option<u16>,
+}
+
+async fn container_exec(
+    Path(id): Path<String>,
+    Query(query): Query<ExecQuery>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    let rows = query.rows.unwrap_or(24);
+    let cols = query.cols.unwrap_or(80);
+    ws.on_upgrade(move |socket| handle_exec(id, socket, rows, cols))
+}
+
+#[allow(clippy::too_many_lines)]
+async fn handle_exec(container_id: String, ws: WebSocket, rows: u16, cols: u16) {
+    let Ok(docker) = get_docker_client() else {
+        return;
+    };
+    let docker = Arc::new(docker);
+
+    let Ok(exec) = docker
+        .create_exec(
+            &container_id,
+            CreateExecOptions::<String> {
+                attach_stdin: Some(true),
+                attach_stdout: Some(true),
+                attach_stderr: Some(true),
+                tty: Some(true),
+                cmd: Some(vec!["/bin/sh".to_owned()]),
+                ..Default::default()
+            },
+        )
+        .await
+    else {
+        return;
+    };
+
+    let exec_id = exec.id;
+
+    let attached = match docker
+        .start_exec(
+            &exec_id,
+            Some(StartExecOptions {
+                detach: false,
+                tty: true,
+                output_capacity: None,
+            }),
+        )
+        .await
+    {
+        Ok(StartExecResults::Attached { output, input }) => (output, input),
+        _ => return,
+    };
+    let (mut output, mut input) = attached;
+
+    // Apply initial terminal dimensions
+    let _ = docker
+        .resize_exec(
+            &exec_id,
+            ResizeExecOptions {
+                height: rows,
+                width: cols,
+            },
+        )
+        .await;
+
+    let (mut ws_tx, mut ws_rx) = ws.split();
+
+    // Docker PTY output → WebSocket binary frames
+    let send_task = tokio::spawn(async move {
+        while let Some(Ok(msg)) = output.next().await {
+            let bytes = msg.into_bytes();
+            if ws_tx.send(Message::Binary(bytes)).await.is_err() {
+                break;
+            }
+        }
+    });
+
+    // WebSocket → Docker exec stdin; text JSON messages handle resize
+    let docker_resize = Arc::clone(&docker);
+    let exec_id_resize = exec_id.clone();
+    let recv_task = tokio::spawn(async move {
+        while let Some(Ok(msg)) = ws_rx.next().await {
+            match msg {
+                Message::Binary(data) => {
+                    if input.write_all(&data).await.is_err() {
+                        break;
+                    }
+                    let _ = input.flush().await;
+                }
+                Message::Text(text) => {
+                    if let Ok(json) = serde_json::from_str::<Value>(&text) {
+                        if json.get("type").and_then(Value::as_str) == Some("resize") {
+                            if let (Some(c), Some(r)) =
+                                (json["cols"].as_u64(), json["rows"].as_u64())
+                            {
+                                let _ = docker_resize
+                                    .resize_exec(
+                                        &exec_id_resize,
+                                        ResizeExecOptions {
+                                            height: u16::try_from(r).unwrap_or(24),
+                                            width: u16::try_from(c).unwrap_or(80),
+                                        },
+                                    )
+                                    .await;
+                            }
+                        } else {
+                            // Plain text input
+                            if input.write_all(text.as_bytes()).await.is_err() {
+                                break;
+                            }
+                            let _ = input.flush().await;
+                        }
+                    } else {
+                        // Non-JSON text — forward as-is to stdin
+                        if input.write_all(text.as_bytes()).await.is_err() {
+                            break;
+                        }
+                        let _ = input.flush().await;
+                    }
+                }
+                Message::Close(_) => break,
+                _ => {}
+            }
+        }
+    });
+
+    tokio::select! {
+        _ = send_task => {}
+        _ = recv_task => {}
+    }
 }
 
 #[cfg(test)]

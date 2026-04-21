@@ -5,6 +5,9 @@ mod handler;
 pub mod repository;
 mod routes;
 
+#[cfg(test)]
+mod entity_tests;
+
 pub use avatar::{delete_avatar, upload_avatar};
 pub use dto::{CreateUser, UpdateUser};
 pub use entity::{User, UserProfile, UserWithProfile};
