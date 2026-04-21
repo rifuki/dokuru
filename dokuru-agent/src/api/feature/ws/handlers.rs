@@ -2,7 +2,7 @@ use axum::{
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
     response::Response,
 };
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{SinkExt, StreamExt, stream::SplitStream};
 use tokio::time::{Duration, interval};
 use tracing::{debug, info};
 
@@ -20,9 +20,22 @@ pub async fn ws_handler(ws: WebSocketUpgrade) -> Response {
     ws.on_upgrade(handle_socket)
 }
 
+/// Returns `true` if the connection should be kept alive, `false` to close.
+async fn handle_incoming(msg: Option<Result<Message, axum::Error>>) -> bool {
+    match msg {
+        Some(Ok(Message::Close(_))) | None => false,
+        Some(Err(e)) => {
+            debug!("WebSocket error: {e}");
+            false
+        }
+        Some(Ok(_)) => true, // pong or any other message — ignore, keep alive
+    }
+}
+
 async fn handle_socket(socket: WebSocket) {
     info!("WebSocket client connected");
-    let (mut sender, mut receiver) = socket.split();
+
+    let (mut sender, mut receiver): (_, SplitStream<WebSocket>) = socket.split();
     let mut ticker = interval(Duration::from_secs(10));
 
     // Skip the first immediate tick so we don't ping before the client is ready.
@@ -38,16 +51,8 @@ async fn handle_socket(socket: WebSocket) {
                 }
             }
             msg = receiver.next() => {
-                match msg {
-                    // Client sent a close frame or stream ended
-                    Some(Ok(Message::Close(_))) | None => break,
-                    // Connection error
-                    Some(Err(e)) => {
-                        debug!("WebSocket error: {e}");
-                        break;
-                    }
-                    // pong or any other message — just ignore
-                    Some(Ok(_)) => {}
+                if !handle_incoming(msg).await {
+                    break;
                 }
             }
         }
