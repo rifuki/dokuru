@@ -48,13 +48,11 @@ async fn list_stacks() -> Result<Json<Vec<StackResponse>>, StatusCode> {
     let mut stacks: HashMap<String, StackResponse> = HashMap::new();
 
     for c in &containers {
-        let labels = match c.labels.as_ref() {
-            Some(l) => l,
-            None => continue,
+        let Some(labels) = c.labels.as_ref() else {
+            continue;
         };
-        let project = match labels.get("com.docker.compose.project") {
-            Some(p) => p.clone(),
-            None => continue,
+        let Some(project) = labels.get("com.docker.compose.project").cloned() else {
+            continue;
         };
 
         let state = c.state.as_deref().unwrap_or("").to_string();
@@ -118,13 +116,11 @@ async fn get_stack(Path(name): Path<String>) -> Result<Json<StackResponse>, Stat
     let mut stack: Option<StackResponse> = None;
 
     for c in &containers {
-        let labels = match c.labels.as_ref() {
-            Some(l) => l,
-            None => continue,
+        let Some(labels) = c.labels.as_ref() else {
+            continue;
         };
-        let project = match labels.get("com.docker.compose.project") {
-            Some(p) => p,
-            None => continue,
+        let Some(project) = labels.get("com.docker.compose.project") else {
+            continue;
         };
         if *project != name {
             continue;
