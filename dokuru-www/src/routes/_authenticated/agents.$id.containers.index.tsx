@@ -20,13 +20,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { agentApi } from "@/lib/api/agent";
 import { useState } from "react";
@@ -95,40 +88,10 @@ function ContainerRow({
             <span className="text-xs text-muted-foreground truncate hidden md:block">{container.status}</span>
           </div>
 
-          {/* Expand / open-in-page dropdown */}
-          <div onClick={(e) => e.stopPropagation()}>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-9 w-9 p-0 hover:bg-accent"
-                >
-                  <ChevronDown
-                    className="h-4 w-4 text-muted-foreground transition-transform duration-200"
-                    style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }}
-                  />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={() => setExpanded((v) => !v)}>
-                  <ContainerIcon className="h-4 w-4 mr-2" />
-                  {expanded ? "Collapse Details" : "View Details"}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link
-                    to="/agents/$id/containers/$containerId"
-                    params={{ id: agentId, containerId: container.id }}
-                    className="flex items-center"
-                  >
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    Open in New Page
-                  </Link>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          {/* ChevronDown expand indicator */}
+          <span className="text-muted-foreground transition-transform duration-200 shrink-0" style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }}>
+            <ChevronDown className="h-4 w-4" />
+          </span>
 
           {/* Actions */}
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -161,6 +124,16 @@ function ContainerRow({
                 <TooltipContent>Start container</TooltipContent>
               </Tooltip>
             )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button size="sm" variant="ghost" className="h-9 w-9 p-0 hover:bg-primary/10 hover:text-primary" asChild>
+                  <Link to="/agents/$id/containers/$containerId" params={{ id: agentId, containerId: container.id }}>
+                    <ExternalLink className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Open in new page</TooltipContent>
+            </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
