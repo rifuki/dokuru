@@ -43,7 +43,7 @@ const Hero = () => {
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
-          className="flex items-center gap-3 mb-8"
+          className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-8"
         >
           <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.2em] text-zinc-400 border border-white/10 rounded-full px-3 py-1.5 bg-white/[0.02]">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot" />
