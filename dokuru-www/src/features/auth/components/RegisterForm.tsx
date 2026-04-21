@@ -24,7 +24,11 @@ export function RegisterForm() {
   const [password, setPassword] = useState(
     import.meta.env.DEV ? "password123" : ""
   );
+  const [confirmPassword, setConfirmPassword] = useState(
+    import.meta.env.DEV ? "password123" : ""
+  );
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const typingTimerRef = useRef<number | null>(null);
   const register = useRegister();
@@ -148,18 +152,18 @@ export function RegisterForm() {
               <Input
                 id="password"
                 type={showPassword ? "text" : "password"}
-                placeholder="Min 8 characters"
+                placeholder="Min 6 characters"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                minLength={8}
+                minLength={6}
                 className="h-11 pr-10 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                {password.length > 0 && password.length < 8 && (
+                {password.length > 0 && password.length < 6 && (
                   <XCircle className="h-4 w-4 text-red-500" />
                 )}
-                {password.length >= 8 && (
+                {password.length >= 6 && (
                   <CheckCircle2 className="h-4 w-4 text-green-500" />
                 )}
                 <button
@@ -177,12 +181,53 @@ export function RegisterForm() {
             </div>
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="confirm-password" className="text-sm font-medium">
+              Confirm Password
+            </Label>
+            <div className="relative">
+              <Input
+                id="confirm-password"
+                type={showConfirmPassword ? "text" : "password"}
+                placeholder="Re-enter password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                minLength={6}
+                className="h-11 pr-10 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"
+              />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                {confirmPassword.length > 0 && confirmPassword !== password && (
+                  <XCircle className="h-4 w-4 text-red-500" />
+                )}
+                {confirmPassword.length > 0 && confirmPassword === password && password.length >= 6 && (
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                )}
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+            {confirmPassword.length > 0 && confirmPassword !== password && (
+              <p className="text-xs text-red-500">Passwords do not match</p>
+            )}
+          </div>
+
           <Button
             type="submit"
             className="w-full h-11 bg-gradient-to-r from-miku-primary to-miku-accent hover:opacity-90 transition-opacity text-base font-medium shadow-md hover:shadow-lg"
             disabled={
               register.isPending ||
-              password.length < 8 ||
+              password.length < 6 ||
+              confirmPassword !== password ||
               (usernameCheck.data && !usernameCheck.data.available)
             }
           >
