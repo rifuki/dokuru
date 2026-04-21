@@ -32,6 +32,7 @@ pub async fn get_me(
     Ok(ApiSuccess::default().with_data(UserProfileResponse {
         id: user_with_profile.id,
         email: user_with_profile.email,
+        email_verified: user_with_profile.email_verified,
         username: user_with_profile.username,
         name: user_with_profile.full_name.unwrap_or_default(),
         avatar_url: user_with_profile.avatar_url,
@@ -98,6 +99,7 @@ pub async fn update_me(
         .with_data(UserProfileResponse {
             id: user.id,
             email: user.email,
+            email_verified: user.email_verified,
             username: user.username,
             name: profile
                 .as_ref()
