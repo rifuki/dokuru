@@ -37,11 +37,11 @@ function ImageDetailPage() {
   const size = image?.Size ? `${(image.Size / 1024 / 1024).toFixed(2)} MB` : "N/A";
 
   return (
-    <div className="max-w-7xl mx-auto w-full space-y-6 p-6">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-          <Box className="h-8 w-8" />
-          {tags[0] || imageId}
+    <div className="max-w-7xl mx-auto w-full space-y-6">
+      <div className="min-w-0">
+        <h2 className="text-3xl font-bold tracking-tight flex items-center gap-3 min-w-0">
+          <Box className="h-8 w-8 shrink-0" />
+          <span className="truncate">{tags[0] || imageId}</span>
         </h2>
         <p className="text-muted-foreground text-sm mt-1">Image Details</p>
       </div>
@@ -50,9 +50,9 @@ function ImageDetailPage() {
         <div className="space-y-4 p-6 rounded-lg border bg-card">
           <h3 className="font-semibold text-lg">Image Information</h3>
           <div className="space-y-3 text-sm">
-            <div>
+            <div className="min-w-0">
               <span className="text-muted-foreground">ID:</span>
-              <p className="font-mono text-xs">{image?.Id}</p>
+              <p className="font-mono text-xs break-all">{image?.Id}</p>
             </div>
             <div>
               <span className="text-muted-foreground">Size:</span>
@@ -77,9 +77,9 @@ function ImageDetailPage() {
         </div>
       </div>
 
-      <div className="p-6 rounded-lg border bg-card">
+      <div className="p-6 rounded-lg border bg-card overflow-hidden">
         <h3 className="font-semibold text-lg mb-4">Raw JSON</h3>
-        <pre className="bg-muted/50 p-4 rounded-lg overflow-auto max-h-96 text-xs font-mono">
+        <pre className="bg-muted/50 p-4 rounded-lg overflow-auto max-h-96 text-xs font-mono w-full">
           {JSON.stringify(image, null, 2)}
         </pre>
       </div>
