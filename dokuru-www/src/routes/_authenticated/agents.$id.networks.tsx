@@ -1,24 +1,91 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Network } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Network as NetworkIcon, Trash2 } from "lucide-react";
+import { dockerApi } from "@/services/docker-api";
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { toast } from "sonner";
+import { agentApi } from "@/lib/api/agent";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/networks")({
-    component: NetworksPage,
+  component: NetworksPage,
 });
 
 function NetworksPage() {
-    return (
-        <div className="max-w-7xl mx-auto w-full space-y-6">
-            <div>
-                <h2 className="text-2xl font-bold tracking-tight">Networks</h2>
-                <p className="text-muted-foreground text-sm mt-1">Manage Docker networks</p>
-            </div>
-            <div className="rounded-xl border border-dashed bg-card/50 p-16 text-center flex flex-col items-center justify-center min-h-[300px]">
-                <Network className="h-12 w-12 text-muted-foreground/40 mb-4" />
-                <h3 className="text-lg font-semibold">Coming Soon</h3>
-                <p className="text-muted-foreground mt-2 text-sm max-w-sm">
-                    Network management is under development.
-                </p>
-            </div>
+  const { id } = Route.useParams();
+  const queryClient = useQueryClient();
+
+  const { data: agent } = useQuery({
+    queryKey: ["agent", id],
+    queryFn: () => agentApi.getById(id),
+  });
+
+  const { data: networks, isLoading } = useQuery({
+    queryKey: ["networks", id],
+    queryFn: () => dockerApi.listNetworks(agent!.url, agent!.token).then((res: any) => res.data),
+    enabled: !!agent,
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (networkId: string) => dockerApi.removeNetwork(agent!.url, agent!.token, networkId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["networks", id] });
+      toast.success("Network removed");
+    },
+    onError: () => toast.error("Failed to remove network"),
+  });
+
+  if (isLoading) return <div className="max-w-7xl mx-auto w-full">Loading...</div>;
+
+  return (
+    <div className="max-w-7xl mx-auto w-full space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold">Networks</h2>
+        <p className="text-muted-foreground text-sm">{networks?.length || 0} networks found</p>
+      </div>
+
+      {!networks || networks.length === 0 ? (
+        <div className="rounded-xl border border-dashed bg-card/50 p-16 text-center">
+          <NetworkIcon className="h-12 w-12 text-muted-foreground/40 mb-4 mx-auto" />
+          <h3 className="text-lg font-semibold">No networks found</h3>
         </div>
-    );
+      ) : (
+        <div className="rounded-lg border bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Driver</TableHead>
+                <TableHead>Scope</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {networks.map((network: any) => (
+                <TableRow key={network.id}>
+                  <TableCell className="font-medium">{network.name}</TableCell>
+                  <TableCell>{network.driver}</TableCell>
+                  <TableCell>{network.scope}</TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        if (confirm("Remove this network?")) {
+                          removeMutation.mutate(network.id);
+                        }
+                      }}
+                      disabled={removeMutation.isPending}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
 }
