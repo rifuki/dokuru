@@ -124,11 +124,30 @@ export function ProfileSettings() {
 
     const handleProfileSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const updates: { name?: string; username?: string; email?: string } = {};
+        
+        // Handle email change separately
+        if (email !== user.email) {
+            try {
+                await apiClient.post('/users/change-email', { new_email: email });
+                toast.success(`Verification email sent to ${email}. Check your inbox to confirm the change.`);
+                // Reset email to current
+                setEmail(user.email);
+                // Refresh user data to show pending email
+                queryClient.invalidateQueries({ queryKey: settingsKeys.profile() });
+                return;
+            } catch (error: unknown) {
+                const msg = error instanceof Error && 'response' in error 
+                    ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
+                    : undefined;
+                toast.error(msg || "Failed to initiate email change");
+                return;
+            }
+        }
 
+        // Handle other updates
+        const updates: { name?: string; username?: string } = {};
         if (name !== user.name) updates.name = name;
         if (username !== user.username) updates.username = username;
-        if (email !== user.email) updates.email = email;
 
         if (Object.keys(updates).length > 0) {
             try {
