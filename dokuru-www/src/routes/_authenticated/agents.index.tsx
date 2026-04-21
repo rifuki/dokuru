@@ -277,10 +277,9 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
 
 function AgentsList() {
   const navigate = useNavigate();
-  const { agents, isLoading, fetchAgents, updateAgent } = useAgentStore();
+  const { agents, isLoading, fetchAgents, updateAgent, agentInfos, setAgentInfo, setAgentInfoLoading } = useAgentStore();
   const [localAgents, setLocalAgents] = useState<Agent[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [agentInfos, setAgentInfos] = useState<Record<string, { info: DockerInfo | null; loading: boolean }>>({});
 
   useEffect(() => {
     fetchAgents();
@@ -297,40 +296,25 @@ function AgentsList() {
   useEffect(() => {
     if (agents.length === 0) return;
 
-    const loadingState: Record<string, { info: DockerInfo | null; loading: boolean }> = {};
     for (const agent of agents) {
-      loadingState[agent.id] = { info: null, loading: true };
-    }
+      // Skip jika sudah ada cache yang valid (tidak loading)
+      const cached = agentInfos[agent.id];
+      if (cached && !cached.loading) continue;
 
-    queueMicrotask(() => {
-      setAgentInfos(loadingState);
-
-      for (const agent of agents) {
-        const token = getAgentToken(agent.id);
-        if (!token) {
-          setAgentInfos((prev) => ({
-            ...prev,
-            [agent.id]: { info: null, loading: false },
-          }));
-          continue;
-        }
-
-        agentDirectApi
-          .getInfo(agent.url, token)
-          .then((info) => {
-            setAgentInfos((prev) => ({
-              ...prev,
-              [agent.id]: { info, loading: false },
-            }));
-          })
-          .catch(() => {
-            setAgentInfos((prev) => ({
-              ...prev,
-              [agent.id]: { info: null, loading: false },
-            }));
-          });
+      const token = getAgentToken(agent.id);
+      if (!token) {
+        setAgentInfo(agent.id, null);
+        continue;
       }
-    });
+
+      setAgentInfoLoading(agent.id, true);
+
+      agentDirectApi
+        .getInfo(agent.url, token)
+        .then((info) => setAgentInfo(agent.id, info))
+        .catch(() => setAgentInfo(agent.id, null));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agents]);
 
   const handleRefresh = () => {
