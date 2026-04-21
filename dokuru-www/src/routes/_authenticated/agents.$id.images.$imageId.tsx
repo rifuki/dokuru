@@ -77,9 +77,9 @@ function ImageDetailPage() {
         </div>
       </div>
 
-      <div className="p-6 rounded-lg border bg-card overflow-hidden">
+      <div className="p-6 rounded-lg border bg-card">
         <h3 className="font-semibold text-lg mb-4">Raw JSON</h3>
-        <pre className="bg-muted/50 p-4 rounded-lg overflow-auto max-h-96 text-xs font-mono w-full">
+        <pre className="bg-muted/50 p-4 rounded-lg overflow-x-auto overflow-y-auto max-h-96 text-xs font-mono max-w-full">
           {JSON.stringify(image, null, 2)}
         </pre>
       </div>
