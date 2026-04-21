@@ -87,9 +87,33 @@ function ContainerOverview({
   const networks = networkSettings?.Networks as Record<string, unknown> | undefined;
   const labels = (cfg?.Labels as Record<string, string> | undefined) ?? {};
   const binds = (hostCfg?.Binds as string[] | undefined) ?? [];
+  
+  // Extract stack name and created time
+  const stackName = labels["com.docker.compose.project"] || "N/A";
+  const created = data.Created ? new Date(data.Created as string).toLocaleString() : "N/A";
 
   return (
     <div className="p-6 space-y-6 text-sm">
+      {/* Container Info */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <section className="space-y-3">
+          <h4 className="font-semibold text-sm flex items-center gap-2">
+            <div className="h-1 w-1 rounded-full bg-primary" />
+            Container Info
+          </h4>
+          <div className="space-y-2 bg-muted/50 rounded-lg p-4">
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">Created:</span>
+              <span className="font-mono">{created}</span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">Stack:</span>
+              <span className="font-mono text-primary">{stackName}</span>
+            </div>
+          </div>
+        </section>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Ports */}
         {ports && Object.keys(ports).length > 0 && (
@@ -499,7 +523,7 @@ function ContainerInspect({
   if (isLoading) return <p className="text-sm text-muted-foreground p-6">Loading…</p>;
 
   return (
-    <div className="p-5">
+    <div className="p-5 overflow-x-hidden">
       <div className="rounded-lg border overflow-hidden">
         <div className="bg-[#0d1117] px-4 py-2 border-b border-white/10 flex items-center justify-between">
           <span className="text-xs text-muted-foreground font-mono">Docker Inspect JSON</span>
@@ -512,7 +536,7 @@ function ContainerInspect({
             Copy
           </Button>
         </div>
-        <pre className="bg-[#0d1117] p-4 overflow-auto max-h-[600px] text-xs font-mono text-gray-300 whitespace-pre-wrap break-words">
+        <pre className="bg-[#0d1117] p-4 overflow-x-auto max-h-[600px] text-xs font-mono text-gray-300 whitespace-pre-wrap break-all">
           {JSON.stringify(data, null, 2)}
         </pre>
       </div>
@@ -556,11 +580,11 @@ function ContainerDetail({
             disabled={t.disabled}
             onClick={() => setTab(t.id)}
             className={`
-              flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-all
+              flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-all border-t border-x
               ${t.disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}
               ${tab === t.id
-                ? "bg-background text-foreground shadow-sm border-t border-x"
-                : "text-muted-foreground hover:text-foreground hover:bg-background/50"}
+                ? "bg-background text-foreground shadow-sm border-border"
+                : "text-muted-foreground hover:text-foreground hover:bg-background/50 border-transparent"}
             `}
           >
             {t.icon}
@@ -643,18 +667,12 @@ function ContainerRow({
             <ContainerIcon className="h-4 w-4" />
           </div>
 
-          <div className="min-w-0 flex-1 grid grid-cols-1 md:grid-cols-[2fr_2fr_1fr_auto_2fr] gap-3 items-center">
-            <div className="flex flex-col gap-0.5">
+          <div className="min-w-0 flex-1 grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_auto_minmax(0,2fr)] gap-4 items-center">
+            <div className="flex flex-col gap-0.5 min-w-0">
               <span className="font-semibold text-sm truncate">{name}</span>
               <span className="text-xs text-muted-foreground font-mono truncate">{container.id.slice(0, 12)}</span>
             </div>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-sm text-muted-foreground truncate font-mono">{container.image}</span>
-              <span className="text-xs text-muted-foreground truncate">
-                Created: {new Date(container.created * 1000).toLocaleString()}
-              </span>
-            </div>
-            <span className="text-xs text-muted-foreground truncate font-mono">{stackName}</span>
+            <span className="text-sm text-muted-foreground truncate font-mono">{container.image}</span>
             <Badge variant="outline" className={`text-xs font-medium w-fit ${stateColor(container.state)}`}>
               {container.state}
             </Badge>
