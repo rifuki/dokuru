@@ -26,18 +26,19 @@ export function WebSocketProvider({ children, url, enabled = true }: WebSocketPr
     const reconnectAttemptsRef = useRef(0);
     const maxReconnectAttempts = 5;
     const connectRef = useRef<(() => void) | null>(null);
+    const isCleaningUpRef = useRef(false);
 
     const send = useCallback((data: unknown) => {
         if (wsRef.current?.readyState === WebSocket.OPEN) {
             wsRef.current.send(JSON.stringify(data));
-        } else {
-            console.warn("WebSocket not connected, message not sent");
         }
     }, []);
 
     useEffect(() => {
+        isCleaningUpRef.current = false;
+
         const connect = () => {
-            if (!enabled || wsRef.current?.readyState === WebSocket.OPEN) return;
+            if (!enabled || wsRef.current?.readyState === WebSocket.OPEN || isCleaningUpRef.current) return;
 
             setStatus("connecting");
 
@@ -46,31 +47,33 @@ export function WebSocketProvider({ children, url, enabled = true }: WebSocketPr
                 wsRef.current = new WebSocket(wsUrl);
 
                 wsRef.current.onopen = () => {
+                    if (isCleaningUpRef.current) return;
                     setStatus("connected");
                     reconnectAttemptsRef.current = 0;
-                    console.log("✅ WebSocket connected:", wsUrl);
                 };
 
                 wsRef.current.onmessage = (event) => {
+                    if (isCleaningUpRef.current) return;
                     setLastMessage(event);
                 };
 
-                wsRef.current.onerror = (error) => {
-                    console.error("❌ WebSocket error:", error);
+                wsRef.current.onerror = () => {
+                    if (isCleaningUpRef.current) return;
                     setStatus("error");
                 };
 
                 wsRef.current.onclose = () => {
+                    if (isCleaningUpRef.current) return;
                     setStatus("disconnected");
-                    console.log("🔌 WebSocket disconnected");
 
                     if (enabled && reconnectAttemptsRef.current < maxReconnectAttempts) {
                         const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
                         reconnectAttemptsRef.current++;
                         
                         reconnectTimeoutRef.current = setTimeout(() => {
-                            console.log(`🔄 Reconnecting... (attempt ${reconnectAttemptsRef.current})`);
-                            connectRef.current?.();
+                            if (!isCleaningUpRef.current) {
+                                connectRef.current?.();
+                            }
                         }, delay);
                     } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
                         toast.error("WebSocket connection failed", {
@@ -79,8 +82,9 @@ export function WebSocketProvider({ children, url, enabled = true }: WebSocketPr
                     }
                 };
             } catch (error) {
-                console.error("Failed to create WebSocket:", error);
-                setStatus("error");
+                if (!isCleaningUpRef.current) {
+                    setStatus("error");
+                }
             }
         };
 
@@ -91,6 +95,7 @@ export function WebSocketProvider({ children, url, enabled = true }: WebSocketPr
         }
 
         return () => {
+            isCleaningUpRef.current = true;
             if (reconnectTimeoutRef.current) {
                 clearTimeout(reconnectTimeoutRef.current);
             }
