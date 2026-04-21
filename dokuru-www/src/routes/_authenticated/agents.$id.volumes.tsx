@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { HardDrive, Trash2 } from "lucide-react";
 import { dockerApi, type Volume } from "@/services/docker-api";
@@ -88,7 +88,15 @@ function VolumesPage() {
             <TableBody>
               {volumes.map((volume: Volume) => (
                 <TableRow key={volume.name}>
-                  <TableCell className="font-medium">{volume.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link
+                      to="/agents/$id/volumes/$volumeName"
+                      params={{ id, volumeName: volume.name }}
+                      className="text-primary hover:underline"
+                    >
+                      {volume.name}
+                    </Link>
+                  </TableCell>
                   <TableCell>{volume.driver}</TableCell>
                   <TableCell className="text-muted-foreground text-sm">{volume.mountpoint}</TableCell>
                   <TableCell className="text-right">
