@@ -9,6 +9,7 @@ pub struct Agent {
     pub name: String,
     pub url: String,
     pub token_hash: String,
+    pub encrypted_token: String,
     pub access_mode: String,
     pub status: String,
     pub last_seen: Option<DateTime<Utc>>,

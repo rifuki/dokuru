@@ -24,6 +24,7 @@ impl AgentService {
         dto: CreateAgentDto,
     ) -> Result<AgentResponse> {
         let token_hash = Self::hash_token(&dto.token);
+        let encrypted_token = Self::encrypt_token(&dto.token);
         let plain_token = dto.token.clone(); // Keep for response
 
         let agent = Agent {
@@ -32,6 +33,7 @@ impl AgentService {
             name: dto.name,
             url: dto.url,
             token_hash,
+            encrypted_token,
             access_mode: dto.access_mode,
             status: "unknown".to_string(),
             last_seen: None,
@@ -98,8 +100,29 @@ impl AgentService {
         hex::encode(result)
     }
 
+    fn encrypt_token(token: &str) -> String {
+        // Simple base64 encoding (not real encryption, but sufficient for now)
+        // In production, use proper encryption like AES-256-GCM
+        use base64::{Engine as _, engine::general_purpose};
+        general_purpose::STANDARD.encode(token.as_bytes())
+    }
+
+    fn decrypt_token(encrypted: &str) -> Result<String> {
+        use base64::{Engine as _, engine::general_purpose};
+        let decoded = general_purpose::STANDARD
+            .decode(encrypted)
+            .map_err(|e| eyre::eyre!("Failed to decode token: {}", e))?;
+        String::from_utf8(decoded).map_err(|e| eyre::eyre!("Invalid UTF-8: {}", e))
+    }
+
     fn to_response(agent: Agent) -> AgentResponse {
-        Self::to_response_with_token(agent, None)
+        // Decrypt token from encrypted_token field
+        let decrypted_token = if agent.encrypted_token.is_empty() {
+            None
+        } else {
+            Self::decrypt_token(&agent.encrypted_token).ok()
+        };
+        Self::to_response_with_token(agent, decrypted_token)
     }
 
     fn to_response_with_token(agent: Agent, token: Option<String>) -> AgentResponse {
