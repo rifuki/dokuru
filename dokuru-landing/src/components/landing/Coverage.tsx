@@ -109,7 +109,7 @@ const Coverage = () => {
                 </p>
 
                 <ul className="mt-6 flex flex-col gap-2 border-t border-white/5 pt-5">
-                  {g.rules.map((r, idx) => (
+                  {g.rules.map((r) => (
                     <li
                       key={r}
                       className="flex items-start gap-2.5 font-mono text-[13px] text-zinc-300"
