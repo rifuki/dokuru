@@ -6,7 +6,7 @@ import { useAgentStore } from "@/stores/use-agent-store";
 export function useRealtimeAgents() {
     const { status, lastMessage } = useWebSocket();
     const queryClient = useQueryClient();
-    const { setAgentOnline } = useAgentStore();
+    const { setAgentOnline, agents } = useAgentStore();
 
     useEffect(() => {
         if (!lastMessage) return;
@@ -15,15 +15,35 @@ export function useRealtimeAgents() {
             const data = JSON.parse(lastMessage.data);
 
             switch (data.type) {
-                case "agent:connected":
+                case "agent:connected": {
                     void queryClient.invalidateQueries({ queryKey: ["agents"] });
-                    if (data.data?.agentId) setAgentOnline(data.data.agentId, true);
+                    const agentId = data.data?.agentId as string | undefined;
+                    if (agentId) {
+                        // Only update online status for relay agents.
+                        // Direct/cloudflare agents are managed by useAgentConnections
+                        // via their own per-agent WS — letting both sources write the
+                        // same flag causes a race that makes the card flicker.
+                        const agent = agents.find((a) => a.id === agentId);
+                        console.log(`[Relay] agent:connected → ${agent?.name ?? agentId} (mode=${agent?.access_mode})`);
+                        if (agent?.access_mode === "relay") {
+                            setAgentOnline(agentId, true);
+                        }
+                    }
                     break;
+                }
 
-                case "agent:disconnected":
+                case "agent:disconnected": {
                     void queryClient.invalidateQueries({ queryKey: ["agents"] });
-                    if (data.data?.agentId) setAgentOnline(data.data.agentId, false);
+                    const agentId = data.data?.agentId as string | undefined;
+                    if (agentId) {
+                        const agent = agents.find((a) => a.id === agentId);
+                        console.log(`[Relay] agent:disconnected → ${agent?.name ?? agentId} (mode=${agent?.access_mode})`);
+                        if (agent?.access_mode === "relay") {
+                            setAgentOnline(agentId, false);
+                        }
+                    }
                     break;
+                }
 
                 case "agent:updated":
                     void queryClient.invalidateQueries({ queryKey: ["agents"] });
@@ -41,7 +61,7 @@ export function useRealtimeAgents() {
         } catch (error) {
             console.error("Failed to parse WebSocket message:", error);
         }
-    }, [lastMessage, queryClient, setAgentOnline]);
+    }, [lastMessage, queryClient, setAgentOnline, agents]);
 
     return { status };
 }
