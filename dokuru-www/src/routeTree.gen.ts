@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as VerifyEmailChangeRouteImport } from './routes/verify-email-change'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
@@ -49,6 +50,11 @@ import { Route as AuthenticatedAgentsIdImagesImageIdRouteImport } from './routes
 import { Route as AuthenticatedAgentsIdContainersContainerIdRouteImport } from './routes/_authenticated/agents.$id.containers.$containerId'
 import { Route as AuthenticatedAgentsIdAuditsAuditIdRouteImport } from './routes/_authenticated/agents.$id.audits.$auditId'
 
+const VerifyEmailChangeRoute = VerifyEmailChangeRouteImport.update({
+  id: '/verify-email-change',
+  path: '/verify-email-change',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const VerifyEmailRoute = VerifyEmailRouteImport.update({
   id: '/verify-email',
   path: '/verify-email',
@@ -275,6 +281,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRouteWithChildren
   '/verify-email': typeof VerifyEmailRoute
+  '/verify-email-change': typeof VerifyEmailChangeRoute
   '/admin': typeof AuthenticatedAdminRouteWithChildren
   '/settings/profile': typeof SettingsProfileRoute
   '/settings/security': typeof SettingsSecurityRoute
@@ -313,6 +320,7 @@ export interface FileRoutesByTo {
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
   '/verify-email': typeof VerifyEmailRoute
+  '/verify-email-change': typeof VerifyEmailChangeRoute
   '/settings/profile': typeof SettingsProfileRoute
   '/settings/security': typeof SettingsSecurityRoute
   '/settings/sessions': typeof SettingsSessionsRoute
@@ -346,6 +354,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRouteWithChildren
   '/verify-email': typeof VerifyEmailRoute
+  '/verify-email-change': typeof VerifyEmailChangeRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRouteWithChildren
   '/settings/profile': typeof SettingsProfileRoute
   '/settings/security': typeof SettingsSecurityRoute
@@ -389,6 +398,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/settings'
     | '/verify-email'
+    | '/verify-email-change'
     | '/admin'
     | '/settings/profile'
     | '/settings/security'
@@ -427,6 +437,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/reset-password'
     | '/verify-email'
+    | '/verify-email-change'
     | '/settings/profile'
     | '/settings/security'
     | '/settings/sessions'
@@ -459,6 +470,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/settings'
     | '/verify-email'
+    | '/verify-email-change'
     | '/_authenticated/admin'
     | '/settings/profile'
     | '/settings/security'
@@ -501,10 +513,18 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SettingsRoute: typeof SettingsRouteWithChildren
   VerifyEmailRoute: typeof VerifyEmailRoute
+  VerifyEmailChangeRoute: typeof VerifyEmailChangeRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/verify-email-change': {
+      id: '/verify-email-change'
+      path: '/verify-email-change'
+      fullPath: '/verify-email-change'
+      preLoaderRoute: typeof VerifyEmailChangeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/verify-email': {
       id: '/verify-email'
       path: '/verify-email'
@@ -994,6 +1014,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SettingsRoute: SettingsRouteWithChildren,
   VerifyEmailRoute: VerifyEmailRoute,
+  VerifyEmailChangeRoute: VerifyEmailChangeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
