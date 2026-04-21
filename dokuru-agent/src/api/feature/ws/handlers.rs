@@ -9,9 +9,11 @@ use tracing::{debug, info};
 /// WebSocket handler for agent connectivity monitoring.
 ///
 /// Clients (the dokuru-www frontend) connect here to track whether this agent
-/// is reachable. The handler keeps the connection alive by sending a JSON ping
-/// every 10 seconds. The frontend detects disconnection via the WS `onclose`
-/// event and immediately marks the agent offline in its UI.
+/// is reachable. The handler sends a WebSocket protocol Ping frame every 15
+/// seconds. Browsers reply automatically with a Pong at the protocol level
+/// (invisible to JS), which keeps Cloudflare Tunnel's proxy connection alive.
+/// The frontend detects disconnection via the WS `onclose` event and marks
+/// the agent offline in its UI.
 ///
 /// Authentication is handled by `agent_auth_middleware` before this handler
 /// is reached (token passed as `?token=<token>` query param since browsers
@@ -37,7 +39,8 @@ async fn handle_socket(socket: WebSocket) {
     info!("WebSocket client connected");
 
     let (mut sender, mut receiver) = socket.split();
-    let mut ticker = interval(Duration::from_secs(10));
+    // 15 s interval — well under Cloudflare Tunnel's ~60 s idle timeout.
+    let mut ticker = interval(Duration::from_secs(15));
 
     // Skip the first immediate tick so we don't ping before the client is ready.
     ticker.tick().await;
@@ -45,9 +48,11 @@ async fn handle_socket(socket: WebSocket) {
     loop {
         tokio::select! {
             _ = ticker.tick() => {
-                debug!("Sending ping to WS client");
-                let ping = Message::Text(r#"{"type":"ping"}"#.to_owned().into());
-                if sender.send(ping).await.is_err() {
+                // Use a WS protocol Ping frame, not a text message.
+                // Browsers respond automatically with a Pong (opcode 0xA),
+                // which Cloudflare Tunnel treats as keepalive activity.
+                debug!("Sending protocol ping to WS client");
+                if sender.send(Message::Ping(vec![].into())).await.is_err() {
                     break;
                 }
             }

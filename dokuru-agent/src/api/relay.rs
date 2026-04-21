@@ -51,8 +51,8 @@ pub async fn start_relay_mode(config: Config) -> Result<()> {
             }
             Err(e) => {
                 error!("Relay connection error: {}", e);
-                warn!("Reconnecting in 5 seconds...");
-                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                warn!("Reconnecting in 2 seconds...");
+                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
             }
         }
     }
@@ -98,16 +98,40 @@ async fn connect_and_run(token: &str) -> Result<()> {
         }
     }
 
+    // Create channel for sending messages
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Message>();
+
+    // Spawn write task
+    let write_task = tokio::spawn(async move {
+        while let Some(msg) = rx.recv().await {
+            if write.send(msg).await.is_err() {
+                break;
+            }
+        }
+    });
+
+    // Spawn keepalive task
+    let tx_keepalive = tx.clone();
+    let keepalive_task = tokio::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+        loop {
+            interval.tick().await;
+            if tx_keepalive.send(Message::Ping(vec![])).is_err() {
+                break;
+            }
+        }
+    });
+
     // Handle messages
     while let Some(msg) = read.next().await {
         match msg {
             Ok(Message::Text(text)) => {
-                if let Err(e) = handle_message(&text, &mut write).await {
+                if let Err(e) = handle_message(&text, &tx) {
                     error!("Error handling message: {}", e);
                 }
             }
             Ok(Message::Ping(_)) => {
-                let _ = write.send(Message::Pong(vec![])).await;
+                let _ = tx.send(Message::Pong(vec![]));
             }
             Ok(Message::Close(_)) => {
                 info!("Server closed connection");
@@ -121,18 +145,12 @@ async fn connect_and_run(token: &str) -> Result<()> {
         }
     }
 
+    keepalive_task.abort();
+    write_task.abort();
     Ok(())
 }
 
-async fn handle_message(
-    text: &str,
-    write: &mut futures_util::stream::SplitSink<
-        tokio_tungstenite::WebSocketStream<
-            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-        >,
-        Message,
-    >,
-) -> Result<()> {
+fn handle_message(text: &str, tx: &tokio::sync::mpsc::UnboundedSender<Message>) -> Result<()> {
     let msg: WsMessage = serde_json::from_str(text)?;
 
     match msg {
@@ -153,14 +171,10 @@ async fn handle_message(
                 data: result.unwrap_or_else(|e| serde_json::json!({ "error": e.to_string() })),
             };
 
-            write
-                .send(Message::Text(serde_json::to_string(&response)?))
-                .await?;
+            tx.send(Message::Text(serde_json::to_string(&response)?))?;
         }
         WsMessage::Ping => {
-            write
-                .send(Message::Text(serde_json::to_string(&WsMessage::Pong)?))
-                .await?;
+            tx.send(Message::Text(serde_json::to_string(&WsMessage::Pong)?))?;
         }
         _ => {}
     }
