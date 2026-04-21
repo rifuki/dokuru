@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::docker::containers::{ContainerResponse, ListQuery};
 
     #[test]
     fn test_container_response_creation() {
