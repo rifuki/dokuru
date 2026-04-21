@@ -7,6 +7,7 @@ export interface Container {
   state: string;
   status: string;
   created: number;
+  labels?: Record<string, string>;
 }
 
 export interface ContainerStats {
