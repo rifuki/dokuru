@@ -137,11 +137,7 @@ pub trait UserRepository: Send + Sync {
     ) -> Result<bool, sqlx::Error>;
 
     /// Verify pending email and update
-    async fn verify_pending_email(
-        &self,
-        pool: &PgPool,
-        token: &str,
-    ) -> Result<bool, sqlx::Error>;
+    async fn verify_pending_email(&self, pool: &PgPool, token: &str) -> Result<bool, sqlx::Error>;
 
     /// Clear pending email
     async fn clear_pending_email(&self, pool: &PgPool, user_id: Uuid) -> Result<bool, sqlx::Error>;
@@ -450,11 +446,7 @@ impl UserRepository for UserRepositoryImpl {
         Ok(result.rows_affected() > 0)
     }
 
-    async fn verify_pending_email(
-        &self,
-        pool: &PgPool,
-        token: &str,
-    ) -> Result<bool, sqlx::Error> {
+    async fn verify_pending_email(&self, pool: &PgPool, token: &str) -> Result<bool, sqlx::Error> {
         let result = sqlx::query(
             "UPDATE users SET email = pending_email, pending_email = NULL, pending_email_token = NULL, pending_email_token_expires_at = NULL, updated_at = NOW() 
              WHERE pending_email_token = $1 AND pending_email_token_expires_at > NOW()"

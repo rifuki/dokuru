@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    feature::auth::middleware::AuthUser,
+    feature::auth::types::AuthUser,
     infrastructure::web::response::{ApiError, ApiResult, ApiSuccess},
     state::AppState,
 };
@@ -20,7 +20,7 @@ pub struct ChangeEmailResponse {
 
 pub async fn request_email_change(
     State(state): State<AppState>,
-    AuthUser(user): AuthUser,
+    axum::Extension(auth_user): axum::Extension<AuthUser>,
     Json(req): Json<ChangeEmailRequest>,
 ) -> ApiResult<ChangeEmailResponse> {
     // Validate email format
@@ -31,7 +31,7 @@ pub async fn request_email_change(
     }
 
     // Check if new email is same as current
-    if req.new_email == user.email {
+    if req.new_email == auth_user.email {
         return Err(ApiError::default()
             .with_code(StatusCode::BAD_REQUEST)
             .with_message("New email is the same as current email"));
@@ -61,7 +61,13 @@ pub async fn request_email_change(
     // Save pending email
     state
         .user_repo
-        .set_pending_email(state.db.pool(), user.id, &req.new_email, &token, expires_at)
+        .set_pending_email(
+            state.db.pool(),
+            auth_user.user_id,
+            &req.new_email,
+            &token,
+            expires_at,
+        )
         .await
         .map_err(|e| {
             tracing::error!("Failed to set pending email: {}", e);
