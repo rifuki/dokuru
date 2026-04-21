@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Container as ContainerIcon, Play, Square, RotateCw, Trash2 } from "lucide-react";
+import { Play, Square, RotateCw, Trash2, Container as ContainerIcon } from "lucide-react";
 import { dockerApi, type Container } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -115,7 +115,7 @@ function ContainersPage() {
 
       {!containers || containers.length === 0 ? (
         <div className="rounded-xl border border-dashed bg-card/50 p-16 text-center">
-          <Container className="h-12 w-12 text-muted-foreground/40 mb-4 mx-auto" />
+          <ContainerIcon className="h-12 w-12 text-muted-foreground/40 mb-4 mx-auto" />
           <h3 className="text-lg font-semibold">No containers found</h3>
           <p className="text-muted-foreground mt-2 text-sm">
             No Docker containers are running on this agent.
