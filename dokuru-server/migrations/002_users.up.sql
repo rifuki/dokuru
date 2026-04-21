@@ -22,6 +22,14 @@ CREATE TABLE users (
     is_active       BOOLEAN NOT NULL DEFAULT TRUE,
     email_verified  BOOLEAN NOT NULL DEFAULT FALSE,
     
+    -- Email Verification
+    verification_token VARCHAR(255),
+    verification_token_expires_at TIMESTAMPTZ,
+    
+    -- Password Reset
+    reset_token VARCHAR(255),
+    reset_token_expires_at TIMESTAMPTZ,
+    
     -- Role
     role            VARCHAR(20) NOT NULL DEFAULT 'user',
     -- 'admin', 'user', 'moderator'
