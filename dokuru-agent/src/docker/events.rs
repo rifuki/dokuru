@@ -55,7 +55,7 @@ async fn get_events(
         }
 
         if let Ok(evt) = event {
-            let event_type = evt.typ.map(|t| format!("{:?}", t)).unwrap_or_default();
+            let event_type = evt.typ.map(|t| format!("{t:?}")).unwrap_or_default();
             let actor_id = evt
                 .actor
                 .as_ref()
