@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { agentApi } from "@/lib/api/agent";
-import { agentDirectApi, type DockerInfo, type AuditResponse } from "@/lib/api/agent-direct";
+import { agentDirectApi, type DockerInfo } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
 import { getAgentToken, setAgentToken } from "@/stores/use-agent-store";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Trash2, Edit, Eye, EyeOff, Container, Box, HardDrive, Network, Play, CheckCircle2, XCircle, AlertCircle, Bot, Calendar, Wifi, Cpu, MemoryStick, Monitor, Layers } from "lucide-react";
+import { Trash2, Edit, Eye, EyeOff, Container, Box, HardDrive, Network, Bot, Calendar, Wifi, Monitor, Layers } from "lucide-react";
 import { useAgentStore } from "@/stores/use-agent-store";
 import { toast } from "sonner";
 
@@ -26,10 +26,8 @@ function AgentDetail() {
     const { deleteAgent, updateAgent } = useAgentStore();
     const [agent, setAgent] = useState<Agent | null>(null);
     const [dockerInfo, setDockerInfo] = useState<DockerInfo | null>(null);
-    const [auditResults, setAuditResults] = useState<AuditResponse | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isLoadingDocker, setIsLoadingDocker] = useState(false);
-    const [isRunningAudit, setIsRunningAudit] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -118,26 +116,6 @@ function AgentDetail() {
         }
     };
 
-    const handleRunAudit = async () => {
-        if (!agent) return;
-
-        const token = getAgentToken(agent.id);
-        if (!token) {
-            toast.error("Agent token not found");
-            return;
-        }
-
-        setIsRunningAudit(true);
-        try {
-            const results = await agentDirectApi.runAudit(agent.url, token);
-            setAuditResults(results);
-            toast.success("Audit completed successfully");
-        } catch {
-            toast.error("Failed to run audit");
-        } finally {
-            setIsRunningAudit(false);
-        }
-    };
 
     if (isLoading) {
         return (
