@@ -125,6 +125,26 @@ pub trait UserRepository: Send + Sync {
 
     /// Clear reset token
     async fn clear_reset_token(&self, pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error>;
+
+    /// Set pending email with token
+    async fn set_pending_email(
+        &self,
+        pool: &PgPool,
+        user_id: Uuid,
+        new_email: &str,
+        token: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<bool, sqlx::Error>;
+
+    /// Verify pending email and update
+    async fn verify_pending_email(
+        &self,
+        pool: &PgPool,
+        token: &str,
+    ) -> Result<bool, sqlx::Error>;
+
+    /// Clear pending email
+    async fn clear_pending_email(&self, pool: &PgPool, user_id: Uuid) -> Result<bool, sqlx::Error>;
 }
 
 #[derive(Debug, Clone, Default)]
@@ -405,6 +425,51 @@ impl UserRepository for UserRepositoryImpl {
             "UPDATE users SET reset_token = NULL, reset_token_expires_at = NULL, updated_at = NOW() WHERE id = $1"
         )
         .bind(id)
+        .execute(pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn set_pending_email(
+        &self,
+        pool: &PgPool,
+        user_id: Uuid,
+        new_email: &str,
+        token: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query(
+            "UPDATE users SET pending_email = $2, pending_email_token = $3, pending_email_token_expires_at = $4, updated_at = NOW() WHERE id = $1"
+        )
+        .bind(user_id)
+        .bind(new_email)
+        .bind(token)
+        .bind(expires_at)
+        .execute(pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn verify_pending_email(
+        &self,
+        pool: &PgPool,
+        token: &str,
+    ) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query(
+            "UPDATE users SET email = pending_email, pending_email = NULL, pending_email_token = NULL, pending_email_token_expires_at = NULL, updated_at = NOW() 
+             WHERE pending_email_token = $1 AND pending_email_token_expires_at > NOW()"
+        )
+        .bind(token)
+        .execute(pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn clear_pending_email(&self, pool: &PgPool, user_id: Uuid) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query(
+            "UPDATE users SET pending_email = NULL, pending_email_token = NULL, pending_email_token_expires_at = NULL, updated_at = NOW() WHERE id = $1"
+        )
+        .bind(user_id)
         .execute(pool)
         .await?;
         Ok(result.rows_affected() > 0)

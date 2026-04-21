@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/verify-email")({
     component: VerifyEmail,
@@ -13,6 +14,7 @@ export const Route = createFileRoute("/verify-email")({
 
 function VerifyEmail() {
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const { token } = Route.useSearch();
     const [status, setStatus] = useState<"loading" | "success" | "error">(() => 
         !token ? "error" : "loading"
@@ -31,6 +33,9 @@ function VerifyEmail() {
                 await apiClient.get(`/auth/verify-email?token=${token}`);
                 setStatus("success");
                 setMessage("Email verified successfully!");
+                // Invalidate user queries to refresh data
+                queryClient.invalidateQueries({ queryKey: ["user"] });
+                queryClient.invalidateQueries({ queryKey: ["profile"] });
             } catch (error: unknown) {
                 const msg = error instanceof Error && 'response' in error 
                     ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
@@ -41,7 +46,7 @@ function VerifyEmail() {
         };
 
         verifyEmail();
-    }, [token]);
+    }, [token, queryClient]);
 
     return (
         <div className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -58,8 +63,8 @@ function VerifyEmail() {
                         <CheckCircle2 className="mx-auto h-16 w-16 text-green-500" />
                         <h1 className="text-2xl font-bold">Email Verified!</h1>
                         <p className="text-muted-foreground">{message}</p>
-                        <Button onClick={() => navigate({ to: "/" })} className="mt-4">
-                            Go to Dashboard
+                        <Button onClick={() => navigate({ to: "/settings/profile" })} className="mt-4">
+                            Go to Profile
                         </Button>
                     </>
                 )}

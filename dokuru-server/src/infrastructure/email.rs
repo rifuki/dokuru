@@ -5,6 +5,7 @@ use crate::infrastructure::config::EmailConfig;
 
 const VERIFY_EMAIL_TEMPLATE: &str = include_str!("../../templates/email/verify_email.html");
 const RESET_PASSWORD_TEMPLATE: &str = include_str!("../../templates/email/reset_password.html");
+const EMAIL_CHANGE_TEMPLATE: &str = include_str!("../../templates/email/email_change.html");
 
 #[derive(Clone)]
 pub struct EmailService {
@@ -37,6 +38,12 @@ impl EmailService {
     pub async fn send_password_reset_email(&self, to: &str, reset_url: &str) -> Result<()> {
         let html = RESET_PASSWORD_TEMPLATE.replace("{{reset_url}}", reset_url);
         self.send_email(to, "Reset Your Password - Dokuru", &html)
+            .await
+    }
+
+    pub async fn send_email_change_verification(&self, to: &str, verification_url: &str) -> Result<()> {
+        let html = EMAIL_CHANGE_TEMPLATE.replace("{{verification_url}}", verification_url);
+        self.send_email(to, "Verify Your New Email - Dokuru", &html)
             .await
     }
 
