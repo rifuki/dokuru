@@ -33,8 +33,8 @@ function VerifyEmail() {
                 await apiClient.get(`/auth/verify-email?token=${token}`);
                 setStatus("success");
                 setMessage("Email verified successfully!");
-                // Only invalidate profile, not auth queries to prevent logout
-                queryClient.invalidateQueries({ queryKey: ["profile"] });
+                // Invalidate settings profile query to refresh user data
+                queryClient.invalidateQueries({ queryKey: ["settings", "profile"] });
             } catch (error: unknown) {
                 const msg = error instanceof Error && 'response' in error 
                     ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
@@ -44,7 +44,7 @@ function VerifyEmail() {
                 if (msg === "Email already verified") {
                     setStatus("success");
                     setMessage("Email is already verified!");
-                    queryClient.invalidateQueries({ queryKey: ["profile"] });
+                    queryClient.invalidateQueries({ queryKey: ["settings", "profile"] });
                 } else {
                     setStatus("error");
                     setMessage(msg || "Verification failed");
