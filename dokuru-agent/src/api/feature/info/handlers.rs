@@ -19,8 +19,14 @@ pub struct ContainerStats {
 #[derive(Debug, Serialize)]
 pub struct EnvironmentInfo {
     pub docker_version: String,
+    pub api_version: Option<String>,
     pub os: String,
     pub architecture: String,
+    pub hostname: Option<String>,
+    pub kernel_version: Option<String>,
+    pub docker_root_dir: Option<String>,
+    pub storage_driver: Option<String>,
+    pub logging_driver: Option<String>,
     pub containers: ContainerStats,
     pub stacks: usize,
     pub volumes: usize,
@@ -46,6 +52,12 @@ pub async fn get_info(State(state): State<AppState>) -> ApiResult<EnvironmentInf
         .operating_system
         .unwrap_or_else(|| "unknown".to_string());
     let architecture = sys.architecture.unwrap_or_else(|| "unknown".to_string());
+    let hostname = sys.name;
+    let kernel_version = sys.kernel_version;
+    let docker_root_dir = sys.docker_root_dir;
+    let storage_driver = sys.driver;
+    let logging_driver = sys.logging_driver;
+    let api_version = docker.version().await.ok().and_then(|v| v.api_version);
 
     // Containers
     let all_containers = docker
@@ -111,8 +123,14 @@ pub async fn get_info(State(state): State<AppState>) -> ApiResult<EnvironmentInf
 
     Ok(ApiSuccess::default().with_data(EnvironmentInfo {
         docker_version,
+        api_version,
         os,
         architecture,
+        hostname,
+        kernel_version,
+        docker_root_dir,
+        storage_driver,
+        logging_driver,
         containers: ContainerStats {
             total: all_containers.len(),
             running,
