@@ -409,13 +409,20 @@ export function ContainerTerminal({
   }, [agentUrl, token, containerId]);
 
   useEffect(() => {
-    if (!active) return;
-    const cleanup = connect();
-    return cleanup;
+    if (!active || termRef.current) return; // Skip if inactive or already initialized
+    connect();
   }, [active, connect]);
 
+  // Cleanup only on component unmount (route change)
+  useEffect(() => {
+    return () => {
+      wsRef.current?.close();
+      termRef.current?.dispose();
+    };
+  }, []);
+
   return (
-    <div className="rounded-lg border overflow-hidden shadow-lg">
+    <div className={`rounded-lg border overflow-hidden shadow-lg ${!active ? 'hidden' : ''}`}>
       <div className="flex items-center justify-between px-4 py-2.5 bg-[#0d1117] border-b border-white/10">
         <div className="flex items-center gap-3">
           <TerminalIcon className="h-4 w-4 text-muted-foreground" />
