@@ -91,6 +91,11 @@ export const dockerApi = {
       headers: { Authorization: `Bearer ${token}` },
     }),
 
+  inspectImage: (agentUrl: string, token: string, id: string) =>
+    axios.get(`${agentUrl}/docker/images/${id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
   removeImage: (agentUrl: string, token: string, id: string) =>
     axios.delete(`${agentUrl}/docker/images/${id}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -116,6 +121,11 @@ export const dockerApi = {
       headers: { Authorization: `Bearer ${token}` },
     }),
 
+  inspectNetwork: (agentUrl: string, token: string, id: string) =>
+    axios.get(`${agentUrl}/docker/networks/${id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
   removeNetwork: (agentUrl: string, token: string, id: string) =>
     axios.delete(`${agentUrl}/docker/networks/${id}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -124,6 +134,11 @@ export const dockerApi = {
   // Volumes
   listVolumes: (agentUrl: string, token: string) =>
     axios.get<Volume[]>(`${agentUrl}/docker/volumes`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
+  inspectVolume: (agentUrl: string, token: string, name: string) =>
+    axios.get(`${agentUrl}/docker/volumes/${name}`, {
       headers: { Authorization: `Bearer ${token}` },
     }),
 
