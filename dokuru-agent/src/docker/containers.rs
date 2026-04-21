@@ -35,7 +35,10 @@ where
 {
     Router::new()
         .route("/docker/containers", get(list_containers))
-        .route("/docker/containers/:id", get(inspect_container).delete(remove_container))
+        .route(
+            "/docker/containers/:id",
+            get(inspect_container).delete(remove_container),
+        )
         .route("/docker/containers/:id/start", post(start_container))
         .route("/docker/containers/:id/stop", post(stop_container))
         .route("/docker/containers/:id/restart", post(restart_container))
