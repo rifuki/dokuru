@@ -41,8 +41,8 @@ impl AgentRepository for AgentRepositoryImpl {
     async fn create(&self, pool: &PgPool, agent: &Agent) -> Result<Agent> {
         let agent = sqlx::query_as::<_, Agent>(
             r"
-            INSERT INTO agents (id, user_id, name, url, token_hash, access_mode, status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO agents (id, user_id, name, url, token_hash, encrypted_token, access_mode, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING *
             ",
         )
@@ -51,6 +51,7 @@ impl AgentRepository for AgentRepositoryImpl {
         .bind(&agent.name)
         .bind(&agent.url)
         .bind(&agent.token_hash)
+        .bind(&agent.encrypted_token)
         .bind(&agent.access_mode)
         .bind(&agent.status)
         .fetch_one(pool)
