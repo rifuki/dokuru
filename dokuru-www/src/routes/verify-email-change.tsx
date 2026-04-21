@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import apiClient, { isApiErrorResponse } from "@/lib/api/axios-instance";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
@@ -19,14 +19,16 @@ function VerifyEmailChange() {
     const [status, setStatus] = useState<"loading" | "success" | "error">(() => 
         !token ? "error" : "loading"
     );
-    const [message, setMessage] = useState(() => 
+    const [message, setMessage] = useState(() =>
         !token ? "Invalid verification link" : ""
     );
+    const verifyingRef = useRef(false);
 
     useEffect(() => {
-        if (!token) {
+        if (!token || verifyingRef.current) {
             return;
         }
+        verifyingRef.current = true;
 
         const verifyEmailChange = async () => {
             try {

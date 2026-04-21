@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { useProfile, settingsKeys } from "@/features/settings/hooks/use-profile";
 import { useUpdateProfile } from "@/features/settings/hooks/use-update-profile";
+import { useEmailChange } from "@/features/settings/hooks/use-email-change";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { getAvatarUrl } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
@@ -28,6 +29,7 @@ export function ProfileSettings() {
     const queryClient = useQueryClient();
     const { data: user, isLoading } = useProfile();
     const { isPending: isUpdating, mutateAsync: updateUser } = useUpdateProfile();
+    const { isPending: isChangingEmail, mutateAsync: changeEmail } = useEmailChange();
 
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [isRemoveModalOpen, setIsRemoveModalOpen] = useState(false);
@@ -132,20 +134,17 @@ export function ProfileSettings() {
         // Handle email change separately
         if (email !== user.email) {
             try {
-                await apiClient.post('/users/change-email', { new_email: email });
+                await changeEmail(email);
                 toast.success(`Verification email sent to ${email}. Check your inbox to confirm the change.`);
-                // Reset email to current
                 setEmail(user.email);
-                // Refresh user data to show pending email
                 queryClient.invalidateQueries({ queryKey: settingsKeys.profile() });
-                return;
             } catch (error: unknown) {
                 const msg = error instanceof Error && 'response' in error 
                     ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
                     : undefined;
                 toast.error(msg || "Failed to initiate email change");
-                return;
             }
+            return;
         }
 
         // Handle other updates
@@ -173,7 +172,7 @@ export function ProfileSettings() {
         email !== user.email;
 
     return (
-        <div className="space-y-10 animate-fade-in pb-10">
+        <div className="space-y-10 animate-fade-in">
             <ImageUploadModal
                 isOpen={isUploadModalOpen}
                 onClose={() => setIsUploadModalOpen(false)}
@@ -345,10 +344,10 @@ export function ProfileSettings() {
                 <div className="pt-6">
                     <Button
                         type="submit"
-                        disabled={isUpdating || !isProfileChanged}
+                        disabled={isUpdating || isChangingEmail || !isProfileChanged}
                         className="h-10 px-8 font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-md"
                     >
-                        {isUpdating ? "Saving..." : "Save Changes"}
+                        {isUpdating || isChangingEmail ? "Saving..." : "Save Changes"}
                     </Button>
                 </div>
             </form>
