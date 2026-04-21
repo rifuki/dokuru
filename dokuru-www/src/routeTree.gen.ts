@@ -32,6 +32,9 @@ import { Route as AuthenticatedAgentsIdEventsRouteImport } from './routes/_authe
 import { Route as AuthenticatedAgentsIdContainersRouteImport } from './routes/_authenticated/agents.$id.containers'
 import { Route as AuthenticatedAgentsIdAuditsRouteImport } from './routes/_authenticated/agents.$id.audits'
 import { Route as AuthenticatedAgentsIdAuditRouteImport } from './routes/_authenticated/agents.$id.audit'
+import { Route as AuthenticatedAgentsIdVolumesIndexRouteImport } from './routes/_authenticated/agents.$id.volumes.index'
+import { Route as AuthenticatedAgentsIdNetworksIndexRouteImport } from './routes/_authenticated/agents.$id.networks.index'
+import { Route as AuthenticatedAgentsIdImagesIndexRouteImport } from './routes/_authenticated/agents.$id.images.index'
 import { Route as AuthenticatedAgentsIdAuditsIndexRouteImport } from './routes/_authenticated/agents.$id.audits.index'
 import { Route as AuthenticatedAgentsIdAuditIndexRouteImport } from './routes/_authenticated/agents.$id.audit.index'
 import { Route as AuthenticatedAgentsIdVolumesVolumeNameRouteImport } from './routes/_authenticated/agents.$id.volumes.$volumeName'
@@ -163,6 +166,24 @@ const AuthenticatedAgentsIdAuditRoute =
     path: '/audit',
     getParentRoute: () => AuthenticatedAgentsIdRoute,
   } as any)
+const AuthenticatedAgentsIdVolumesIndexRoute =
+  AuthenticatedAgentsIdVolumesIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedAgentsIdVolumesRoute,
+  } as any)
+const AuthenticatedAgentsIdNetworksIndexRoute =
+  AuthenticatedAgentsIdNetworksIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedAgentsIdNetworksRoute,
+  } as any)
+const AuthenticatedAgentsIdImagesIndexRoute =
+  AuthenticatedAgentsIdImagesIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedAgentsIdImagesRoute,
+  } as any)
 const AuthenticatedAgentsIdAuditsIndexRoute =
   AuthenticatedAgentsIdAuditsIndexRouteImport.update({
     id: '/',
@@ -229,6 +250,9 @@ export interface FileRoutesByFullPath {
   '/agents/$id/volumes/$volumeName': typeof AuthenticatedAgentsIdVolumesVolumeNameRoute
   '/agents/$id/audit/': typeof AuthenticatedAgentsIdAuditIndexRoute
   '/agents/$id/audits/': typeof AuthenticatedAgentsIdAuditsIndexRoute
+  '/agents/$id/images/': typeof AuthenticatedAgentsIdImagesIndexRoute
+  '/agents/$id/networks/': typeof AuthenticatedAgentsIdNetworksIndexRoute
+  '/agents/$id/volumes/': typeof AuthenticatedAgentsIdVolumesIndexRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
@@ -244,9 +268,6 @@ export interface FileRoutesByTo {
   '/agents': typeof AuthenticatedAgentsIndexRoute
   '/agents/$id/containers': typeof AuthenticatedAgentsIdContainersRoute
   '/agents/$id/events': typeof AuthenticatedAgentsIdEventsRoute
-  '/agents/$id/images': typeof AuthenticatedAgentsIdImagesRouteWithChildren
-  '/agents/$id/networks': typeof AuthenticatedAgentsIdNetworksRouteWithChildren
-  '/agents/$id/volumes': typeof AuthenticatedAgentsIdVolumesRouteWithChildren
   '/agents/$id': typeof AuthenticatedAgentsIdIndexRoute
   '/agents/$id/audits/$auditId': typeof AuthenticatedAgentsIdAuditsAuditIdRoute
   '/agents/$id/images/$imageId': typeof AuthenticatedAgentsIdImagesImageIdRoute
@@ -254,6 +275,9 @@ export interface FileRoutesByTo {
   '/agents/$id/volumes/$volumeName': typeof AuthenticatedAgentsIdVolumesVolumeNameRoute
   '/agents/$id/audit': typeof AuthenticatedAgentsIdAuditIndexRoute
   '/agents/$id/audits': typeof AuthenticatedAgentsIdAuditsIndexRoute
+  '/agents/$id/images': typeof AuthenticatedAgentsIdImagesIndexRoute
+  '/agents/$id/networks': typeof AuthenticatedAgentsIdNetworksIndexRoute
+  '/agents/$id/volumes': typeof AuthenticatedAgentsIdVolumesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -286,6 +310,9 @@ export interface FileRoutesById {
   '/_authenticated/agents/$id/volumes/$volumeName': typeof AuthenticatedAgentsIdVolumesVolumeNameRoute
   '/_authenticated/agents/$id/audit/': typeof AuthenticatedAgentsIdAuditIndexRoute
   '/_authenticated/agents/$id/audits/': typeof AuthenticatedAgentsIdAuditsIndexRoute
+  '/_authenticated/agents/$id/images/': typeof AuthenticatedAgentsIdImagesIndexRoute
+  '/_authenticated/agents/$id/networks/': typeof AuthenticatedAgentsIdNetworksIndexRoute
+  '/_authenticated/agents/$id/volumes/': typeof AuthenticatedAgentsIdVolumesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -318,6 +345,9 @@ export interface FileRouteTypes {
     | '/agents/$id/volumes/$volumeName'
     | '/agents/$id/audit/'
     | '/agents/$id/audits/'
+    | '/agents/$id/images/'
+    | '/agents/$id/networks/'
+    | '/agents/$id/volumes/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
@@ -333,9 +363,6 @@ export interface FileRouteTypes {
     | '/agents'
     | '/agents/$id/containers'
     | '/agents/$id/events'
-    | '/agents/$id/images'
-    | '/agents/$id/networks'
-    | '/agents/$id/volumes'
     | '/agents/$id'
     | '/agents/$id/audits/$auditId'
     | '/agents/$id/images/$imageId'
@@ -343,6 +370,9 @@ export interface FileRouteTypes {
     | '/agents/$id/volumes/$volumeName'
     | '/agents/$id/audit'
     | '/agents/$id/audits'
+    | '/agents/$id/images'
+    | '/agents/$id/networks'
+    | '/agents/$id/volumes'
   id:
     | '__root__'
     | '/_authenticated'
@@ -374,6 +404,9 @@ export interface FileRouteTypes {
     | '/_authenticated/agents/$id/volumes/$volumeName'
     | '/_authenticated/agents/$id/audit/'
     | '/_authenticated/agents/$id/audits/'
+    | '/_authenticated/agents/$id/images/'
+    | '/_authenticated/agents/$id/networks/'
+    | '/_authenticated/agents/$id/volumes/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -546,6 +579,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAgentsIdAuditRouteImport
       parentRoute: typeof AuthenticatedAgentsIdRoute
     }
+    '/_authenticated/agents/$id/volumes/': {
+      id: '/_authenticated/agents/$id/volumes/'
+      path: '/'
+      fullPath: '/agents/$id/volumes/'
+      preLoaderRoute: typeof AuthenticatedAgentsIdVolumesIndexRouteImport
+      parentRoute: typeof AuthenticatedAgentsIdVolumesRoute
+    }
+    '/_authenticated/agents/$id/networks/': {
+      id: '/_authenticated/agents/$id/networks/'
+      path: '/'
+      fullPath: '/agents/$id/networks/'
+      preLoaderRoute: typeof AuthenticatedAgentsIdNetworksIndexRouteImport
+      parentRoute: typeof AuthenticatedAgentsIdNetworksRoute
+    }
+    '/_authenticated/agents/$id/images/': {
+      id: '/_authenticated/agents/$id/images/'
+      path: '/'
+      fullPath: '/agents/$id/images/'
+      preLoaderRoute: typeof AuthenticatedAgentsIdImagesIndexRouteImport
+      parentRoute: typeof AuthenticatedAgentsIdImagesRoute
+    }
     '/_authenticated/agents/$id/audits/': {
       id: '/_authenticated/agents/$id/audits/'
       path: '/'
@@ -640,12 +694,15 @@ const AuthenticatedAgentsIdAuditsRouteWithChildren =
 
 interface AuthenticatedAgentsIdImagesRouteChildren {
   AuthenticatedAgentsIdImagesImageIdRoute: typeof AuthenticatedAgentsIdImagesImageIdRoute
+  AuthenticatedAgentsIdImagesIndexRoute: typeof AuthenticatedAgentsIdImagesIndexRoute
 }
 
 const AuthenticatedAgentsIdImagesRouteChildren: AuthenticatedAgentsIdImagesRouteChildren =
   {
     AuthenticatedAgentsIdImagesImageIdRoute:
       AuthenticatedAgentsIdImagesImageIdRoute,
+    AuthenticatedAgentsIdImagesIndexRoute:
+      AuthenticatedAgentsIdImagesIndexRoute,
   }
 
 const AuthenticatedAgentsIdImagesRouteWithChildren =
@@ -655,12 +712,15 @@ const AuthenticatedAgentsIdImagesRouteWithChildren =
 
 interface AuthenticatedAgentsIdNetworksRouteChildren {
   AuthenticatedAgentsIdNetworksNetworkIdRoute: typeof AuthenticatedAgentsIdNetworksNetworkIdRoute
+  AuthenticatedAgentsIdNetworksIndexRoute: typeof AuthenticatedAgentsIdNetworksIndexRoute
 }
 
 const AuthenticatedAgentsIdNetworksRouteChildren: AuthenticatedAgentsIdNetworksRouteChildren =
   {
     AuthenticatedAgentsIdNetworksNetworkIdRoute:
       AuthenticatedAgentsIdNetworksNetworkIdRoute,
+    AuthenticatedAgentsIdNetworksIndexRoute:
+      AuthenticatedAgentsIdNetworksIndexRoute,
   }
 
 const AuthenticatedAgentsIdNetworksRouteWithChildren =
@@ -670,12 +730,15 @@ const AuthenticatedAgentsIdNetworksRouteWithChildren =
 
 interface AuthenticatedAgentsIdVolumesRouteChildren {
   AuthenticatedAgentsIdVolumesVolumeNameRoute: typeof AuthenticatedAgentsIdVolumesVolumeNameRoute
+  AuthenticatedAgentsIdVolumesIndexRoute: typeof AuthenticatedAgentsIdVolumesIndexRoute
 }
 
 const AuthenticatedAgentsIdVolumesRouteChildren: AuthenticatedAgentsIdVolumesRouteChildren =
   {
     AuthenticatedAgentsIdVolumesVolumeNameRoute:
       AuthenticatedAgentsIdVolumesVolumeNameRoute,
+    AuthenticatedAgentsIdVolumesIndexRoute:
+      AuthenticatedAgentsIdVolumesIndexRoute,
   }
 
 const AuthenticatedAgentsIdVolumesRouteWithChildren =
