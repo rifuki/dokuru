@@ -68,7 +68,7 @@ function ComposeDialog({
 }) {
   const [copied, setCopied] = useState(false);
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ["stack-compose", agentUrl, stackName],
     queryFn: async () => {
       const res = await dockerApi.getStackCompose(agentUrl, token, stackName);
@@ -76,7 +76,21 @@ function ComposeDialog({
     },
     enabled: open,
     staleTime: 30_000,
+    retry: false,
   });
+
+  // Extract error detail from the agent's JSON response if available.
+  const errorDetail = (() => {
+    if (!error) return null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const d = (error as any)?.response?.data as
+        | { error: string; detail: string }
+        | undefined;
+      if (d?.error) return d;
+    } catch { /* ignore */ }
+    return { error: String(error), detail: "" };
+  })();
 
   function handleCopy() {
     if (!data?.content) return;
@@ -140,13 +154,17 @@ function ComposeDialog({
               <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-pulse" />
               Loading compose file…
             </div>
-          ) : isError ? (
-            <div className="flex flex-col items-center justify-center h-48 text-sm text-muted-foreground gap-2">
-              <FileCode2 className="h-8 w-8 opacity-30" />
-              <p>Could not read the compose file.</p>
-              <p className="text-xs opacity-60">
-                The file may not be accessible from the agent's process.
-              </p>
+          ) : errorDetail ? (
+            <div className="flex flex-col items-start justify-center min-h-48 gap-3 p-5">
+              <div className="flex items-center gap-2 text-red-400">
+                <FileCode2 className="h-5 w-5 shrink-0" />
+                <span className="text-sm font-medium">{errorDetail.error}</span>
+              </div>
+              {errorDetail.detail && (
+                <pre className="text-xs text-zinc-400 font-mono whitespace-pre-wrap break-all bg-zinc-900/60 rounded-lg px-4 py-3 w-full">
+                  {errorDetail.detail}
+                </pre>
+              )}
             </div>
           ) : (
             <pre className="p-5 text-xs leading-relaxed font-mono text-zinc-200 whitespace-pre overflow-x-auto">
