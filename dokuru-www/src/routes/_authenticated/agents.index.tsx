@@ -87,7 +87,16 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
       >
         <div className="p-4 flex items-center gap-6">
           <div className="w-14 flex items-center justify-center shrink-0">
-            <img src="/docker.svg" alt="Docker" className="w-14 h-14" />
+            <img
+              src="/docker.svg"
+              alt="Docker"
+              className="w-14 h-14 transition-all duration-300"
+              style={
+                !loading && !isOnline
+                  ? { filter: "brightness(0) saturate(100%) invert(27%) sepia(51%) saturate(2878%) hue-rotate(346deg) brightness(104%) contrast(97%)" }
+                  : undefined
+              }
+            />
           </div>
 
           <div className="flex-1 min-w-0">
