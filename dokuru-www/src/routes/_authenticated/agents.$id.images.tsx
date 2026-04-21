@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery, useMutation, useQueryClient } from "@tantml:query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Image as ImageIcon, Trash2 } from "lucide-react";
-import { dockerApi } from "@/services/docker-api";
+import { dockerApi, type Image } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -29,7 +29,10 @@ function ImagesPage() {
 
   const { data: images, isLoading } = useQuery({
     queryKey: ["images", id],
-    queryFn: () => dockerApi.listImages(agent!.url, agent!.token, true).then((res: any) => res.data),
+    queryFn: async () => {
+      const res = await dockerApi.listImages(agent!.url, agent!.token, true);
+      return res.data;
+    },
     enabled: !!agent,
     refetchInterval: 10000,
   });
@@ -111,7 +114,7 @@ function ImagesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {images.map((image: any) => (
+              {images.map((image: Image) => (
                 <TableRow key={image.id}>
                   <TableCell className="font-medium">
                     {image.repo_tags[0] || "<none>:<none>"}

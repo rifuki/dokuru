@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Container, Play, Square, RotateCw, Trash2 } from "lucide-react";
-import { dockerApi } from "@/services/docker-api";
+import { Container as ContainerIcon, Play, Square, RotateCw, Trash2 } from "lucide-react";
+import { dockerApi, type Container } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -30,8 +30,10 @@ function ContainersPage() {
 
   const { data: containers, isLoading } = useQuery({
     queryKey: ["containers", id],
-    queryFn: () =>
-      dockerApi.listContainers(agent!.url, agent!.token, true).then((res: any) => res.data),
+    queryFn: async () => {
+      const res = await dockerApi.listContainers(agent!.url, agent!.token, true);
+      return res.data;
+    },
     enabled: !!agent,
     refetchInterval: 5000,
   });
@@ -132,7 +134,7 @@ function ContainersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {containers.map((container: any) => (
+              {containers.map((container: Container) => (
                 <TableRow key={container.id}>
                   <TableCell className="font-medium">
                     {container.names[0]?.replace("/", "") || container.id.slice(0, 12)}
