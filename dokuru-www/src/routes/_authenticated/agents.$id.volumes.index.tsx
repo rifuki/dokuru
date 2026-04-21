@@ -1,11 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
-import { HardDrive, Trash2, Scissors } from "lucide-react";
+import { HardDrive, Trash2, Scissors, ExternalLink, FolderOpen } from "lucide-react";
 import { dockerApi, type Volume } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { agentApi } from "@/lib/api/agent";
 
@@ -37,7 +40,10 @@ function VolumesPage() {
       if (!agent?.token) throw new Error("Agent token not available");
       return dockerApi.removeVolume(agent.url, agent.token, volumeName);
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["volumes", id] }); toast.success("Volume removed"); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["volumes", id] });
+      toast.success("Volume removed");
+    },
     onError: () => toast.error("Failed to remove volume"),
   });
 
@@ -46,7 +52,10 @@ function VolumesPage() {
       if (!agent?.token) throw new Error("Agent token not available");
       return dockerApi.pruneVolumes(agent.url, agent.token);
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["volumes", id] }); toast.success("Unused volumes pruned"); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["volumes", id] });
+      toast.success("Unused volumes pruned");
+    },
     onError: () => toast.error("Failed to prune volumes"),
   });
 
@@ -63,76 +72,115 @@ function VolumesPage() {
       accessorKey: "name",
       header: "Name",
       cell: ({ row }) => (
-        <Link
-          to="/agents/$id/volumes/$volumeName"
-          params={{ id, volumeName: row.original.name }}
-          className="text-primary hover:underline font-medium text-sm"
-        >
-          {row.original.name}
-        </Link>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-orange-500/10 text-orange-500 shrink-0">
+            <HardDrive className="h-4 w-4" />
+          </div>
+          <Link
+            to="/agents/$id/volumes/$volumeName"
+            params={{ id, volumeName: row.original.name }}
+            className="font-medium text-sm text-primary hover:underline truncate"
+          >
+            {row.original.name}
+          </Link>
+        </div>
       ),
     },
     {
       accessorKey: "driver",
       header: "Driver",
       cell: ({ getValue }) => (
-        <Badge variant="outline" className="font-mono text-xs">{getValue() as string}</Badge>
+        <Badge variant="outline" className="font-mono text-xs">
+          {getValue() as string}
+        </Badge>
       ),
     },
     {
       accessorKey: "mountpoint",
       header: "Mountpoint",
       cell: ({ getValue }) => (
-        <span className="font-mono text-xs text-muted-foreground truncate block max-w-xs">{getValue() as string}</span>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <FolderOpen className="h-3.5 w-3.5 shrink-0" />
+          <span className="font-mono truncate max-w-xs">{getValue() as string}</span>
+        </div>
       ),
     },
     {
       id: "actions",
       header: "",
       cell: ({ row }) => (
-        <div className="flex justify-end">
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
-            onClick={() => { if (confirm("Remove this volume?")) removeMutation.mutate(row.original.name); }}
-            disabled={removeMutation.isPending}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
+        <TooltipProvider>
+          <div className="flex justify-end gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary" asChild>
+                  <Link to="/agents/$id/volumes/$volumeName" params={{ id, volumeName: row.original.name }}>
+                    <ExternalLink className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>View details</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="sm" variant="ghost"
+                  className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => { if (confirm("Remove this volume?")) removeMutation.mutate(row.original.name); }}
+                  disabled={removeMutation.isPending}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Remove volume</TooltipContent>
+            </Tooltip>
+          </div>
+        </TooltipProvider>
       ),
       enableSorting: false,
-      size: 48,
+      size: 80,
     },
   ];
 
   return (
     <div className="max-w-7xl mx-auto w-full space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Volumes</h2>
-          <p className="text-muted-foreground text-sm mt-1">
-            {isLoading ? "Loading…" : `${volumes?.length ?? 0} volumes found`}
-          </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <h2 className="text-3xl font-bold tracking-tight">Volumes</h2>
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            {isLoading ? <span>Loading…</span> : (
+              <>
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-orange-500/70" />
+                  <span className="font-medium">{volumes?.length ?? 0} volume{(volumes?.length ?? 0) !== 1 ? "s" : ""}</span>
+                </div>
+              </>
+            )}
+          </div>
         </div>
         <Button
-          variant="outline"
-          size="sm"
-          onClick={() => { if (agent && confirm("Prune unused volumes?")) pruneMutation.mutate(); }}
+          variant="outline" size="default" className="h-10 px-4 gap-2 self-start sm:self-auto"
+          onClick={() => { if (confirm("Prune unused volumes?")) pruneMutation.mutate(); }}
           disabled={pruneMutation.isPending || !agent}
         >
-          <Scissors className="h-4 w-4 mr-2" />
+          <Scissors className="h-4 w-4" />
           Prune Unused
         </Button>
       </div>
 
       {isLoading ? (
-        <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-12 rounded-lg bg-card animate-pulse border" />)}</div>
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => <div key={i} className="h-14 rounded-lg bg-card animate-pulse border" />)}
+        </div>
       ) : !volumes || volumes.length === 0 ? (
-        <div className="rounded-xl border border-dashed bg-card/50 p-16 text-center">
-          <HardDrive className="h-12 w-12 text-muted-foreground/40 mb-4 mx-auto" />
-          <h3 className="text-lg font-semibold">No volumes found</h3>
+        <div className="rounded-xl border-2 border-dashed bg-muted/20 p-20 text-center">
+          <div className="flex justify-center mb-4">
+            <div className="h-16 w-16 rounded-full bg-muted/50 flex items-center justify-center">
+              <HardDrive className="h-8 w-8 text-muted-foreground/50" />
+            </div>
+          </div>
+          <h3 className="text-xl font-semibold mb-2">No volumes found</h3>
+          <p className="text-muted-foreground text-sm">No Docker volumes on this agent.</p>
         </div>
       ) : (
         <DataTable

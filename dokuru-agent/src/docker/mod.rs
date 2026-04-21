@@ -2,6 +2,7 @@ pub mod containers;
 pub mod events;
 pub mod images;
 pub mod networks;
+pub mod stacks;
 pub mod volumes;
 
 #[cfg(test)]

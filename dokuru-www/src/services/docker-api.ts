@@ -52,6 +52,24 @@ export interface Volume {
   mountpoint: string;
 }
 
+export interface StackContainer {
+  id: string;
+  name: string;
+  image: string;
+  state: string;
+  status: string;
+  service: string;
+}
+
+export interface Stack {
+  name: string;
+  working_dir: string | null;
+  config_file: string | null;
+  containers: StackContainer[];
+  running: number;
+  total: number;
+}
+
 export const dockerApi = {
   // Containers
   listContainers: (agentUrl: string, token: string, all = true) =>
@@ -126,6 +144,17 @@ export const dockerApi = {
 
   pruneImages: (agentUrl: string, token: string) =>
     axios.post(`${agentUrl}/docker/images/prune`, null, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
+  // Stacks
+  listStacks: (agentUrl: string, token: string) =>
+    axios.get<Stack[]>(`${agentUrl}/docker/stacks`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
+  getStack: (agentUrl: string, token: string, name: string) =>
+    axios.get<Stack>(`${agentUrl}/docker/stacks/${encodeURIComponent(name)}`, {
       headers: { Authorization: `Bearer ${token}` },
     }),
 
