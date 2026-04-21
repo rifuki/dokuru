@@ -271,32 +271,14 @@ pub fn prompt_for_config(
         return Ok((config, false));
     }
 
-    match mode {
-        SetupMode::Onboard => {
-            configure_server_section(&mut config)?;
-            configure_docker_section(&mut config)?;
-            configure_service_section(&mut config)?;
-            Ok((config, false))
-        }
-        SetupMode::Configure => {
-            note(
-                "Existing config",
-                format!(
-                    "Server:  {}:{}\nDocker:  {}\nService: {}",
-                    config.host,
-                    config.port,
-                    config.docker_socket,
-                    if config.skip_service {
-                        "disabled"
-                    } else {
-                        &config.service_name
-                    },
-                ),
-            )?;
-            run_configure_sections(&mut config)?;
-            Ok((config, false))
-        }
+    // Only used for Onboard mode now
+    if mode == SetupMode::Onboard {
+        configure_server_section(&mut config)?;
+        configure_docker_section(&mut config)?;
+        configure_service_section(&mut config)?;
     }
+
+    Ok((config, false))
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -309,6 +291,22 @@ enum ConfigSection {
 }
 
 pub fn run_configure_sections(config: &mut InstallerConfig) -> Result<()> {
+    // Show existing config
+    note(
+        "Existing config",
+        format!(
+            "Server:  {}:{}\nDocker:  {}\nService: {}",
+            config.host,
+            config.port,
+            config.docker_socket,
+            if config.skip_service {
+                "disabled"
+            } else {
+                &config.service_name
+            },
+        ),
+    )?;
+
     loop {
         let section = select("Select section to configure")
             .item(
