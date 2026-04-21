@@ -323,23 +323,39 @@ pub fn run_configure_sections(config: &mut InstallerConfig) -> Result<bool> {
                 "Access",
                 "access mode (Cloudflare/Direct)",
             )
-            .item(ConfigSection::Done, "Continue", "finish and apply")
+            .item(ConfigSection::Done, "Exit", "finish configuration")
             .interact()?;
 
         match section {
-            ConfigSection::Server => configure_server_section(config)?,
-            ConfigSection::Docker => configure_docker_section(config)?,
-            ConfigSection::Service => configure_service_section(config)?,
+            ConfigSection::Server => {
+                configure_server_section(config)?;
+                // Write config immediately
+                write_config_file_preserve_token(config)?;
+                cliclack::log::success("✓ Server config updated")?;
+                // Restart service
+                let _ = run_command("systemctl", &["restart", &config.service_name]);
+            }
+            ConfigSection::Docker => {
+                configure_docker_section(config)?;
+                // Write config immediately
+                write_config_file_preserve_token(config)?;
+                cliclack::log::success("✓ Docker config updated")?;
+                // Restart service
+                let _ = run_command("systemctl", &["restart", &config.service_name]);
+            }
+            ConfigSection::Service => {
+                configure_service_section(config)?;
+                cliclack::log::success("✓ Service config updated")?;
+            }
             ConfigSection::Access => {
                 let should_exit = configure_access_section(config)?;
                 if should_exit {
                     return Ok(true); // Signal early exit
                 }
             }
-            ConfigSection::Done => break,
+            ConfigSection::Done => return Ok(true), // Exit
         }
     }
-    Ok(false) // Normal flow
 }
 
 pub fn configure_server_section(config: &mut InstallerConfig) -> Result<()> {
@@ -714,6 +730,11 @@ pub fn write_config_file(config: &InstallerConfig, token_hash: Option<String>) -
     run_command("chgrp", &["dokuru", &config_path.display().to_string()])?;
 
     Ok(())
+}
+
+/// Write config file preserving existing token
+pub fn write_config_file_preserve_token(config: &InstallerConfig) -> Result<()> {
+    write_config_file(config, None)
 }
 
 pub fn write_systemd_unit(config: &InstallerConfig, preflight: &Preflight) -> Result<()> {
