@@ -18,7 +18,6 @@ export function RegisterForm() {
   const [username, setUsername] = useState(
     import.meta.env.DEV ? "testuser" : ""
   );
-  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState(
     import.meta.env.DEV ? "test@example.com" : ""
   );
@@ -43,11 +42,6 @@ export function RegisterForm() {
     const filtered = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '');
     setUsername(filtered);
     
-    // Auto-fill fullName from username (replace _ with space and capitalize)
-    if (!fullName) {
-      setFullName(filtered.replace(/[._-]/g, ' '));
-    }
-    
     // Clear previous timer
     if (typingTimerRef.current) {
       clearTimeout(typingTimerRef.current);
@@ -71,6 +65,9 @@ export function RegisterForm() {
     if (usernameCheck.data && !usernameCheck.data.available) {
       return;
     }
+
+    // Auto-fill fullName from username (replace _ with space)
+    const fullName = username.replace(/[._-]/g, ' ');
 
     try {
       await register.mutateAsync({ username, email, password, fullName });
