@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Image as ImageIcon, Trash2 } from "lucide-react";
 import { dockerApi, type Image } from "@/services/docker-api";
@@ -124,7 +124,13 @@ function ImagesPage() {
               {images.map((image: Image) => (
                 <TableRow key={image.id}>
                   <TableCell className="font-medium">
-                    {image.repo_tags[0] || "<none>:<none>"}
+                    <Link
+                      to="/agents/$id/images/$imageId"
+                      params={{ id, imageId: image.id }}
+                      className="text-primary hover:underline"
+                    >
+                      {image.repo_tags[0] || "<none>:<none>"}
+                    </Link>
                   </TableCell>
                   <TableCell className="text-muted-foreground font-mono text-sm">
                     {image.id.replace("sha256:", "").slice(0, 12)}

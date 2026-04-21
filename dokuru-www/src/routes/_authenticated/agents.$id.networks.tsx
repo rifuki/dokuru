@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Network as NetworkIcon, Trash2 } from "lucide-react";
 import { dockerApi, type Network } from "@/services/docker-api";
@@ -70,7 +70,15 @@ function NetworksPage() {
             <TableBody>
               {networks.map((network: Network) => (
                 <TableRow key={network.id}>
-                  <TableCell className="font-medium">{network.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link
+                      to="/agents/$id/networks/$networkId"
+                      params={{ id, networkId: network.id }}
+                      className="text-primary hover:underline"
+                    >
+                      {network.name}
+                    </Link>
+                  </TableCell>
                   <TableCell>{network.driver}</TableCell>
                   <TableCell>{network.scope}</TableCell>
                   <TableCell className="text-right">

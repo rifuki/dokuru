@@ -225,6 +225,7 @@ function ContainerLogs({
   containerId: string;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [autoScroll, setAutoScroll] = useState(false);
 
   const { data: logs, isLoading } = useQuery({
     queryKey: ["container-logs", containerId],
@@ -236,8 +237,10 @@ function ContainerLogs({
   });
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [logs]);
+    if (autoScroll) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [logs, autoScroll]);
 
   if (isLoading) return <p className="text-sm text-muted-foreground p-6">Loading…</p>;
 
@@ -245,7 +248,15 @@ function ContainerLogs({
     <div className="rounded-lg border overflow-hidden">
       <div className="bg-[#0d1117] px-4 py-2 border-b border-white/10 flex items-center justify-between">
         <span className="text-xs text-muted-foreground font-mono">Container Logs</span>
-        <Badge variant="secondary" className="text-[10px]">{logs?.length ?? 0} lines</Badge>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setAutoScroll(!autoScroll)}
+            className="text-[10px] px-2 py-1 rounded hover:bg-white/10 transition-colors"
+          >
+            {autoScroll ? "Auto-scroll: ON" : "Auto-scroll: OFF"}
+          </button>
+          <Badge variant="secondary" className="text-[10px]">{logs?.length ?? 0} lines</Badge>
+        </div>
       </div>
       <div className="h-96 overflow-y-auto bg-[#0d1117] p-4 font-mono text-xs leading-relaxed">
         {(!logs || logs.length === 0) ? (
@@ -501,7 +512,7 @@ function ContainerInspect({
             Copy
           </Button>
         </div>
-        <pre className="bg-[#0d1117] p-4 overflow-auto max-h-[600px] text-xs font-mono text-gray-300">
+        <pre className="bg-[#0d1117] p-4 overflow-auto max-h-[600px] text-xs font-mono text-gray-300 whitespace-pre-wrap break-words">
           {JSON.stringify(data, null, 2)}
         </pre>
       </div>
