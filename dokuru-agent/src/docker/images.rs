@@ -8,6 +8,7 @@ use axum::{
 use bollard::image::{
     CreateImageOptions, ListImagesOptions, PruneImagesOptions, RemoveImageOptions,
 };
+use bollard::models::HistoryResponseItem;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -43,6 +44,7 @@ where
             "/docker/images/{id}",
             get(inspect_image).delete(remove_image),
         )
+        .route("/docker/images/{id}/history", get(image_history))
         .route("/docker/images/pull", post(pull_image))
         .route("/docker/images/prune", post(prune_images))
 }
@@ -84,6 +86,17 @@ async fn inspect_image(Path(id): Path<String>) -> Result<Json<Value>, StatusCode
         .map_err(|_| StatusCode::NOT_FOUND)?;
 
     Ok(Json(serde_json::to_value(image).unwrap()))
+}
+
+async fn image_history(Path(id): Path<String>) -> Result<Json<Vec<HistoryResponseItem>>, StatusCode> {
+    let docker = get_docker_client().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let history = docker
+        .image_history(&id)
+        .await
+        .map_err(|_| StatusCode::NOT_FOUND)?;
+
+    Ok(Json(history))
 }
 
 async fn remove_image(Path(id): Path<String>) -> Result<StatusCode, StatusCode> {
