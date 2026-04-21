@@ -211,64 +211,77 @@ export function AppSidebar() {
                     onOpenChange={() => toggleAgent(agent.id)}
                   >
                     <div className={isIconMode ? "" : "px-2"}>
-                      <CollapsibleTrigger asChild>
-                        {isIconMode ? (
-                          <SidebarMenuButton tooltip={agent.name} isActive={isAgentActive}>
-                            <AgentIcon className={`size-5 ${isOnline ? "text-green-500" : "text-muted-foreground"}`} />
-                          </SidebarMenuButton>
-                        ) : (
-                          <button
-                            type="button"
-                            className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
-                              isAgentActive
-                                ? "border-miku-primary/40 text-miku-primary"
-                                : "border-sidebar-border text-sidebar-foreground hover:bg-sidebar-accent/40"
-                            }`}
-                          >
-                            <AgentIcon className={`size-5 shrink-0 ${isOnline ? "text-green-500" : "text-muted-foreground"}`} />
-                            <span className="flex-1 truncate text-left">{agent.name}</span>
-                            <ChevronDown
-                              className={`size-5 shrink-0 text-sidebar-foreground/50 transition-transform duration-200 ${
-                                openAgents[agent.id] ? "rotate-180" : ""
+                      {/* Card wrapper with border and background */}
+                      <div
+                        className={
+                          isIconMode
+                            ? ""
+                            : `rounded-lg border overflow-hidden transition-colors ${
+                                isAgentActive
+                                  ? "border-miku-primary/40"
+                                  : "border-sidebar-border"
+                              }`
+                        }
+                      >
+                        <CollapsibleTrigger asChild>
+                          {isIconMode ? (
+                            <SidebarMenuButton tooltip={agent.name} isActive={isAgentActive}>
+                              <AgentIcon className={`size-5 ${isOnline ? "text-green-500" : "text-muted-foreground"}`} />
+                            </SidebarMenuButton>
+                          ) : (
+                            <button
+                              type="button"
+                              className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-none transition-colors ${
+                                isAgentActive
+                                  ? "text-miku-primary"
+                                  : "text-sidebar-foreground hover:bg-sidebar-accent/40"
                               }`}
-                            />
-                          </button>
-                        )}
-                      </CollapsibleTrigger>
+                            >
+                              <AgentIcon className={`size-5 shrink-0 ${isOnline ? "text-green-500" : "text-muted-foreground"}`} />
+                              <span className="flex-1 truncate text-left">{agent.name}</span>
+                              <ChevronDown
+                                className={`size-5 shrink-0 text-sidebar-foreground/50 transition-transform duration-200 ${
+                                  openAgents[agent.id] ? "rotate-180" : ""
+                                }`}
+                              />
+                            </button>
+                          )}
+                        </CollapsibleTrigger>
 
-                      {!isIconMode && (
-                        <CollapsibleContent>
-                          <div className="mt-1.5 space-y-0.5">
-                            {agentNavItems(agent.id).map((item) => {
-                              const active = isActive(item.href);
-                              const disabled = item.requiresOnline && !isOnline;
-                              return disabled ? (
-                                <span
-                                  key={item.href}
-                                  title="Agent offline"
-                                  className="flex items-center gap-3 py-2 text-sm px-3 rounded-md text-sidebar-foreground/30 cursor-not-allowed select-none"
-                                >
-                                  <item.icon className="size-4 shrink-0" />
-                                  <span>{item.title}</span>
-                                </span>
-                              ) : (
-                                <Link
-                                  key={item.href}
-                                  to={item.href}
-                                  className={`flex items-center gap-3 py-1.5 text-sm transition-colors ${
-                                    active
-                                      ? "px-3 rounded-md bg-miku-primary/20 text-miku-primary font-medium"
-                                      : "px-3 rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
-                                  }`}
-                                >
-                                  <item.icon className="size-4 shrink-0" />
-                                  <span>{item.title}</span>
-                                </Link>
-                              );
-                            })}
-                          </div>
-                        </CollapsibleContent>
-                      )}
+                        {!isIconMode && (
+                          <CollapsibleContent>
+                            <div className="border-t border-sidebar-border/60 pb-1.5 pt-1">
+                              {agentNavItems(agent.id).map((item) => {
+                                const active = isActive(item.href);
+                                const disabled = item.requiresOnline && !isOnline;
+                                return disabled ? (
+                                  <span
+                                    key={item.href}
+                                    title="Agent offline"
+                                    className="flex items-center gap-3 py-2 text-sm px-3 mx-1.5 rounded-md text-sidebar-foreground/30 cursor-not-allowed select-none"
+                                  >
+                                    <item.icon className="size-4 shrink-0" />
+                                    <span>{item.title}</span>
+                                  </span>
+                                ) : (
+                                  <Link
+                                    key={item.href}
+                                    to={item.href}
+                                    className={`flex items-center gap-3 py-1.5 text-sm transition-colors ${
+                                      active
+                                        ? "px-3 mx-0 rounded-none border-l-[3px] border-miku-primary bg-miku-primary/20 text-miku-primary font-medium"
+                                        : "px-3 mx-1.5 rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                                    }`}
+                                  >
+                                    <item.icon className="size-4 shrink-0" />
+                                    <span>{item.title}</span>
+                                  </Link>
+                                );
+                              })}
+                            </div>
+                          </CollapsibleContent>
+                        )}
+                      </div>
                     </div>
                   </Collapsible>
                 </SidebarGroup>
