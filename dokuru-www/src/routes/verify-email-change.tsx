@@ -33,8 +33,8 @@ function VerifyEmailChange() {
                 await apiClient.get(`/users/verify-email-change?token=${token}`);
                 setStatus("success");
                 setMessage("Email changed successfully!");
-                // Only invalidate profile, not auth queries to prevent logout
-                queryClient.invalidateQueries({ queryKey: ["profile"] });
+                // Invalidate settings profile query to refresh user data
+                queryClient.invalidateQueries({ queryKey: ["settings", "profile"] });
             } catch (error: unknown) {
                 const msg = error instanceof Error && 'response' in error 
                     ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
