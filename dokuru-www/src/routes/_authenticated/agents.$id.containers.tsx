@@ -1,7 +1,6 @@
 import "@xterm/xterm/css/xterm.css";
 
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Play,
