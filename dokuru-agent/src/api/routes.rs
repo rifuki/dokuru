@@ -1,4 +1,4 @@
-use super::feature::{audit, containers, environments, fix, health, info, proxy, rules, trivy};
+use super::feature::{audit, containers, environments, fix, health, info, proxy, rules, trivy, ws};
 use super::infrastructure::web::middleware::agent_auth_middleware;
 use super::state::AppState;
 use crate::docker;
@@ -24,6 +24,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(docker::stacks::routes())
         .merge(docker::volumes::routes())
         .merge(docker::events::routes())
+        .merge(ws::routes())
         .layer(middleware::from_fn_with_state(
             state.clone(),
             agent_auth_middleware,

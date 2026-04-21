@@ -7,3 +7,4 @@ pub mod info;
 pub mod proxy;
 pub mod rules;
 pub mod trivy;
+pub mod ws;
