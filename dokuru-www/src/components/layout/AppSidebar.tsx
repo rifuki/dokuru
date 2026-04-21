@@ -9,14 +9,17 @@ import {
   Key,
   LayoutDashboard,
   Bot,
+  BotOff,
   Container,
   Network,
   HardDrive,
   Activity,
   ChevronDown,
-  Box,
+  Server,
   ShieldCheck,
   Layers,
+  Home,
+  Box,
 } from "lucide-react";
 
 import {
@@ -127,9 +130,9 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        {/* Platform */}
+        {/* Home */}
         <SidebarGroup>
-          <SidebarGroupLabel>Platform</SidebarGroupLabel>
+          <SidebarGroupLabel>Home</SidebarGroupLabel>
           <div className={isIconMode ? "" : "px-2"}>
             <SidebarMenu>
               <SidebarMenuItem>
@@ -140,7 +143,7 @@ export function AppSidebar() {
                   className="text-sm! py-2! data-[active=true]:bg-miku-primary/15 data-[active=true]:text-miku-primary data-[active=true]:font-medium"
                 >
                   <Link to={isAdmin ? "/admin" : "/agents"}>
-                    {isAdmin ? <LayoutDashboard className="size-4" /> : <Bot className="size-4" />}
+                    {isAdmin ? <Home className="size-4" /> : <Server className="size-4" />}
                     <span>{isAdmin ? "Overview" : "Agents"}</span>
                   </Link>
                 </SidebarMenuButton>
@@ -180,15 +183,14 @@ export function AppSidebar() {
         {/* Agents — empty state */}
         {!isAdmin && agents.length === 0 && !isIconMode && (
           <SidebarGroup>
-            <SidebarGroupLabel>Agents</SidebarGroupLabel>
+            <SidebarGroupLabel>No Agent</SidebarGroupLabel>
             <div className="px-2">
               <Link
                 to="/"
                 className="flex items-center gap-2 px-3 py-2 rounded-lg border border-sidebar-border bg-sidebar-accent/20 text-sm text-sidebar-foreground/60 hover:bg-sidebar-accent/35 transition-colors"
               >
-                <span className="font-medium text-sidebar-foreground/80">Agent:</span>
-                <span className="text-sidebar-foreground/40">/</span>
-                <span>None selected</span>
+                <BotOff className="size-4 text-muted-foreground" />
+                <span>No agent connected</span>
               </Link>
             </div>
           </SidebarGroup>
@@ -196,96 +198,83 @@ export function AppSidebar() {
 
         {/* Agents — card per agent */}
         {!isAdmin && agents.length > 0 && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Agents</SidebarGroupLabel>
-            <div className={isIconMode ? "flex flex-col gap-1.5" : "px-2 flex flex-col gap-1.5"}>
-              {agents.map((agent) => {
-                const isAgentActive = location.pathname.startsWith(`/agents/${agent.id}`);
-                const isOnline = !!agentOnlineStatus[agent.id];
-                return (
+          <>
+            {agents.map((agent) => {
+              const isAgentActive = location.pathname.startsWith(`/agents/${agent.id}`);
+              const isOnline = !!agentOnlineStatus[agent.id];
+              const AgentIcon = isOnline ? Bot : BotOff;
+              return (
+                <SidebarGroup key={agent.id}>
+                  <SidebarGroupLabel>{agent.name}</SidebarGroupLabel>
                   <Collapsible
-                    key={agent.id}
                     open={!!openAgents[agent.id]}
                     onOpenChange={() => toggleAgent(agent.id)}
                   >
-                    <div>
-                      {/* Card wrapper — only shown when sidebar is expanded */}
-                      <div
-                        className={
-                          isIconMode
-                            ? ""
-                            : `rounded-lg border overflow-hidden transition-colors ${
-                                isAgentActive
-                                  ? "border-sidebar-primary/40"
-                                  : "border-sidebar-border"
-                              }`
-                        }
-                      >
-                        <CollapsibleTrigger asChild>
-                          {isIconMode ? (
-                            <SidebarMenuButton tooltip={agent.name} isActive={isAgentActive}>
-                              <Box className="size-5 text-miku-primary" />
-                            </SidebarMenuButton>
-                          ) : (
-                            <button
-                              type="button"
-                              className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-none transition-colors ${
-                                isAgentActive
-                                  ? "text-miku-primary"
-                                  : "text-sidebar-foreground hover:bg-sidebar-accent/40"
+                    <div className={isIconMode ? "" : "px-2"}>
+                      <CollapsibleTrigger asChild>
+                        {isIconMode ? (
+                          <SidebarMenuButton tooltip={agent.name} isActive={isAgentActive}>
+                            <AgentIcon className={`size-5 ${isOnline ? "text-green-500" : "text-muted-foreground"}`} />
+                          </SidebarMenuButton>
+                        ) : (
+                          <button
+                            type="button"
+                            className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
+                              isAgentActive
+                                ? "border-miku-primary/40 text-miku-primary"
+                                : "border-sidebar-border text-sidebar-foreground hover:bg-sidebar-accent/40"
+                            }`}
+                          >
+                            <AgentIcon className={`size-5 shrink-0 ${isOnline ? "text-green-500" : "text-muted-foreground"}`} />
+                            <span className="flex-1 truncate text-left">{agent.name}</span>
+                            <ChevronDown
+                              className={`size-5 shrink-0 text-sidebar-foreground/50 transition-transform duration-200 ${
+                                openAgents[agent.id] ? "rotate-180" : ""
                               }`}
-                            >
-                              <Box className="size-5 shrink-0 text-miku-primary" />
-                              <span className="flex-1 truncate text-left">{agent.name}</span>
-                              <ChevronDown
-                                className={`size-5 shrink-0 text-sidebar-foreground/50 transition-transform duration-200 ${
-                                  openAgents[agent.id] ? "rotate-180" : ""
-                                }`}
-                              />
-                            </button>
-                          )}
-                        </CollapsibleTrigger>
-
-                        {!isIconMode && (
-                          <CollapsibleContent>
-                            <div className="border-t border-sidebar-border/60 pb-1.5 pt-1">
-                              {agentNavItems(agent.id).map((item) => {
-                                const active = isActive(item.href);
-                                const disabled = item.requiresOnline && !isOnline;
-                                return disabled ? (
-                                  <span
-                                    key={item.href}
-                                    title="Agent offline"
-                                    className="flex items-center gap-3 py-2 text-sm px-3 mx-1.5 rounded-md text-sidebar-foreground/30 cursor-not-allowed select-none"
-                                  >
-                                    <item.icon className="size-4 shrink-0" />
-                                    <span>{item.title}</span>
-                                  </span>
-                                ) : (
-                                  <Link
-                                    key={item.href}
-                                    to={item.href}
-                                    className={`flex items-center gap-3 py-1.5 text-sm transition-colors ${
-                                      active
-                                        ? "px-3 mx-0 rounded-none border-l-[3px] border-miku-primary bg-miku-primary/20 text-miku-primary font-medium"
-                                        : "px-3 mx-1.5 rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
-                                    }`}
-                                  >
-                                    <item.icon className="size-4 shrink-0" />
-                                    <span>{item.title}</span>
-                                  </Link>
-                                );
-                              })}
-                            </div>
-                          </CollapsibleContent>
+                            />
+                          </button>
                         )}
-                      </div>
+                      </CollapsibleTrigger>
+
+                      {!isIconMode && (
+                        <CollapsibleContent>
+                          <div className="mt-1.5 space-y-0.5">
+                            {agentNavItems(agent.id).map((item) => {
+                              const active = isActive(item.href);
+                              const disabled = item.requiresOnline && !isOnline;
+                              return disabled ? (
+                                <span
+                                  key={item.href}
+                                  title="Agent offline"
+                                  className="flex items-center gap-3 py-2 text-sm px-3 rounded-md text-sidebar-foreground/30 cursor-not-allowed select-none"
+                                >
+                                  <item.icon className="size-4 shrink-0" />
+                                  <span>{item.title}</span>
+                                </span>
+                              ) : (
+                                <Link
+                                  key={item.href}
+                                  to={item.href}
+                                  className={`flex items-center gap-3 py-1.5 text-sm transition-colors ${
+                                    active
+                                      ? "px-3 rounded-md bg-miku-primary/20 text-miku-primary font-medium"
+                                      : "px-3 rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                                  }`}
+                                >
+                                  <item.icon className="size-4 shrink-0" />
+                                  <span>{item.title}</span>
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        </CollapsibleContent>
+                      )}
                     </div>
                   </Collapsible>
-                );
-              })}
-            </div>
-          </SidebarGroup>
+                </SidebarGroup>
+              );
+            })}
+          </>
         )}
 
         {/* Settings */}

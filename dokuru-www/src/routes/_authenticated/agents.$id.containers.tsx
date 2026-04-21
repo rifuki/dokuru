@@ -96,8 +96,9 @@ function ContainerOverview({
 
   return (
     <div className="p-6 space-y-6 text-sm">
-      {/* Container Info */}
+      {/* Top Grid: Container Info, Ports, Networks */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Container Info */}
         <section className="space-y-3">
           <h4 className="font-semibold text-sm flex items-center gap-2">
             <div className="h-1 w-1 rounded-full bg-primary" />
@@ -114,9 +115,7 @@ function ContainerOverview({
             </div>
           </div>
         </section>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Ports */}
         {ports && Object.keys(ports).length > 0 && (
           <section className="space-y-3">
@@ -139,40 +138,40 @@ function ContainerOverview({
             </div>
           </section>
         )}
-
-        {/* Networks & IP */}
-        {networks && Object.keys(networks).length > 0 && (
-          <section className="space-y-3">
-            <h4 className="font-semibold text-sm flex items-center gap-2">
-              <div className="h-1 w-1 rounded-full bg-primary" />
-              Networks & IP Address
-            </h4>
-            <div className="space-y-2">
-              {Object.entries(networks).map(([name, net]) => {
-                const networkData = net as { IPAddress?: string; NetworkID?: string };
-                return (
-                  <div key={name} className="bg-muted/50 rounded-lg p-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Link
-                        to="/agents/$id/networks/$networkId"
-                        params={{ id: agentId, networkId: networkData.NetworkID || name }}
-                        className="bg-primary/10 text-primary border border-primary/20 rounded-md px-2 py-1 text-xs font-mono font-medium hover:bg-primary/20 transition-colors"
-                      >
-                        {name}
-                      </Link>
-                    </div>
-                    {networkData.IPAddress && (
-                      <div className="text-xs font-mono text-muted-foreground mt-2">
-                        IP: <span className="text-foreground">{networkData.IPAddress}</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
       </div>
+
+      {/* Networks */}
+      {networks && Object.keys(networks).length > 0 && (
+        <section className="space-y-3">
+          <h4 className="font-semibold text-sm flex items-center gap-2">
+            <div className="h-1 w-1 rounded-full bg-primary" />
+            Networks & IP Address
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {Object.entries(networks).map(([name, net]) => {
+              const networkData = net as { IPAddress?: string; NetworkID?: string };
+              return (
+                <div key={name} className="bg-muted/50 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Link
+                      to="/agents/$id/networks/$networkId"
+                      params={{ id: agentId, networkId: networkData.NetworkID || name }}
+                      className="bg-primary/10 text-primary border border-primary/20 rounded-md px-2 py-1 text-xs font-mono font-medium hover:bg-primary/20 transition-colors"
+                    >
+                      {name}
+                    </Link>
+                  </div>
+                  {networkData.IPAddress && (
+                    <div className="text-xs font-mono text-muted-foreground mt-2">
+                      IP: <span className="text-foreground">{networkData.IPAddress}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Mounts / Binds */}
       {(mounts?.length || binds.length) > 0 && (
