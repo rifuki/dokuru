@@ -31,12 +31,15 @@ type AgentWithInfo = {
   agent: Agent;
   info: DockerInfo | null;
   loading: boolean;
+  wsOnline: boolean | undefined; // undefined = not yet determined
 };
 
 function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick: () => void; onUpdated: (agent: Agent) => void }) {
-  const { agent, info, loading } = data;
+  const { agent, info, loading, wsOnline } = data;
   const { deleteAgent } = useAgentStore();
-  const isOnline = !loading && info !== null;
+  // Agent is considered "online" only when: WS is up AND we have fresh info.
+  // wsOnline === undefined means still connecting (treat as not-yet-known).
+  const isOnline = !loading && info !== null && wsOnline === true;
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editName, setEditName] = useState(agent.name);
@@ -132,7 +135,8 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
                 <span className="text-[12px] text-muted-foreground/70">Loading...</span>
               </div>
             ) : info ? (
-              <div className="flex items-center mt-3 text-[12px] font-medium text-muted-foreground flex-wrap divide-x divide-border">
+              // Show last-known stats even when WS is temporarily offline.
+              <div className={`flex items-center mt-3 text-[12px] font-medium flex-wrap divide-x divide-border transition-opacity ${!isOnline ? "opacity-50" : "text-muted-foreground"}`}>
                 <div className="flex items-center gap-1.5 pr-3">
                   <Container className="w-3.5 h-3.5" />
                   <span>{info.containers.total} containers</span>
@@ -321,20 +325,18 @@ function AgentsList() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agents]);
 
-  // Sync agentInfos whenever real-time online status changes.
-  // - offline → clear info immediately so the card shows DOWN
-  // - online  → re-fetch Docker info so stats are fresh
+  // Re-fetch Docker info when an agent comes back online.
+  // We do NOT clear info on offline — the card keeps showing last-known stats
+  // with reduced opacity so the UI doesn't blank out on every WS blip.
   useEffect(() => {
     for (const agent of agents) {
       const isOnline = agentOnlineStatus[agent.id];
-      if (isOnline === false) {
-        setAgentInfo(agent.id, null);
-      } else if (isOnline === true) {
+      if (isOnline === true) {
         const token = agent.token ?? getAgentToken(agent.id);
         if (!token) continue;
         agentDirectApi.getInfo(agent.url, token)
           .then((info) => setAgentInfo(agent.id, info))
-          .catch(() => setAgentInfo(agent.id, null));
+          .catch(() => { /* keep stale info; WS status badge already shows DOWN */ });
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -433,6 +435,7 @@ function AgentsList() {
                   agent,
                   info: agentInfos[agent.id]?.info ?? null,
                   loading: agentInfos[agent.id]?.loading ?? true,
+                  wsOnline: agentOnlineStatus[agent.id],
                 }}
                 onClick={() => navigate({ to: `/agents/${agent.id}` })}
                 onUpdated={handleAgentUpdated}
