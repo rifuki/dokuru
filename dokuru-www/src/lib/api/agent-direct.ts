@@ -79,7 +79,7 @@ export interface AuditResponse {
 export const agentDirectApi = {
   getInfo: async (agentUrl: string, token?: string): Promise<DockerInfo> => {
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    const response = await axios.get(`${agentUrl}/api/v1/info`, { headers, timeout: 2000 });
+    const response = await axios.get(`${agentUrl}/api/v1/info`, { headers, timeout: 10000 });
     return response.data.data;
   },
 
