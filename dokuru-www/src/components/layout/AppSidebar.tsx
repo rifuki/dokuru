@@ -87,11 +87,22 @@ export function AppSidebar() {
 
   useEffect(() => {
     if (isAdmin || agents.length === 0) return;
-    for (const agent of agents) {
-      agentDirectApi.checkHealth(agent.url)
-        .then((ok) => setAgentOnline(agent.id, ok))
-        .catch(() => setAgentOnline(agent.id, false));
-    }
+    
+    const checkAgentsHealth = () => {
+      for (const agent of agents) {
+        agentDirectApi.checkHealth(agent.url)
+          .then((ok) => setAgentOnline(agent.id, ok))
+          .catch(() => setAgentOnline(agent.id, false));
+      }
+    };
+    
+    // Initial check
+    checkAgentsHealth();
+    
+    // Periodic check every 10 seconds
+    const interval = setInterval(checkAgentsHealth, 10000);
+    
+    return () => clearInterval(interval);
   }, [agents, isAdmin, setAgentOnline]);
 
   const isActive = (href: string) => {
