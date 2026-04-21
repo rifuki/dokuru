@@ -1,5 +1,6 @@
 pub mod avatar;
 pub mod dto;
+pub mod email_change;
 pub mod entity;
 mod handler;
 pub mod repository;
@@ -10,6 +11,7 @@ mod entity_tests;
 
 pub use avatar::{delete_avatar, upload_avatar};
 pub use dto::{CreateUser, UpdateUser};
+pub use email_change::{request_email_change, verify_email_change};
 pub use entity::{User, UserProfile, UserWithProfile};
 pub use handler::{get_me, update_me};
 pub use repository::{

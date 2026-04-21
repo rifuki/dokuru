@@ -26,6 +26,11 @@ CREATE TABLE users (
     verification_token VARCHAR(255),
     verification_token_expires_at TIMESTAMPTZ,
     
+    -- Email Change (pending verification)
+    pending_email VARCHAR(255),
+    pending_email_token VARCHAR(255),
+    pending_email_token_expires_at TIMESTAMPTZ,
+    
     -- Password Reset
     reset_token VARCHAR(255),
     reset_token_expires_at TIMESTAMPTZ,

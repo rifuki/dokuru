@@ -105,8 +105,18 @@ export function ProfileSettings() {
         try {
             await apiClient.post('/auth/resend-verification', { email: user.email });
             toast.success("Verification email sent! Check your inbox.");
-        } catch {
-            toast.error("Failed to send verification email");
+        } catch (error: unknown) {
+            const msg = error instanceof Error && 'response' in error 
+                ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
+                : undefined;
+            
+            if (msg === "Email already verified") {
+                // Refresh user data
+                queryClient.invalidateQueries({ queryKey: settingsKeys.profile() });
+                toast.success("Email is already verified!");
+            } else {
+                toast.error(msg || "Failed to send verification email");
+            }
         } finally {
             setIsResendingVerification(false);
         }
