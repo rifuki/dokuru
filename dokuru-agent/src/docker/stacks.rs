@@ -1,0 +1,174 @@
+use axum::{Router, extract::Path, http::StatusCode, response::Json, routing::get};
+use bollard::container::ListContainersOptions;
+use serde::Serialize;
+use std::collections::HashMap;
+
+use super::get_docker_client;
+
+#[derive(Serialize)]
+pub struct StackContainer {
+    pub id: String,
+    pub name: String,
+    pub image: String,
+    pub state: String,
+    pub status: String,
+    pub service: String,
+}
+
+#[derive(Serialize)]
+pub struct StackResponse {
+    pub name: String,
+    pub working_dir: Option<String>,
+    pub config_file: Option<String>,
+    pub containers: Vec<StackContainer>,
+    pub running: usize,
+    pub total: usize,
+}
+
+pub fn routes<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    Router::new()
+        .route("/docker/stacks", get(list_stacks))
+        .route("/docker/stacks/{name}", get(get_stack))
+}
+
+async fn list_stacks() -> Result<Json<Vec<StackResponse>>, StatusCode> {
+    let docker = get_docker_client().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let containers = docker
+        .list_containers(Some(ListContainersOptions::<String> {
+            all: true,
+            ..Default::default()
+        }))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mut stacks: HashMap<String, StackResponse> = HashMap::new();
+
+    for c in &containers {
+        let labels = match c.labels.as_ref() {
+            Some(l) => l,
+            None => continue,
+        };
+        let project = match labels.get("com.docker.compose.project") {
+            Some(p) => p.clone(),
+            None => continue,
+        };
+
+        let state = c.state.as_deref().unwrap_or("").to_string();
+        let is_running = state == "running";
+
+        let sc = StackContainer {
+            id: c.id.as_deref().unwrap_or("").to_string(),
+            name: c
+                .names
+                .as_deref()
+                .and_then(|n| n.first())
+                .map(|n| n.trim_start_matches('/').to_string())
+                .unwrap_or_default(),
+            image: c.image.as_deref().unwrap_or("").to_string(),
+            state: state.clone(),
+            status: c.status.as_deref().unwrap_or("").to_string(),
+            service: labels
+                .get("com.docker.compose.service")
+                .cloned()
+                .unwrap_or_default(),
+        };
+
+        let entry = stacks
+            .entry(project.clone())
+            .or_insert_with(|| StackResponse {
+                name: project.clone(),
+                working_dir: labels
+                    .get("com.docker.compose.project.working_dir")
+                    .cloned(),
+                config_file: labels
+                    .get("com.docker.compose.project.config_files")
+                    .cloned(),
+                containers: Vec::new(),
+                running: 0,
+                total: 0,
+            });
+
+        if is_running {
+            entry.running += 1;
+        }
+        entry.total += 1;
+        entry.containers.push(sc);
+    }
+
+    let mut result: Vec<StackResponse> = stacks.into_values().collect();
+    result.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(Json(result))
+}
+
+async fn get_stack(Path(name): Path<String>) -> Result<Json<StackResponse>, StatusCode> {
+    let docker = get_docker_client().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let containers = docker
+        .list_containers(Some(ListContainersOptions::<String> {
+            all: true,
+            ..Default::default()
+        }))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mut stack: Option<StackResponse> = None;
+
+    for c in &containers {
+        let labels = match c.labels.as_ref() {
+            Some(l) => l,
+            None => continue,
+        };
+        let project = match labels.get("com.docker.compose.project") {
+            Some(p) => p,
+            None => continue,
+        };
+        if *project != name {
+            continue;
+        }
+
+        let state = c.state.as_deref().unwrap_or("").to_string();
+        let is_running = state == "running";
+
+        let sc = StackContainer {
+            id: c.id.as_deref().unwrap_or("").to_string(),
+            name: c
+                .names
+                .as_deref()
+                .and_then(|n| n.first())
+                .map(|n| n.trim_start_matches('/').to_string())
+                .unwrap_or_default(),
+            image: c.image.as_deref().unwrap_or("").to_string(),
+            state: state.clone(),
+            status: c.status.as_deref().unwrap_or("").to_string(),
+            service: labels
+                .get("com.docker.compose.service")
+                .cloned()
+                .unwrap_or_default(),
+        };
+
+        let entry = stack.get_or_insert_with(|| StackResponse {
+            name: name.clone(),
+            working_dir: labels
+                .get("com.docker.compose.project.working_dir")
+                .cloned(),
+            config_file: labels
+                .get("com.docker.compose.project.config_files")
+                .cloned(),
+            containers: Vec::new(),
+            running: 0,
+            total: 0,
+        });
+
+        if is_running {
+            entry.running += 1;
+        }
+        entry.total += 1;
+        entry.containers.push(sc);
+    }
+
+    stack.map(Json).ok_or(StatusCode::NOT_FOUND)
+}

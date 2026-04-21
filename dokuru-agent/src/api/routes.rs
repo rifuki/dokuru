@@ -21,6 +21,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(docker::containers::routes())
         .merge(docker::images::routes())
         .merge(docker::networks::routes())
+        .merge(docker::stacks::routes())
         .merge(docker::volumes::routes())
         .merge(docker::events::routes())
         .layer(middleware::from_fn_with_state(
