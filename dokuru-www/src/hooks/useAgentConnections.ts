@@ -85,22 +85,40 @@ export function useAgentConnections(agents: Agent[]) {
         const token  = agent.token ?? getAgentToken(agent.id) ?? "";
         const wsUrl  = agent.url.replace(/^http/, "ws") + `/ws?token=${encodeURIComponent(token)}`;
 
+        console.log(`[WS] connecting → ${agent.name} (${wsUrl.split("?")[0]})`);
         const ws = new WebSocket(wsUrl);
         wsMap.current.set(agent.id, ws);
 
         ws.onopen = () => {
+            const attempt = attemptMap.current.get(agent.id) ?? 0;
+            console.log(`[WS] connected  → ${agent.name} (attempt ${attempt})`);
             setOnlineRef.current(agent.id, true);
             attemptMap.current.set(agent.id, 0);
         };
 
-        ws.onclose = () => {
+        ws.onclose = (ev) => {
+            console.warn(
+                `[WS] closed     → ${agent.name}  code=${ev.code} wasClean=${ev.wasClean}` +
+                (ev.reason ? `  reason="${ev.reason}"` : ""),
+            );
             setOnlineRef.current(agent.id, false);
             wsMap.current.delete(agent.id);
             scheduleReconnect(agent.id);
         };
 
-        // onerror always fires before onclose; handle in onclose only.
-        ws.onerror = () => {};
+        ws.onerror = (ev) => {
+            console.error(`[WS] error      → ${agent.name}`, ev);
+        };
+
+        // Log server-side ping messages from the agent binary (sent every 10s).
+        ws.onmessage = (ev) => {
+            try {
+                const msg = JSON.parse(ev.data as string) as { type: string };
+                if (msg.type === "ping") {
+                    console.debug(`[WS] ping       ← ${agent.name}`);
+                }
+            } catch { /* ignore non-JSON */ }
+        };
     }
 
     function scheduleReconnect(agentId: string) {
@@ -110,11 +128,15 @@ export function useAgentConnections(agents: Agent[]) {
         const delay   = Math.min(RECONNECT_BASE_MS * 2 ** attempt, RECONNECT_MAX_MS);
         attemptMap.current.set(agentId, attempt + 1);
 
+        const agent = agentsRef.current.find((a) => a.id === agentId);
+        const name  = agent?.name ?? agentId;
+        console.log(`[WS] reconnect  → ${name} in ${delay}ms (attempt ${attempt + 1})`);
+
         const timer = setTimeout(() => {
             timerMap.current.delete(agentId);
             // Look up the latest agent data when reconnecting.
-            const agent = agentsRef.current.find((a) => a.id === agentId);
-            if (agent) openWs(agent);
+            const latestAgent = agentsRef.current.find((a) => a.id === agentId);
+            if (latestAgent) openWs(latestAgent);
         }, delay);
 
         timerMap.current.set(agentId, timer);
