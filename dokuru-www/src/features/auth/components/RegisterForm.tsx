@@ -18,6 +18,7 @@ export function RegisterForm() {
   const [username, setUsername] = useState(
     import.meta.env.DEV ? "testuser" : ""
   );
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState(
     import.meta.env.DEV ? "test@example.com" : ""
   );
@@ -41,6 +42,11 @@ export function RegisterForm() {
     // Only allow lowercase letters, numbers, and underscores (no spaces!)
     const filtered = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '');
     setUsername(filtered);
+    
+    // Auto-fill fullName from username (replace _ with space and capitalize)
+    if (!fullName) {
+      setFullName(filtered.replace(/[._-]/g, ' '));
+    }
     
     // Clear previous timer
     if (typingTimerRef.current) {
@@ -67,7 +73,7 @@ export function RegisterForm() {
     }
 
     try {
-      await register.mutateAsync({ username, email, password });
+      await register.mutateAsync({ username, email, password, fullName });
     } catch {
       // Error handled by hook
     }
