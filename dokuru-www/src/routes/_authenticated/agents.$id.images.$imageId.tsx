@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { type ColumnDef } from "@tanstack/react-table";
 import { dockerApi, type ImageHistoryItem } from "@/services/docker-api";
 import { agentApi } from "@/lib/api/agent";
 import { Badge } from "@/components/ui/badge";
+import { DataTable } from "@/components/ui/data-table";
 import {
   Layers,
   HardDrive,
@@ -13,7 +15,6 @@ import {
   Terminal,
   FolderOpen,
   Globe,
-  ChevronRight,
   Hash,
 } from "lucide-react";
 
@@ -28,67 +29,25 @@ function formatSize(bytes: number) {
   const mb = bytes / 1024 / 1024;
   if (mb > 1024) return `${(mb / 1024).toFixed(2)} GB`;
   if (mb >= 1) return `${mb.toFixed(2)} MB`;
-  return `${(bytes / 1024).toFixed(2)} KB`;
+  const kb = bytes / 1024;
+  if (kb >= 1) return `${kb.toFixed(1)} kB`;
+  return `${bytes} B`;
 }
 
-function cleanCmd(cmd: string) {
-  return cmd
+function cleanCmd(raw: string) {
+  return raw
     .replace(/^\/bin\/sh -c #\(nop\)\s*/i, "")
     .replace(/^\/bin\/sh -c /i, "RUN ")
-    .trim();
+    .trim() || "<missing>";
 }
 
-function LayerRow({ item, index, total }: { item: ImageHistoryItem; index: number; total: number }) {
-  const isBase = index === total - 1;
-  const cmd = cleanCmd(item.CreatedBy || "<missing>");
-  const isNop = item.CreatedBy?.includes("#(nop)");
-  const layerNum = total - index;
-
-  return (
-    <div className="flex gap-3 group">
-      {/* Timeline */}
-      <div className="flex flex-col items-center shrink-0">
-        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-          isBase
-            ? "bg-primary text-primary-foreground"
-            : item.Size > 0
-            ? "bg-primary/20 text-primary border border-primary/30"
-            : "bg-muted text-muted-foreground border border-border"
-        }`}>
-          {layerNum}
-        </div>
-        {!isBase && <div className="w-px flex-1 bg-border mt-1 min-h-[1rem]" />}
-      </div>
-
-      {/* Content */}
-      <div className={`flex-1 pb-4 min-w-0 ${isBase ? "" : ""}`}>
-        <div className="flex items-start justify-between gap-2 flex-wrap">
-          <code className={`text-xs font-mono break-all leading-relaxed ${
-            isNop ? "text-muted-foreground" : "text-foreground"
-          }`}>
-            {cmd}
-          </code>
-          {item.Size > 0 && (
-            <Badge variant="outline" className="text-xs shrink-0 font-mono">
-              +{formatSize(item.Size)}
-            </Badge>
-          )}
-        </div>
-        {item.Tags && item.Tags.length > 0 && (
-          <div className="flex gap-1 mt-1 flex-wrap">
-            {item.Tags.map((t) => (
-              <Badge key={t} variant="secondary" className="text-xs">
-                {t}
-              </Badge>
-            ))}
-          </div>
-        )}
-        <p className="text-xs text-muted-foreground/60 mt-0.5">
-          {new Date(item.Created * 1000).toLocaleString()}
-        </p>
-      </div>
-    </div>
-  );
+// ── Row type for the history table ───────────────────────────────────────────
+interface HistoryRow {
+  order: number;
+  size: number;        // raw bytes for sorting
+  sizeLabel: string;   // formatted
+  command: string;
+  tags: string[] | null;
 }
 
 function InfoRow({ label, value, mono = false }: { label: string; value?: string | null; mono?: boolean }) {
@@ -125,7 +84,7 @@ function ImageDetailPage() {
   const { data: image, isLoading: imageLoading } = useQuery({
     queryKey: ["image", id, decodedImageId],
     queryFn: async () => {
-      if (!agent?.token) throw new Error("Agent token not available");
+      if (!agent?.token) throw new Error();
       const res = await dockerApi.inspectImage(agent.url, agent.token, decodedImageId);
       return res.data as Record<string, unknown>;
     },
@@ -135,7 +94,7 @@ function ImageDetailPage() {
   const { data: history, isLoading: historyLoading } = useQuery({
     queryKey: ["image-history", id, decodedImageId],
     queryFn: async () => {
-      if (!agent?.token) throw new Error("Agent token not available");
+      if (!agent?.token) throw new Error();
       const res = await dockerApi.imageHistory(agent.url, agent.token, decodedImageId);
       return res.data as ImageHistoryItem[];
     },
@@ -144,7 +103,7 @@ function ImageDetailPage() {
 
   if (imageLoading) {
     return (
-      <div className="max-w-7xl mx-auto w-full space-y-4">
+      <div className="max-w-5xl mx-auto w-full space-y-4">
         {[1, 2, 3].map((i) => (
           <div key={i} className="rounded-xl border bg-card animate-pulse h-40" />
         ))}
@@ -154,15 +113,13 @@ function ImageDetailPage() {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cfg = (image?.Config ?? {}) as Record<string, any>;
-  const rootfs = (image?.RootFS ?? {}) as Record<string, unknown>;
   const tags = (image?.RepoTags as string[]) ?? [];
   const digests = (image?.RepoDigests as string[]) ?? [];
   const envs = (cfg.Env as string[]) ?? [];
   const cmd = Array.isArray(cfg.Cmd) ? (cfg.Cmd as string[]).join(" ") : null;
   const entrypoint = Array.isArray(cfg.Entrypoint) ? (cfg.Entrypoint as string[]).join(" ") : null;
-  const workdir = cfg.WorkingDir as string | null;
+  const workdir = (cfg.WorkingDir as string) || null;
   const exposedPorts = cfg.ExposedPorts ? Object.keys(cfg.ExposedPorts as object) : [];
-  const layers = (rootfs.Layers as string[]) ?? [];
 
   const shortId = (image?.Id as string)?.replace("sha256:", "").slice(0, 12) ?? "";
   const fullSize = image?.Size ? formatSize(image.Size as number) : "N/A";
@@ -173,12 +130,70 @@ function ImageDetailPage() {
   const dockerVersion = image?.DockerVersion as string | undefined;
   const author = image?.Author as string | undefined;
   const created = image?.Created ? new Date(image.Created as string).toLocaleString() : null;
-
   const primaryTag = tags[0] ?? decodedImageId.replace("sha256:", "").slice(0, 12);
+
+  // Build history table rows — reverse so order 0 = oldest/base layer
+  const historyRows: HistoryRow[] = history
+    ? [...history].reverse().map((item, i) => ({
+        order: i,
+        size: item.Size,
+        sizeLabel: formatSize(item.Size),
+        command: cleanCmd(item.CreatedBy || ""),
+        tags: item.Tags,
+      }))
+    : [];
+
+  const historyColumns: ColumnDef<HistoryRow>[] = [
+    {
+      accessorKey: "order",
+      header: "Order",
+      size: 72,
+      cell: ({ getValue }) => (
+        <span className="text-sm font-mono text-muted-foreground tabular-nums">
+          {getValue() as number}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "size",
+      header: "Size",
+      size: 110,
+      cell: ({ row }) => (
+        <span className={`text-sm font-mono tabular-nums ${row.original.size > 0 ? "text-foreground" : "text-muted-foreground"}`}>
+          {row.original.sizeLabel}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "command",
+      header: "Layer",
+      cell: ({ getValue, row }) => {
+        const cmd = getValue() as string;
+        const truncated = cmd.length > 80 ? cmd.slice(0, 80) + " …" : cmd;
+        return (
+          <div className="flex items-start gap-2 min-w-0">
+            <code className="text-xs font-mono break-all leading-relaxed" title={cmd}>
+              {truncated}
+            </code>
+            {row.original.tags && row.original.tags.length > 0 && (
+              <div className="flex gap-1 shrink-0 flex-wrap">
+                {row.original.tags.map((t) => (
+                  <Badge key={t} variant="secondary" className="text-xs px-1.5 py-0">{t}</Badge>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      },
+    },
+  ];
+
+  const hasConfig = cmd || entrypoint || workdir || exposedPorts.length > 0 || envs.length > 0;
 
   return (
     <div className="max-w-5xl mx-auto w-full space-y-6">
-      {/* Header */}
+
+      {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="flex items-start gap-4">
         <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 text-primary shrink-0">
           <Layers className="h-6 w-6" />
@@ -203,7 +218,7 @@ function ImageDetailPage() {
         </div>
       </div>
 
-      {/* Stats strip */}
+      {/* ── Stats strip ─────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { icon: HardDrive, label: "Size", value: fullSize },
@@ -221,8 +236,8 @@ function ImageDetailPage() {
         ))}
       </div>
 
+      {/* ── Image Details + Tags ─────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Image Details */}
         <Section title="Image Details" icon={Hash}>
           <InfoRow label="Full ID" value={(image?.Id as string) ?? null} mono />
           {virtualSize && <InfoRow label="Virtual Size" value={virtualSize} />}
@@ -231,14 +246,11 @@ function ImageDetailPage() {
           <InfoRow label="Parent ID" value={(image?.Parent as string) || null} mono />
         </Section>
 
-        {/* Tags & Digests */}
         <Section title="Tags & Digests" icon={Tag}>
           {tags.length > 0 ? (
             <div className="flex flex-wrap gap-2 mb-3">
               {tags.map((t) => (
-                <Badge key={t} variant="secondary" className="font-mono text-xs">
-                  {t}
-                </Badge>
+                <Badge key={t} variant="secondary" className="font-mono text-xs">{t}</Badge>
               ))}
             </div>
           ) : (
@@ -247,21 +259,19 @@ function ImageDetailPage() {
           {digests.length > 0 && (
             <div className="space-y-1">
               {digests.map((d) => (
-                <p key={d} className="font-mono text-xs text-muted-foreground break-all">
-                  {d}
-                </p>
+                <p key={d} className="font-mono text-xs text-muted-foreground break-all">{d}</p>
               ))}
             </div>
           )}
         </Section>
       </div>
 
-      {/* Config */}
-      {(cmd || entrypoint || workdir || exposedPorts.length > 0 || envs.length > 0) && (
-        <Section title="Container Config" icon={Terminal}>
+      {/* ── Dockerfile Config ─────────────────────────────────────────────── */}
+      {hasConfig && (
+        <Section title="Dockerfile Config" icon={Terminal}>
           <div className="space-y-0">
-            {entrypoint && <InfoRow label="Entrypoint" value={entrypoint} mono />}
-            {cmd && <InfoRow label="CMD" value={cmd} mono />}
+            <InfoRow label="Entrypoint" value={entrypoint} mono />
+            <InfoRow label="CMD" value={cmd} mono />
             {workdir && (
               <div className="flex gap-3 py-2.5 border-b border-border/50">
                 <span className="text-muted-foreground text-sm w-32 shrink-0 flex items-center gap-1">
@@ -279,9 +289,7 @@ function ImageDetailPage() {
                 </span>
                 <div className="flex flex-wrap gap-1">
                   {exposedPorts.map((p) => (
-                    <Badge key={p} variant="outline" className="font-mono text-xs">
-                      {p}
-                    </Badge>
+                    <Badge key={p} variant="outline" className="font-mono text-xs">{p}</Badge>
                   ))}
                 </div>
               </div>
@@ -291,9 +299,7 @@ function ImageDetailPage() {
                 <span className="text-muted-foreground text-sm w-32 shrink-0">Env</span>
                 <div className="space-y-0.5 min-w-0">
                   {envs.map((e) => (
-                    <p key={e} className="font-mono text-xs text-muted-foreground break-all">
-                      {e}
-                    </p>
+                    <p key={e} className="font-mono text-xs text-muted-foreground break-all">{e}</p>
                   ))}
                 </div>
               </div>
@@ -302,40 +308,34 @@ function ImageDetailPage() {
         </Section>
       )}
 
-      {/* RootFS Layers */}
-      {layers.length > 0 && (
-        <Section title={`RootFS Layers (${layers.length})`} icon={ChevronRight}>
-          <div className="space-y-1">
-            {layers.map((layer, i) => (
-              <div key={layer} className="flex items-center gap-3 py-1.5 border-b border-border/30 last:border-0">
-                <span className="text-xs text-muted-foreground w-5 text-right shrink-0">{i + 1}</span>
-                <code className="font-mono text-xs text-muted-foreground break-all">
-                  {layer.replace("sha256:", "").slice(0, 64)}
-                </code>
-              </div>
-            ))}
-          </div>
-        </Section>
-      )}
+      {/* ── Build History — DataTable ────────────────────────────────────── */}
+      <div className="rounded-xl border bg-card overflow-hidden">
+        <div className="flex items-center gap-2.5 px-5 py-4 border-b bg-muted/30">
+          <Layers className="h-4 w-4 text-primary" />
+          <h3 className="font-semibold text-sm">
+            Build History {historyRows.length > 0 ? `(${historyRows.length} layers)` : ""}
+          </h3>
+        </div>
+        <div className="p-5">
+          {historyLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-10 rounded bg-muted animate-pulse" />
+              ))}
+            </div>
+          ) : historyRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No history available.</p>
+          ) : (
+            <DataTable
+              data={historyRows}
+              columns={historyColumns}
+              rowId="order"
+              searchPlaceholder="Search layers…"
+            />
+          )}
+        </div>
+      </div>
 
-      {/* History / Dockerfile Layers */}
-      <Section title={`Build History (${history?.length ?? 0} layers)`} icon={Layers}>
-        {historyLoading ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-10 rounded bg-muted animate-pulse" />
-            ))}
-          </div>
-        ) : !history || history.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No history available.</p>
-        ) : (
-          <div className="pt-1">
-            {history.map((item, i) => (
-              <LayerRow key={`${item.Id}-${i}`} item={item} index={i} total={history.length} />
-            ))}
-          </div>
-        )}
-      </Section>
     </div>
   );
 }
