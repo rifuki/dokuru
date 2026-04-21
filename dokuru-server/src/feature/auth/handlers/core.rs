@@ -70,6 +70,39 @@ pub async fn register(
                 .with_message("Registration failed"),
         })?;
 
+    // Send verification email (async, don't block registration)
+    let state_clone = state.clone();
+    let email = req.email.clone();
+    let user_id = response.user.id;
+    let origin = headers
+        .get("origin")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("http://localhost:5173")
+        .to_string();
+
+    tokio::spawn(async move {
+        let token = uuid::Uuid::new_v4().to_string();
+        let expires_at = chrono::Utc::now() + chrono::Duration::hours(24);
+
+        if let Err(e) = state_clone
+            .user_repo
+            .set_verification_token(state_clone.db.pool(), user_id, &token, expires_at)
+            .await
+        {
+            tracing::error!("Failed to set verification token: {}", e);
+            return;
+        }
+
+        let verification_url = format!("{origin}/verify-email?token={token}");
+        if let Err(e) = state_clone
+            .email_service
+            .send_verification_email(&email, &verification_url)
+            .await
+        {
+            tracing::error!("Failed to send verification email: {}", e);
+        }
+    });
+
     Ok(ApiSuccess::default()
         .with_code(StatusCode::CREATED)
         .with_data(response)

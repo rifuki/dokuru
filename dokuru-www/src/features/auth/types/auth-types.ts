@@ -11,6 +11,7 @@ export interface User {
   role: "user" | "admin";
   created_at?: string;
   avatar_url?: string;
+  email_verified?: boolean;
 }
 
 export interface AuthResponse {

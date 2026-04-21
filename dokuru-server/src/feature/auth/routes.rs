@@ -21,7 +21,11 @@ pub fn auth_routes() -> Router<AppState> {
         .route(
             "/check-username",
             get(handlers::check_username_availability),
-        );
+        )
+        .route("/verify-email", get(handlers::verify_email))
+        .route("/resend-verification", post(handlers::resend_verification))
+        .route("/forgot-password", post(handlers::forgot_password))
+        .route("/reset-password", post(handlers::reset_password));
 
     let protected = Router::new()
         .route("/logout", post(handlers::logout))

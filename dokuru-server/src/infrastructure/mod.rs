@@ -1,4 +1,5 @@
 pub mod config;
+pub mod email;
 pub mod env;
 pub mod logging;
 pub mod persistence;

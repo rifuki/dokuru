@@ -90,6 +90,41 @@ pub trait UserRepository: Send + Sync {
         pool: &PgPool,
         id: Uuid,
     ) -> Result<Option<UserWithProfile>, sqlx::Error>;
+
+    /// Set verification token
+    async fn set_verification_token(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        token: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<bool, sqlx::Error>;
+
+    /// Verify email with token
+    async fn verify_email_with_token(
+        &self,
+        pool: &PgPool,
+        token: &str,
+    ) -> Result<bool, sqlx::Error>;
+
+    /// Set password reset token
+    async fn set_reset_token(
+        &self,
+        pool: &PgPool,
+        email: &str,
+        token: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<bool, sqlx::Error>;
+
+    /// Find user by reset token
+    async fn find_by_reset_token(
+        &self,
+        pool: &PgPool,
+        token: &str,
+    ) -> Result<Option<User>, sqlx::Error>;
+
+    /// Clear reset token
+    async fn clear_reset_token(&self, pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error>;
 }
 
 #[derive(Debug, Clone, Default)]
@@ -298,6 +333,81 @@ impl UserRepository for UserRepositoryImpl {
         .fetch_optional(pool)
         .await?;
         Ok(row)
+    }
+
+    async fn set_verification_token(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        token: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query(
+            "UPDATE users SET verification_token = $2, verification_token_expires_at = $3, updated_at = NOW() WHERE id = $1"
+        )
+        .bind(id)
+        .bind(token)
+        .bind(expires_at)
+        .execute(pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn verify_email_with_token(
+        &self,
+        pool: &PgPool,
+        token: &str,
+    ) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query(
+            "UPDATE users SET email_verified = true, verification_token = NULL, verification_token_expires_at = NULL, updated_at = NOW() 
+             WHERE verification_token = $1 AND verification_token_expires_at > NOW()"
+        )
+        .bind(token)
+        .execute(pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn set_reset_token(
+        &self,
+        pool: &PgPool,
+        email: &str,
+        token: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query(
+            "UPDATE users SET reset_token = $2, reset_token_expires_at = $3, updated_at = NOW() WHERE email = $1"
+        )
+        .bind(email)
+        .bind(token)
+        .bind(expires_at)
+        .execute(pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn find_by_reset_token(
+        &self,
+        pool: &PgPool,
+        token: &str,
+    ) -> Result<Option<User>, sqlx::Error> {
+        let user = sqlx::query_as::<_, User>(
+            "SELECT * FROM users WHERE reset_token = $1 AND reset_token_expires_at > NOW()",
+        )
+        .bind(token)
+        .fetch_optional(pool)
+        .await?;
+        Ok(user)
+    }
+
+    async fn clear_reset_token(&self, pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query(
+            "UPDATE users SET reset_token = NULL, reset_token_expires_at = NULL, updated_at = NOW() WHERE id = $1"
+        )
+        .bind(id)
+        .execute(pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
     }
 }
 
