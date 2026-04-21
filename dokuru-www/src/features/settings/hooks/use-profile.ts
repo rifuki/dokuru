@@ -14,6 +14,7 @@ export function useProfile(options?: { enabled?: boolean }) {
     queryKey: settingsKeys.profile(),
     queryFn: userService.getMe,
     enabled: isAuth && (options?.enabled ?? true),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 1000, // 30 seconds instead of 5 minutes
+    refetchOnWindowFocus: true, // Refetch when user returns to tab
   });
 }
