@@ -56,7 +56,7 @@ function VolumesPage() {
           <h2 className="text-2xl font-bold">Volumes</h2>
           <p className="text-muted-foreground text-sm">{volumes?.length || 0} volumes found</p>
         </div>
-        <Button variant="outline" onClick={() => { if (confirm("Prune unused volumes?")) pruneMutation.mutate(); }} disabled={pruneMutation.isPending}>
+        <Button variant="outline" onClick={() => { if (agent && confirm("Prune unused volumes?")) pruneMutation.mutate(); }} disabled={pruneMutation.isPending || !agent}>
           <Trash2 className="h-4 w-4 mr-2" />
           Prune Unused
         </Button>

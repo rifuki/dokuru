@@ -1,4 +1,4 @@
-import { apiClient } from "@/lib/api/axios-instance";
+import { apiClient } from "@/lib/api";
 
 export interface Container {
   id: string;
