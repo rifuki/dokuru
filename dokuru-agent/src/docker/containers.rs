@@ -16,10 +16,10 @@ use super::get_docker_client;
 
 #[derive(Deserialize)]
 pub struct ListQuery {
-    all: Option<bool>,
+    pub all: Option<bool>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct ContainerResponse {
     pub id: String,
     pub names: Vec<String>,

@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::audit::*;
 
     #[test]
     fn test_severity_serialization() {
