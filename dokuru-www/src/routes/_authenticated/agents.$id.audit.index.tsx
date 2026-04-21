@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAgentStore } from "@/stores/use-agent-store";
+import { useAuditStore } from "@/stores/use-audit-store";
 import { useEffect, useRef, useState } from "react";
 import { agentApi } from "@/lib/api/agent";
 import { agentDirectApi, type AuditResponse, type AuditResult, type FixOutcome } from "@/lib/api/agent-direct";
@@ -180,15 +181,17 @@ function FixProgress({ steps, currentStep }: { steps: string[]; currentStep: num
 
 // ── Rule Card ────────────────────────────────────────────────────────────────
 
-function RuleCard({ result, agentUrl, token }: {
+function RuleCard({ result, agentId, agentUrl, token }: {
     result: AuditResult;
+    agentId: string;
     agentUrl: string;
     token?: string;
 }) {
     const queryClient = useQueryClient();
+    const { fixingRules, fixOutcomes, setFixing, setFixOutcome } = useAuditStore();
+    const fixing = fixingRules[agentId]?.[result.rule.id] ?? false;
+    const fixOutcome = fixOutcomes[agentId]?.[result.rule.id] ?? null;
     const [open, setOpen] = useState(false);
-    const [fixing, setFixing] = useState(false);
-    const [fixOutcome, setFixOutcome] = useState<FixOutcome | null>(null);
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [fixStepIndex, setFixStepIndex] = useState(0);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -215,8 +218,8 @@ function RuleCard({ result, agentUrl, token }: {
 
     const executeFix = async () => {
         setConfirmOpen(false);
-        setFixing(true);
-        setFixOutcome(null);
+        setFixing(agentId, rule.id, true);
+        setFixOutcome(agentId, rule.id, null);
         setFixStepIndex(0);
         setOpen(true);
 
@@ -231,13 +234,11 @@ function RuleCard({ result, agentUrl, token }: {
         try {
             const outcome = await agentDirectApi.applyFix(agentUrl, rule.id, token);
             if (intervalRef.current) clearInterval(intervalRef.current);
-            setFixOutcome(outcome);
+            setFixOutcome(agentId, rule.id, outcome);
             if (outcome.status === "Applied") {
                 toast.success(`Fix applied for rule ${rule.id}`);
-                // Refetch audit data to show updated status
                 queryClient.invalidateQueries({ queryKey: ["agent-audit"] });
-                // Clear fix outcome after delay to allow refetch
-                setTimeout(() => setFixOutcome(null), 3000);
+                setTimeout(() => setFixOutcome(agentId, rule.id, null), 3000);
             } else if (outcome.status === "Blocked") {
                 toast.error(`Rule ${rule.id}: ${outcome.message.slice(0, 80)}`);
             }
@@ -245,7 +246,7 @@ function RuleCard({ result, agentUrl, token }: {
             if (intervalRef.current) clearInterval(intervalRef.current);
             toast.error("Failed to connect to agent");
         } finally {
-            setFixing(false);
+            setFixing(agentId, rule.id, false);
         }
     };
 
@@ -383,7 +384,7 @@ function RuleCard({ result, agentUrl, token }: {
                     {/* Fix outcome panel */}
                     {!fixing && fixOutcome && (
                         <div className="pt-3">
-                            <FixPanel outcome={fixOutcome} onDismiss={() => setFixOutcome(null)} />
+                            <FixPanel outcome={fixOutcome} onDismiss={() => setFixOutcome(agentId, rule.id, null)} />
                         </div>
                     )}
 
@@ -522,52 +523,52 @@ function AuditPage() {
     const { id } = Route.useParams();
     const navigate = useNavigate();
     const { agentOnlineStatus } = useAgentStore();
+    const { runningAudits, auditHistories, setRunning, setAuditHistory } = useAuditStore();
     const isOnline = !!agentOnlineStatus[id];
     const [agent, setAgent] = useState<Agent | null>(null);
     const [token, setToken] = useState<string | undefined>();
     const [auditData] = useState<AuditResponse | null>(null);
-    const [auditHistory, setAuditHistory] = useState<AuditResponse[]>([]);
-    const [isRunning, setIsRunning] = useState(false);
+    const isRunning = runningAudits[id] ?? false;
+    const auditHistory = auditHistories[id] ?? [];
     const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
     const [sectionFilter, setSectionFilter] = useState<string>("all");
-
 
     useEffect(() => {
         agentApi.getById(id).then(a => {
             setAgent(a);
             setToken(getAgentToken(a.id) ?? undefined);
-            // Load audit history
-            agentApi.listAudits(a.id).then(setAuditHistory).catch(() => {});
+            // Fetch history hanya jika belum ada di cache
+            if (!auditHistories[id]) {
+                agentApi.listAudits(a.id).then(h => setAuditHistory(id, h)).catch(() => {});
+            }
         }).catch(() => toast.error("Failed to load agent"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]);
 
     const handleRunAudit = async () => {
         if (!agent) return;
         if (!token) return toast.error("Agent token not found");
-        setIsRunning(true);
+        setRunning(id, true);
         try {
             const data = await agentDirectApi.runAudit(agent.url, token);
-            
-            // Save to server
             try {
                 const savedAudit = await agentApi.saveAudit(agent.id, data);
                 toast.success(`Audit complete — ${savedAudit.summary.score}/100`);
-                
-                // Navigate to audit detail page
+                // Invalidate history cache supaya fresh saat kembali
+                setAuditHistory(id, []);
                 if (savedAudit.id) {
-                    navigate({ 
+                    navigate({
                         to: "/agents/$id/audits/$auditId",
-                        params: { id: agent.id, auditId: savedAudit.id } 
+                        params: { id: agent.id, auditId: savedAudit.id }
                     });
                 }
-            } catch (err) {
-                console.error("Failed to save audit to server:", err);
+            } catch {
                 toast.error("Failed to save audit");
             }
         } catch {
             toast.error("Audit failed");
         } finally {
-            setIsRunning(false);
+            setRunning(id, false);
         }
     };
 
@@ -795,6 +796,7 @@ function AuditPage() {
                                                     <RuleCard
                                                         key={r.rule.id}
                                                         result={r}
+                                                        agentId={id}
                                                         agentUrl={agent?.url ?? ""}
                                                         token={token}
                                                     />
