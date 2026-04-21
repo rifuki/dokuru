@@ -82,7 +82,7 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[540px]">
+            <DialogContent className="sm:max-w-[480px]">
                 <DialogHeader>
                     <DialogTitle className="text-xl">Add Docker Agent</DialogTitle>
                     <DialogDescription>
@@ -90,7 +90,7 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                     </DialogDescription>
                 </DialogHeader>
 
-                <form onSubmit={handleSubmit} className="space-y-5 pt-2">
+                <form onSubmit={handleSubmit} className="space-y-4 pt-1">
                     {/* Name Input with Random Generator */}
                     <div className="space-y-2">
                         <Label htmlFor="name" className="text-sm font-medium">Agent Name</Label>
@@ -119,68 +119,68 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                     </div>
 
                     {/* Access Mode - Radio Cards */}
-                    <div className="space-y-3">
+                    <div className="space-y-2.5">
                         <Label className="text-sm font-medium">Access Mode</Label>
-                        <RadioGroup value={accessMode} onValueChange={setAccessMode} className="grid gap-3">
+                        <RadioGroup value={accessMode} onValueChange={setAccessMode} className="grid gap-2.5">
                             <label
                                 htmlFor="cloudflare"
-                                className={`relative flex items-start gap-3 rounded-lg border-2 p-4 cursor-pointer transition-all ${
+                                className={`relative flex items-start gap-3 rounded-lg border-2 p-3 cursor-pointer transition-all ${
                                     accessMode === "cloudflare"
                                         ? "border-primary bg-primary/5"
                                         : "border-border hover:border-primary/50 hover:bg-muted/50"
                                 }`}
                             >
                                 <RadioGroupItem value="cloudflare" id="cloudflare" className="mt-0.5" />
-                                <div className="flex-1 space-y-1">
+                                <div className="flex-1 space-y-0.5">
                                     <div className="flex items-center gap-2">
-                                        <Cloud className="h-4 w-4 text-primary" />
+                                        <Cloud className="h-3.5 w-3.5 text-primary" />
                                         <span className="font-semibold text-sm">Cloudflare Tunnel</span>
-                                        <span className="ml-auto text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                                        <span className="ml-auto text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
                                             Recommended
                                         </span>
                                     </div>
-                                    <p className="text-xs text-muted-foreground">
-                                        Auto HTTPS, no domain needed. Perfect for quick setup.
+                                    <p className="text-[11px] text-muted-foreground leading-tight">
+                                        Auto HTTPS, no domain needed
                                     </p>
                                 </div>
                             </label>
 
                             <label
                                 htmlFor="direct"
-                                className={`relative flex items-start gap-3 rounded-lg border-2 p-4 cursor-pointer transition-all ${
+                                className={`relative flex items-start gap-3 rounded-lg border-2 p-3 cursor-pointer transition-all ${
                                     accessMode === "direct"
                                         ? "border-primary bg-primary/5"
                                         : "border-border hover:border-primary/50 hover:bg-muted/50"
                                 }`}
                             >
                                 <RadioGroupItem value="direct" id="direct" className="mt-0.5" />
-                                <div className="flex-1 space-y-1">
+                                <div className="flex-1 space-y-0.5">
                                     <div className="flex items-center gap-2">
-                                        <Globe className="h-4 w-4" />
+                                        <Globe className="h-3.5 w-3.5" />
                                         <span className="font-semibold text-sm">Direct HTTP</span>
                                     </div>
-                                    <p className="text-xs text-muted-foreground">
-                                        Use your own reverse proxy (Nginx, Caddy, Traefik).
+                                    <p className="text-[11px] text-muted-foreground leading-tight">
+                                        Use your own reverse proxy
                                     </p>
                                 </div>
                             </label>
 
                             <label
                                 htmlFor="relay"
-                                className={`relative flex items-start gap-3 rounded-lg border-2 p-4 cursor-pointer transition-all ${
+                                className={`relative flex items-start gap-3 rounded-lg border-2 p-3 cursor-pointer transition-all ${
                                     accessMode === "relay"
                                         ? "border-primary bg-primary/5"
                                         : "border-border hover:border-primary/50 hover:bg-muted/50"
                                 }`}
                             >
                                 <RadioGroupItem value="relay" id="relay" className="mt-0.5" />
-                                <div className="flex-1 space-y-1">
+                                <div className="flex-1 space-y-0.5">
                                     <div className="flex items-center gap-2">
-                                        <Link2 className="h-4 w-4" />
+                                        <Link2 className="h-3.5 w-3.5" />
                                         <span className="font-semibold text-sm">Relay Mode</span>
                                     </div>
-                                    <p className="text-xs text-muted-foreground">
-                                        No public URL needed. Works behind firewall/NAT.
+                                    <p className="text-[11px] text-muted-foreground leading-tight">
+                                        No public URL needed
                                     </p>
                                 </div>
                             </label>
