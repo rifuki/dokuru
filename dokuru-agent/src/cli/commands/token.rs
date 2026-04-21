@@ -66,7 +66,7 @@ pub fn run_token_rotate(shared: &SharedArgs) -> Result<()> {
     note(
         "New Token",
         format!(
-            "{new_token}\n\n⚠️  Update this token in your Dokuru dashboard.\n   The old token is now invalid."
+            "{new_token}\n\n→ Update this token in your Dokuru dashboard.\n   The old token is now invalid."
         ),
     )?;
 
