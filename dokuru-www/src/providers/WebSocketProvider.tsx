@@ -26,20 +26,21 @@ export function WebSocketProvider({ children, url, enabled = true }: WebSocketPr
         {
             shouldReconnect: () => enabled,
             reconnectAttempts: 5,
-            reconnectInterval: (attemptNumber) => Math.min(1000 * Math.pow(2, attemptNumber), 30000),
+            reconnectInterval: (attemptNumber: number) => Math.min(1000 * Math.pow(2, attemptNumber), 30000),
             share: false,
         },
         enabled
     );
 
     // Map ReadyState to our ConnectionStatus
-    const status: ConnectionStatus = {
+    const statusMap: Record<ReadyState, ConnectionStatus> = {
         [ReadyState.CONNECTING]: "connecting",
         [ReadyState.OPEN]: "connected",
         [ReadyState.CLOSING]: "disconnected",
         [ReadyState.CLOSED]: "disconnected",
         [ReadyState.UNINSTANTIATED]: "disconnected",
-    }[readyState] as ConnectionStatus;
+    };
+    const status = statusMap[readyState];
 
     const send = (data: unknown) => {
         sendJsonMessage(data);
@@ -61,4 +62,4 @@ export function useWebSocketContext() {
 }
 
 // Alias for backward compatibility
-export const useWebSocket = useWebSocketContext;
+export { useWebSocketContext as useWebSocket };
