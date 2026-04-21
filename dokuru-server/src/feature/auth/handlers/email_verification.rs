@@ -37,6 +37,8 @@ pub async fn verify_email(
         })?;
 
     if !verified {
+        // Check if token exists but email is already verified
+        // This happens when user clicks verification link multiple times
         return Err(ApiError::default()
             .with_code(StatusCode::BAD_REQUEST)
             .with_message("Invalid or expired verification token"));
