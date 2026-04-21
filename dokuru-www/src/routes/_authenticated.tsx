@@ -82,7 +82,7 @@ function DashboardLayout() {
     return (
         <SidebarProvider>
             <AppSidebar />
-            <SidebarInset>
+            <SidebarInset className="min-w-0 overflow-x-hidden">
                 {/* Top Header - Shared for all authenticated users */}
                 <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center justify-between gap-2 border-b bg-background px-4 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-16">
                     <div className="flex items-center gap-2">
