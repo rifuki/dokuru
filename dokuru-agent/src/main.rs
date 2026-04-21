@@ -32,6 +32,11 @@ enum Commands {
         #[command(subcommand)]
         action: TokenAction,
     },
+    /// View or manage configuration
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
     /// Restart Dokuru service (and tunnel if running)
     Restart {
         /// Only restart the main dokuru service, skip the tunnel
@@ -52,6 +57,12 @@ enum TokenAction {
     Show(cli::SharedArgs),
     /// Generate and apply a new token
     Rotate(cli::SharedArgs),
+}
+
+#[derive(Subcommand)]
+enum ConfigAction {
+    /// Display current configuration
+    Show(cli::SharedArgs),
 }
 
 #[tokio::main]
@@ -76,6 +87,9 @@ async fn main() -> eyre::Result<()> {
         Commands::Token { action } => match action {
             TokenAction::Show(shared) => cli::run_token_show(shared)?,
             TokenAction::Rotate(shared) => cli::run_token_rotate(shared)?,
+        },
+        Commands::Config { action } => match action {
+            ConfigAction::Show(shared) => cli::run_config_show(shared)?,
         },
         Commands::Restart { service_only } => cli::run_restart(*service_only)?,
         Commands::Update(args) => cli::run_update(args)?,

@@ -1,3 +1,4 @@
+mod config;
 mod configure;
 mod doctor;
 mod onboard;
@@ -8,6 +9,7 @@ mod token;
 mod uninstall;
 mod update;
 
+pub use config::run_config_show;
 pub use configure::run_configure;
 pub use doctor::run_doctor;
 pub use onboard::run;
