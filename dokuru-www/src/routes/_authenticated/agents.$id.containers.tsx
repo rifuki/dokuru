@@ -31,10 +31,11 @@ function ContainersPage() {
   const { data: containers, isLoading } = useQuery({
     queryKey: ["containers", id],
     queryFn: async () => {
+      if (!agent?.token) throw new Error("Agent token not available");
       const res = await dockerApi.listContainers(agent!.url, agent!.token, true);
       return res.data;
     },
-    enabled: !!agent,
+    enabled: !!agent?.token,
     refetchInterval: 5000,
   });
 

@@ -23,10 +23,11 @@ function VolumesPage() {
   const { data: volumes, isLoading } = useQuery({
     queryKey: ["volumes", id],
     queryFn: async () => {
-      const res = await dockerApi.listVolumes(agent!.url, agent!.token);
+      if (!agent?.token) throw new Error("Agent token not available");
+      const res = await dockerApi.listVolumes(agent.url, agent.token);
       return res.data;
     },
-    enabled: !!agent,
+    enabled: !!agent?.token,
   });
 
   const removeMutation = useMutation({

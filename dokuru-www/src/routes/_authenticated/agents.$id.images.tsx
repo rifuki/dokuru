@@ -30,10 +30,11 @@ function ImagesPage() {
   const { data: images, isLoading } = useQuery({
     queryKey: ["images", id],
     queryFn: async () => {
+      if (!agent?.token) throw new Error("Agent token not available");
       const res = await dockerApi.listImages(agent!.url, agent!.token, true);
       return res.data;
     },
-    enabled: !!agent,
+    enabled: !!agent?.token,
     refetchInterval: 10000,
   });
 
