@@ -31,7 +31,7 @@ function NetworksPage() {
 
   const removeMutation = useMutation({
     mutationFn: (networkId: string) => {
-      if (!agent) throw new Error("Agent not loaded");
+      if (!agent?.token) throw new Error("Agent token not available");
       return dockerApi.removeNetwork(agent.url, agent.token, networkId);
     },
     onSuccess: () => {

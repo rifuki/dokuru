@@ -31,7 +31,7 @@ function VolumesPage() {
 
   const removeMutation = useMutation({
     mutationFn: (volumeName: string) => {
-      if (!agent) throw new Error("Agent not loaded");
+      if (!agent?.token) throw new Error("Agent token not available");
       return dockerApi.removeVolume(agent.url, agent.token, volumeName);
     },
     onSuccess: () => {
@@ -43,7 +43,7 @@ function VolumesPage() {
 
   const pruneMutation = useMutation({
     mutationFn: () => {
-      if (!agent) throw new Error("Agent not loaded");
+      if (!agent?.token) throw new Error("Agent token not available");
       return dockerApi.pruneVolumes(agent.url, agent.token);
     },
     onSuccess: () => {

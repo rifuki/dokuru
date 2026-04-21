@@ -40,7 +40,7 @@ function ContainersPage() {
 
   const startMutation = useMutation({
     mutationFn: (containerId: string) => {
-      if (!agent) throw new Error("Agent not loaded");
+      if (!agent?.token) throw new Error("Agent token not available");
       return dockerApi.startContainer(agent.url, agent.token, containerId);
     },
     onSuccess: () => {
@@ -52,7 +52,7 @@ function ContainersPage() {
 
   const stopMutation = useMutation({
     mutationFn: (containerId: string) => {
-      if (!agent) throw new Error("Agent not loaded");
+      if (!agent?.token) throw new Error("Agent token not available");
       return dockerApi.stopContainer(agent.url, agent.token, containerId);
     },
     onSuccess: () => {
@@ -64,7 +64,7 @@ function ContainersPage() {
 
   const restartMutation = useMutation({
     mutationFn: (containerId: string) => {
-      if (!agent) throw new Error("Agent not loaded");
+      if (!agent?.token) throw new Error("Agent token not available");
       return dockerApi.restartContainer(agent.url, agent.token, containerId);
     },
     onSuccess: () => {
@@ -76,7 +76,7 @@ function ContainersPage() {
 
   const removeMutation = useMutation({
     mutationFn: (containerId: string) => {
-      if (!agent) throw new Error("Agent not loaded");
+      if (!agent?.token) throw new Error("Agent token not available");
       return dockerApi.removeContainer(agent.url, agent.token, containerId);
     },
     onSuccess: () => {
