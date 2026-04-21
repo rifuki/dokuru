@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from "react";
-import { toast } from "sonner";
+import { createContext, useContext, type ReactNode } from "react";
+import useWebSocket, { ReadyState } from "react-use-websocket";
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
 
@@ -19,97 +19,31 @@ interface WebSocketProviderProps {
 }
 
 export function WebSocketProvider({ children, url, enabled = true }: WebSocketProviderProps) {
-    const [status, setStatus] = useState<ConnectionStatus>("disconnected");
-    const [lastMessage, setLastMessage] = useState<MessageEvent | null>(null);
-    const wsRef = useRef<WebSocket | null>(null);
-    const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-    const reconnectAttemptsRef = useRef(0);
-    const maxReconnectAttempts = 5;
-    const connectRef = useRef<(() => void) | null>(null);
-    const isCleaningUpRef = useRef(false);
+    const wsUrl = url.replace(/^http/, "ws");
+    
+    const { sendJsonMessage, lastMessage, readyState } = useWebSocket(
+        wsUrl,
+        {
+            shouldReconnect: () => enabled,
+            reconnectAttempts: 5,
+            reconnectInterval: (attemptNumber) => Math.min(1000 * Math.pow(2, attemptNumber), 30000),
+            share: false,
+        },
+        enabled
+    );
 
-    const send = useCallback((data: unknown) => {
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify(data));
-        }
-    }, []);
+    // Map ReadyState to our ConnectionStatus
+    const status: ConnectionStatus = {
+        [ReadyState.CONNECTING]: "connecting",
+        [ReadyState.OPEN]: "connected",
+        [ReadyState.CLOSING]: "disconnected",
+        [ReadyState.CLOSED]: "disconnected",
+        [ReadyState.UNINSTANTIATED]: "disconnected",
+    }[readyState] as ConnectionStatus;
 
-    useEffect(() => {
-        isCleaningUpRef.current = false;
-
-        const connect = () => {
-            if (!enabled || wsRef.current?.readyState === WebSocket.OPEN || isCleaningUpRef.current) return;
-
-            setStatus("connecting");
-
-            try {
-                const wsUrl = url.replace(/^http/, "ws");
-                wsRef.current = new WebSocket(wsUrl);
-
-                wsRef.current.onopen = () => {
-                    if (isCleaningUpRef.current) return;
-                    setStatus("connected");
-                    reconnectAttemptsRef.current = 0;
-                };
-
-                wsRef.current.onmessage = (event) => {
-                    if (isCleaningUpRef.current) return;
-                    setLastMessage(event);
-                };
-
-                wsRef.current.onerror = () => {
-                    if (isCleaningUpRef.current) return;
-                    setStatus("error");
-                };
-
-                wsRef.current.onclose = () => {
-                    if (isCleaningUpRef.current) return;
-                    setStatus("disconnected");
-
-                    if (enabled && reconnectAttemptsRef.current < maxReconnectAttempts) {
-                        const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
-                        reconnectAttemptsRef.current++;
-                        
-                        reconnectTimeoutRef.current = setTimeout(() => {
-                            if (!isCleaningUpRef.current) {
-                                connectRef.current?.();
-                            }
-                        }, delay);
-                    } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-                        toast.error("WebSocket connection failed", {
-                            description: "Falling back to HTTP polling"
-                        });
-                    }
-                };
-            } catch {
-                if (!isCleaningUpRef.current) {
-                    setStatus("error");
-                }
-            }
-        };
-
-        connectRef.current = connect;
-
-        if (enabled) {
-            connect();
-        }
-
-        return () => {
-            isCleaningUpRef.current = true;
-            if (reconnectTimeoutRef.current) {
-                clearTimeout(reconnectTimeoutRef.current);
-            }
-            if (wsRef.current) {
-                // Remove event listeners before closing to prevent error logs
-                wsRef.current.onopen = null;
-                wsRef.current.onmessage = null;
-                wsRef.current.onerror = null;
-                wsRef.current.onclose = null;
-                wsRef.current.close();
-                wsRef.current = null;
-            }
-        };
-    }, [url, enabled]);
+    const send = (data: unknown) => {
+        sendJsonMessage(data);
+    };
 
     return (
         <WebSocketContext.Provider value={{ status, send, lastMessage }}>
@@ -118,10 +52,13 @@ export function WebSocketProvider({ children, url, enabled = true }: WebSocketPr
     );
 }
 
-export function useWebSocket() {
+export function useWebSocketContext() {
     const context = useContext(WebSocketContext);
     if (!context) {
-        throw new Error("useWebSocket must be used within WebSocketProvider");
+        throw new Error("useWebSocketContext must be used within WebSocketProvider");
     }
     return context;
 }
+
+// Alias for backward compatibility
+export const useWebSocket = useWebSocketContext;
