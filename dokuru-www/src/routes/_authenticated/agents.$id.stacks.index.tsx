@@ -9,12 +9,23 @@ import {
   ChevronRight,
   Layers,
   Activity,
+  FileCode2,
+  X,
+  Copy,
+  Check,
 } from "lucide-react";
 import { dockerApi, type Stack, type StackContainer } from "@/services/docker-api";
 import { Input } from "@/components/ui/input";
 import { agentApi } from "@/lib/api/agent";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/stacks/")({
   component: StacksPage,
@@ -40,6 +51,174 @@ function stateDot(state: string) {
   }
 }
 
+// ---------- Compose file dialog ----------
+
+function ComposeDialog({
+  open,
+  onClose,
+  stackName,
+  agentUrl,
+  token,
+}: {
+  open: boolean;
+  onClose: () => void;
+  stackName: string;
+  agentUrl: string;
+  token: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["stack-compose", agentUrl, stackName],
+    queryFn: async () => {
+      const res = await dockerApi.getStackCompose(agentUrl, token, stackName);
+      return res.data;
+    },
+    enabled: open,
+    staleTime: 30_000,
+  });
+
+  function handleCopy() {
+    if (!data?.content) return;
+    void navigator.clipboard.writeText(data.content).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-3xl w-full max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden">
+        {/* Header */}
+        <DialogHeader className="flex-row items-start justify-between gap-3 px-5 py-4 border-b border-border/60 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shrink-0">
+              <FileCode2 className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <DialogTitle className="text-base font-semibold leading-tight">
+                {stackName}
+              </DialogTitle>
+              {data?.path && (
+                <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate">
+                  {data.path}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {data?.content && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs gap-1.5"
+                onClick={handleCopy}
+              >
+                {copied ? (
+                  <Check className="h-3.5 w-3.5 text-green-400" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+                {copied ? "Copied" : "Copy"}
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={onClose}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </DialogHeader>
+
+        {/* Body */}
+        <div className="flex-1 overflow-auto bg-zinc-950/60">
+          {isLoading ? (
+            <div className="flex items-center justify-center h-48 text-sm text-muted-foreground gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-pulse" />
+              Loading compose file…
+            </div>
+          ) : isError ? (
+            <div className="flex flex-col items-center justify-center h-48 text-sm text-muted-foreground gap-2">
+              <FileCode2 className="h-8 w-8 opacity-30" />
+              <p>Could not read the compose file.</p>
+              <p className="text-xs opacity-60">
+                The file may not be accessible from the agent's process.
+              </p>
+            </div>
+          ) : (
+            <pre className="p-5 text-xs leading-relaxed font-mono text-zinc-200 whitespace-pre overflow-x-auto">
+              <YamlHighlight content={data?.content ?? ""} />
+            </pre>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Very lightweight YAML syntax colouring — no external dep required.
+function YamlHighlight({ content }: { content: string }) {
+  const lines = content.split("\n");
+  return (
+    <>
+      {lines.map((line, i) => (
+        <span key={i} className="block">
+          <YamlLine line={line} />
+          {"\n"}
+        </span>
+      ))}
+    </>
+  );
+}
+
+function YamlLine({ line }: { line: string }) {
+  // Comment
+  if (/^\s*#/.test(line)) {
+    return <span className="text-zinc-500 italic">{line}</span>;
+  }
+  // Top-level key (no leading spaces, ends with colon)
+  if (/^[a-zA-Z_][a-zA-Z0-9_-]*\s*:/.test(line)) {
+    const colon = line.indexOf(":");
+    return (
+      <>
+        <span className="text-cyan-400 font-semibold">{line.slice(0, colon)}</span>
+        <span className="text-zinc-400">:</span>
+        <span className="text-zinc-200">{line.slice(colon + 1)}</span>
+      </>
+    );
+  }
+  // Indented key: "  key: value"
+  const indentedKey = /^(\s+)([a-zA-Z_][a-zA-Z0-9_.-]*)(\s*:)(.*)/;
+  const m = line.match(indentedKey);
+  if (m) {
+    return (
+      <>
+        <span>{m[1]}</span>
+        <span className="text-sky-300">{m[2]}</span>
+        <span className="text-zinc-400">{m[3]}</span>
+        <span className="text-amber-200">{m[4]}</span>
+      </>
+    );
+  }
+  // List item "  - value"
+  if (/^\s*-\s/.test(line)) {
+    const dash = line.indexOf("-");
+    return (
+      <>
+        <span>{line.slice(0, dash)}</span>
+        <span className="text-zinc-400">-</span>
+        <span className="text-amber-200">{line.slice(dash + 1)}</span>
+      </>
+    );
+  }
+  return <span className="text-zinc-300">{line}</span>;
+}
+
+// ---------- Container row ----------
+
 function ContainerRow({
   container,
   agentId,
@@ -55,7 +234,6 @@ function ContainerRow({
       params={{ id: agentId, containerId: container.id }}
       className="group/row flex items-center gap-3 px-5 py-3 hover:bg-muted/40 transition-colors cursor-pointer"
     >
-      {/* Status indicator */}
       <div className="relative flex items-center justify-center w-7 h-7 rounded-lg bg-muted/60 shrink-0 group-hover/row:bg-muted transition-colors">
         <Container className="h-3.5 w-3.5 text-muted-foreground" />
         <span
@@ -67,7 +245,6 @@ function ContainerRow({
         />
       </div>
 
-      {/* Name */}
       <div className="min-w-0 flex-1">
         <span className="text-sm font-medium truncate block group-hover/row:text-foreground transition-colors">
           {container.name}
@@ -77,14 +254,12 @@ function ContainerRow({
         </span>
       </div>
 
-      {/* Service badge */}
       {container.service && (
         <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-xs font-mono bg-muted/60 text-muted-foreground border border-border/50 shrink-0">
           {container.service}
         </span>
       )}
 
-      {/* State badge */}
       <span
         className={cn(
           "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border shrink-0",
@@ -94,13 +269,26 @@ function ContainerRow({
         {container.state}
       </span>
 
-      {/* Arrow */}
       <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover/row:text-muted-foreground group-hover/row:translate-x-0.5 transition-all shrink-0" />
     </Link>
   );
 }
 
-function StackCard({ stack, agentId }: { stack: Stack; agentId: string }) {
+// ---------- Stack card ----------
+
+function StackCard({
+  stack,
+  agentId,
+  agentUrl,
+  token,
+}: {
+  stack: Stack;
+  agentId: string;
+  agentUrl: string;
+  token: string;
+}) {
+  const [composeOpen, setComposeOpen] = useState(false);
+
   const allRunning = stack.running === stack.total;
   const noneRunning = stack.running === 0;
   const runPct = stack.total > 0 ? (stack.running / stack.total) * 100 : 0;
@@ -118,83 +306,99 @@ function StackCard({ stack, agentId }: { stack: Stack; agentId: string }) {
     : "bg-yellow-500";
 
   return (
-    <div className="group border border-border/60 rounded-2xl bg-card hover:border-border hover:shadow-lg hover:shadow-black/5 transition-all duration-300 overflow-hidden">
-      {/* Card header */}
-      <div className="flex items-center gap-4 px-6 py-4 bg-gradient-to-r from-muted/30 to-transparent border-b border-border/40">
-        {/* Icon */}
-        <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-cyan-500/10 text-cyan-400 group-hover:bg-cyan-500/15 transition-colors shrink-0 border border-cyan-500/20">
-          <SquareStack className="h-5 w-5" />
-        </div>
+    <>
+      <div className="group border border-border/60 rounded-2xl bg-card hover:border-border hover:shadow-lg hover:shadow-black/5 transition-all duration-300 overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center gap-4 px-6 py-4 bg-gradient-to-r from-muted/30 to-transparent border-b border-border/40">
+          <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-cyan-500/10 text-cyan-400 group-hover:bg-cyan-500/15 transition-colors shrink-0 border border-cyan-500/20">
+            <SquareStack className="h-5 w-5" />
+          </div>
 
-        {/* Title + meta */}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="font-semibold text-base tracking-tight">{stack.name}</span>
-            <span
-              className={cn(
-                "inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full border",
-                statusClass,
-              )}
-            >
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span className="font-semibold text-base tracking-tight">{stack.name}</span>
               <span
                 className={cn(
-                  "h-1.5 w-1.5 rounded-full bg-current",
-                  allRunning && "animate-pulse",
+                  "inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full border",
+                  statusClass,
                 )}
-              />
-              {statusLabel}
-            </span>
-          </div>
+              >
+                <span
+                  className={cn(
+                    "h-1.5 w-1.5 rounded-full bg-current",
+                    allRunning && "animate-pulse",
+                  )}
+                />
+                {statusLabel}
+              </span>
+            </div>
 
-          <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground flex-wrap">
-            <span className="flex items-center gap-1.5">
-              <Activity className="h-3 w-3" />
-              <span>
-                <span className="text-foreground font-medium">{stack.running}</span>
-                /{stack.total} running
-              </span>
-            </span>
-            {stack.working_dir && (
-              <span className="flex items-center gap-1.5 truncate">
-                <FolderOpen className="h-3 w-3 shrink-0" />
-                <span className="truncate font-mono">{stack.working_dir}</span>
-              </span>
-            )}
-            {stack.config_file && (
+            <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground flex-wrap">
               <span className="flex items-center gap-1.5">
-                <FileText className="h-3 w-3 shrink-0" />
-                <span className="font-mono">{stack.config_file.split("/").pop()}</span>
+                <Activity className="h-3 w-3" />
+                <span>
+                  <span className="text-foreground font-medium">{stack.running}</span>
+                  /{stack.total} running
+                </span>
               </span>
-            )}
+              {stack.working_dir && (
+                <span className="flex items-center gap-1.5 truncate">
+                  <FolderOpen className="h-3 w-3 shrink-0" />
+                  <span className="truncate font-mono">{stack.working_dir}</span>
+                </span>
+              )}
+              {stack.config_file && (
+                <button
+                  onClick={() => setComposeOpen(true)}
+                  className="flex items-center gap-1.5 hover:text-foreground transition-colors group/compose"
+                >
+                  <FileText className="h-3 w-3 shrink-0 group-hover/compose:text-cyan-400 transition-colors" />
+                  <span className="font-mono group-hover/compose:text-cyan-400 transition-colors underline underline-offset-2 decoration-dashed">
+                    {stack.config_file.split("/").pop()}
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="shrink-0 flex flex-col items-end gap-1">
+            <span className="text-2xl font-bold tabular-nums leading-none">
+              {stack.total}
+            </span>
+            <span className="text-xs text-muted-foreground">containers</span>
           </div>
         </div>
 
-        {/* Progress ring / count */}
-        <div className="shrink-0 flex flex-col items-end gap-1">
-          <span className="text-2xl font-bold tabular-nums leading-none">
-            {stack.total}
-          </span>
-          <span className="text-xs text-muted-foreground">containers</span>
+        {/* Progress bar */}
+        <div className="h-0.5 bg-muted/40">
+          <div
+            className={cn("h-full transition-all duration-700", barClass)}
+            style={{ width: `${runPct}%` }}
+          />
+        </div>
+
+        {/* Container rows */}
+        <div className="divide-y divide-border/30">
+          {stack.containers.map((c) => (
+            <ContainerRow key={c.id} container={c} agentId={agentId} />
+          ))}
         </div>
       </div>
 
-      {/* Progress bar */}
-      <div className="h-0.5 bg-muted/40">
-        <div
-          className={cn("h-full transition-all duration-700", barClass)}
-          style={{ width: `${runPct}%` }}
+      {stack.config_file && (
+        <ComposeDialog
+          open={composeOpen}
+          onClose={() => setComposeOpen(false)}
+          stackName={stack.name}
+          agentUrl={agentUrl}
+          token={token}
         />
-      </div>
-
-      {/* Container rows */}
-      <div className="divide-y divide-border/30">
-        {stack.containers.map((c) => (
-          <ContainerRow key={c.id} container={c} agentId={agentId} />
-        ))}
-      </div>
-    </div>
+      )}
+    </>
   );
 }
+
+// ---------- Page ----------
 
 function StacksPage() {
   const { id } = Route.useParams();
@@ -263,7 +467,6 @@ function StacksPage() {
           )}
         </div>
 
-        {/* Search */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
@@ -299,7 +502,13 @@ function StacksPage() {
       ) : (
         <div className="space-y-5">
           {filtered.map((stack) => (
-            <StackCard key={stack.name} stack={stack} agentId={id} />
+            <StackCard
+              key={stack.name}
+              stack={stack}
+              agentId={id}
+              agentUrl={agent?.url ?? ""}
+              token={agent?.token ?? ""}
+            />
           ))}
         </div>
       )}

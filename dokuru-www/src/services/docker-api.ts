@@ -158,6 +158,12 @@ export const dockerApi = {
       headers: { Authorization: `Bearer ${token}` },
     }),
 
+  getStackCompose: (agentUrl: string, token: string, name: string) =>
+    axios.get<{ path: string; content: string }>(
+      `${agentUrl}/docker/stacks/${encodeURIComponent(name)}/compose`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    ),
+
   // Networks
   listNetworks: (agentUrl: string, token: string) =>
     axios.get<Network[]>(`${agentUrl}/docker/networks`, {

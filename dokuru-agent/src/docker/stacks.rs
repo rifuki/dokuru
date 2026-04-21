@@ -2,6 +2,7 @@ use axum::{Router, extract::Path, http::StatusCode, response::Json, routing::get
 use bollard::container::ListContainersOptions;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use super::get_docker_client;
 
@@ -32,6 +33,7 @@ where
     Router::new()
         .route("/docker/stacks", get(list_stacks))
         .route("/docker/stacks/{name}", get(get_stack))
+        .route("/docker/stacks/{name}/compose", get(get_compose_file))
 }
 
 async fn list_stacks() -> Result<Json<Vec<StackResponse>>, StatusCode> {
@@ -167,4 +169,56 @@ async fn get_stack(Path(name): Path<String>) -> Result<Json<StackResponse>, Stat
     }
 
     stack.map(Json).ok_or(StatusCode::NOT_FOUND)
+}
+
+#[derive(Serialize)]
+struct ComposeFileResponse {
+    path: String,
+    content: String,
+}
+
+/// Read the docker-compose file from disk and return its raw content.
+///
+/// The path is taken from the `com.docker.compose.project.config_files` label
+/// of any container belonging to the requested stack. Multiple config files
+/// (comma-separated) are not uncommon; we read the first one that exists.
+async fn get_compose_file(
+    Path(name): Path<String>,
+) -> Result<Json<ComposeFileResponse>, StatusCode> {
+    let docker = get_docker_client().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let containers = docker
+        .list_containers(Some(ListContainersOptions::<String> {
+            all: true,
+            ..Default::default()
+        }))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Find the config_files label for this stack.
+    let config_files = containers
+        .iter()
+        .find_map(|c| {
+            let labels = c.labels.as_ref()?;
+            if labels.get("com.docker.compose.project")?.as_str() != name.as_str() {
+                return None;
+            }
+            labels
+                .get("com.docker.compose.project.config_files")
+                .cloned()
+        })
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    // The label may contain several comma-separated paths; try each in order.
+    for raw in config_files.split(',') {
+        let path = PathBuf::from(raw.trim());
+        if let Ok(content) = tokio::fs::read_to_string(&path).await {
+            return Ok(Json(ComposeFileResponse {
+                path: path.to_string_lossy().into_owned(),
+                content,
+            }));
+        }
+    }
+
+    Err(StatusCode::NOT_FOUND)
 }
