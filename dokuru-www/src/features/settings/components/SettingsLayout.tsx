@@ -55,8 +55,8 @@ export function SettingsLayout() {
             </aside>
 
             {/* Main Content Area */}
-            <main className="flex-1 overflow-y-auto relative pb-20">
-                <div className="px-10 md:px-14 pt-16 max-w-[740px]">
+            <main className="flex-1 overflow-y-auto relative">
+                <div className="px-10 md:px-14 py-16 max-w-[740px]">
                     <Outlet />
                 </div>
 
