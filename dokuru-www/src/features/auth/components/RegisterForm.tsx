@@ -7,13 +7,13 @@ import {
   Eye,
   EyeOff,
   ArrowRight,
-  Loader2,
   CheckCircle2,
   XCircle,
 } from "lucide-react";
 import { useRegister } from "@/features/auth/hooks/use-register";
 import { useUsernameAvailability } from "@/features/auth/hooks/use-username-availability";
 import { useEmailAvailability } from "@/features/auth/hooks/use-email-availability";
+import { LoadingDots } from "@/components/ui/loading-dots";
 
 export function RegisterForm() {
   const [username, setUsername] = useState(
@@ -151,7 +151,7 @@ export function RegisterForm() {
                 )}
                 {/* Show loading spinner while typing or checking */}
                 {(isTyping || usernameCheck.isLoading) && username.length >= 3 && (
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  <LoadingDots className="text-muted-foreground" />
                 )}
                 {/* Show checkmark if available */}
                 {!isTyping && showUsernameStatus && usernameCheck.data.available && (
@@ -182,7 +182,7 @@ export function RegisterForm() {
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
                 {/* Show loading spinner while typing or checking */}
                 {(isTypingEmail || emailCheck.isLoading) && email.includes('@') && (
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  <LoadingDots className="text-muted-foreground" />
                 )}
                 {/* Show checkmark if available */}
                 {!isTypingEmail && showEmailStatus && emailCheck.data.available && (
@@ -284,7 +284,7 @@ export function RegisterForm() {
             }
           >
             {register.isPending ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
+              <LoadingDots />
             ) : (
               <>
                 Create account <ArrowRight className="ml-2 h-5 w-5" />

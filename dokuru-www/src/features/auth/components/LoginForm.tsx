@@ -3,8 +3,9 @@ import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react";
+import { Eye, EyeOff, ArrowRight } from "lucide-react";
 import { useLogin } from "@/features/auth/hooks/use-login";
+import { LoadingDots } from "@/components/ui/loading-dots";
 
 export function LoginForm() {
   const [username, setUsername] = useState(
@@ -98,7 +99,7 @@ export function LoginForm() {
             disabled={login.isPending}
           >
             {login.isPending ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
+              <LoadingDots />
             ) : (
               <>
                 Sign in <ArrowRight className="ml-2 h-5 w-5" />
