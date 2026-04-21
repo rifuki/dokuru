@@ -88,7 +88,9 @@ async fn inspect_image(Path(id): Path<String>) -> Result<Json<Value>, StatusCode
     Ok(Json(serde_json::to_value(image).unwrap()))
 }
 
-async fn image_history(Path(id): Path<String>) -> Result<Json<Vec<HistoryResponseItem>>, StatusCode> {
+async fn image_history(
+    Path(id): Path<String>,
+) -> Result<Json<Vec<HistoryResponseItem>>, StatusCode> {
     let docker = get_docker_client().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let history = docker
