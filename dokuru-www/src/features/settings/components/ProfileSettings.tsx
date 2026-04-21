@@ -4,7 +4,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ImageUploadModal } from "./ImageUploadModal";
 import {
     AlertDialog,
@@ -16,7 +15,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Camera, Loader2, AlertTriangle } from "lucide-react";
+import { Camera, Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { useProfile, settingsKeys } from "@/features/settings/hooks/use-profile";
@@ -265,40 +264,48 @@ export function ProfileSettings() {
                         </p>
                     </div>
                     <div className="space-y-2 sm:col-span-2">
-                        <Label htmlFor="email" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                            Email Address
-                            <span className="text-destructive ml-1">*</span>
-                        </Label>
-                        <Input
-                            id="email"
-                            type="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            placeholder="your@email.com"
-                            className="h-11 bg-muted/40 border-transparent transition-colors focus-visible:ring-1 focus-visible:ring-primary/50 hover:bg-muted/60"
-                        />
+                        <div className="flex items-center gap-2">
+                            <Label htmlFor="email" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                                Email Address
+                            </Label>
+                            {!user.email_verified && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                                    <AlertCircle className="h-3 w-3" />
+                                    Unverified
+                                </span>
+                            )}
+                        </div>
+                        <div className="relative">
+                            <Input
+                                id="email"
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="your@email.com"
+                                disabled={!user.email_verified}
+                                className="h-11 bg-muted/40 border-transparent transition-colors focus-visible:ring-1 focus-visible:ring-primary/50 hover:bg-muted/60 disabled:opacity-70 disabled:cursor-not-allowed pr-24"
+                            />
+                            {!user.email_verified && (
+                                <button
+                                    type="button"
+                                    onClick={handleResendVerification}
+                                    disabled={isResendingVerification}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 h-7 px-3 text-[12px] font-medium rounded-md bg-muted hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                                >
+                                    {isResendingVerification ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                        <><RefreshCw className="h-3 w-3" />Resend</>
+                                    )}
+                                </button>
+                            )}
+                        </div>
                         <p className="text-[13px] text-muted-foreground mt-1">
-                            We use this for authentication and notifications.
+                            {!user.email_verified
+                                ? "Verify your email to enable editing and notifications."
+                                : "We use this for authentication and notifications."
+                            }
                         </p>
-                        
-                        {/* Email Verification Banner */}
-                        {!user.email_verified && (
-                            <Alert className="border-yellow-500/50 bg-yellow-500/10 mt-3">
-                                <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                                <AlertDescription>
-                                    <span className="text-sm">
-                                        Email not verified. Check your inbox or{" "}
-                                        <button
-                                            onClick={handleResendVerification}
-                                            disabled={isResendingVerification}
-                                            className="font-medium underline hover:no-underline disabled:opacity-50"
-                                        >
-                                            {isResendingVerification ? "Sending..." : "resend verification email"}
-                                        </button>
-                                    </span>
-                                </AlertDescription>
-                            </Alert>
-                        )}
                     </div>
                 </div>
 
