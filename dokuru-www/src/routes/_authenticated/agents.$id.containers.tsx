@@ -14,6 +14,8 @@ import {
   BarChart2,
   Info,
   Search,
+  Cpu,
+  MemoryStick,
 } from "lucide-react";
 import { dockerApi, type Container } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
