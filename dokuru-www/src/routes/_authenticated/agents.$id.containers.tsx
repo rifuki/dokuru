@@ -39,8 +39,10 @@ function ContainersPage() {
   });
 
   const startMutation = useMutation({
-    mutationFn: (containerId: string) =>
-      dockerApi.startContainer(agent!.url, agent!.token, containerId),
+    mutationFn: (containerId: string) => {
+      if (!agent) throw new Error("Agent not loaded");
+      return dockerApi.startContainer(agent.url, agent.token, containerId);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["containers", id] });
       toast.success("Container started");
@@ -49,8 +51,10 @@ function ContainersPage() {
   });
 
   const stopMutation = useMutation({
-    mutationFn: (containerId: string) =>
-      dockerApi.stopContainer(agent!.url, agent!.token, containerId),
+    mutationFn: (containerId: string) => {
+      if (!agent) throw new Error("Agent not loaded");
+      return dockerApi.stopContainer(agent.url, agent.token, containerId);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["containers", id] });
       toast.success("Container stopped");
@@ -59,8 +63,10 @@ function ContainersPage() {
   });
 
   const restartMutation = useMutation({
-    mutationFn: (containerId: string) =>
-      dockerApi.restartContainer(agent!.url, agent!.token, containerId),
+    mutationFn: (containerId: string) => {
+      if (!agent) throw new Error("Agent not loaded");
+      return dockerApi.restartContainer(agent.url, agent.token, containerId);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["containers", id] });
       toast.success("Container restarted");
@@ -69,8 +75,10 @@ function ContainersPage() {
   });
 
   const removeMutation = useMutation({
-    mutationFn: (containerId: string) =>
-      dockerApi.removeContainer(agent!.url, agent!.token, containerId),
+    mutationFn: (containerId: string) => {
+      if (!agent) throw new Error("Agent not loaded");
+      return dockerApi.removeContainer(agent.url, agent.token, containerId);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["containers", id] });
       toast.success("Container removed");
