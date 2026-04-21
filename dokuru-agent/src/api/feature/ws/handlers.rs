@@ -2,7 +2,7 @@ use axum::{
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
     response::Response,
 };
-use futures_util::{SinkExt, StreamExt, stream::SplitStream};
+use futures_util::{SinkExt, StreamExt};
 use tokio::time::{Duration, interval};
 use tracing::{debug, info};
 
@@ -21,7 +21,7 @@ pub async fn ws_handler(ws: WebSocketUpgrade) -> Response {
 }
 
 /// Returns `true` if the connection should be kept alive, `false` to close.
-async fn handle_incoming(msg: Option<Result<Message, axum::Error>>) -> bool {
+fn handle_incoming(msg: Option<Result<Message, axum::Error>>) -> bool {
     match msg {
         Some(Ok(Message::Close(_))) | None => false,
         Some(Err(e)) => {
@@ -32,10 +32,11 @@ async fn handle_incoming(msg: Option<Result<Message, axum::Error>>) -> bool {
     }
 }
 
+#[allow(clippy::cognitive_complexity)]
 async fn handle_socket(socket: WebSocket) {
     info!("WebSocket client connected");
 
-    let (mut sender, mut receiver): (_, SplitStream<WebSocket>) = socket.split();
+    let (mut sender, mut receiver) = socket.split();
     let mut ticker = interval(Duration::from_secs(10));
 
     // Skip the first immediate tick so we don't ping before the client is ready.
@@ -51,7 +52,7 @@ async fn handle_socket(socket: WebSocket) {
                 }
             }
             msg = receiver.next() => {
-                if !handle_incoming(msg).await {
+                if !handle_incoming(msg) {
                     break;
                 }
             }
