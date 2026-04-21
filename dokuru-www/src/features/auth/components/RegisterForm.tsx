@@ -7,6 +7,7 @@ import {
   Eye,
   EyeOff,
   ArrowRight,
+  Loader2,
   CheckCircle2,
   XCircle,
 } from "lucide-react";
@@ -151,7 +152,7 @@ export function RegisterForm() {
                 )}
                 {/* Show loading spinner while typing or checking */}
                 {(isTyping || usernameCheck.isLoading) && username.length >= 3 && (
-                  <LoadingDots className="text-muted-foreground" />
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 )}
                 {/* Show checkmark if available */}
                 {!isTyping && showUsernameStatus && usernameCheck.data.available && (
@@ -182,7 +183,7 @@ export function RegisterForm() {
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
                 {/* Show loading spinner while typing or checking */}
                 {(isTypingEmail || emailCheck.isLoading) && email.includes('@') && (
-                  <LoadingDots className="text-muted-foreground" />
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 )}
                 {/* Show checkmark if available */}
                 {!isTypingEmail && showEmailStatus && emailCheck.data.available && (
