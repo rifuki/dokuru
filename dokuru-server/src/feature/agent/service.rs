@@ -74,18 +74,23 @@ impl AgentService {
         user_id: Uuid,
         dto: UpdateAgentDto,
     ) -> Result<Option<AgentResponse>> {
-        let token_hash = dto.token.as_deref().map(Self::hash_token);
-        let agent = self
-            .agent_repo
-            .update(
-                pool,
-                id,
-                user_id,
-                &dto.name,
-                &dto.url,
-                token_hash.as_deref(),
+        let (token_hash, encrypted_token) = if let Some(token) = &dto.token {
+            (
+                Some(Self::hash_token(token)),
+                Some(Self::encrypt_token(token)),
             )
-            .await?;
+        } else {
+            (None, None)
+        };
+
+        let params = crate::feature::agent::repository::UpdateAgentParams {
+            name: &dto.name,
+            url: &dto.url,
+            token_hash: token_hash.as_deref(),
+            encrypted_token: encrypted_token.as_deref(),
+        };
+
+        let agent = self.agent_repo.update(pool, id, user_id, params).await?;
         Ok(agent.map(Self::to_response))
     }
 
