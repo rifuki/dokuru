@@ -33,15 +33,24 @@ export function useAgentConnections(agents: Agent[]) {
     const agentsRef   = useRef(agents);
     agentsRef.current = agents;
 
+    // Sync connections whenever the set of agents (or their URLs) changes.
+    // Does NOT close existing connections — only adds new ones and removes
+    // stale ones.  Unmount cleanup is handled by the effect below.
     useEffect(() => {
         const eligible = agents.filter(
             (a) => a.access_mode !== "relay" && a.url && a.url !== "relay",
         );
         const eligibleIds = new Set(eligible.map((a) => a.id));
 
-        // Tear down connections for agents that were removed.
+        // Tear down connections for agents that were removed or whose URL changed.
         for (const [id, ws] of wsMap.current) {
-            if (!eligibleIds.has(id)) {
+            const agent = eligible.find((a) => a.id === id);
+            const expectedWsUrl = agent
+                ? agent.url.replace(/^http/, "ws") + "/ws"
+                : null;
+            const urlChanged = expectedWsUrl && !ws.url.startsWith(expectedWsUrl);
+
+            if (!eligibleIds.has(id) || urlChanged) {
                 ws.onclose = null; // prevent reconnect loop
                 ws.close();
                 wsMap.current.delete(id);
@@ -49,15 +58,17 @@ export function useAgentConnections(agents: Agent[]) {
             }
         }
 
-        // Open connections for new agents.
+        // Open connections for new agents (existing open/connecting ones are skipped).
         for (const agent of eligible) {
             const existing = wsMap.current.get(agent.id);
-            // Skip if already open or connecting.
             if (existing && existing.readyState <= WebSocket.OPEN) continue;
             openWs(agent);
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [agents.map((a) => a.id + a.url).join(",")]);
 
-        // Global cleanup on unmount.
+    // Close all connections only when the hook unmounts (sidebar leaves DOM).
+    useEffect(() => {
         return () => {
             for (const ws of wsMap.current.values()) {
                 ws.onclose = null;
@@ -68,8 +79,7 @@ export function useAgentConnections(agents: Agent[]) {
             timerMap.current.clear();
             attemptMap.current.clear();
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [agents.map((a) => a.id + a.url + a.token).join(",")]);
+    }, []);
 
     function openWs(agent: Agent) {
         const token  = agent.token ?? getAgentToken(agent.id) ?? "";
