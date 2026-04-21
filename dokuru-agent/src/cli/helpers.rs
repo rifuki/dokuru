@@ -331,7 +331,13 @@ pub fn run_configure_sections(config: &mut InstallerConfig) -> Result<bool> {
                 configure_server_section(config)?;
                 // Write config immediately
                 write_config_file_preserve_token(config)?;
-                cliclack::log::success("✓ Server config updated")?;
+                note(
+                    "Server Updated",
+                    format!(
+                        "Port:  {}\nBind:  {}\nCORS:  {}\n\n✓ Config saved & service restarted",
+                        config.port, config.host, config.cors_origins
+                    ),
+                )?;
                 // Restart service
                 let _ = run_command("systemctl", &["restart", &config.service_name]);
             }
@@ -339,13 +345,29 @@ pub fn run_configure_sections(config: &mut InstallerConfig) -> Result<bool> {
                 configure_docker_section(config)?;
                 // Write config immediately
                 write_config_file_preserve_token(config)?;
-                cliclack::log::success("✓ Docker config updated")?;
+                note(
+                    "Docker Updated",
+                    format!(
+                        "Socket: {}\n\n✓ Config saved & service restarted",
+                        config.docker_socket
+                    ),
+                )?;
                 // Restart service
                 let _ = run_command("systemctl", &["restart", &config.service_name]);
             }
             ConfigSection::Service => {
                 configure_service_section(config)?;
-                cliclack::log::success("✓ Service config updated")?;
+                note(
+                    "Service Updated",
+                    format!(
+                        "Systemd: {}\n\n✓ Config saved",
+                        if config.skip_service {
+                            "disabled"
+                        } else {
+                            "enabled"
+                        }
+                    ),
+                )?;
             }
             ConfigSection::Access => {
                 let should_exit = configure_access_section(config)?;
