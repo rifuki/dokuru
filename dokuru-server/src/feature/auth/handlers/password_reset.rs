@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
+    feature::auth::auth_method::entity::AuthProvider,
     infrastructure::web::response::{ApiError, ApiResult, ApiSuccess},
     state::AppState,
 };
@@ -116,11 +117,29 @@ pub async fn reset_password(
                 .with_message("Invalid or expired reset token")
         })?;
 
+    // Find the password auth method for this user
+    let auth_method = state
+        .auth_service
+        .auth_method_service()
+        .find_by_user_and_provider(user.id, AuthProvider::Password)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to find auth method: {}", e);
+            ApiError::default()
+                .with_code(StatusCode::INTERNAL_SERVER_ERROR)
+                .with_message("Failed to reset password")
+        })?
+        .ok_or_else(|| {
+            ApiError::default()
+                .with_code(StatusCode::BAD_REQUEST)
+                .with_message("No password login found for this account")
+        })?;
+
     // Update password
     state
         .auth_service
         .auth_method_service()
-        .update_password(user.id, &req.new_password)
+        .update_password(auth_method.id, &req.new_password)
         .await
         .map_err(|e| {
             tracing::error!("Failed to update password: {}", e);
