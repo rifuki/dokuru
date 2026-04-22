@@ -168,3 +168,63 @@ pub fn write_local_config_string(content: &str) -> eyre::Result<()> {
     std::fs::write(&path, if trimmed.is_empty() { "" } else { content })
         .map_err(|error| eyre::eyre!("Failed to write {}: {error}", path.display()))
 }
+
+/// Update a single field inside a TOML config file (local.toml or secrets.toml),
+/// creating the file and any missing tables if needed. Preserves existing content.
+pub fn write_field_to_toml(target: &str, path: &[&str], value: &str) -> eyre::Result<()> {
+    let file_path = match target {
+        "secrets" => secrets_config_path(),
+        _ => local_config_path(),
+    };
+
+    // Load or create document
+    let mut doc = if file_path.exists() {
+        let raw = std::fs::read_to_string(&file_path)
+            .map_err(|e| eyre::eyre!("Failed to read {}: {e}", file_path.display()))?;
+        raw.parse::<DocumentMut>()
+            .map_err(|e| eyre::eyre!("Failed to parse {}: {e}", file_path.display()))?
+    } else {
+        DocumentMut::new()
+    };
+
+    if path.is_empty() {
+        return Err(eyre::eyre!("Empty path provided"));
+    }
+
+    // Navigate / create tables up to the last segment
+    let (table_path, field_key) = path.split_at(path.len() - 1);
+    let field_key = field_key[0];
+
+    let mut table = doc.as_table_mut();
+    for &segment in table_path {
+        if !table.contains_key(segment) {
+            table.insert(segment, toml_edit::Item::Table(toml_edit::Table::new()));
+        }
+        table = table
+            .get_mut(segment)
+            .and_then(|item| item.as_table_mut())
+            .ok_or_else(|| eyre::eyre!("Path segment '{segment}' is not a table"))?;
+    }
+
+    // Detect best TOML type from value string
+    let toml_value = if value == "true" || value == "false" {
+        toml_edit::value(value.parse::<bool>().unwrap())
+    } else if let Ok(n) = value.parse::<i64>() {
+        toml_edit::value(n)
+    } else if let Ok(f) = value.parse::<f64>() {
+        toml_edit::value(f)
+    } else {
+        toml_edit::value(value)
+    };
+
+    table.insert(field_key, toml_value);
+
+    // Ensure parent directory exists
+    if let Some(parent) = file_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| eyre::eyre!("Failed to create dir {}: {e}", parent.display()))?;
+    }
+
+    std::fs::write(&file_path, doc.to_string())
+        .map_err(|e| eyre::eyre!("Failed to write {}: {e}", file_path.display()))
+}

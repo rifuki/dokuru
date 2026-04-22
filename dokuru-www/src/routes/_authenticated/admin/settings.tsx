@@ -1,22 +1,27 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Activity,
   BadgeInfo,
   Cable,
+  Check,
   ChevronDown,
   ChevronRight,
   Cookie,
   Database,
   FileCode2,
   Mail,
+  Pencil,
   RefreshCcw,
   Server,
   Settings2,
-  Terminal,
   Upload,
+  X,
+  Eye,
+  EyeOff,
+  Terminal,
 } from "lucide-react";
 
 import { adminService } from "@/lib/api/services/admin-services";
@@ -115,42 +120,216 @@ function parseLogLine(raw: string): ParsedLogLine {
   };
 }
 
-function formatSourceLabel(source?: string) {
-  if (!source) return null;
-  if (source.startsWith("env:")) return source.replace("env:", "Env:").trim();
-  if (source.startsWith("file:")) return source.replace("file:", "File:").trim();
-  return source;
+type SourceKind = "env" | "local" | "secrets" | "defaults" | "runtime" | "unknown";
+
+export type ConfigSourceDetail = {
+  source: string;
+  value: string;
+};
+
+function parseSource(source?: string): { kind: SourceKind; label: string; detail: string } {
+  if (!source) return { kind: "unknown", label: "?", detail: "" };
+  if (source.startsWith("env:")) {
+    const varName = source.slice(4).trim();
+    return { kind: "env", label: "env", detail: varName };
+  }
+  if (source.includes("local.toml"))   return { kind: "local",    label: "local",    detail: "local.toml" };
+  if (source.includes("secrets.toml")) return { kind: "secrets",  label: "secrets",  detail: "secrets.toml" };
+  if (source.includes("defaults.toml"))return { kind: "defaults", label: "defaults", detail: "defaults.toml" };
+  if (source === "runtime")            return { kind: "runtime",  label: "runtime",  detail: "runtime" };
+  return { kind: "unknown", label: "?", detail: source };
+}
+
+const SOURCE_DOT: Record<SourceKind, string> = {
+  env:      "bg-violet-400",
+  local:    "bg-sky-400",
+  secrets:  "bg-amber-400",
+  defaults: "bg-muted-foreground/40",
+  runtime:  "bg-muted-foreground/40",
+  unknown:  "bg-muted-foreground/20",
+};
+
+function MaskedValue({ value, isSensitive, mono }: { value: string; isSensitive: boolean; mono?: boolean }) {
+  const [show, setShow] = useState(false);
+  
+  if (!isSensitive) {
+    return <span className={`truncate text-sm ${mono ? "font-mono" : ""} text-foreground/90 text-right`}>{value || "—"}</span>;
+  }
+
+  return (
+    <div className="flex items-center justify-end gap-2">
+      <span className={`truncate text-sm ${mono && show ? "font-mono" : ""} text-foreground/90 text-right tracking-tight`}>
+        {show ? (value || "—") : "••••••••"}
+      </span>
+      <button
+        type="button"
+        onClick={() => setShow(!show)}
+        className="flex h-5 w-5 shrink-0 items-center justify-center rounded hover:bg-muted text-muted-foreground transition-colors"
+      >
+        {show ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+      </button>
+    </div>
+  );
 }
 
 function ConfigRow({
   icon: Icon,
   label,
   value,
-  source,
+  sources,
   mono,
+  tomlPath,
+  onSave,
 }: {
   icon: typeof Server;
   label: string;
   value: string;
-  source?: string;
+  sources?: ConfigSourceDetail[];
   mono?: boolean;
+  tomlPath?: string[];
+  onSave?: (value: string) => Promise<void>;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const activeSource = sources?.[0];
+  const parsedActive = parseSource(activeSource?.source);
+  const hasMultiple = (sources?.length ?? 0) > 1;
+
+  const isEditable = Boolean(tomlPath && onSave);
+
+  function startEdit() {
+    setDraft(value);
+    setEditing(true);
+    setTimeout(() => inputRef.current?.select(), 0);
+  }
+
+  function cancel() {
+    setEditing(false);
+    setDraft("");
+  }
+
+  async function commit() {
+    const trimmed = draft.trim();
+    if (trimmed === value.trim()) { cancel(); return; }
+    setSaving(true);
+    try {
+      await onSave?.(trimmed);
+      setEditing(false);
+      setDraft("");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <div className="flex items-center justify-between gap-4 py-3 px-1 border-b last:border-0 border-border/50 transition-colors hover:bg-muted/30">
-      <div className="flex items-center gap-3 min-w-0 flex-1">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted/50 text-muted-foreground">
-          <Icon className="h-4 w-4" />
+    <div className="flex flex-col border-b last:border-0 border-border/30 rounded-sm">
+      <div className="grid grid-cols-[minmax(150px,1fr)_100px_minmax(150px,1fr)] items-center gap-4 py-2.5 px-3 hover:bg-muted/20 transition-colors">
+        {/* Left: icon + label */}
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground/60">
+            <Icon className="h-3.5 w-3.5" />
+          </div>
+          <span className="truncate text-sm font-medium text-foreground/80">{label}</span>
+          {hasMultiple && (
+            <button 
+              onClick={() => setExpanded(!expanded)}
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full hover:bg-muted text-muted-foreground transition-colors"
+              title="View overridden values"
+            >
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
+            </button>
+          )}
         </div>
-        <div className="text-sm font-medium text-foreground/90">{label}</div>
+
+        {/* Middle: source dot + tiny text */}
+        <div className="flex items-center gap-1.5 justify-start">
+          {activeSource && (
+            <div className="flex items-center gap-1.5 px-1.5 py-0.5 rounded hover:bg-muted/30 transition-colors" title={parsedActive.detail || parsedActive.label}>
+              <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${SOURCE_DOT[parsedActive.kind]}`} />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">{parsedActive.label}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Right: value + edit */}
+        <div className="flex items-center justify-end gap-2 shrink-0 min-w-0">
+          {editing ? (
+            <>
+              <input
+                ref={inputRef}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void commit();
+                  if (e.key === "Escape") cancel();
+                }}
+                autoFocus
+                className="h-7 w-full max-w-[200px] rounded border bg-background px-2.5 font-mono text-xs text-foreground shadow-sm outline-none focus:ring-1 focus:ring-primary"
+              />
+              <button
+                type="button"
+                onClick={() => void commit()}
+                disabled={saving}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 disabled:opacity-40 transition-colors"
+              >
+                {saving ? <RefreshCcw className="h-3 w-3 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              </button>
+              <button
+                type="button"
+                onClick={cancel}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-muted/60 text-muted-foreground hover:bg-muted transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </>
+          ) : (
+            <>
+              <MaskedValue 
+                value={activeSource?.value ?? value} 
+                isSensitive={parsedActive.kind === "env" || parsedActive.kind === "secrets"} 
+                mono={mono} 
+              />
+              {isEditable && (
+                <button
+                  type="button"
+                  onClick={startEdit}
+                  title={`Edit ${label}`}
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-border/40 text-muted-foreground/60 hover:border-primary/40 hover:bg-primary/5 hover:text-primary transition-all ml-1"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </div>
-      <div className="flex items-center gap-3 text-right shrink-0">
-        <div className={`truncate max-w-[200px] sm:max-w-[300px] text-sm ${mono ? "font-mono text-muted-foreground" : "text-muted-foreground"}`}>{value || "—"}</div>
-        {source ? (
-          <Badge variant="secondary" className="shrink-0 text-[10px] font-medium uppercase tracking-wider px-1.5 py-0">
-            {formatSourceLabel(source)}
-          </Badge>
-        ) : null}
-      </div>
+
+      {expanded && hasMultiple && (
+        <div className="pl-[46px] pr-3 pb-3 pt-1 bg-muted/5 border-t border-border/10 space-y-2">
+          {sources!.slice(1).map((src, i) => {
+            const parsed = parseSource(src.source);
+            return (
+              <div key={i} className="grid grid-cols-[100px_minmax(150px,1fr)] items-center gap-4">
+                <div className="flex items-center gap-1.5" title={parsed.detail || parsed.label}>
+                  <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${SOURCE_DOT[parsed.kind]}`} />
+                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground/40">{parsed.label}</span>
+                </div>
+                <div className="flex justify-end pr-9">
+                  <MaskedValue 
+                    value={src.value} 
+                    isSensitive={parsed.kind === "env" || parsed.kind === "secrets"} 
+                    mono={mono} 
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -282,6 +461,28 @@ function AdminSettingsPage() {
   const currentLogLevel = pendingLogLevel ?? normalizeLevel(logs?.runtime_level);
   const effectiveSources = config?.field_sources ?? {};
   const editorContent = localConfigDraft ?? localConfig?.content ?? "";
+
+  const [showSecrets, setShowSecrets] = useState(false);
+
+  const updateFieldMutation = useMutation({
+    mutationFn: ({ path, value, target }: { path: string[]; value: string; target?: "local" | "secrets" }) =>
+      adminService.updateConfigField(path, value, target),
+    onSuccess: (result) => {
+      setLocalConfigDraft(result.content);
+      void Promise.all([refetchConfig(), refetchLocalConfig()]);
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Failed to save field");
+    },
+  });
+
+  function makeFieldSaver(label: string, path: string[], target: "local" | "secrets" = "local") {
+    return async (newValue: string) => {
+      await updateFieldMutation.mutateAsync({ path, value: newValue, target });
+      toast.success(`${label} → saved to ${target}.toml`);
+    };
+  }
+
 
   const visibleLines = useMemo(() => {
     const lines = logs?.lines ?? [];
@@ -495,50 +696,77 @@ function AdminSettingsPage() {
                 <>
                   <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-muted/20 px-4 py-3 text-sm shadow-sm">
                     <Badge variant="secondary" className="font-normal uppercase tracking-wider text-[10px]">{config.source}</Badge>
-                    <span className="font-medium text-foreground/90">{config.is_production ? "Production Mode" : "Development Mode"}</span>
-                    <span className="text-border">•</span>
-                    <span className="font-mono text-xs text-muted-foreground">{config.rust_env}</span>
+                    <div className="h-4 w-px bg-border" />
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">ENV</span>
+                      <span className="font-mono text-xs font-medium text-foreground/90">{config.rust_env}</span>
+                    </div>
                   </div>
 
                   <ConfigSection
                     title="Bootstrap"
                     description="Initial admin bootstrap settings. Password remains outside this view because it should live in env or secrets."
                   >
-                    <ConfigRow icon={BadgeInfo} label="Bootstrap Enabled" value={config.bootstrap.enabled ? "enabled" : "disabled"} source={effectiveSources["bootstrap.enabled"]} />
-                    <ConfigRow icon={BadgeInfo} label="Bootstrap Email" value={config.bootstrap.admin_email} source={effectiveSources["bootstrap.admin_email"]} mono />
-                    <ConfigRow icon={BadgeInfo} label="Bootstrap Username" value={config.bootstrap.admin_username} source={effectiveSources["bootstrap.admin_username"]} mono />
-                    <ConfigRow icon={BadgeInfo} label="Bootstrap Name" value={config.bootstrap.admin_name} source={effectiveSources["bootstrap.admin_name"]} />
+                    <ConfigRow icon={BadgeInfo} label="Bootstrap Enabled" value={config.bootstrap.enabled ? "enabled" : "disabled"} sources={effectiveSources["bootstrap.enabled"]} tomlPath={["bootstrap","enabled"]} onSave={makeFieldSaver("Bootstrap Enabled",["bootstrap","enabled"])} />
+                    <ConfigRow icon={BadgeInfo} label="Bootstrap Email" value={config.bootstrap.admin_email} sources={effectiveSources["bootstrap.admin_email"]} mono tomlPath={["bootstrap","admin_email"]} onSave={makeFieldSaver("Bootstrap Email",["bootstrap","admin_email"])} />
+                    <ConfigRow icon={BadgeInfo} label="Bootstrap Username" value={config.bootstrap.admin_username} sources={effectiveSources["bootstrap.admin_username"]} mono tomlPath={["bootstrap","admin_username"]} onSave={makeFieldSaver("Bootstrap Username",["bootstrap","admin_username"])} />
+                    <ConfigRow icon={BadgeInfo} label="Bootstrap Name" value={config.bootstrap.admin_name} sources={effectiveSources["bootstrap.admin_name"]} tomlPath={["bootstrap","admin_name"]} onSave={makeFieldSaver("Bootstrap Name",["bootstrap","admin_name"])} />
                   </ConfigSection>
 
                   <ConfigSection
                     title="Server"
                     description="HTTP listener and origin policy. Changes here are validated by reload, but full application requires restart for port/CORS updates."
                   >
-                    <ConfigRow icon={Server} label="API Port" value={String(config.server.port)} source={effectiveSources["server.port"]} mono />
-                    <ConfigRow icon={Cable} label="CORS Origins" value={config.server.cors_allowed_origins.join(", ")} source={effectiveSources["server.cors_allowed_origins"]} mono />
-                    <ConfigRow icon={Activity} label="Default Log Level" value={config.logging.default_level} source={effectiveSources["logging.default_level"]} />
+                    <ConfigRow icon={Server} label="API Port" value={String(config.server.port)} sources={effectiveSources["server.port"]} mono tomlPath={["server","port"]} onSave={makeFieldSaver("API Port",["server","port"])} />
+                    <ConfigRow icon={Cable} label="CORS Origins" value={config.server.cors_allowed_origins.join(", ")} sources={effectiveSources["server.cors_allowed_origins"]} mono tomlPath={["server","cors_allowed_origins"]} onSave={makeFieldSaver("CORS Origins",["server","cors_allowed_origins"])} />
+                    <ConfigRow icon={Activity} label="Default Log Level" value={config.logging.default_level} sources={effectiveSources["logging.default_level"]} tomlPath={["logging","default_level"]} onSave={makeFieldSaver("Default Log Level",["logging","default_level"])} />
                   </ConfigSection>
 
                   <ConfigSection
                     title="Cookie & Upload"
                     description="Client session behavior and media delivery settings that frontend behavior depends on."
                   >
-                    <ConfigRow icon={Cookie} label="Cookie Policy" value={`${config.cookie.same_site} · ${config.cookie.secure ? "secure" : "insecure"}`} source={effectiveSources["cookie.same_site"]} />
-                    <ConfigRow icon={Cookie} label="HttpOnly" value={config.cookie.http_only ? "enabled" : "disabled"} source={effectiveSources["cookie.http_only"]} />
-                    <ConfigRow icon={Upload} label="Upload Dir" value={config.upload.upload_dir} source={effectiveSources["upload.dir"]} mono />
-                    <ConfigRow icon={Upload} label="Upload Base URL" value={config.upload.base_url} source={effectiveSources["upload.base_url"]} mono />
+                    <ConfigRow icon={Cookie} label="Cookie Policy" value={`${config.cookie.same_site} · ${config.cookie.secure ? "secure" : "insecure"}`} sources={effectiveSources["cookie.same_site"]} />
+                    <ConfigRow icon={Cookie} label="HttpOnly" value={config.cookie.http_only ? "enabled" : "disabled"} sources={effectiveSources["cookie.http_only"]} />
+                    <ConfigRow icon={Upload} label="Upload Dir" value={config.upload.upload_dir} sources={effectiveSources["upload.dir"]} mono tomlPath={["upload","dir"]} onSave={makeFieldSaver("Upload Dir",["upload","dir"])} />
+                    <ConfigRow icon={Upload} label="Upload Base URL" value={config.upload.base_url} sources={effectiveSources["upload.base_url"]} mono tomlPath={["upload","base_url"]} onSave={makeFieldSaver("Upload Base URL",["upload","base_url"])} />
                   </ConfigSection>
 
                   <ConfigSection
-                    title="Delivery & Features"
-                    description="Feature toggles inferred from the active config plus email delivery metadata."
+                    title="Database"
+                    description="PostgreSQL connection settings. URL is sensitive — stored in env or secrets.toml."
                   >
-                    <ConfigRow icon={Mail} label="Email From" value={config.email.from_email} source={effectiveSources["email.from_email"]} mono />
-                    <ConfigRow icon={Mail} label="Email Provider" value={config.email.provider} />
-                    <ConfigRow icon={Database} label="Redis" value={config.features.redis_enabled ? "enabled" : "disabled"} />
-                    <ConfigRow icon={Upload} label="Uploads" value={config.features.uploads_enabled ? "enabled" : "disabled"} />
-                    <ConfigRow icon={Mail} label="Email" value={config.features.email_enabled ? "enabled" : "disabled"} />
+                    <ConfigRow icon={Database} label="Database URL" value={config.database.url_configured ? "configured" : "not set"} sources={effectiveSources["database.url"]} mono />
+                    <ConfigRow icon={Database} label="Max Connections" value={String(config.database.max_connections)} sources={effectiveSources["database.max_connections"]} mono tomlPath={["database","max_connections"]} onSave={makeFieldSaver("Max Connections",["database","max_connections"])} />
+                    <ConfigRow icon={Database} label="Min Connections" value={String(config.database.min_connections)} sources={effectiveSources["database.min_connections"]} mono tomlPath={["database","min_connections"]} onSave={makeFieldSaver("Min Connections",["database","min_connections"])} />
                   </ConfigSection>
+
+                  <ConfigSection
+                    title="Redis"
+                    description="Redis connection for sessions and caching. URL is sensitive — stored in env or secrets.toml."
+                  >
+                    <ConfigRow icon={Database} label="Redis URL" value={config.redis.url_configured ? "configured" : "not set"} sources={effectiveSources["redis.url"]} mono />
+                  </ConfigSection>
+
+                  <ConfigSection
+                    title="Auth & Tokens"
+                    description="JWT signing secrets and token expiry durations. Secrets must live in env or secrets.toml."
+                  >
+                    <ConfigRow icon={Server} label="Access Secret" value={config.auth.access_secret_configured ? "configured" : "not set"} sources={effectiveSources["auth.access_secret"]} mono />
+                    <ConfigRow icon={Server} label="Refresh Secret" value={config.auth.refresh_secret_configured ? "configured" : "not set"} sources={effectiveSources["auth.refresh_secret"]} mono />
+                    <ConfigRow icon={Server} label="Access Token Expiry" value={`${config.auth.access_expiry_secs}s`} sources={effectiveSources["auth.access_expiry_secs"]} mono tomlPath={["auth","access_expiry_secs"]} onSave={makeFieldSaver("Access Expiry",["auth","access_expiry_secs"])} />
+                    <ConfigRow icon={Server} label="Refresh Token Expiry" value={`${config.auth.refresh_expiry_secs}s`} sources={effectiveSources["auth.refresh_expiry_secs"]} mono tomlPath={["auth","refresh_expiry_secs"]} onSave={makeFieldSaver("Refresh Expiry",["auth","refresh_expiry_secs"])} />
+                  </ConfigSection>
+
+                  <ConfigSection
+                    title="Email"
+                    description="Email delivery via Resend. API key is sensitive — store in env or secrets.toml."
+                  >
+                    <ConfigRow icon={Mail} label="Resend API Key" value={config.features.email_enabled ? "configured" : "not set"} sources={effectiveSources["email.resend_api_key"]} mono />
+                    <ConfigRow icon={Mail} label="From Email" value={config.email.from_email} sources={effectiveSources["email.from_email"]} mono tomlPath={["email","from_email"]} onSave={makeFieldSaver("From Email",["email","from_email"])} />
+                    <ConfigRow icon={Mail} label="Provider" value={config.email.provider} />
+                  </ConfigSection>
+
                 </>
               ) : null}
             </CardContent>
