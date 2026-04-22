@@ -6,6 +6,7 @@ import { Home, LogIn } from "lucide-react";
 // Providers
 import TanStackProvider from "@/providers/TanStackProvider";
 import ThemeProvider from "@/providers/ThemeProvider";
+import { AuthProvider } from "@/providers/AuthProvider";
 
 // Components
 import { Toaster } from "@/components/ui/sonner";
@@ -24,7 +25,9 @@ function RootComponent() {
     <Fragment>
       <TanStackProvider>
         <ThemeProvider defaultTheme="system" enableSystem attribute="class">
-          <Outlet />
+          <AuthProvider>
+            <Outlet />
+          </AuthProvider>
           <Toaster position="bottom-right" richColors />
         </ThemeProvider>
       </TanStackProvider>

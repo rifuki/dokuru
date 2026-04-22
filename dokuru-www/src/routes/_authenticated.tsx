@@ -1,7 +1,6 @@
-import { createFileRoute, Outlet, useNavigate, useLocation } from "@tanstack/react-router";
-import { AuthProvider } from "@/providers/AuthProvider";
+import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
 import { WebSocketProvider } from "@/providers/WebSocketProvider";
-import { useIsAuthenticated, useAuthUser } from "@/stores/use-auth-store";
+import { useIsAuthenticated, useAuthUser, useAuthLoading } from "@/stores/use-auth-store";
 import { useEffect, useState } from "react";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
@@ -40,32 +39,27 @@ export const Route = createFileRoute("/_authenticated")({
 
 function AppLayout() {
     return (
-        <AuthProvider>
-            <RequireAuth>
-                <WebSocketProvider url={WS_URL}>
-                    <DashboardLayout />
-                </WebSocketProvider>
-            </RequireAuth>
-        </AuthProvider>
+        <RequireAuth>
+            <WebSocketProvider url={WS_URL}>
+                <DashboardLayout />
+            </WebSocketProvider>
+        </RequireAuth>
     );
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
     const isAuth = useIsAuthenticated();
+    const isLoading = useAuthLoading();
     const navigate = useNavigate();
-    const location = useLocation();
 
     useEffect(() => {
-        const isPublicRoute = location.pathname === "/login" || location.pathname === "/register";
-
-        if (!isAuth && !isPublicRoute) {
+        if (isLoading) return;
+        if (!isAuth) {
             navigate({ to: "/login", replace: true });
         }
+    }, [isAuth, isLoading, navigate]);
 
-        if (isAuth && isPublicRoute) {
-            navigate({ to: "/", replace: true });
-        }
-    }, [isAuth, location.pathname, navigate]);
+    if (isLoading || !isAuth) return null;
 
     return <>{children}</>;
 }
