@@ -10,7 +10,6 @@ import {
   Layers,
   Activity,
   FileCode2,
-  X,
   Copy,
   Check,
 } from "lucide-react";
@@ -105,7 +104,7 @@ function ComposeDialog({
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-3xl w-full max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden">
         {/* Header */}
-        <DialogHeader className="flex-row items-start justify-between gap-3 px-5 py-4 border-b border-border/60 shrink-0">
+        <DialogHeader className="flex-row items-start justify-between gap-3 px-5 py-4 pr-12 border-b border-border/60 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shrink-0">
               <FileCode2 className="h-4 w-4" />
