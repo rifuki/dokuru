@@ -1,3 +1,7 @@
+# Writable override layer for local or admin-edited config.
+# This file is intended to be safe to edit and safe to commit only if it contains no secrets.
+# It overrides defaults.toml, but can still be overridden by environment variables and .env.
+
 [server]
 # Example: tighten CORS for a specific deployed frontend
 cors_allowed_origins = ["https://app.dokuru.rifuki.dev"]

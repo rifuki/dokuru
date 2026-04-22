@@ -1,6 +1,6 @@
 use axum::{
     Router, middleware,
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
 };
 
 use crate::{
