@@ -163,7 +163,6 @@ function AdminAgentsPage() {
       header: "Last Heartbeat",
       cell: ({ row }) => {
         const agent = row.original;
-        const resolvedStatus = resolveAgentStatus(agent, liveStatuses[agent.id]);
 
         if (hasRecentHeartbeat(agent.last_seen)) {
           return <span className="text-sm text-emerald-500">Recent</span>;
