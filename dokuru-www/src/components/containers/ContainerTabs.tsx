@@ -11,7 +11,8 @@ import {
   Cpu,
   MemoryStick,
   Plug,
-  Unplug,
+  ChevronDown,
+  Loader2,
 } from "lucide-react";
 import { dockerApi, type Container } from "@/services/docker-api";
 import { Badge } from "@/components/ui/badge";
@@ -350,6 +351,8 @@ export function ContainerStats({
 
 type TermStatus = "idle" | "connecting" | "connected" | "disconnected" | "error";
 
+const SHELLS = ["/bin/bash", "/bin/sh"];
+
 export function ContainerTerminal({
   agentUrl,
   token,
@@ -365,15 +368,45 @@ export function ContainerTerminal({
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const shellMenuRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<TermStatus>("idle");
   const [hasConnectedBefore, setHasConnectedBefore] = useState(false);
+  const [selectedShell, setSelectedShell] = useState<string>("/bin/sh");
+  const [detectedShell, setDetectedShell] = useState<string | null>(null);
+  const [shellMenuOpen, setShellMenuOpen] = useState(false);
 
-  const connect = useCallback(() => {
+  // Detect available shell when tab becomes active (once)
+  useEffect(() => {
+    if (!active || detectedShell !== null) return;
+    dockerApi.detectContainerShell(agentUrl, token, containerId)
+      .then((res) => {
+        const s = res.data.shell;
+        setDetectedShell(s);
+        setSelectedShell(s);
+      })
+      .catch(() => {
+        setDetectedShell("/bin/sh");
+        setSelectedShell("/bin/sh");
+      });
+  }, [active, agentUrl, token, containerId, detectedShell]);
+
+  // Close shell dropdown when clicking outside
+  useEffect(() => {
+    if (!shellMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (shellMenuRef.current && !shellMenuRef.current.contains(e.target as Node)) {
+        setShellMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [shellMenuOpen]);
+
+  const connect = useCallback((shellOverride?: string) => {
     if (!wrapperRef.current) return;
     wsRef.current?.close();
     termRef.current?.dispose();
 
-    // Defer to avoid synchronous setState inside useEffect
     queueMicrotask(() => setStatus("connecting"));
 
     const term = new Terminal({
@@ -381,6 +414,7 @@ export function ContainerTerminal({
       fontSize: 13,
       fontFamily: '"Cascadia Code", "Fira Code", monospace',
       theme: { background: "#0d1117", foreground: "#c9d1d9", cursor: "#58a6ff" },
+      scrollback: 5000,
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -389,9 +423,11 @@ export function ContainerTerminal({
     termRef.current = term;
     fitRef.current = fit;
 
+    const shell = shellOverride ?? selectedShell;
+    const shellParam = `&shell=${encodeURIComponent(shell)}`;
     const wsUrl =
       agentUrl.replace(/^http/, "ws") +
-      `/docker/containers/${containerId}/exec?token=${encodeURIComponent(token)}&cols=${term.cols}&rows=${term.rows}`;
+      `/docker/containers/${containerId}/exec?token=${encodeURIComponent(token)}&cols=${term.cols}&rows=${term.rows}${shellParam}`;
 
     const ws = new WebSocket(wsUrl);
     ws.binaryType = "arraybuffer";
@@ -424,7 +460,7 @@ export function ContainerTerminal({
     if (wrapperRef.current) ro.observe(wrapperRef.current);
 
     return () => { ro.disconnect(); ws.close(); term.dispose(); };
-  }, [agentUrl, token, containerId]);
+  }, [agentUrl, token, containerId, selectedShell]);
 
   // Auto-connect when terminal tab becomes active
   useEffect(() => {
@@ -448,70 +484,133 @@ export function ContainerTerminal({
     error:        "Error",
   }[status];
 
-  const ConnectIcon = hasConnectedBefore ? RotateCw : Plug;
-  const isDisconnected = status === "disconnected" || status === "error" || status === "idle";
+  const isConnected  = status === "connected";
+  const isConnecting = status === "connecting";
+  const isDetecting  = active && detectedShell === null;
+  const shellLabel   = selectedShell.split("/").pop()!;
 
   return (
-    <div className={`rounded-xl border border-white/8 overflow-hidden shadow-2xl ${!active ? "hidden" : ""}`}>
-      {/* Title bar */}
-      <div className="flex items-center gap-3 px-4 py-3 bg-[#161b22] border-b border-white/8 select-none">
-        {/* macOS-style window dots */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className="h-3 w-3 rounded-full bg-[#ff5f56]" />
-          <span className="h-3 w-3 rounded-full bg-[#ffbd2e]" />
-          <span className="h-3 w-3 rounded-full bg-[#27c93f]" />
+    <div className={`rounded-xl overflow-hidden border border-border shadow-lg ${!active ? "hidden" : ""}`}>
+
+      {/* ── Title bar ─────────────────────────────────────────────────────────── */}
+      <div className="relative flex items-center gap-2.5 px-4 py-2.5 bg-card border-b border-border select-none">
+
+        {/* Status accent line at top */}
+        <div className={`absolute inset-x-0 top-0 h-px transition-colors duration-500 ${
+          isConnected  ? "bg-gradient-to-r from-transparent via-emerald-500/40 to-transparent"
+          : isConnecting ? "bg-gradient-to-r from-transparent via-primary/30 to-transparent"
+          : "bg-border"
+        }`} />
+
+        {/* macOS dots */}
+        <div className="flex items-center gap-[5px] shrink-0">
+          <span className="h-[11px] w-[11px] rounded-full bg-[#ff5f56]" />
+          <span className="h-[11px] w-[11px] rounded-full bg-[#ffbd2e]" />
+          <span className="h-[11px] w-[11px] rounded-full bg-[#27c93f]" />
         </div>
 
-        <div className="h-4 w-px bg-white/10 shrink-0" />
+        {/* Separator */}
+        <div className="h-4 w-px bg-border shrink-0" />
 
-        {/* Shell path */}
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <span className="text-[#58a6ff] font-mono text-xs font-bold shrink-0">❯_</span>
-          <span className="text-xs text-[#8b949e] font-mono">/bin/sh</span>
-          <span className="font-mono text-[11px] bg-white/5 border border-white/10 text-[#8b949e] px-2 py-0.5 rounded-md">
-            {containerId.slice(0, 12)}
-          </span>
+        {/* Prompt + container path */}
+        <div className="flex items-center gap-1 min-w-0">
+          <span className="text-primary font-mono text-[13px] font-bold leading-none shrink-0">❯</span>
+          <span className="font-mono text-[11px] text-muted-foreground shrink-0">~/</span>
+          <span className="font-mono text-[11px] text-foreground/80 truncate max-w-[96px]">{containerId.slice(0, 12)}</span>
         </div>
+
+        {/* Shell selector */}
+        <div ref={shellMenuRef} className="relative shrink-0">
+          <button
+            onClick={() => !isDetecting && setShellMenuOpen((v) => !v)}
+            disabled={isDetecting}
+            className={`flex items-center gap-1 pl-2 pr-1.5 py-[3px] rounded-md border text-[11px] font-mono transition-all ${
+              isDetecting
+                ? "bg-muted border-border text-muted-foreground/50 cursor-not-allowed"
+                : "bg-muted border-border text-muted-foreground hover:text-foreground hover:bg-accent"
+            }`}
+          >
+            {isDetecting
+              ? <><Loader2 className="h-2.5 w-2.5 animate-spin mr-0.5" />detecting…</>
+              : <><span className="mr-0.5">{shellLabel}</span><ChevronDown className="h-2.5 w-2.5 opacity-60" /></>
+            }
+          </button>
+
+          {shellMenuOpen && (
+            <div className="absolute top-full left-0 mt-1.5 z-50 rounded-lg border border-border bg-popover shadow-lg overflow-hidden w-[150px]">
+              <div className="px-3 pt-2 pb-1">
+                <span className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground/60">shell</span>
+              </div>
+              {SHELLS.map((s) => {
+                const isSelected = selectedShell === s;
+                const isDefault  = s === detectedShell;
+                return (
+                  <button
+                    key={s}
+                    onClick={() => { setSelectedShell(s); setShellMenuOpen(false); connect(s); }}
+                    className={`w-full text-left px-3 py-2 text-[11px] font-mono transition-colors flex items-center justify-between gap-2 ${
+                      isSelected
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    }`}
+                  >
+                    <span>{s}</span>
+                    <span className="flex items-center gap-1 shrink-0">
+                      {isDefault && (
+                        <span className="text-[8px] px-1 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-mono tracking-wide">
+                          detected
+                        </span>
+                      )}
+                      {isSelected && !isDefault && <span className="text-primary text-xs">✓</span>}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1" />
 
         {/* Status pill */}
-        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-medium font-mono shrink-0 ${
-          status === "connected"
-            ? "bg-green-500/10 border-green-500/20 text-green-400"
-            : status === "connecting"
-            ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-400"
-            : "bg-white/5 border-white/10 text-[#8b949e]"
+        <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-mono font-medium shrink-0 transition-all duration-300 ${
+          isConnected
+            ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-500"
+            : isConnecting
+            ? "bg-primary/10 border-primary/25 text-primary"
+            : "bg-muted border-border text-muted-foreground"
         }`}>
-          <span className={`h-1.5 w-1.5 rounded-full bg-current shrink-0 ${
-            status === "connecting" ? "animate-pulse" : ""
-          }`} />
+          {isConnecting
+            ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
+            : <span className="h-1.5 w-1.5 rounded-full bg-current shrink-0" />
+          }
           {statusLabel}
         </div>
 
         {/* Connect / Reconnect button */}
         <button
-          onClick={connect}
-          disabled={status === "connecting"}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium font-mono transition-all shrink-0 border ${
-            isDisconnected && status !== "idle"
-              ? "bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20"
-              : status === "connected"
-              ? "bg-white/5 border-white/10 text-[#8b949e] hover:bg-white/10 hover:text-white"
-              : status === "idle"
-              ? "bg-[#238636]/20 border-[#238636]/30 text-[#3fb950] hover:bg-[#238636]/30"
-              : "bg-white/5 border-white/10 text-[#8b949e] opacity-60 cursor-not-allowed"
+          onClick={() => connect()}
+          disabled={isConnecting}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-mono font-medium transition-all shrink-0 border ${
+            isConnecting
+              ? "bg-muted border-border text-muted-foreground cursor-not-allowed"
+              : hasConnectedBefore
+              ? "bg-muted border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground hover:border-border"
+              : "bg-primary/15 border-primary/30 text-primary hover:bg-primary/25"
           }`}
         >
-          {status === "connecting"
+          {isConnecting
             ? <RotateCw className="h-3 w-3 animate-spin" />
-            : isDisconnected && status !== "idle"
-            ? <Unplug className="h-3 w-3" />
-            : <ConnectIcon className="h-3 w-3" />
+            : hasConnectedBefore
+            ? <RotateCw className="h-3 w-3" />
+            : <Plug className="h-3 w-3" />
           }
           {hasConnectedBefore ? "Reconnect" : "Connect"}
         </button>
       </div>
 
-      <div ref={wrapperRef} className="h-96 bg-[#0d1117]" />
+      {/* ── Terminal body ──────────────────────────────────────────────────────── */}
+      <div ref={wrapperRef} className="h-96 bg-background pt-2 px-1" />
     </div>
   );
 }

@@ -50,6 +50,7 @@ where
         .route("/docker/containers/{id}/logs", get(container_logs))
         .route("/docker/containers/{id}/stats", get(container_stats))
         .route("/docker/containers/{id}/exec", get(container_exec))
+        .route("/docker/containers/{id}/shell", get(detect_shell_handler))
 }
 
 async fn list_containers(
@@ -186,6 +187,57 @@ async fn container_stats(Path(id): Path<String>) -> Result<Json<Value>, StatusCo
 struct ExecQuery {
     rows: Option<u16>,
     cols: Option<u16>,
+    /// Shell to use. Defaults to auto-detect (bash → sh).
+    shell: Option<String>,
+}
+
+/// Shells tried in priority order when `shell` param is not provided.
+const SHELL_PRIORITY: &[&str] = &["/bin/bash", "/bin/sh"];
+
+/// Resolve which shell to use. Tries `shell` param first, then falls back
+/// to the priority list by checking if the binary exists in the container.
+async fn resolve_shell(docker: &bollard::Docker, container_id: &str, preferred: Option<String>) -> String {
+    if let Some(s) = preferred {
+        if !s.is_empty() {
+            return s;
+        }
+    }
+    // Auto-detect: run `test -f <shell>` for each candidate.
+    for candidate in SHELL_PRIORITY {
+        let probe = docker
+            .create_exec(
+                container_id,
+                bollard::exec::CreateExecOptions::<String> {
+                    attach_stdout: Some(true),
+                    attach_stderr: Some(true),
+                    tty: Some(false),
+                    cmd: Some(vec!["test".to_owned(), "-f".to_owned(), candidate.to_string()]),
+                    ..Default::default()
+                },
+            )
+            .await;
+        if let Ok(exec) = probe {
+            if let Ok(bollard::exec::StartExecResults::Attached { mut output, .. }) = docker
+                .start_exec(&exec.id, Some(bollard::exec::StartExecOptions { detach: false, tty: false, output_capacity: None }))
+                .await
+            {
+                // Drain output; exit code 0 means the file exists.
+                while output.next().await.is_some() {}
+                let info = docker.inspect_exec(&exec.id).await.unwrap_or_default();
+                if info.exit_code == Some(0) {
+                    return candidate.to_string();
+                }
+            }
+        }
+    }
+    "/bin/sh".to_owned()
+}
+
+/// GET /docker/containers/{id}/shell — returns the best available shell for the container.
+async fn detect_shell_handler(Path(id): Path<String>) -> Result<Json<serde_json::Value>, StatusCode> {
+    let docker = get_docker_client().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let shell = resolve_shell(&docker, &id, None).await;
+    Ok(Json(serde_json::json!({ "shell": shell })))
 }
 
 async fn container_exec(
@@ -195,15 +247,18 @@ async fn container_exec(
 ) -> Response {
     let rows = query.rows.unwrap_or(24);
     let cols = query.cols.unwrap_or(80);
-    ws.on_upgrade(move |socket| handle_exec(id, socket, rows, cols))
+    let shell = query.shell;
+    ws.on_upgrade(move |socket| handle_exec(id, socket, rows, cols, shell))
 }
 
 #[allow(clippy::too_many_lines)]
-async fn handle_exec(container_id: String, ws: WebSocket, rows: u16, cols: u16) {
+async fn handle_exec(container_id: String, ws: WebSocket, rows: u16, cols: u16, preferred_shell: Option<String>) {
     let Ok(docker) = get_docker_client() else {
         return;
     };
     let docker = Arc::new(docker);
+
+    let shell = resolve_shell(&docker, &container_id, preferred_shell).await;
 
     let Ok(exec) = docker
         .create_exec(
@@ -213,7 +268,7 @@ async fn handle_exec(container_id: String, ws: WebSocket, rows: u16, cols: u16) 
                 attach_stdout: Some(true),
                 attach_stderr: Some(true),
                 tty: Some(true),
-                cmd: Some(vec!["/bin/sh".to_owned()]),
+                cmd: Some(vec![shell]),
                 ..Default::default()
             },
         )

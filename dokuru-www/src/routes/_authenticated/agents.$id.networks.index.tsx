@@ -156,7 +156,6 @@ function NetworksPage() {
       <PageHeader
         icon={NetworkIcon}
         title="Networks"
-        accent="violet"
         loading={isLoading}
         stats={[
           { value: networks?.length ?? 0, label: `network${(networks?.length ?? 0) !== 1 ? "s" : ""}` },

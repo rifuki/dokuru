@@ -148,7 +148,6 @@ function VolumesPage() {
       <PageHeader
         icon={HardDrive}
         title="Volumes"
-        accent="orange"
         loading={isLoading}
         stats={[
           { value: volumes?.length ?? 0, label: `volume${(volumes?.length ?? 0) !== 1 ? "s" : ""}` },
