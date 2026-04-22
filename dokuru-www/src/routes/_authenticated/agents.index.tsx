@@ -79,12 +79,12 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
     setIsSaving(true);
     try {
       const updated = await agentApi.update(agent.id, {
-        name: editName,
-        url: editUrl,
-        token: editToken || undefined,
+        name: editName.trim(),
+        url: editUrl.trim(),
+        token: editToken.trim() || undefined,
       });
-      if (editToken) {
-        setAgentToken(agent.id, editToken);
+      if (editToken.trim()) {
+        setAgentToken(agent.id, editToken.trim());
       }
       onUpdated(updated);
       setShowEditDialog(false);
@@ -163,9 +163,9 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
                 <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-miku-primary" />
                 <span className="text-[12px] text-muted-foreground/70">Fetching Docker info...</span>
               </div>
-            ) : info ? (
-              // Show last-known stats, dimmed when WS is temporarily offline.
-              <div className={`flex items-center mt-3 text-[12px] font-medium flex-wrap divide-x divide-border transition-opacity ${!isOnline ? "opacity-50" : "text-muted-foreground"}`}>
+            ) : info && isOnline ? (
+              // Only show stats when agent is online
+              <div className="flex items-center mt-3 text-[12px] font-medium flex-wrap divide-x divide-border text-muted-foreground">
                 <div className="flex items-center gap-1.5 pr-3">
                   <Container className="w-3.5 h-3.5" />
                   <span>{info.containers.total} containers</span>

@@ -169,9 +169,10 @@ impl StatsRepository for StatsRepositoryImpl {
     }
 
     async fn average_score(&self, pool: &PgPool) -> Result<f64, StatsRepositoryError> {
-        let avg: Option<f64> = sqlx::query_scalar("SELECT AVG(score) FROM audit_results")
-            .fetch_one(pool)
-            .await?;
+        let avg: Option<f64> =
+            sqlx::query_scalar("SELECT AVG(score)::FLOAT8 FROM audit_results")
+                .fetch_one(pool)
+                .await?;
         Ok(avg.unwrap_or(0.0))
     }
 

@@ -175,11 +175,11 @@ function AgentDetail() {
         setIsSaving(true);
         try {
             const updated = await agentApi.update(id, {
-                name: editName,
-                url: editUrl,
-                token: editToken || undefined,
+                name: editName.trim(),
+                url: editUrl.trim(),
+                token: editToken.trim() || undefined,
             });
-            if (editToken) setAgentToken(id, editToken);
+            if (editToken.trim()) setAgentToken(id, editToken.trim());
             setAgent(updated);
             updateAgent(updated);
             setEditDialogOpen(false);
