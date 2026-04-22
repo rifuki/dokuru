@@ -564,7 +564,7 @@ export function ContainerTerminal({
     <div className={`rounded-xl overflow-hidden border border-border shadow-lg ${!active ? "hidden" : ""}`}>
 
       {/* ── Title bar ─────────────────────────────────────────────────────────── */}
-      <div className="relative flex items-center gap-2.5 px-4 py-2.5 bg-card border-b border-border select-none">
+      <div className="relative flex items-center gap-2 px-3 py-1.5 bg-card border-b border-border select-none">
 
         {/* Status accent line at top */}
         <div className={`absolute inset-x-0 top-0 h-px transition-colors duration-500 ${
@@ -574,20 +574,20 @@ export function ContainerTerminal({
         }`} />
 
         {/* macOS dots */}
-        <div className="flex items-center gap-[5px] shrink-0">
-          <span className="h-[11px] w-[11px] rounded-full bg-[#ff5f56]" />
-          <span className="h-[11px] w-[11px] rounded-full bg-[#ffbd2e]" />
-          <span className="h-[11px] w-[11px] rounded-full bg-[#27c93f]" />
+        <div className="flex items-center gap-1 shrink-0">
+          <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f56]" />
+          <span className="h-2.5 w-2.5 rounded-full bg-[#ffbd2e]" />
+          <span className="h-2.5 w-2.5 rounded-full bg-[#27c93f]" />
         </div>
 
         {/* Separator */}
-        <div className="h-4 w-px bg-border shrink-0" />
+        <div className="h-3 w-px bg-border/50 shrink-0" />
 
         {/* Prompt + container path */}
         <div className="flex items-center gap-1 min-w-0">
-          <span className="text-primary font-mono text-[13px] font-bold leading-none shrink-0">❯</span>
-          <span className="font-mono text-[11px] text-muted-foreground shrink-0">~/</span>
-          <span className="font-mono text-[11px] text-foreground/80 truncate max-w-[96px]">{containerId.slice(0, 12)}</span>
+          <span className="text-primary font-mono text-xs font-bold leading-none shrink-0">❯</span>
+          <span className="font-mono text-[10px] text-muted-foreground shrink-0">~/</span>
+          <span className="font-mono text-[10px] text-foreground/80 truncate max-w-[96px]">{containerId.slice(0, 12)}</span>
         </div>
 
         {/* Shell selector */}
@@ -595,7 +595,7 @@ export function ContainerTerminal({
           <button
             onClick={() => !isDetecting && setShellMenuOpen((v) => !v)}
             disabled={isDetecting}
-            className={`flex items-center gap-1 pl-2 pr-1.5 py-[3px] rounded-md border text-[11px] font-mono transition-all ${
+            className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[10px] font-mono transition-all ${
               isDetecting
                 ? "bg-muted border-border text-muted-foreground/50 cursor-not-allowed"
                 : "bg-muted border-border text-muted-foreground hover:text-foreground hover:bg-accent"
@@ -645,28 +645,28 @@ export function ContainerTerminal({
 
         {/* Status indicator — disconnected only shown if we've had a session before */}
         {(isConnected || isConnecting || isDisconnected) && (
-          <div className={`flex items-center gap-1.5 text-[11px] font-mono font-medium uppercase tracking-wide shrink-0 transition-colors duration-300 ${
+          <div className={`flex items-center gap-1 text-[10px] font-mono font-medium uppercase tracking-wide shrink-0 transition-colors duration-300 ${
             isConnected    ? "text-emerald-500"
             : isConnecting ? "text-primary"
             : "text-destructive"
           }`}>
             {isConnecting
-              ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
-              : <span className={`h-1.5 w-1.5 rounded-full bg-current shrink-0 ${isConnected ? "animate-pulse" : ""}`} />
+              ? <Loader2 className="h-2 w-2 animate-spin" />
+              : <span className={`h-1 w-1 rounded-full bg-current shrink-0 ${isConnected ? "animate-pulse" : ""}`} />
             }
             {isConnected ? "Connected" : isConnecting ? "Connecting" : "Disconnected"}
           </div>
         )}
 
         {/* Actions */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
           {/* Disconnect button — only when connected, labeled so it's findable */}
           {isConnected && (
             <button
               onClick={disconnect}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-mono font-medium border border-border/60 text-muted-foreground hover:text-destructive hover:border-destructive/40 hover:bg-destructive/10 transition-all"
+              className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono font-medium border border-border/60 text-muted-foreground hover:text-destructive hover:border-destructive/40 hover:bg-destructive/10 transition-all"
             >
-              <PowerOff className="h-3 w-3" />
+              <PowerOff className="h-2.5 w-2.5" />
               Disconnect
             </button>
           )}
@@ -676,7 +676,7 @@ export function ContainerTerminal({
             <button
               onClick={reconnect}
               disabled={isConnecting}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-mono font-medium transition-all border ${
+              className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono font-medium transition-all border ${
                 isConnecting
                   ? "bg-muted border-border text-muted-foreground cursor-not-allowed"
                   : isDisconnected
@@ -685,10 +685,10 @@ export function ContainerTerminal({
               }`}
             >
               {isConnecting
-                ? <RotateCw className="h-3 w-3 animate-spin" />
+                ? <RotateCw className="h-2.5 w-2.5 animate-spin" />
                 : isDisconnected
-                ? <RotateCw className="h-3 w-3" />
-                : <Plug className="h-3 w-3" />
+                ? <RotateCw className="h-2.5 w-2.5" />
+                : <Plug className="h-2.5 w-2.5" />
               }
               {isDisconnected ? "Reconnect" : "Connect"}
             </button>
