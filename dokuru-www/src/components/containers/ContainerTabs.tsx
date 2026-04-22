@@ -18,9 +18,10 @@ import {
 import { dockerApi, type Container } from "@/services/docker-api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import useWebSocket, { ReadyState } from "react-use-websocket";
 
 // ─── Overview tab ─────────────────────────────────────────────────────────────
 
@@ -368,13 +369,46 @@ export function ContainerTerminal({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
   const shellMenuRef = useRef<HTMLDivElement>(null);
-  const [status, setStatus] = useState<TermStatus>("idle");
-  const [hasConnectedBefore, setHasConnectedBefore] = useState(false);
+  const [shouldConnect, setShouldConnect] = useState(false);
+  const [termDimensions, setTermDimensions] = useState({ cols: 80, rows: 24 });
   const [selectedShell, setSelectedShell] = useState<string>("/bin/sh");
   const [detectedShell, setDetectedShell] = useState<string | null>(null);
   const [shellMenuOpen, setShellMenuOpen] = useState(false);
+
+  // Build WebSocket URL
+  const wsUrl = useMemo(() => {
+    if (!shouldConnect) return null;
+    const shell = `&shell=${encodeURIComponent(selectedShell)}`;
+    return agentUrl.replace(/^http/, "ws") +
+      `/docker/containers/${containerId}/exec?token=${encodeURIComponent(token)}&cols=${termDimensions.cols}&rows=${termDimensions.rows}${shell}`;
+  }, [shouldConnect, agentUrl, containerId, token, selectedShell, termDimensions]);
+
+  const { sendMessage, lastMessage, readyState, getWebSocket } = useWebSocket(wsUrl, {
+    shouldReconnect: () => false,
+    reconnectAttempts: 0,
+    share: false,
+    onOpen: () => {
+      if (termRef.current) termRef.current.options.disableStdin = false;
+    },
+    onClose: () => {
+      if (termRef.current) {
+        termRef.current.write("\r\n\x1b[31m✗ Connection closed\x1b[0m\r\n");
+        termRef.current.options.disableStdin = true;
+      }
+    },
+    onError: () => {
+      if (termRef.current) {
+        termRef.current.write("\r\n\x1b[31m✗ Connection error\x1b[0m\r\n");
+        termRef.current.options.disableStdin = true;
+      }
+    },
+  });
+
+  const status: TermStatus = 
+    readyState === ReadyState.OPEN ? "connected" :
+    readyState === ReadyState.CONNECTING ? "connecting" :
+    readyState === ReadyState.CLOSED ? "disconnected" : "error";
 
   // Detect available shell when tab becomes active (once)
   useEffect(() => {
@@ -403,12 +437,9 @@ export function ContainerTerminal({
     return () => document.removeEventListener("mousedown", handler);
   }, [shellMenuOpen]);
 
-  const connect = useCallback((shellOverride?: string) => {
-    if (!wrapperRef.current) return;
-    wsRef.current?.close();
-    termRef.current?.dispose();
-
-    queueMicrotask(() => setStatus("connecting"));
+  // Initialize terminal
+  useEffect(() => {
+    if (!active || !wrapperRef.current || termRef.current) return;
 
     const term = new Terminal({
       cursorBlink: true,
@@ -424,78 +455,65 @@ export function ContainerTerminal({
     termRef.current = term;
     fitRef.current = fit;
 
-    const shell = shellOverride ?? selectedShell;
-    const shellParam = `&shell=${encodeURIComponent(shell)}`;
-    const wsUrl =
-      agentUrl.replace(/^http/, "ws") +
-      `/docker/containers/${containerId}/exec?token=${encodeURIComponent(token)}&cols=${term.cols}&rows=${term.rows}${shellParam}`;
-
-    const ws = new WebSocket(wsUrl);
-    ws.binaryType = "arraybuffer";
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      setStatus("connected");
-      setHasConnectedBefore(true);
-      term.options.disableStdin = false;
-    };
-    ws.onclose = () => {
-      setStatus("disconnected");
-      term.write("\r\n\x1b[31m✗ Connection closed\x1b[0m\r\n");
-      term.options.disableStdin = true;
-    };
-    ws.onerror = () => {
-      setStatus("error");
-      term.write("\r\n\x1b[31m✗ Connection error\x1b[0m\r\n");
-      term.options.disableStdin = true;
-    };
-    ws.onmessage = (e) => {
-      const data = e.data instanceof ArrayBuffer ? new Uint8Array(e.data) : e.data;
-      term.write(data);
-    };
-    term.onData((data) => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(new TextEncoder().encode(data));
-    });
-    term.onResize(({ cols, rows }) => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "resize", cols, rows }));
+    queueMicrotask(() => {
+      setTermDimensions({ cols: term.cols, rows: term.rows });
+      setShouldConnect(true);
     });
 
-    const ro = new ResizeObserver(() => fit.fit());
-    if (wrapperRef.current) ro.observe(wrapperRef.current);
+    const ro = new ResizeObserver(() => {
+      fit.fit();
+      queueMicrotask(() => setTermDimensions({ cols: term.cols, rows: term.rows }));
+    });
+    ro.observe(wrapperRef.current);
 
-    return () => { ro.disconnect(); ws.close(); term.dispose(); };
-  }, [agentUrl, token, containerId, selectedShell]);
-
-  // Auto-connect when terminal tab becomes active
-  useEffect(() => {
-    if (!active || termRef.current) return;
-    connect();
-  }, [active, connect]);
-
-  // Cleanup on unmount
-  useEffect(() => {
     return () => {
-      wsRef.current?.close();
-      termRef.current?.dispose();
+      ro.disconnect();
+      term.dispose();
+      termRef.current = null;
     };
-  }, []);
+  }, [active]);
+
+  // Handle terminal input
+  useEffect(() => {
+    if (!termRef.current) return;
+    const disposable = termRef.current.onData((data) => {
+      if (readyState === ReadyState.OPEN) sendMessage(new TextEncoder().encode(data));
+    });
+    return () => disposable.dispose();
+  }, [readyState, sendMessage]);
+
+  // Handle terminal resize
+  useEffect(() => {
+    if (!termRef.current) return;
+    const disposable = termRef.current.onResize(({ cols, rows }) => {
+      if (readyState === ReadyState.OPEN) sendMessage(JSON.stringify({ type: "resize", cols, rows }));
+    });
+    return () => disposable.dispose();
+  }, [readyState, sendMessage]);
+
+  // Handle incoming messages
+  useEffect(() => {
+    if (!lastMessage || !termRef.current) return;
+    const data = lastMessage.data instanceof ArrayBuffer ? new Uint8Array(lastMessage.data) : lastMessage.data;
+    termRef.current.write(data);
+  }, [lastMessage]);
 
   const disconnect = useCallback(() => {
-    setStatus("disconnected");
     if (termRef.current) {
       termRef.current.write("\r\n\x1b[33m⏻ Disconnected\x1b[0m\r\n");
       termRef.current.options.disableStdin = true;
     }
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(new TextEncoder().encode("exit\n"));
-      setTimeout(() => {
-        if (wsRef.current) {
-          wsRef.current.onclose = null;
-          wsRef.current.close();
-          wsRef.current = null;
-        }
-      }, 100);
+    if (readyState === ReadyState.OPEN) {
+      sendMessage(new TextEncoder().encode("exit\n"));
+      setTimeout(() => getWebSocket()?.close(), 100);
     }
+  }, [readyState, sendMessage, getWebSocket]);
+
+  const reconnect = useCallback(() => {
+    termRef.current?.dispose();
+    termRef.current = null;
+    setShouldConnect(false);
+    setTimeout(() => setShouldConnect(true), 100);
   }, []);
 
   const isConnected    = status === "connected";
@@ -562,7 +580,7 @@ export function ContainerTerminal({
                 return (
                   <button
                     key={s}
-                    onClick={() => { setSelectedShell(s); setShellMenuOpen(false); connect(s); }}
+                    onClick={() => { setSelectedShell(s); setShellMenuOpen(false); reconnect(); }}
                     className={`w-full text-left px-3 py-2 text-[11px] font-mono transition-colors flex items-center justify-between gap-2 ${
                       isSelected
                         ? "bg-primary/10 text-primary"
@@ -588,7 +606,7 @@ export function ContainerTerminal({
         <div className="flex-1" />
 
         {/* Status indicator — disconnected only shown if we've had a session before */}
-        {(isConnected || isConnecting || (isDisconnected && hasConnectedBefore)) && (
+        {(isConnected || isConnecting || isDisconnected) && (
           <div className={`flex items-center gap-1.5 text-[11px] font-mono font-medium uppercase tracking-wide shrink-0 transition-colors duration-300 ${
             isConnected    ? "text-emerald-500"
             : isConnecting ? "text-primary"
@@ -618,23 +636,23 @@ export function ContainerTerminal({
           {/* Connect / Reconnect button — hidden when connected */}
           {!isConnected && (
             <button
-              onClick={() => connect()}
+              onClick={reconnect}
               disabled={isConnecting}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-mono font-medium transition-all border ${
                 isConnecting
                   ? "bg-muted border-border text-muted-foreground cursor-not-allowed"
-                  : hasConnectedBefore
+                  : isDisconnected
                   ? "bg-muted border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                   : "bg-primary/15 border-primary/30 text-primary hover:bg-primary/25"
               }`}
             >
               {isConnecting
                 ? <RotateCw className="h-3 w-3 animate-spin" />
-                : hasConnectedBefore
+                : isDisconnected
                 ? <RotateCw className="h-3 w-3" />
                 : <Plug className="h-3 w-3" />
               }
-              {hasConnectedBefore ? "Reconnect" : "Connect"}
+              {isDisconnected ? "Reconnect" : "Connect"}
             </button>
           )}
         </div>
