@@ -393,6 +393,9 @@ export function ContainerTerminal({
     share: false,
     onOpen: () => {
       if (termRef.current) termRef.current.options.disableStdin = false;
+      // Set binary type to arraybuffer
+      const ws = getWebSocket();
+      if (ws && 'binaryType' in ws) ws.binaryType = 'arraybuffer';
     },
     onClose: () => {
       if (termRef.current) {
