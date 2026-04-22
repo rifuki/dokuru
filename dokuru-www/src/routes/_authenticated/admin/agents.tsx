@@ -51,9 +51,6 @@ function AdminAgentsPage() {
               </TableRow>
             ) : (
               agents.map((agent) => {
-                const info = agentInfo[agent.id];
-                const isOnline = info?.wsOnline === true;
-
                 return (
                   <TableRow key={agent.id}>
                     <TableCell>
@@ -66,9 +63,9 @@ function AdminAgentsPage() {
                       {agent.url}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={isOnline ? "default" : "secondary"}>
+                      <Badge variant="secondary">
                         <Activity className="h-3 w-3 mr-1" />
-                        {isOnline ? "Online" : "Offline"}
+                        Registered
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
