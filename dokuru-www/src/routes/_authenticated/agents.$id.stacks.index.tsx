@@ -462,7 +462,6 @@ function StacksPage() {
       <PageHeader
         icon={Layers}
         title="Stacks"
-        accent="cyan"
         loading={isLoading}
         stats={[
           { value: filtered.length, label: `stack${filtered.length !== 1 ? "s" : ""}` },

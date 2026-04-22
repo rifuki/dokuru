@@ -12,7 +12,6 @@ function EventsPage() {
       <PageHeader
         icon={Activity}
         title="Events"
-        accent="rose"
         stats={[{ value: "Live", label: "real-time stream", pulse: true }]}
       />
 

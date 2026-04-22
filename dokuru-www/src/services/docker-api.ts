@@ -112,6 +112,11 @@ export const dockerApi = {
       headers: { Authorization: `Bearer ${token}` },
     }),
 
+  detectContainerShell: (agentUrl: string, token: string, id: string) =>
+    axios.get<{ shell: string }>(`${agentUrl}/docker/containers/${id}/shell`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+
   // Images
   listImages: (agentUrl: string, token: string, all = true) =>
     axios.get<Image[]>(`${agentUrl}/docker/images?all=${all}`, {

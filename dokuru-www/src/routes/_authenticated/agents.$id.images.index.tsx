@@ -230,7 +230,6 @@ function ImagesPage() {
       <PageHeader
         icon={Layers}
         title="Images"
-        accent="blue"
         loading={isLoading}
         stats={[
           { value: images?.length ?? 0, label: `image${(images?.length ?? 0) !== 1 ? "s" : ""}` },
