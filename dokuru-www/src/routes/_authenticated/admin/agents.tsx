@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
-import { useState } from "react";
 import { adminService } from "@/lib/api/services/admin-services";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
@@ -16,9 +15,31 @@ export const Route = createFileRoute("/_authenticated/admin/agents")({
 
 const ONLINE_WINDOW_MS = 5 * 60 * 1000;
 
+type LiveStatus = "online" | "offline";
+
 function isRecentlySeen(lastSeen: string | null) {
   if (!lastSeen) return false;
   return Date.now() - new Date(lastSeen).getTime() <= ONLINE_WINDOW_MS;
+}
+
+function resolveAgentStatus(agent: AdminAgent, liveStatus?: LiveStatus) {
+  if (liveStatus === "online") {
+    return "online" as const;
+  }
+
+  if (agent.access_mode === "relay") {
+    return isRecentlySeen(agent.last_seen) ? ("online" as const) : ("offline" as const);
+  }
+
+  if (!agent.last_seen) {
+    return liveStatus === "offline" ? ("offline" as const) : ("never" as const);
+  }
+
+  if (isRecentlySeen(agent.last_seen)) {
+    return "online" as const;
+  }
+
+  return liveStatus === "offline" ? ("offline" as const) : ("stale" as const);
 }
 
 function ConnectionBadge({ mode }: { mode: string }) {
@@ -36,16 +57,8 @@ function ConnectionBadge({ mode }: { mode: string }) {
   );
 }
 
-function StatusBadge({ lastSeen }: { lastSeen: string | null }) {
-  if (!lastSeen) {
-    return (
-      <Badge variant="outline" className="bg-muted text-muted-foreground border-border">
-        Never seen
-      </Badge>
-    );
-  }
-
-  if (isRecentlySeen(lastSeen)) {
+function StatusBadge({ status }: { status: ReturnType<typeof resolveAgentStatus> }) {
+  if (status === "online") {
     return (
       <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30">
         Online
@@ -53,9 +66,17 @@ function StatusBadge({ lastSeen }: { lastSeen: string | null }) {
     );
   }
 
+  if (status === "stale") {
+    return (
+      <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30">
+        Stale
+      </Badge>
+    );
+  }
+
   return (
-    <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30">
-      Stale
+    <Badge variant="outline" className="bg-muted text-muted-foreground border-border">
+      {status === "never" ? "Never seen" : "Offline"}
     </Badge>
   );
 }
@@ -89,85 +110,122 @@ function SummaryCard({
   );
 }
 
-const columns: ColumnDef<AdminAgent>[] = [
-  {
-    accessorKey: "name",
-    header: "Agent",
-    cell: ({ row }) => {
-      const agent = row.original;
-      return (
-        <div className="space-y-1">
-          <div className="font-medium">{agent.name}</div>
-          <div className="text-xs text-muted-foreground font-mono break-all">{agent.url}</div>
-        </div>
-      );
-    },
-  },
-  {
-    accessorKey: "user_email",
-    header: "Owner",
-    cell: ({ row }) => (
-      <div className="flex items-center gap-2 text-sm">
-        <UserRound className="h-3.5 w-3.5 text-muted-foreground" />
-        <span>{row.original.user_email}</span>
-      </div>
-    ),
-  },
-  {
-    accessorKey: "access_mode",
-    header: "Connection",
-    cell: ({ row }) => <ConnectionBadge mode={row.original.access_mode} />,
-  },
-  {
-    accessorKey: "last_seen",
-    header: "Status",
-    cell: ({ row }) => <StatusBadge lastSeen={row.original.last_seen} />,
-  },
-  {
-    accessorKey: "created_at",
-    header: "Created",
-    cell: ({ row }) => (
-      <span className="text-sm text-muted-foreground">
-        {formatDistanceToNow(new Date(row.original.created_at), { addSuffix: true })}
-      </span>
-    ),
-  },
-  {
-    id: "lastSeenAt",
-    accessorFn: (row) => row.last_seen ?? "",
-    header: "Last Seen",
-    cell: ({ row }) => {
-      const lastSeen = row.original.last_seen;
-      if (!lastSeen) {
-        return <span className="text-sm text-muted-foreground">Never</span>;
-      }
-
-      return (
-        <div className="text-sm text-muted-foreground">
-          {formatDistanceToNow(new Date(lastSeen), { addSuffix: true })}
-        </div>
-      );
-    },
-  },
-];
-
 function AdminAgentsPage() {
-  const [recentAgentsThreshold] = useState(
-    () => new Date().getTime() - 7 * 24 * 60 * 60 * 1000
-  );
-
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ["admin", "agents"],
     queryFn: adminService.getAdminAgents,
   });
 
   const agents = data?.agents ?? [];
+
+  const {
+    data: liveStatuses = {},
+    isFetching: isCheckingStatuses,
+    refetch: refetchStatuses,
+  } = useQuery<Record<string, LiveStatus>>({
+    queryKey: ["admin", "agents", "live-status", agents.map((agent) => `${agent.id}:${agent.url}`).join("|")],
+    enabled: agents.length > 0,
+    staleTime: 15_000,
+    queryFn: async () => {
+      const results = await Promise.all(
+        agents.map(async (agent) => {
+          if (agent.access_mode === "relay") {
+            return [agent.id, isRecentlySeen(agent.last_seen) ? "online" : "offline"] as const;
+          }
+
+          try {
+            const response = await fetch(`${agent.url}/health`, {
+              method: "GET",
+              signal: AbortSignal.timeout(5_000),
+            });
+
+            return [agent.id, response.ok ? "online" : "offline"] as const;
+          } catch {
+            return [agent.id, "offline"] as const;
+          }
+        })
+      );
+
+      return Object.fromEntries(results);
+    },
+  });
   const totalAgents = data?.total ?? 0;
-  const onlineAgents = agents.filter((agent) => isRecentlySeen(agent.last_seen)).length;
+  const onlineAgents = agents.filter((agent) => resolveAgentStatus(agent, liveStatuses[agent.id]) === "online").length;
   const relayAgents = agents.filter((agent) => agent.access_mode === "relay").length;
-  const recentAgents = agents.filter(
-    (agent) => new Date(agent.created_at).getTime() >= recentAgentsThreshold
-  ).length;
+  const staleAgents = agents.filter((agent) => resolveAgentStatus(agent, liveStatuses[agent.id]) === "stale").length;
+
+  const columns: ColumnDef<AdminAgent>[] = [
+    {
+      accessorKey: "name",
+      header: "Agent",
+      cell: ({ row }) => {
+        const agent = row.original;
+        return (
+          <div className="space-y-1">
+            <div className="font-medium">{agent.name}</div>
+            <div className="text-xs text-muted-foreground font-mono break-all">{agent.url}</div>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "user_email",
+      header: "Owner",
+      cell: ({ row }) => (
+        <div className="flex items-center gap-2 text-sm">
+          <UserRound className="h-3.5 w-3.5 text-muted-foreground" />
+          <span>{row.original.user_email}</span>
+        </div>
+      ),
+    },
+    {
+      accessorKey: "access_mode",
+      header: "Connection",
+      cell: ({ row }) => <ConnectionBadge mode={row.original.access_mode} />,
+    },
+    {
+      id: "status",
+      accessorFn: (row) => resolveAgentStatus(row, liveStatuses[row.id]),
+      header: "Status",
+      cell: ({ row }) => <StatusBadge status={resolveAgentStatus(row.original, liveStatuses[row.original.id])} />,
+    },
+    {
+      accessorKey: "created_at",
+      header: "Created",
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {formatDistanceToNow(new Date(row.original.created_at), { addSuffix: true })}
+        </span>
+      ),
+    },
+    {
+      id: "lastSeenAt",
+      accessorFn: (row) => row.last_seen ?? "",
+      header: "Last Seen",
+      cell: ({ row }) => {
+        const agent = row.original;
+        const resolvedStatus = resolveAgentStatus(agent, liveStatuses[agent.id]);
+
+        if (resolvedStatus === "online") {
+          return <span className="text-sm text-emerald-500">Live now</span>;
+        }
+
+        if (!agent.last_seen) {
+          return <span className="text-sm text-muted-foreground">Never</span>;
+        }
+
+        return (
+          <div className="text-sm text-muted-foreground">
+            {formatDistanceToNow(new Date(agent.last_seen), { addSuffix: true })}
+          </div>
+        );
+      },
+    },
+  ];
+
+  const handleRefresh = async () => {
+    await Promise.all([refetch(), refetchStatuses()]);
+  };
 
   return (
     <div className="space-y-6">
@@ -175,11 +233,11 @@ function AdminAgentsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Agents</h1>
           <p className="text-muted-foreground">
-            Monitor every registered agent across all user accounts.
+            Monitor every registered agent across all user accounts with live reachability checks.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => void refetch()} disabled={isFetching}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
+        <Button variant="outline" size="sm" onClick={() => void handleRefresh()} disabled={isFetching || isCheckingStatuses}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${isFetching || isCheckingStatuses ? "animate-spin" : ""}`} />
           Refresh
         </Button>
       </div>
@@ -196,7 +254,7 @@ function AdminAgentsPage() {
         <SummaryCard
           title="Online Now"
           value={onlineAgents}
-          description="Seen in the last 5 minutes"
+          description="Live health check or active relay presence"
           icon={RadioTower}
           iconWrapClassName="bg-emerald-100 dark:bg-emerald-950/30"
           iconClassName="text-emerald-600"
@@ -210,9 +268,9 @@ function AdminAgentsPage() {
           iconClassName="text-amber-600"
         />
         <SummaryCard
-          title="New This Week"
-          value={recentAgents}
-          description="Recently added to the fleet"
+          title="Needs Attention"
+          value={staleAgents}
+          description="Previously seen, but not reachable now"
           icon={Clock3}
           iconWrapClassName="bg-violet-100 dark:bg-violet-950/30"
           iconClassName="text-violet-600"
@@ -224,7 +282,7 @@ function AdminAgentsPage() {
           <div>
             <h2 className="text-lg font-semibold">Fleet Inventory</h2>
             <p className="text-sm text-muted-foreground">
-              Search by agent name, owner email, connection mode, or timestamps.
+              Search by agent name, owner email, connection mode, or URL.
             </p>
           </div>
           <div className="hidden items-center gap-2 rounded-lg border px-3 py-2 text-xs text-muted-foreground md:flex">
