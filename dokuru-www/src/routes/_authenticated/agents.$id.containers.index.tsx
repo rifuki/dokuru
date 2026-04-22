@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { agentApi } from "@/lib/api/agent";
 import { useState } from "react";
 import { ContainerTabPanel } from "@/components/containers/ContainerTabs";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/containers/")({
   component: ContainersPage,
@@ -281,44 +282,37 @@ function ContainersPage() {
   const running = filtered.filter((c) => c.state.toLowerCase() === "running").length;
 
   return (
-    <div className="max-w-7xl mx-auto w-full space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <h2 className="text-3xl font-bold tracking-tight">Containers</h2>
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            {isLoading ? <span>Loading…</span> : (
-              <>
-                <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                  <span className="font-medium">{running} running</span>
-                </div>
-                <span className="text-muted-foreground/50">•</span>
-                <span>{filtered.length} total</span>
-              </>
-            )}
-          </div>
+    <div className="max-w-7xl mx-auto w-full">
+      <PageHeader
+        icon={ContainerIcon}
+        title="Containers"
+        accent="green"
+        loading={isLoading}
+        stats={[
+          { value: running, label: "running", pulse: running > 0 },
+          { value: filtered.length, label: "total" },
+        ]}
+      >
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            className="pl-9 h-9 w-52 text-sm bg-muted/40 border-border/60 focus:bg-background"
+            placeholder="Search containers…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
+        <Button
+          size="sm"
+          variant={showAll ? "default" : "outline"}
+          className="h-9 px-4"
+          onClick={() => setShowAll((v) => !v)}
+        >
+          {showAll ? "All" : "Running"}
+        </Button>
+      </PageHeader>
 
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              className="pl-9 h-10 w-64 text-sm"
-              placeholder="Search containers..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <Button
-            size="default"
-            variant={showAll ? "default" : "outline"}
-            className="h-10 px-4"
-            onClick={() => setShowAll((v) => !v)}
-          >
-            {showAll ? "All" : "Running"}
-          </Button>
-        </div>
-      </div>
+      <div className="space-y-6">
 
       {isLoading ? (
         <div className="space-y-3">
@@ -359,6 +353,7 @@ function ContainersPage() {
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }
