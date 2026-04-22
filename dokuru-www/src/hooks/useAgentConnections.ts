@@ -87,6 +87,44 @@ export function useAgentConnections(agents: Agent[]) {
         setConnectingRef.current(agent.id, true);
         setConnErrRef.current(agent.id, null);
 
+        // First, test HTTP endpoint to get better error messages
+        const httpUrl = agent.url + "/health";
+        fetch(httpUrl, { 
+            method: "GET",
+            signal: AbortSignal.timeout(5000)
+        })
+        .then(async (res) => {
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+            }
+            // Health check passed, now try WebSocket
+            connectWebSocket(agent, wsUrl);
+        })
+        .catch((err) => {
+            console.error(`[WS] pre-check failed → ${agent.name}:`, err);
+            setConnectingRef.current(agent.id, false);
+            setOnlineRef.current(agent.id, false);
+            
+            // Better error messages
+            let errorMsg = "Connection failed";
+            if (err.name === "AbortError" || err.message.includes("timeout")) {
+                errorMsg = "Connection timeout - agent unreachable";
+            } else if (err.message.includes("404")) {
+                errorMsg = "Agent not found (404) - check URL";
+            } else if (err.message.includes("401") || err.message.includes("403")) {
+                errorMsg = "Authentication failed - check token";
+            } else if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
+                errorMsg = "Network error - agent offline or URL invalid";
+            } else {
+                errorMsg = err.message || "Unknown error";
+            }
+            
+            setConnErrRef.current(agent.id, errorMsg);
+            scheduleReconnect(agent.id);
+        });
+    }
+
+    function connectWebSocket(agent: Agent, wsUrl: string) {
         const ws = new WebSocket(wsUrl);
         wsMap.current.set(agent.id, ws);
 
@@ -159,12 +197,15 @@ export function useAgentConnections(agents: Agent[]) {
 
 function resolveCloseReason(code: number): string {
     switch (code) {
+        case 1000: return "Connection closed normally";
         case 1001: return "Agent going away";
-        case 1006: return "Connection lost (timeout or network error)";
+        case 1006: return "Connection lost - agent offline or network error";
+        case 1008: return "Policy violation - check token or permissions";
         case 1011: return "Agent internal error";
         case 1012: return "Agent restarting";
-        case 4001: return "Authentication failed";
-        case 4003: return "Access denied";
+        case 4001: return "Authentication failed - invalid token";
+        case 4003: return "Access denied - insufficient permissions";
+        case 4004: return "Agent not found - check URL";
         default:   return `Connection closed (code ${code})`;
     }
 }
