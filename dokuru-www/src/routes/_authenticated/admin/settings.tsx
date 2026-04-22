@@ -48,6 +48,8 @@ const LEVEL_STYLES: Record<string, string> = {
   error: "text-red-400",
 };
 
+const ANSI_ESCAPE_REGEX = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, "g");
+
 const LOCAL_TOML_PLACEHOLDER = `# Example
 [logging]
 default_level = "info"
@@ -74,20 +76,53 @@ function formatLogTimestamp(raw: string) {
   });
 }
 
+function stripAnsi(raw: string) {
+  return raw.replace(ANSI_ESCAPE_REGEX, "");
+}
+
+function tidyHttpTraceMessage(raw: string) {
+  const withoutPrefix = raw.replace(
+    /^http_request:\s+http_trace::on_response:\s+.*?http_trace\.rs:\d+:\s*/,
+    ""
+  );
+
+  return withoutPrefix
+    .split(/\s(?:method|uri|version|client_ip|request_id)=/)[0]
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function parseLogLine(raw: string): ParsedLogLine {
-  const match = raw.match(/^(\S+)\s+([A-Z]+)\s+(.*)$/);
+  const cleaned = stripAnsi(raw).trim();
+  const match = cleaned.match(/^(\S+)\s+([A-Z]+)\s+(.*)$/);
+
   if (!match) {
-    return { timestamp: null, level: "info", message: raw };
+    return {
+      timestamp: null,
+      level: "info",
+      message: cleaned,
+    };
   }
+
+  const messageBody = match[3].includes("http_request: http_trace::on_response:")
+    ? tidyHttpTraceMessage(match[3])
+    : match[3].replace(/\s+/g, " ").trim();
 
   return {
     timestamp: formatLogTimestamp(match[1]),
     level: match[2].toLowerCase(),
-    message: match[3],
+    message: messageBody,
   };
 }
 
-function ConfigItem({
+function formatSourceLabel(source?: string) {
+  if (!source) return null;
+  if (source.startsWith("env:")) return source.replace("env:", "Env:").trim();
+  if (source.startsWith("file:")) return source.replace("file:", "File:").trim();
+  return source;
+}
+
+function ConfigRow({
   icon: Icon,
   label,
   value,
@@ -101,15 +136,39 @@ function ConfigItem({
   mono?: boolean;
 }) {
   return (
-    <div className="rounded-xl border bg-card/60 px-4 py-4">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+    <div className="flex items-start justify-between gap-4 rounded-xl border bg-card/60 px-4 py-3">
+      <div className="min-w-0 flex-1">
+        <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           <Icon className="h-3.5 w-3.5" />
           {label}
         </div>
-        {source ? <Badge variant="outline" className="text-[10px] capitalize">{source}</Badge> : null}
+        <div className={`truncate text-sm ${mono ? "font-mono text-foreground/90" : "font-medium"}`}>{value || "—"}</div>
       </div>
-      <div className={`truncate text-sm ${mono ? "font-mono text-foreground/90" : "font-medium"}`}>{value || "—"}</div>
+      {source ? (
+        <Badge variant="outline" className="shrink-0 text-[10px]">
+          {formatSourceLabel(source)}
+        </Badge>
+      ) : null}
+    </div>
+  );
+}
+
+function ConfigSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-3 rounded-2xl border bg-card/40 p-4">
+      <div>
+        <h3 className="text-sm font-semibold">{title}</h3>
+        <p className="text-xs text-muted-foreground mt-1">{description}</p>
+      </div>
+      <div className="grid gap-3">{children}</div>
     </div>
   );
 }
@@ -217,18 +276,19 @@ function AdminSettingsPage() {
   });
 
   const currentLogLevel = pendingLogLevel ?? normalizeLevel(logs?.runtime_level);
-
   const effectiveSources = config?.field_sources ?? {};
+  const editorContent = localConfigDraft ?? localConfig?.content ?? "";
 
   const visibleLines = useMemo(() => {
     const lines = logs?.lines ?? [];
-    return lines.filter((raw) => {
-      const parsed = parseLogLine(raw);
-      return (LEVEL_PRIORITY[parsed.level] ?? LEVEL_PRIORITY.info) >= (LEVEL_PRIORITY[filterLevel] ?? LEVEL_PRIORITY.trace);
-    });
+    return lines
+      .map(parseLogLine)
+      .filter(
+        (parsed) =>
+          (LEVEL_PRIORITY[parsed.level] ?? LEVEL_PRIORITY.info) >=
+          (LEVEL_PRIORITY[filterLevel] ?? LEVEL_PRIORITY.trace)
+      );
   }, [filterLevel, logs?.lines]);
-
-  const editorContent = localConfigDraft ?? localConfig?.content ?? "";
 
   const metrics = [
     {
@@ -270,28 +330,36 @@ function AdminSettingsPage() {
         </p>
       </div>
 
-      <section className="rounded-2xl border bg-card">
+      <section className="rounded-2xl border bg-card overflow-hidden">
         <div className="flex flex-col gap-4 px-5 py-4 lg:flex-row lg:items-start lg:justify-between">
           <button
             type="button"
             onClick={() => setLogsOpen((value) => !value)}
-            className="flex items-center gap-2 text-left text-foreground transition hover:text-foreground/90"
+            className="flex items-center gap-3 text-left text-foreground transition hover:text-foreground/90"
           >
-            {logsOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-            <Terminal className="h-4 w-4 text-primary" />
+            {logsOpen ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            )}
+            <div className="rounded-lg border bg-primary/5 p-2 text-primary">
+              <Terminal className="h-4 w-4" />
+            </div>
             <div>
-              <div className="text-sm font-semibold">Runtime Logging</div>
-              <div className="text-xs text-muted-foreground">
-                View recent application logs and adjust runtime verbosity without restarting the server.
+              <div className="text-lg font-semibold">Runtime Logging</div>
+              <div className="text-sm text-muted-foreground">
+                Inspect recent application logs and tune runtime verbosity without restarting the server.
               </div>
             </div>
           </button>
 
           <div className="flex flex-wrap items-center gap-3 lg:justify-end">
-            <div className="flex items-center gap-2 rounded-lg border px-2 py-1.5">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Runtime</span>
+            <div className="flex items-center gap-2 rounded-xl border bg-card/60 px-3 py-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Runtime
+              </span>
               <Select value={currentLogLevel} onValueChange={setPendingLogLevel}>
-                <SelectTrigger id="log-level" className="h-8 w-[160px] border-0 bg-transparent px-2 shadow-none">
+                <SelectTrigger className="h-9 w-[180px] border-0 bg-transparent px-2 shadow-none">
                   <SelectValue placeholder="Select log level" />
                 </SelectTrigger>
                 <SelectContent>
@@ -315,8 +383,10 @@ function AdminSettingsPage() {
               </Button>
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Live</span>
+            <div className="flex items-center gap-2 rounded-xl border bg-card/60 px-3 py-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Live
+              </span>
               <button
                 type="button"
                 onClick={() => setAutoRefreshLogs((value) => !value)}
@@ -324,7 +394,7 @@ function AdminSettingsPage() {
                   autoRefreshLogs ? "text-emerald-400" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {autoRefreshLogs ? "● on" : "off"}
+                {autoRefreshLogs ? "on" : "off"}
               </button>
               <Button variant="outline" size="sm" onClick={() => void refetchLogs()} disabled={logsFetching}>
                 <RefreshCcw className={`mr-2 h-3.5 w-3.5 ${logsFetching ? "animate-spin" : ""}`} />
@@ -338,7 +408,9 @@ function AdminSettingsPage() {
           <div className="border-t px-4 pb-4 pt-3">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-black/20 px-4 py-3">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">View</span>
+                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  View
+                </span>
                 {LOG_LEVELS.map((level) => (
                   <button
                     key={level}
@@ -366,27 +438,24 @@ function AdminSettingsPage() {
 
             <div className="h-80 overflow-y-auto rounded-xl border bg-black/40 p-3 font-mono text-[11px] leading-relaxed">
               {logsLoading ? (
-                <div className="flex h-full items-center justify-center text-muted-foreground">Loading logs...</div>
+                <div className="flex h-full items-center justify-center text-muted-foreground">
+                  Loading logs...
+                </div>
               ) : visibleLines.length === 0 ? (
                 <div className="flex h-full items-center justify-center text-muted-foreground">
                   No logs matched the current filter.
                 </div>
               ) : (
                 <div className="space-y-1">
-                  {visibleLines.map((raw, index) => {
-                    const parsed = parseLogLine(raw);
-                    return (
-                      <div key={`${parsed.timestamp ?? "raw"}-${index}`} className="flex gap-3 py-[1px]">
-                        <span className="w-[72px] shrink-0 text-muted-foreground/70">
-                          {parsed.timestamp ?? "--:--:--"}
-                        </span>
-                        <span className={`w-10 shrink-0 font-semibold uppercase ${LEVEL_STYLES[parsed.level] ?? "text-slate-300"}`}>
-                          {parsed.level.slice(0, 4)}
-                        </span>
-                        <span className="whitespace-pre-wrap break-words text-slate-200">{parsed.message}</span>
-                      </div>
-                    );
-                  })}
+                  {visibleLines.map((parsed, index) => (
+                    <div key={`${parsed.timestamp ?? "raw"}-${index}`} className="grid grid-cols-[88px_56px_minmax(0,1fr)] gap-3 py-[2px]">
+                      <span className="text-muted-foreground/70">{parsed.timestamp ?? "--:--:--"}</span>
+                      <span className={`font-semibold uppercase ${LEVEL_STYLES[parsed.level] ?? "text-slate-300"}`}>
+                        {parsed.level.slice(0, 4)}
+                      </span>
+                      <span className="whitespace-pre-wrap break-words text-slate-200">{parsed.message}</span>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -394,7 +463,7 @@ function AdminSettingsPage() {
         ) : null}
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
         <div className="space-y-6">
           <Card>
             <CardHeader>
@@ -406,41 +475,59 @@ function AdminSettingsPage() {
                 The active server configuration after startup, resolved from embedded TOML defaults plus optional mounted files and environment overrides.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-5">
               {configLoading ? (
                 <div className="flex h-32 items-center justify-center">
                   <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-primary" />
                 </div>
               ) : config ? (
                 <>
-                  <div className="flex flex-wrap items-center gap-2 rounded-lg border px-4 py-3 text-sm text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-2 rounded-xl border px-4 py-3 text-sm text-muted-foreground">
                     <Badge variant="outline">{config.source}</Badge>
                     <span>{config.is_production ? "Production mode" : "Development mode"}</span>
                     <span>·</span>
                     <span>{config.rust_env}</span>
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <ConfigItem icon={BadgeInfo} label="Bootstrap Enabled" value={config.bootstrap.enabled ? "enabled" : "disabled"} source={effectiveSources["bootstrap.enabled"]} />
-                    <ConfigItem icon={BadgeInfo} label="Bootstrap Email" value={config.bootstrap.admin_email} source={effectiveSources["bootstrap.admin_email"]} mono />
-                    <ConfigItem icon={BadgeInfo} label="Bootstrap Username" value={config.bootstrap.admin_username} source={effectiveSources["bootstrap.admin_username"]} mono />
-                    <ConfigItem icon={BadgeInfo} label="Bootstrap Name" value={config.bootstrap.admin_name} source={effectiveSources["bootstrap.admin_name"]} />
-                    <ConfigItem icon={Server} label="API Port" value={String(config.server.port)} source={effectiveSources["server.port"]} mono />
-                    <ConfigItem icon={Cable} label="CORS Origins" value={config.server.cors_allowed_origins.join(", ")} source={effectiveSources["server.cors_allowed_origins"]} mono />
-                    <ConfigItem icon={Activity} label="Default Log Level" value={config.logging.default_level} source={effectiveSources["logging.default_level"]} />
-                    <ConfigItem icon={Cookie} label="Cookie Policy" value={`${config.cookie.same_site} · ${config.cookie.secure ? "secure" : "insecure"}`} source={effectiveSources["cookie.same_site"]} />
-                    <ConfigItem icon={Cookie} label="HttpOnly" value={config.cookie.http_only ? "enabled" : "disabled"} source={effectiveSources["cookie.http_only"]} />
-                    <ConfigItem icon={Upload} label="Upload Dir" value={config.upload.upload_dir} source={effectiveSources["upload.dir"]} mono />
-                    <ConfigItem icon={Upload} label="Upload Base URL" value={config.upload.base_url} source={effectiveSources["upload.base_url"]} mono />
-                    <ConfigItem icon={Mail} label="Email From" value={config.email.from_email} source={effectiveSources["email.from_email"]} mono />
-                    <ConfigItem icon={Mail} label="Email Provider" value={config.email.provider} />
-                  </div>
+                  <ConfigSection
+                    title="Bootstrap"
+                    description="Initial admin bootstrap settings. Password remains outside this view because it should live in env or secrets."
+                  >
+                    <ConfigRow icon={BadgeInfo} label="Bootstrap Enabled" value={config.bootstrap.enabled ? "enabled" : "disabled"} source={effectiveSources["bootstrap.enabled"]} />
+                    <ConfigRow icon={BadgeInfo} label="Bootstrap Email" value={config.bootstrap.admin_email} source={effectiveSources["bootstrap.admin_email"]} mono />
+                    <ConfigRow icon={BadgeInfo} label="Bootstrap Username" value={config.bootstrap.admin_username} source={effectiveSources["bootstrap.admin_username"]} mono />
+                    <ConfigRow icon={BadgeInfo} label="Bootstrap Name" value={config.bootstrap.admin_name} source={effectiveSources["bootstrap.admin_name"]} />
+                  </ConfigSection>
 
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <ConfigItem icon={Database} label="Redis" value={config.features.redis_enabled ? "enabled" : "disabled"} />
-                    <ConfigItem icon={Upload} label="Uploads" value={config.features.uploads_enabled ? "enabled" : "disabled"} />
-                    <ConfigItem icon={Mail} label="Email" value={config.features.email_enabled ? "enabled" : "disabled"} />
-                  </div>
+                  <ConfigSection
+                    title="Server"
+                    description="HTTP listener and origin policy. Changes here are validated by reload, but full application requires restart for port/CORS updates."
+                  >
+                    <ConfigRow icon={Server} label="API Port" value={String(config.server.port)} source={effectiveSources["server.port"]} mono />
+                    <ConfigRow icon={Cable} label="CORS Origins" value={config.server.cors_allowed_origins.join(", ")} source={effectiveSources["server.cors_allowed_origins"]} mono />
+                    <ConfigRow icon={Activity} label="Default Log Level" value={config.logging.default_level} source={effectiveSources["logging.default_level"]} />
+                  </ConfigSection>
+
+                  <ConfigSection
+                    title="Cookie & Upload"
+                    description="Client session behavior and media delivery settings that frontend behavior depends on."
+                  >
+                    <ConfigRow icon={Cookie} label="Cookie Policy" value={`${config.cookie.same_site} · ${config.cookie.secure ? "secure" : "insecure"}`} source={effectiveSources["cookie.same_site"]} />
+                    <ConfigRow icon={Cookie} label="HttpOnly" value={config.cookie.http_only ? "enabled" : "disabled"} source={effectiveSources["cookie.http_only"]} />
+                    <ConfigRow icon={Upload} label="Upload Dir" value={config.upload.upload_dir} source={effectiveSources["upload.dir"]} mono />
+                    <ConfigRow icon={Upload} label="Upload Base URL" value={config.upload.base_url} source={effectiveSources["upload.base_url"]} mono />
+                  </ConfigSection>
+
+                  <ConfigSection
+                    title="Delivery & Features"
+                    description="Feature toggles inferred from the active config plus email delivery metadata."
+                  >
+                    <ConfigRow icon={Mail} label="Email From" value={config.email.from_email} source={effectiveSources["email.from_email"]} mono />
+                    <ConfigRow icon={Mail} label="Email Provider" value={config.email.provider} />
+                    <ConfigRow icon={Database} label="Redis" value={config.features.redis_enabled ? "enabled" : "disabled"} />
+                    <ConfigRow icon={Upload} label="Uploads" value={config.features.uploads_enabled ? "enabled" : "disabled"} />
+                    <ConfigRow icon={Mail} label="Email" value={config.features.email_enabled ? "enabled" : "disabled"} />
+                  </ConfigSection>
                 </>
               ) : null}
             </CardContent>
@@ -453,11 +540,11 @@ function AdminSettingsPage() {
                 <CardTitle>Local Override Editor</CardTitle>
               </div>
               <CardDescription>
-                Edit `local.toml` overrides here. These values override `defaults.toml`, but can still be overridden by environment variables.
+                Edit `local.toml` overrides here. These values override `defaults.toml`, but environment variables still take precedence.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm text-muted-foreground">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <Badge variant="outline">local.toml</Badge>
                   <span>{localConfig?.path ?? config?.local_config_path ?? "config/local.toml"}</span>
@@ -498,7 +585,11 @@ function AdminSettingsPage() {
 
               <div className="flex items-center justify-between gap-3">
                 <div className="text-xs text-muted-foreground">
-                  {localConfigLoading ? "Loading local.toml..." : localConfig?.exists ? "Editing existing local.toml" : "local.toml does not exist yet; saving here will create it."}
+                  {localConfigLoading
+                    ? "Loading local.toml..."
+                    : localConfig?.exists
+                    ? "Editing existing local.toml"
+                    : "local.toml does not exist yet; saving here will create it."}
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
@@ -508,7 +599,10 @@ function AdminSettingsPage() {
                   >
                     Reset local.toml
                   </Button>
-                  <Button onClick={() => saveLocalConfigMutation.mutate(editorContent)} disabled={saveLocalConfigMutation.isPending}>
+                  <Button
+                    onClick={() => saveLocalConfigMutation.mutate(editorContent)}
+                    disabled={saveLocalConfigMutation.isPending}
+                  >
                     {saveLocalConfigMutation.isPending ? "Saving..." : "Save local.toml"}
                   </Button>
                 </div>
@@ -534,7 +628,7 @@ function AdminSettingsPage() {
               <CardTitle>Application Snapshot</CardTitle>
               <CardDescription>Current usage and operational totals.</CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2">
+            <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
               {metrics.map((metric) => (
                 <MetricCard
                   key={metric.title}
@@ -548,22 +642,11 @@ function AdminSettingsPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Cable className="h-5 w-5 text-muted-foreground" />
-                <CardTitle>Agent Connection Mix</CardTitle>
-              </div>
-              <CardDescription>How agents currently connect into Dokuru.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <AgentConnectionChart
-                agentsByMode={stats?.agents_by_mode}
-                totalAgents={stats?.total_agents ?? 0}
-                loading={statsLoading}
-              />
-            </CardContent>
-          </Card>
+          <AgentConnectionChart
+            agentsByMode={stats?.agents_by_mode}
+            totalAgents={stats?.total_agents ?? 0}
+            loading={statsLoading}
+          />
         </div>
       </div>
     </div>
