@@ -12,7 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, RefreshCw, Container, Box, HardDrive, Search, ChevronDown, ArrowUpDown, Edit, Trash2, Cpu, Server, Eye, EyeOff, Cloud, Globe, Link2, Loader2, WifiOff, AlertTriangle } from "lucide-react";
+import { Plus, RefreshCw, Container, Box, HardDrive, Search, ChevronDown, Edit, Trash2, Cpu, Server, Eye, EyeOff, Cloud, Globe, Link2, Loader2, WifiOff, AlertTriangle, ArrowUp, ArrowDown, X } from "lucide-react";
 import { AddAgentModal } from "@/components/agents/AddAgentModal";
 import { agentDirectApi } from "@/lib/api/agent-direct";
 import { agentApi } from "@/lib/api/agent";
@@ -21,7 +21,13 @@ import type { Agent } from "@/types/agent";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+
+type ConnectionFilter = "all" | "cloudflare" | "direct" | "domain" | "relay";
+type StatusFilter     = "all" | "online" | "connecting" | "offline";
+type SortField        = "name" | "status" | "connection";
+type SortDir          = "asc" | "desc";
 
 export const Route = createFileRoute("/_authenticated/agents/")({
   component: AgentsList,
@@ -328,32 +334,28 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
 function AgentsList() {
   const navigate = useNavigate();
   const { agents, isLoading, fetchAgents, updateAgent, agentInfos, setAgentInfo, setAgentInfoLoading, agentOnlineStatus, agentConnectingStatus, agentConnectionError } = useAgentStore();
-  const [localAgents, setLocalAgents] = useState<Agent[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
-  useEffect(() => {
-    fetchAgents();
-  }, [fetchAgents]);
+  // Filter & sort state
+  const [search, setSearch]               = useState("");
+  const [connFilter, setConnFilter]       = useState<ConnectionFilter>("all");
+  const [statusFilter, setStatusFilter]   = useState<StatusFilter>("all");
+  const [versionFilter, setVersionFilter] = useState<string>("all");
+  const [sortField, setSortField]         = useState<SortField>("name");
+  const [sortDir, setSortDir]             = useState<SortDir>("asc");
 
-  useEffect(() => {
-    setLocalAgents(agents);
-  }, [agents]);
+  useEffect(() => { fetchAgents(); }, [fetchAgents]);
 
-  const handleAgentUpdated = (updated: Agent) => {
-    updateAgent(updated);
-  };
+  const handleAgentUpdated = (updated: Agent) => { updateAgent(updated); };
 
-  // Initial info fetch — runs once when agents load.
+  // Initial Docker info fetch — runs once when agents load.
   useEffect(() => {
     if (agents.length === 0) return;
-
     for (const agent of agents) {
       const cached = agentInfos[agent.id];
       if (cached && !cached.loading) continue;
-
       const token = agent.token ?? getAgentToken(agent.id);
       if (!token) { setAgentInfo(agent.id, null); continue; }
-
       setAgentInfoLoading(agent.id, true);
       agentDirectApi.getInfo(agent.url, token)
         .then((info) => setAgentInfo(agent.id, info))
@@ -363,25 +365,83 @@ function AgentsList() {
   }, [agents]);
 
   // Re-fetch Docker info when an agent comes back online.
-  // We do NOT clear info on offline — the card keeps showing last-known stats
-  // with reduced opacity so the UI doesn't blank out on every WS blip.
   useEffect(() => {
     for (const agent of agents) {
-      const isOnline = agentOnlineStatus[agent.id];
-      if (isOnline === true) {
+      if (agentOnlineStatus[agent.id] === true) {
         const token = agent.token ?? getAgentToken(agent.id);
         if (!token) continue;
         agentDirectApi.getInfo(agent.url, token)
           .then((info) => setAgentInfo(agent.id, info))
-          .catch(() => { /* keep stale info; WS status badge already shows DOWN */ });
+          .catch(() => { /* keep stale info */ });
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentOnlineStatus]);
 
-  const handleRefresh = () => {
-    fetchAgents();
+  // Collect available Docker versions for the version filter dropdown.
+  const availableVersions = Array.from(
+    new Set(
+      agents
+        .map((a) => agentInfos[a.id]?.info?.docker_version)
+        .filter((v): v is string => !!v),
+    ),
+  ).sort();
+
+  const hasFilters = search !== "" || connFilter !== "all" || statusFilter !== "all" || versionFilter !== "all";
+
+  const clearAll = () => {
+    setSearch("");
+    setConnFilter("all");
+    setStatusFilter("all");
+    setVersionFilter("all");
   };
+
+  // Build filtered + sorted list.
+  const displayAgents = agents
+    .filter((agent) => {
+      // Search
+      if (search) {
+        const q = search.toLowerCase();
+        const inName = agent.name.toLowerCase().includes(q);
+        const inUrl  = agent.url.toLowerCase().includes(q);
+        const inMode = agent.access_mode?.toLowerCase().includes(q) ?? false;
+        const inVer  = (agentInfos[agent.id]?.info?.docker_version ?? "").toLowerCase().includes(q);
+        const isOnl  = agentOnlineStatus[agent.id] === true;
+        const inStat = (isOnl ? "up online connected" : "down offline disconnected").includes(q);
+        if (!inName && !inUrl && !inMode && !inVer && !inStat) return false;
+      }
+      // Connection filter
+      if (connFilter !== "all" && agent.access_mode !== connFilter) return false;
+      // Status filter
+      if (statusFilter !== "all") {
+        const connecting = !!agentConnectingStatus[agent.id];
+        const online     = !connecting && agentOnlineStatus[agent.id] === true;
+        const offline    = !connecting && agentOnlineStatus[agent.id] === false;
+        if (statusFilter === "online"     && !online)     return false;
+        if (statusFilter === "connecting" && !connecting) return false;
+        if (statusFilter === "offline"    && !offline)    return false;
+      }
+      // Version filter
+      if (versionFilter !== "all") {
+        if ((agentInfos[agent.id]?.info?.docker_version ?? "") !== versionFilter) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      let cmp = 0;
+      if (sortField === "name") {
+        cmp = a.name.localeCompare(b.name);
+      } else if (sortField === "status") {
+        const score = (id: string) =>
+          agentConnectingStatus[id] ? 1 : agentOnlineStatus[id] === true ? 0 : 2;
+        cmp = score(a.id) - score(b.id);
+      } else if (sortField === "connection") {
+        cmp = (a.access_mode ?? "").localeCompare(b.access_mode ?? "");
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+
+  const sortLabels: Record<SortField, string> = { name: "Name", status: "Status", connection: "Connection" };
 
   return (
     <div className="max-w-7xl mx-auto w-full space-y-6">
@@ -389,13 +449,14 @@ function AgentsList() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Agents</h2>
           <p className="text-muted-foreground text-sm mt-1">
-            {agents.length} agent{agents.length !== 1 ? "s" : ""} connected
+            {displayAgents.length} of {agents.length} agent{agents.length !== 1 ? "s" : ""}
+            {hasFilters && " (filtered)"}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            onClick={handleRefresh}
+            onClick={() => fetchAgents()}
             disabled={isLoading}
             className="border-primary/30 text-primary hover:bg-primary/10"
           >
@@ -426,46 +487,169 @@ function AgentsList() {
         </div>
       ) : (
         <div className="bg-card border border-border rounded-md overflow-hidden">
+          {/* Filter bar */}
           <div className="p-4 border-b border-border">
             <div className="flex items-center gap-3 flex-wrap">
-              <button className="px-3 py-1.5 bg-muted/50 border border-border rounded text-sm text-muted-foreground hover:bg-muted/50 flex items-center gap-2">
-                Connection
-                <ChevronDown className="w-4 h-4" />
-              </button>
-              <button className="px-3 py-1.5 bg-muted/50 border border-border rounded text-sm text-muted-foreground hover:bg-muted/50 flex items-center gap-2">
-                Status
-                <ChevronDown className="w-4 h-4" />
-              </button>
-              <button className="px-3 py-1.5 bg-muted/50 border border-border rounded text-sm text-muted-foreground hover:bg-muted/50 flex items-center gap-2">
-                Agent Version
-                <ChevronDown className="w-4 h-4" />
-              </button>
-              <button className="px-3 py-1.5 text-sm text-miku-primary hover:text-miku-primary/80">
-                Clear all
-              </button>
-              <div className="flex-1 min-w-[300px] relative">
+
+              {/* Connection filter */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className={`px-3 py-1.5 border rounded text-sm flex items-center gap-2 transition-colors ${
+                    connFilter !== "all"
+                      ? "bg-primary/10 border-primary/40 text-primary"
+                      : "bg-muted/50 border-border text-muted-foreground hover:bg-muted"
+                  }`}>
+                    Connection
+                    {connFilter !== "all" && <span className="font-semibold">· {connFilter}</span>}
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-44">
+                  {(["all", "cloudflare", "direct", "domain", "relay"] as ConnectionFilter[]).map((v) => (
+                    <DropdownMenuCheckboxItem
+                      key={v}
+                      checked={connFilter === v}
+                      onCheckedChange={() => setConnFilter(v)}
+                    >
+                      {v === "all" ? "All connections" : v.charAt(0).toUpperCase() + v.slice(1)}
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Status filter */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className={`px-3 py-1.5 border rounded text-sm flex items-center gap-2 transition-colors ${
+                    statusFilter !== "all"
+                      ? "bg-primary/10 border-primary/40 text-primary"
+                      : "bg-muted/50 border-border text-muted-foreground hover:bg-muted"
+                  }`}>
+                    Status
+                    {statusFilter !== "all" && <span className="font-semibold">· {statusFilter}</span>}
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-44">
+                  {(["all", "online", "connecting", "offline"] as StatusFilter[]).map((v) => (
+                    <DropdownMenuCheckboxItem
+                      key={v}
+                      checked={statusFilter === v}
+                      onCheckedChange={() => setStatusFilter(v)}
+                    >
+                      {v === "all" ? "All statuses" : v.charAt(0).toUpperCase() + v.slice(1)}
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Agent Version filter */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className={`px-3 py-1.5 border rounded text-sm flex items-center gap-2 transition-colors ${
+                    versionFilter !== "all"
+                      ? "bg-primary/10 border-primary/40 text-primary"
+                      : "bg-muted/50 border-border text-muted-foreground hover:bg-muted"
+                  }`}>
+                    Agent Version
+                    {versionFilter !== "all" && <span className="font-semibold">· {versionFilter}</span>}
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-48">
+                  <DropdownMenuCheckboxItem
+                    checked={versionFilter === "all"}
+                    onCheckedChange={() => setVersionFilter("all")}
+                  >
+                    All versions
+                  </DropdownMenuCheckboxItem>
+                  {availableVersions.length > 0 && <DropdownMenuSeparator />}
+                  {availableVersions.map((v) => (
+                    <DropdownMenuCheckboxItem
+                      key={v}
+                      checked={versionFilter === v}
+                      onCheckedChange={() => setVersionFilter(v)}
+                    >
+                      Docker {v}
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                  {availableVersions.length === 0 && (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">No version data yet</div>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Clear all */}
+              {hasFilters && (
+                <button
+                  onClick={clearAll}
+                  className="px-3 py-1.5 text-sm text-miku-primary hover:text-miku-primary/80 flex items-center gap-1.5"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Clear all
+                </button>
+              )}
+
+              {/* Search */}
+              <div className="flex-1 min-w-[260px] relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
                 <input
                   type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search by name, status, URL..."
-                  className="w-full pl-10 pr-4 py-1.5 bg-muted/50 border border-border rounded text-sm text-muted-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-miku-primary/50"
+                  className="w-full pl-10 pr-8 py-1.5 bg-muted/50 border border-border rounded text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-miku-primary/50"
                 />
+                {search && (
+                  <button
+                    onClick={() => setSearch("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
+
+              {/* Sort */}
               <div className="flex items-center gap-2 ml-auto">
                 <span className="text-sm text-muted-foreground/70">Sort By</span>
-                <button className="px-3 py-1.5 bg-muted/50 border border-border rounded text-sm text-muted-foreground hover:bg-muted/50 flex items-center gap-2">
-                  Name
-                  <ChevronDown className="w-4 h-4" />
-                </button>
-                <button className="p-1.5 bg-muted/50 border border-border rounded text-muted-foreground hover:bg-muted/50">
-                  <ArrowUpDown className="w-4 h-4" />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="px-3 py-1.5 bg-muted/50 border border-border rounded text-sm text-muted-foreground hover:bg-muted flex items-center gap-2">
+                      {sortLabels[sortField]}
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-40">
+                    <DropdownMenuRadioGroup value={sortField} onValueChange={(v) => setSortField(v as SortField)}>
+                      <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="status">Status</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="connection">Connection</DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <button
+                  onClick={() => setSortDir((d) => d === "asc" ? "desc" : "asc")}
+                  className="p-1.5 bg-muted/50 border border-border rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                  title={sortDir === "asc" ? "Ascending" : "Descending"}
+                >
+                  {sortDir === "asc" ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
                 </button>
               </div>
             </div>
           </div>
 
+          {/* Agent list */}
           <div className="divide-y divide-white/5">
-            {localAgents.map((agent) => (
+            {displayAgents.length === 0 ? (
+              <div className="py-12 text-center">
+                <Search className="w-8 h-8 mx-auto text-muted-foreground/30 mb-3" />
+                <p className="text-sm text-muted-foreground">No agents match your filters.</p>
+                <button onClick={clearAll} className="mt-2 text-sm text-miku-primary hover:underline flex items-center gap-1 mx-auto">
+                  <X className="w-3 h-3" /> Clear filters
+                </button>
+              </div>
+            ) : displayAgents.map((agent) => (
               <AgentCard
                 key={agent.id}
                 data={{
