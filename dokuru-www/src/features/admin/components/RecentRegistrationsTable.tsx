@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, Clock, Users, ArrowRight } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -16,19 +16,19 @@ function UserAvatar({ name, email }: { name?: string | null; email: string }) {
     ? name.slice(0, 2).toUpperCase()
     : email.slice(0, 2).toUpperCase();
 
-  // Deterministic color based on initials
+  // Muted colors
   const colors = [
-    "bg-blue-500/20 text-blue-500",
-    "bg-purple-500/20 text-purple-500",
-    "bg-emerald-500/20 text-emerald-500",
-    "bg-amber-500/20 text-amber-500",
-    "bg-rose-500/20 text-rose-500",
-    "bg-cyan-500/20 text-cyan-500",
+    "bg-[hsl(220,45%,96%)] text-[hsl(220,50%,50%)] dark:bg-[hsl(220,45%,15%)] dark:text-[hsl(220,50%,60%)]",
+    "bg-[hsl(260,40%,96%)] text-[hsl(260,45%,55%)] dark:bg-[hsl(260,40%,15%)] dark:text-[hsl(260,45%,65%)]",
+    "bg-[hsl(142,40%,96%)] text-[hsl(142,45%,45%)] dark:bg-[hsl(142,40%,15%)] dark:text-[hsl(142,45%,55%)]",
+    "bg-[hsl(30,45%,96%)] text-[hsl(30,50%,50%)] dark:bg-[hsl(30,45%,15%)] dark:text-[hsl(30,50%,60%)]",
+    "bg-[hsl(330,40%,96%)] text-[hsl(330,45%,55%)] dark:bg-[hsl(330,40%,15%)] dark:text-[hsl(330,45%,65%)]",
+    "bg-[hsl(180,40%,96%)] text-[hsl(180,40%,45%)] dark:bg-[hsl(180,40%,15%)] dark:text-[hsl(180,40%,55%)]",
   ];
   const idx = initials.charCodeAt(0) % colors.length;
 
   return (
-    <div className={cn("h-8 w-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0", colors[idx])}>
+    <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center text-xs font-semibold shrink-0", colors[idx])}>
       {initials}
     </div>
   );
@@ -39,71 +39,60 @@ export function RecentRegistrationsTable({ registrations, loading }: RecentRegis
     <Card className="border-border">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <Users className="h-4 w-4 text-blue-500" />
-              Recent Registrations
-            </CardTitle>
-            <CardDescription className="mt-0.5">Latest users who joined the platform</CardDescription>
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-lg bg-[hsl(220,50%,96%)] dark:bg-[hsl(220,50%,15%)] flex items-center justify-center">
+              <Users className="h-4 w-4 text-[hsl(220,50%,55%)]" />
+            </div>
+            <CardTitle className="text-base font-semibold">Recent Users</CardTitle>
           </div>
           <Link
             to="/admin/users"
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors group"
           >
             View all
-            <ArrowRight className="h-3 w-3" />
+            <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
           </Link>
         </div>
       </CardHeader>
       <CardContent className="p-0">
         {loading ? (
-          <div className="px-6 space-y-3 pb-4">
+          <div className="px-6 pb-4 space-y-3">
             {[...Array(3)].map((_, i) => (
               <div key={i} className="flex items-center gap-3 animate-pulse">
-                <div className="h-8 w-8 rounded-full bg-muted" />
-                <div className="flex-1 space-y-1.5">
+                <div className="h-9 w-9 rounded-lg bg-muted" />
+                <div className="flex-1 space-y-2">
                   <div className="h-3 w-32 bg-muted rounded" />
-                  <div className="h-2.5 w-48 bg-muted rounded" />
+                  <div className="h-2 w-24 bg-muted rounded" />
                 </div>
               </div>
             ))}
           </div>
         ) : !registrations || registrations.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
-            <Users className="h-8 w-8 opacity-20" />
-            <p className="text-sm">No registrations yet</p>
+          <div className="px-6 py-8 text-center text-sm text-muted-foreground">
+            No recent registrations
           </div>
         ) : (
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-border/50">
             {registrations.map((user) => (
-              <div key={user.id} className="flex items-center gap-3 px-6 py-3 hover:bg-accent/30 transition-colors">
+              <div key={user.id} className="px-6 py-3 flex items-center gap-3 hover:bg-muted/30 transition-colors">
                 <UserAvatar name={user.username} email={user.email} />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium truncate">
-                      {user.username || user.email.split("@")[0]}
-                    </p>
-                    {user.role === "admin" && (
-                      <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-indigo-500/40 text-indigo-500 bg-indigo-500/10">
-                        admin
-                      </Badge>
-                    )}
-                  </div>
+                  <p className="text-sm font-medium truncate">{user.username || user.email}</p>
                   <p className="text-xs text-muted-foreground truncate">{user.email}</p>
                 </div>
-                <div className="flex flex-col items-end gap-1 shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
                   {user.email_verified ? (
-                    <div className="flex items-center gap-1 text-emerald-500 text-[11px]">
+                    <Badge variant="outline" className="gap-1 text-[hsl(142,45%,45%)] border-[hsl(142,40%,85%)] bg-[hsl(142,40%,96%)] dark:bg-[hsl(142,40%,15%)]">
                       <CheckCircle2 className="h-3 w-3" />
-                      <span>Verified</span>
-                    </div>
+                      Verified
+                    </Badge>
                   ) : (
-                    <div className="flex items-center gap-1 text-amber-500 text-[11px]">
+                    <Badge variant="outline" className="gap-1 text-[hsl(38,50%,50%)] border-[hsl(38,45%,85%)] bg-[hsl(38,45%,96%)] dark:bg-[hsl(38,45%,15%)]">
                       <Clock className="h-3 w-3" />
-                      <span>Pending</span>
-                    </div>
+                      Pending
+                    </Badge>
                   )}
-                  <span className="text-[11px] text-muted-foreground">
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
                     {formatDistanceToNow(new Date(user.created_at), { addSuffix: true })}
                   </span>
                 </div>

@@ -191,6 +191,7 @@ function RuleCard({ result, agentUrl, token }: {
     const [fixing, setFixing] = useState(false);
     const [fixOutcome, setFixOutcome] = useState<FixOutcome | null>(null);
     const [confirmOpen, setConfirmOpen] = useState(false);
+    const [guideOpen, setGuideOpen] = useState(false);
     const [fixStepIndex, setFixStepIndex] = useState(0);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -323,6 +324,76 @@ function RuleCard({ result, agentUrl, token }: {
             </AlertDialogContent>
         </AlertDialog>
 
+        {/* Manual Guide dialog */}
+        <AlertDialog open={guideOpen} onOpenChange={setGuideOpen}>
+            <AlertDialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                <AlertDialogHeader>
+                    <AlertDialogTitle className="flex items-center gap-2">
+                        <BookOpen className="h-4 w-4 text-amber-500" />
+                        Manual Remediation Guide — Rule {rule.id}
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                        {rule.title}
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+
+                <div className="space-y-4 text-sm">
+                    {rule.remediation && (
+                        <div>
+                            <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-2">Steps</h5>
+                            <p className="text-sm text-muted-foreground bg-muted/40 rounded-lg p-3 font-mono whitespace-pre-wrap">{rule.remediation}</p>
+                        </div>
+                    )}
+                    
+                    {audit_command && (
+                        <div>
+                            <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-2">Verify with</h5>
+                            <code className="block text-xs bg-zinc-900 dark:bg-zinc-950 text-green-400 p-3 rounded-lg overflow-x-auto font-mono">
+                                $ {audit_command}
+                            </code>
+                        </div>
+                    )}
+
+                    {(rationale || impact) && (
+                        <div className="grid grid-cols-1 gap-3">
+                            {rationale && (
+                                <div className="bg-muted/30 rounded-lg p-3">
+                                    <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1">Rationale</h5>
+                                    <p className="text-xs text-muted-foreground leading-relaxed">{rationale}</p>
+                                </div>
+                            )}
+                            {impact && (
+                                <div className="bg-muted/30 rounded-lg p-3">
+                                    <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1">Impact</h5>
+                                    <p className="text-xs text-muted-foreground leading-relaxed">{impact}</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {references && references.length > 0 && (
+                        <div>
+                            <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-2">References</h5>
+                            <div className="space-y-1">
+                                {references.map((ref, i) => (
+                                    <a key={i} href={ref.startsWith("http") ? ref : undefined}
+                                        target="_blank" rel="noopener noreferrer"
+                                        className="flex items-center gap-1.5 text-xs text-primary hover:underline break-all">
+                                        <Link className="h-3 w-3 shrink-0" />
+                                        {ref}
+                                    </a>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <AlertDialogFooter>
+                    <AlertDialogAction onClick={() => setGuideOpen(false)}>Close</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+
         <div className={cn("rounded-xl border bg-card dark:bg-gradient-to-br dark:from-[#0A0A0B] dark:to-[#111113] border-l-4 transition-all hover:shadow-lg hover:scale-[1.01]", borderLeft)}>
             {/* Header row */}
             <div
@@ -389,7 +460,7 @@ function RuleCard({ result, agentUrl, token }: {
                                 </button>
                             )}
                             <button
-                                onClick={() => setOpen(true)}
+                                onClick={(e) => { e.stopPropagation(); setGuideOpen(true); }}
                                 className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg border transition-all bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border-amber-500/40 hover:shadow-sm"
                             >
                                 <BookOpen className="h-3.5 w-3.5" />

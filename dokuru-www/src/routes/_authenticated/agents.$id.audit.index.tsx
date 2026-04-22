@@ -193,6 +193,7 @@ function RuleCard({ result, agentId, agentUrl, token }: {
     const fixOutcome = fixOutcomes[agentId]?.[result.rule.id] ?? null;
     const [open, setOpen] = useState(false);
     const [confirmOpen, setConfirmOpen] = useState(false);
+    const [guideOpen, setGuideOpen] = useState(false);
     const [fixStepIndex, setFixStepIndex] = useState(0);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -296,6 +297,76 @@ function RuleCard({ result, agentId, agentUrl, token }: {
             </AlertDialogContent>
         </AlertDialog>
 
+        {/* Manual Guide dialog */}
+        <AlertDialog open={guideOpen} onOpenChange={setGuideOpen}>
+            <AlertDialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                <AlertDialogHeader>
+                    <AlertDialogTitle className="flex items-center gap-2">
+                        <BookOpen className="h-4 w-4 text-amber-500" />
+                        Manual Remediation Guide — Rule {rule.id}
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                        {rule.title}
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+
+                <div className="space-y-4 text-sm">
+                    {rule.remediation && (
+                        <div>
+                            <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-2">Steps</h5>
+                            <p className="text-sm text-muted-foreground bg-muted/40 rounded-lg p-3 font-mono whitespace-pre-wrap">{rule.remediation}</p>
+                        </div>
+                    )}
+                    
+                    {audit_command && (
+                        <div>
+                            <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-2">Verify with</h5>
+                            <code className="block text-xs bg-zinc-900 dark:bg-zinc-950 text-green-400 p-3 rounded-lg overflow-x-auto font-mono">
+                                $ {audit_command}
+                            </code>
+                        </div>
+                    )}
+
+                    {(rationale || impact) && (
+                        <div className="grid grid-cols-1 gap-3">
+                            {rationale && (
+                                <div className="bg-muted/30 rounded-lg p-3">
+                                    <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1">Rationale</h5>
+                                    <p className="text-xs text-muted-foreground leading-relaxed">{rationale}</p>
+                                </div>
+                            )}
+                            {impact && (
+                                <div className="bg-muted/30 rounded-lg p-3">
+                                    <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1">Impact</h5>
+                                    <p className="text-xs text-muted-foreground leading-relaxed">{impact}</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {references && references.length > 0 && (
+                        <div>
+                            <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-2">References</h5>
+                            <div className="space-y-1">
+                                {references.map((ref, i) => (
+                                    <a key={i} href={ref.startsWith("http") ? ref : undefined}
+                                        target="_blank" rel="noopener noreferrer"
+                                        className="flex items-center gap-1.5 text-xs text-primary hover:underline">
+                                        <ExternalLink className="h-3 w-3 shrink-0" />
+                                        {ref}
+                                    </a>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <AlertDialogFooter>
+                    <AlertDialogAction onClick={() => setGuideOpen(false)}>Close</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+
         <div className={cn("rounded-xl border border-border bg-card border-l-4 transition-shadow hover:shadow-sm", borderLeft)}>
             {/* Header row */}
             <div
@@ -353,7 +424,7 @@ function RuleCard({ result, agentId, agentUrl, token }: {
                                 </button>
                             )}
                             <button
-                                onClick={() => setOpen(true)}
+                                onClick={(e) => { e.stopPropagation(); setGuideOpen(true); }}
                                 className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-md border transition-all bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-400 border-amber-500/40"
                             >
                                 <BookOpen className="h-3 w-3" />
@@ -522,6 +593,7 @@ type StatusFilter = "all" | "Pass" | "Fail";
 function AuditPage() {
     const { id } = Route.useParams();
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const { agentOnlineStatus } = useAgentStore();
     const { runningAudits, auditHistories, setRunning, setAuditHistory } = useAuditStore();
     const isOnline = !!agentOnlineStatus[id];
@@ -537,10 +609,7 @@ function AuditPage() {
         agentApi.getById(id).then(a => {
             setAgent(a);
             setToken(getAgentToken(a.id) ?? undefined);
-            // Fetch history hanya jika belum ada di cache
-            if (!auditHistories[id]) {
-                agentApi.listAudits(a.id).then(h => setAuditHistory(id, h)).catch(() => {});
-            }
+            agentApi.listAudits(a.id).then(h => setAuditHistory(id, h)).catch(() => {});
         }).catch(() => toast.error("Failed to load agent"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]);
@@ -554,8 +623,7 @@ function AuditPage() {
             try {
                 const savedAudit = await agentApi.saveAudit(agent.id, data);
                 toast.success(`Audit complete — ${savedAudit.summary.score}/100`);
-                // Invalidate history cache supaya fresh saat kembali
-                setAuditHistory(id, []);
+                await queryClient.invalidateQueries({ queryKey: ["audits", id] });
                 if (savedAudit.id) {
                     navigate({
                         to: "/agents/$id/audits/$auditId",

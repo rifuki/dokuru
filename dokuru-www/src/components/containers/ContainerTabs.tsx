@@ -1,5 +1,6 @@
 import "@xterm/xterm/css/xterm.css";
 
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -18,7 +19,6 @@ import {
 import { dockerApi, type Container } from "@/services/docker-api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import useWebSocket, { ReadyState } from "react-use-websocket";
@@ -266,13 +266,15 @@ export function ContainerStats({
   token: string;
   containerId: string;
 }) {
+  const [interval, setInterval] = useState(2000);
+  
   const { data, isLoading } = useQuery({
     queryKey: ["container-stats", containerId],
     queryFn: async () => {
       const res = await dockerApi.getContainerStats(agentUrl, token, containerId);
       return res.data;
     },
-    refetchInterval: 2000,
+    refetchInterval: interval,
   });
 
   if (isLoading) return <p className="text-sm text-muted-foreground p-6">Loading…</p>;
@@ -297,7 +299,26 @@ export function ContainerStats({
   }
 
   return (
-    <div className="p-6">
+    <div className="p-6 space-y-4">
+      {/* Interval Control */}
+      <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/50">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">Update Interval:</span>
+          <span className="text-sm text-muted-foreground">{interval}ms ({(interval/1000).toFixed(1)}s)</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <input
+            type="range"
+            min="500"
+            max="10000"
+            step="500"
+            value={interval}
+            onChange={(e) => setInterval(Number(e.target.value))}
+            className="w-32 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+          />
+        </div>
+      </div>
+      
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-3 p-5 rounded-lg border bg-card">
           <div className="flex items-center justify-between">
