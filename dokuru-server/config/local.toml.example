@@ -6,6 +6,10 @@
 # Example: tighten CORS for a specific deployed frontend
 cors_allowed_origins = ["https://app.dokuru.rifuki.dev"]
 
+[bootstrap]
+# Example: disable one-time bootstrap user creation after initial setup
+enabled = false
+
 [logging]
 # Lower runtime noise by default in production-like local runs
 default_level = "info"

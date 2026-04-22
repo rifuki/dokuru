@@ -103,6 +103,35 @@ pub struct ServerConfig {
     pub cors_allowed_origins: Vec<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct BootstrapConfig {
+    pub enabled: bool,
+    pub admin_email: String,
+    pub admin_username: String,
+    pub admin_name: String,
+}
+
+impl BootstrapConfig {
+    fn from_sources(toml: &TomlConfig) -> Self {
+        Self {
+            enabled: parse_bool(
+                env_override("BOOTSTRAP_ENABLED")
+                    .or_else(|| env_override("DOKURU__BOOTSTRAP__ENABLED")),
+                toml.bootstrap.enabled,
+            ),
+            admin_email: env_override("BOOTSTRAP_ADMIN_EMAIL")
+                .or_else(|| env_override("DOKURU__BOOTSTRAP__ADMIN_EMAIL"))
+                .unwrap_or_else(|| toml.bootstrap.admin_email.clone()),
+            admin_username: env_override("BOOTSTRAP_ADMIN_USERNAME")
+                .or_else(|| env_override("DOKURU__BOOTSTRAP__ADMIN_USERNAME"))
+                .unwrap_or_else(|| toml.bootstrap.admin_username.clone()),
+            admin_name: env_override("BOOTSTRAP_ADMIN_NAME")
+                .or_else(|| env_override("DOKURU__BOOTSTRAP__ADMIN_NAME"))
+                .unwrap_or_else(|| toml.bootstrap.admin_name.clone()),
+        }
+    }
+}
+
 impl ServerConfig {
     fn from_sources(toml: &TomlConfig) -> Result<Self> {
         Ok(Self {
@@ -289,6 +318,7 @@ impl EmailConfig {
 pub struct Config {
     pub rust_env: String,
     pub is_production: bool,
+    pub bootstrap: BootstrapConfig,
     pub server: ServerConfig,
     pub database: DatabaseConfig,
     pub redis_url: Option<String>,
@@ -308,6 +338,7 @@ impl Config {
         let config = Self {
             rust_env,
             is_production,
+            bootstrap: BootstrapConfig::from_sources(&toml),
             server: ServerConfig::from_sources(&toml)?,
             database: DatabaseConfig::from_sources(&toml)?,
             redis_url: env_override("REDIS_URL")

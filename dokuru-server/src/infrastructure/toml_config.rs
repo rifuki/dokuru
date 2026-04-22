@@ -6,6 +6,7 @@ use toml_edit::{DocumentMut, Item};
 #[derive(Debug, Clone, Deserialize)]
 pub struct TomlConfig {
     pub app: AppConfig,
+    pub bootstrap: BootstrapConfig,
     pub server: ServerConfig,
     pub database: DatabaseConfig,
     pub redis: RedisConfig,
@@ -19,6 +20,14 @@ pub struct TomlConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct AppConfig {
     pub rust_env: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct BootstrapConfig {
+    pub enabled: bool,
+    pub admin_email: String,
+    pub admin_username: String,
+    pub admin_name: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

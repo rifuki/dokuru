@@ -17,13 +17,7 @@ use std::sync::Arc;
 pub async fn bootstrap(db: &Database, config: &Config) -> eyre::Result<()> {
     tracing::info!("🚀 Running bootstrap checks...");
 
-    // Check if bootstrap is enabled
-    let bootstrap_enabled = std::env::var("BOOTSTRAP_ENABLED")
-        .unwrap_or_else(|_| "true".to_string())
-        .parse::<bool>()
-        .unwrap_or(true);
-
-    if !bootstrap_enabled {
+    if !config.bootstrap.enabled {
         tracing::info!("⏭️ Bootstrap disabled, skipping...");
         return Ok(());
     }
@@ -36,18 +30,12 @@ pub async fn bootstrap(db: &Database, config: &Config) -> eyre::Result<()> {
         return Ok(());
     }
 
-    // Create admin from env
-    let admin_email =
-        std::env::var("BOOTSTRAP_ADMIN_EMAIL").unwrap_or_else(|_| "admin@dokuru.dev".to_string());
-
-    let admin_username =
-        std::env::var("BOOTSTRAP_ADMIN_USERNAME").unwrap_or_else(|_| "admin".to_string());
-
+    // Create admin from layered config
+    let admin_email = config.bootstrap.admin_email.clone();
+    let admin_username = config.bootstrap.admin_username.clone();
     let admin_password =
         std::env::var("BOOTSTRAP_ADMIN_PASSWORD").unwrap_or_else(|_| generate_secure_password());
-
-    let admin_name =
-        std::env::var("BOOTSTRAP_ADMIN_NAME").unwrap_or_else(|_| "Administrator".to_string());
+    let admin_name = config.bootstrap.admin_name.clone();
 
     tracing::info!("👤 Creating bootstrap admin user: {}", admin_email);
 

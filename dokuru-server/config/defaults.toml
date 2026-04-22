@@ -10,6 +10,12 @@
 [app]
 rust_env = "development"
 
+[bootstrap]
+enabled = true
+admin_email = "admin@dokuru.dev"
+admin_username = "admin"
+admin_name = "Administrator"
+
 [server]
 port = 9393
 cors_allowed_origins = ["http://localhost:5173"]
@@ -43,4 +49,4 @@ max_avatar_size = 2097152
 
 [email]
 resend_api_key = ""
-from_email = "noreply@dokuru.dev"
+from_email = "noreply@dokuru.rifuki.dev"
