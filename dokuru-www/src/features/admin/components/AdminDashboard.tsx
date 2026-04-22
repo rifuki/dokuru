@@ -38,12 +38,12 @@ export function AdminDashboard() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Admin Dashboard</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
+          <p className="text-sm text-muted-foreground mt-1">
             Platform overview — users, agents, audits & system health
           </p>
         </div>
@@ -139,7 +139,7 @@ export function AdminDashboard() {
       </div>
 
       {/* Charts row */}
-      <div className="grid gap-4 lg:grid-cols-5">
+      <div className="grid gap-3 lg:grid-cols-5">
         {/* Audit Activity — wider */}
         <div className="lg:col-span-3">
           <AuditActivityChart
@@ -159,7 +159,7 @@ export function AdminDashboard() {
       </div>
 
       {/* Bottom row */}
-      <div className="grid gap-4 lg:grid-cols-5">
+      <div className="grid gap-3 lg:grid-cols-5">
         {/* Recent Registrations */}
         <div className="lg:col-span-3">
           <RecentRegistrationsTable
@@ -182,7 +182,7 @@ export function AdminDashboard() {
 
       {/* Quick Navigation */}
       <div>
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Quick Actions</p>
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2.5">Quick Actions</p>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {[
             { label: "Manage Users",    desc: "View, edit, and manage accounts",  href: "/admin/users",    icon: Users,     color: "text-blue-500 bg-blue-500/10" },
@@ -193,7 +193,7 @@ export function AdminDashboard() {
             <Link
               key={item.href}
               to={item.href}
-              className="group flex items-center gap-3 rounded-xl border border-border bg-card p-4 hover:border-border/80 hover:bg-accent/30 transition-all duration-150"
+              className="group flex items-center gap-3 rounded-xl border border-border bg-card p-3.5 hover:border-border/80 hover:bg-accent/30 transition-all duration-150"
             >
               <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${item.color}`}>
                 <item.icon className="h-4 w-4" />

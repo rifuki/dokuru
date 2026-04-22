@@ -21,6 +21,7 @@ import {
   Home,
   Box,
   Settings,
+  FileText,
 } from "lucide-react";
 
 import {
@@ -175,6 +176,7 @@ export function AppSidebar() {
                   { title: "Users", href: "/admin/users", icon: Users },
                   { title: "Agents", href: "/admin/agents", icon: Server },
                   { title: "Audits", href: "/admin/audits", icon: ShieldCheck },
+                  { title: "Documents", href: "/admin/documents", icon: FileText },
                   { title: "API Keys", href: "/admin/api-keys", icon: Key },
                   { title: "Settings", href: "/admin/settings", icon: Settings },
                 ].map((item) => (

@@ -31,14 +31,15 @@ const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<
 };
 
 export function AgentConnectionChart({ agentsByMode, totalAgents = 0, loading }: AgentConnectionChartProps) {
-  const data = MODES
-    .map((m) => ({
-      ...m,
-      value: agentsByMode?.[m.key as keyof typeof agentsByMode] ?? 0,
-    }))
-    .filter((d) => d.value > 0);
+  // ALWAYS show all modes, even if 0
+  const allData = MODES.map((m) => ({
+    ...m,
+    value: agentsByMode?.[m.key as keyof typeof agentsByMode] ?? 0,
+  }));
 
-  const hasData = data.length > 0;
+  // For chart: only show non-zero
+  const chartData = allData.filter((d) => d.value > 0);
+  const hasData = chartData.length > 0;
 
   return (
     <Card className="border-border">
@@ -73,7 +74,7 @@ export function AgentConnectionChart({ agentsByMode, totalAgents = 0, loading }:
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={data}
+                    data={chartData}
                     cx="50%"
                     cy="50%"
                     innerRadius={45}
@@ -86,7 +87,7 @@ export function AgentConnectionChart({ agentsByMode, totalAgents = 0, loading }:
                     animationDuration={800}
                     animationEasing="ease-out"
                   >
-                    {data.map((entry, i) => (
+                    {chartData.map((entry, i) => (
                       <Cell key={i} fill={entry.color} stroke="hsl(var(--card))" strokeWidth={2} />
                     ))}
                   </Pie>
@@ -100,24 +101,33 @@ export function AgentConnectionChart({ agentsByMode, totalAgents = 0, loading }:
               </div>
             </div>
 
-            {/* Legend */}
+            {/* Legend - SHOW ALL MODES */}
             <div className="flex-1 space-y-2">
-              {MODES.map((m) => {
-                const count = agentsByMode?.[m.key as keyof typeof agentsByMode] ?? 0;
+              {allData.map((m) => {
+                const count = m.value;
                 const pct = totalAgents > 0 ? Math.round((count / totalAgents) * 100) : 0;
-                if (count === 0) return null;
+                const isZero = count === 0;
                 return (
                   <div key={m.key} className="flex items-center justify-between gap-3 group">
                     <div className="flex items-center gap-2 flex-1">
                       <div 
                         className="h-2.5 w-2.5 rounded-full shrink-0 transition-transform group-hover:scale-125" 
-                        style={{ backgroundColor: m.color }} 
+                        style={{ 
+                          backgroundColor: m.color,
+                          opacity: isZero ? 0.3 : 1
+                        }} 
                       />
-                      <span className="text-sm text-muted-foreground">{m.label}</span>
+                      <span className={`text-sm ${isZero ? "text-muted-foreground/50" : "text-muted-foreground"}`}>
+                        {m.label}
+                      </span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-semibold">{count}</span>
-                      <span className="text-xs text-muted-foreground min-w-[2.5rem] text-right">{pct}%</span>
+                      <span className={`text-sm font-semibold ${isZero ? "text-muted-foreground/50" : ""}`}>
+                        {count}
+                      </span>
+                      <span className={`text-xs min-w-[2.5rem] text-right ${isZero ? "text-muted-foreground/40" : "text-muted-foreground"}`}>
+                        {pct}%
+                      </span>
                     </div>
                   </div>
                 );
