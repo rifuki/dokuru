@@ -24,6 +24,7 @@ RUN cargo chef cook --release --recipe-path recipe.json
 
 # Build the actual binary
 COPY . .
+ENV SQLX_OFFLINE=true
 RUN cargo build --release --bin dokuru-server
 
 # =============================================================================

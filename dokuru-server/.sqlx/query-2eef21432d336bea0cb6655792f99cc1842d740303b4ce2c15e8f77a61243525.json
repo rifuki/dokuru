@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DATE(ran_at) as date, COUNT(*) as count\n             FROM audit_results\n             WHERE ran_at >= NOW() - INTERVAL '7 days'\n             GROUP BY DATE(ran_at)\n             ORDER BY date ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 1,
+        "name": "count",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "2eef21432d336bea0cb6655792f99cc1842d740303b4ce2c15e8f77a61243525"
+}

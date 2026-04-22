@@ -15,9 +15,6 @@ uploads/*
 logs/
 *.log
 
-# SQLx offline cache
-.sqlx/
-
 # Editor
 .vscode/
 .idea/
