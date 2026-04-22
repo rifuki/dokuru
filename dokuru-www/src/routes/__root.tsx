@@ -1,7 +1,7 @@
 import { Fragment } from "react";
 import { createRootRoute, Link, Outlet } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
-import { Home, LogIn } from "lucide-react";
+import { Home } from "lucide-react";
 
 // Providers
 import TanStackProvider from "@/providers/TanStackProvider";
@@ -11,18 +11,9 @@ import ThemeProvider from "@/providers/ThemeProvider";
 import { Toaster } from "@/components/ui/sonner";
 import { Button } from "@/components/ui/button";
 
-// Stores
-import { useIsAuthenticated } from "@/stores/use-auth-store";
-
 export const Route = createRootRoute({
   component: RootComponent,
-  notFoundComponent: () => (
-    <TanStackProvider>
-      <ThemeProvider defaultTheme="system" enableSystem attribute="class">
-        <NotFoundComponent />
-      </ThemeProvider>
-    </TanStackProvider>
-  ),
+  notFoundComponent: NotFoundComponent,
 });
 
 function RootComponent() {
@@ -40,8 +31,6 @@ function RootComponent() {
 }
 
 function NotFoundComponent() {
-  const isAuthenticated = useIsAuthenticated();
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <div className="text-center space-y-6 max-w-md">
@@ -53,18 +42,9 @@ function NotFoundComponent() {
           </p>
         </div>
         <Button asChild>
-          <Link to={isAuthenticated ? "/" : "/login"}>
-            {isAuthenticated ? (
-              <>
-                <Home className="mr-2 h-4 w-4" />
-                Go Home
-              </>
-            ) : (
-              <>
-                <LogIn className="mr-2 h-4 w-4" />
-                Login
-              </>
-            )}
+          <Link to="/">
+            <Home className="mr-2 h-4 w-4" />
+            Go Home
           </Link>
         </Button>
       </div>
