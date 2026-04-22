@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { agentApi } from "@/lib/api/agent";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/ui/page-header";
 import {
   Dialog,
   DialogContent,
@@ -457,47 +458,29 @@ function StacksPage() {
   const totalContainers = filtered.reduce((sum, s) => sum + s.total, 0);
 
   return (
-    <div className="max-w-7xl mx-auto w-full space-y-6">
-      {/* Page header */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-              <Layers className="h-5 w-5" />
-            </div>
-            <h2 className="text-2xl font-bold tracking-tight">Stacks</h2>
-          </div>
-
-          {isLoading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-pulse" />
-              Loading stacks…
-            </div>
-          ) : (
-            <div className="flex items-center gap-3 text-sm text-muted-foreground pl-12">
-              <span>
-                <span className="text-foreground font-semibold">{filtered.length}</span>{" "}
-                stack{filtered.length !== 1 ? "s" : ""}
-              </span>
-              <span className="text-muted-foreground/40">·</span>
-              <span>
-                <span className="text-foreground font-semibold">{totalRunning}</span>
-                /{totalContainers} containers running
-              </span>
-            </div>
-          )}
-        </div>
-
+    <div className="max-w-7xl mx-auto w-full">
+      <PageHeader
+        icon={Layers}
+        title="Stacks"
+        accent="cyan"
+        loading={isLoading}
+        stats={[
+          { value: filtered.length, label: `stack${filtered.length !== 1 ? "s" : ""}` },
+          { value: `${totalRunning}/${totalContainers}`, label: "containers running" },
+        ]}
+      >
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
-            className="pl-9 h-9 w-60 text-sm bg-muted/40 border-border/60 focus:bg-background"
-            placeholder="Search stacks or containers…"
+            className="pl-9 h-9 w-56 text-sm bg-muted/40 border-border/60 focus:bg-background"
+            placeholder="Search stacks…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-      </div>
+      </PageHeader>
+
+      <div className="space-y-5">
 
       {/* Content */}
       {isLoading ? (
@@ -521,7 +504,7 @@ function StacksPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-5">
+        <>
           {filtered.map((stack) => (
             <StackCard
               key={stack.name}
@@ -531,8 +514,9 @@ function StacksPage() {
               token={agent?.token ?? ""}
             />
           ))}
-        </div>
+        </>
       )}
+      </div>
     </div>
   );
 }

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { agentApi } from "@/lib/api/agent";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/networks/")({
   component: NetworksPage,
@@ -151,22 +152,18 @@ function NetworksPage() {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto w-full space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <h2 className="text-3xl font-bold tracking-tight">Networks</h2>
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            {isLoading ? <span>Loading…</span> : (
-              <>
-                <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-primary/70" />
-                  <span className="font-medium">{networks?.length ?? 0} network{(networks?.length ?? 0) !== 1 ? "s" : ""}</span>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
+    <div className="max-w-7xl mx-auto w-full">
+      <PageHeader
+        icon={NetworkIcon}
+        title="Networks"
+        accent="violet"
+        loading={isLoading}
+        stats={[
+          { value: networks?.length ?? 0, label: `network${(networks?.length ?? 0) !== 1 ? "s" : ""}` },
+        ]}
+      />
+
+      <div className="space-y-6">
 
       {isLoading ? (
         <div className="space-y-2">
@@ -193,6 +190,7 @@ function NetworksPage() {
           isDeleting={removeMutation.isPending}
         />
       )}
+      </div>
     </div>
   );
 }

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { agentApi } from "@/lib/api/agent";
+import { PageHeader } from "@/components/ui/page-header";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/volumes/")({
   component: VolumesPage,
@@ -143,30 +144,29 @@ function VolumesPage() {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto w-full space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <h2 className="text-3xl font-bold tracking-tight">Volumes</h2>
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            {isLoading ? <span>Loading…</span> : (
-              <>
-                <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-orange-500/70" />
-                  <span className="font-medium">{volumes?.length ?? 0} volume{(volumes?.length ?? 0) !== 1 ? "s" : ""}</span>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+    <div className="max-w-7xl mx-auto w-full">
+      <PageHeader
+        icon={HardDrive}
+        title="Volumes"
+        accent="orange"
+        loading={isLoading}
+        stats={[
+          { value: volumes?.length ?? 0, label: `volume${(volumes?.length ?? 0) !== 1 ? "s" : ""}` },
+        ]}
+      >
         <Button
-          variant="outline" size="default" className="h-10 px-4 gap-2 self-start sm:self-auto"
+          variant="outline"
+          size="sm"
+          className="h-9 px-3 gap-2"
           onClick={() => { if (confirm("Prune unused volumes?")) pruneMutation.mutate(); }}
           disabled={pruneMutation.isPending || !agent}
         >
-          <Scissors className="h-4 w-4" />
+          <Scissors className="h-3.5 w-3.5" />
           Prune Unused
         </Button>
-      </div>
+      </PageHeader>
+
+      <div className="space-y-6">
 
       {isLoading ? (
         <div className="space-y-2">
@@ -193,6 +193,7 @@ function VolumesPage() {
           isDeleting={removeMutation.isPending}
         />
       )}
+      </div>
     </div>
   );
 }
