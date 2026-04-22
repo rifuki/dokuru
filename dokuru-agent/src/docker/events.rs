@@ -117,7 +117,7 @@ async fn handle_events_stream(ws: WebSocket) {
             }
             msg = receiver.next() => {
                 match msg {
-                    Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
+                    Some(Ok(Message::Close(_)) | Err(_)) | None => break,
                     _ => {} // pong or other — ignore
                 }
             }
