@@ -46,7 +46,11 @@ export function useAgentConnections(agents: Agent[]) {
                 : null;
             const urlChanged = expectedWsUrl && !ws.url.startsWith(expectedWsUrl);
 
-            if (!eligibleIds.has(id) || urlChanged) {
+            const currentToken = agent ? (agent.token ?? getAgentToken(agent.id) ?? "") : "";
+            const tokenChanged = expectedWsUrl &&
+                !ws.url.includes(`token=${encodeURIComponent(currentToken)}`);
+
+            if (!eligibleIds.has(id) || urlChanged || tokenChanged) {
                 ws.onclose = null;
                 ws.close();
                 wsMap.current.delete(id);
@@ -61,7 +65,7 @@ export function useAgentConnections(agents: Agent[]) {
             openWs(agent);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [agents.map((a) => a.id + a.url).join(",")]);
+    }, [agents.map((a) => a.id + a.url + (a.token ?? "")).join(",")]);
 
     useEffect(() => {
         return () => {

@@ -83,10 +83,16 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
         url: editUrl.trim(),
         token: editToken.trim() || undefined,
       });
-      if (editToken.trim()) {
-        setAgentToken(agent.id, editToken.trim());
+      const newToken = editToken.trim();
+      if (newToken) {
+        setAgentToken(agent.id, newToken);
       }
-      onUpdated(updated);
+      // Carry the new token (or existing one) into the store object so
+      // useAgentConnections can detect the change and reconnect immediately.
+      const agentWithToken = newToken
+        ? { ...updated, token: newToken }
+        : { ...updated, token: agent.token ?? getAgentToken(agent.id) ?? undefined };
+      onUpdated(agentWithToken);
       setShowEditDialog(false);
       toast.success("Agent updated");
     } catch {
