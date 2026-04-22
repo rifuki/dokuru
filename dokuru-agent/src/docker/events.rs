@@ -117,8 +117,7 @@ async fn handle_events_stream(ws: WebSocket) {
             }
             msg = receiver.next() => {
                 match msg {
-                    Some(Ok(Message::Close(_))) | None => break,
-                    Some(Err(_)) => break,
+                    Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
                     _ => {} // pong or other — ignore
                 }
             }
@@ -147,10 +146,10 @@ async fn handle_events_stream(ws: WebSocket) {
                     time: evt.time.unwrap_or_default(),
                 };
 
-                if let Ok(json) = serde_json::to_string(&response) {
-                    if sender.send(Message::Text(json.into())).await.is_err() {
-                        break;
-                    }
+                if let Ok(json) = serde_json::to_string(&response)
+                    && sender.send(Message::Text(json.into())).await.is_err()
+                {
+                    break;
                 }
             }
         }
