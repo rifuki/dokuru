@@ -346,6 +346,8 @@ export function ContainerStats({
 
 // ─── Terminal tab ─────────────────────────────────────────────────────────────
 
+type TermStatus = "idle" | "connecting" | "connected" | "disconnected" | "error";
+
 export function ContainerTerminal({
   agentUrl,
   token,
@@ -361,11 +363,15 @@ export function ContainerTerminal({
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const [status, setStatus] = useState<TermStatus>("idle");
+  const hasConnectedBefore = useRef(false);
 
   const connect = useCallback(() => {
     if (!wrapperRef.current) return;
     wsRef.current?.close();
     termRef.current?.dispose();
+
+    setStatus("connecting");
 
     const term = new Terminal({
       cursorBlink: true,
@@ -388,9 +394,18 @@ export function ContainerTerminal({
     ws.binaryType = "arraybuffer";
     wsRef.current = ws;
 
-    ws.onopen = () => term.write("\r\n\x1b[32m✓ Connected\x1b[0m\r\n\r\n");
-    ws.onclose = () => term.write("\r\n\x1b[31m✗ Connection closed\x1b[0m\r\n");
-    ws.onerror = () => term.write("\r\n\x1b[31m✗ Connection error\x1b[0m\r\n");
+    ws.onopen = () => {
+      setStatus("connected");
+      hasConnectedBefore.current = true;
+    };
+    ws.onclose = () => {
+      setStatus("disconnected");
+      term.write("\r\n\x1b[31m✗ Connection closed\x1b[0m\r\n");
+    };
+    ws.onerror = () => {
+      setStatus("error");
+      term.write("\r\n\x1b[31m✗ Connection error\x1b[0m\r\n");
+    };
     ws.onmessage = (e) => {
       const data = e.data instanceof ArrayBuffer ? new Uint8Array(e.data) : e.data;
       term.write(data);
@@ -408,12 +423,13 @@ export function ContainerTerminal({
     return () => { ro.disconnect(); ws.close(); term.dispose(); };
   }, [agentUrl, token, containerId]);
 
+  // Auto-connect when terminal tab becomes active
   useEffect(() => {
-    if (!active || termRef.current) return; // Skip if inactive or already initialized
+    if (!active || termRef.current) return;
     connect();
   }, [active, connect]);
 
-  // Cleanup only on component unmount (route change)
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       wsRef.current?.close();
@@ -421,17 +437,44 @@ export function ContainerTerminal({
     };
   }, []);
 
+  const statusDot = {
+    idle:         "bg-muted-foreground/40",
+    connecting:   "bg-yellow-400 animate-pulse",
+    connected:    "bg-green-400",
+    disconnected: "bg-red-400",
+    error:        "bg-red-400",
+  }[status];
+
+  const statusLabel = {
+    idle:         "Not connected",
+    connecting:   "Connecting…",
+    connected:    "Connected",
+    disconnected: "Disconnected",
+    error:        "Error",
+  }[status];
+
   return (
-    <div className={`rounded-lg border overflow-hidden shadow-lg ${!active ? 'hidden' : ''}`}>
+    <div className={`rounded-lg border overflow-hidden shadow-lg ${!active ? "hidden" : ""}`}>
       <div className="flex items-center justify-between px-4 py-2.5 bg-[#0d1117] border-b border-white/10">
         <div className="flex items-center gap-3">
           <TerminalIcon className="h-4 w-4 text-muted-foreground" />
           <span className="text-xs text-muted-foreground font-mono">/bin/sh</span>
           <Badge variant="secondary" className="text-[10px]">{containerId.slice(0, 12)}</Badge>
+          {/* Status indicator */}
+          <div className="flex items-center gap-1.5 ml-1">
+            <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${statusDot}`} />
+            <span className="text-[11px] text-muted-foreground">{statusLabel}</span>
+          </div>
         </div>
-        <Button size="sm" variant="ghost" className="h-7 text-xs px-3 hover:bg-white/10" onClick={connect}>
-          <RotateCw className="h-3 w-3 mr-1.5" />
-          Reconnect
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 text-xs px-3 hover:bg-white/10"
+          onClick={connect}
+          disabled={status === "connecting"}
+        >
+          <RotateCw className={`h-3 w-3 mr-1.5 ${status === "connecting" ? "animate-spin" : ""}`} />
+          {hasConnectedBefore.current ? "Reconnect" : "Connect"}
         </Button>
       </div>
       <div ref={wrapperRef} className="h-96 bg-[#0d1117]" />
