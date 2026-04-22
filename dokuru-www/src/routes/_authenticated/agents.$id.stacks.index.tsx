@@ -67,6 +67,7 @@ function ComposeDialog({
   token: string;
 }) {
   const [copied, setCopied] = useState(false);
+  const [wordWrap, setWordWrap] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["stack-compose", agentUrl, stackName],
@@ -122,33 +123,36 @@ function ComposeDialog({
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {data?.content && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs gap-1.5"
-                onClick={handleCopy}
-              >
-                {copied ? (
-                  <Check className="h-3.5 w-3.5 text-green-400" />
-                ) : (
-                  <Copy className="h-3.5 w-3.5" />
-                )}
-                {copied ? "Copied" : "Copy"}
-              </Button>
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs gap-1.5"
+                  onClick={() => setWordWrap(!wordWrap)}
+                >
+                  <FileCode2 className="h-3.5 w-3.5" />
+                  {wordWrap ? "No Wrap" : "Wrap"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs gap-1.5"
+                  onClick={handleCopy}
+                >
+                  {copied ? (
+                    <Check className="h-3.5 w-3.5 text-green-400" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" />
+                  )}
+                  {copied ? "Copied" : "Copy"}
+                </Button>
+              </>
             )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={onClose}
-            >
-              <X className="h-4 w-4" />
-            </Button>
           </div>
         </DialogHeader>
 
         {/* Body */}
-        <div className="flex-1 overflow-auto bg-zinc-950/60">
+        <div className="flex-1 overflow-auto bg-zinc-950/60 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-zinc-700/50 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-2 [&::-webkit-scrollbar-thumb]:border-transparent hover:[&::-webkit-scrollbar-thumb]:bg-zinc-600/50">
           {isLoading ? (
             <div className="flex items-center justify-center h-48 text-sm text-muted-foreground gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-pulse" />
@@ -167,7 +171,7 @@ function ComposeDialog({
               )}
             </div>
           ) : (
-            <pre className="p-5 text-xs leading-relaxed font-mono text-zinc-200 whitespace-pre overflow-x-auto">
+            <pre className={`p-5 text-xs leading-relaxed font-mono text-zinc-200 ${wordWrap ? 'whitespace-pre-wrap break-all' : 'whitespace-pre overflow-x-auto'}`}>
               <YamlHighlight content={data?.content ?? ""} />
             </pre>
           )}
