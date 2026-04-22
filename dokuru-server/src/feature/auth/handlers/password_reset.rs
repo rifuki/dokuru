@@ -1,4 +1,4 @@
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{Json, extract::State, http::{HeaderMap, StatusCode}};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -18,8 +18,34 @@ pub struct ForgotPasswordResponse {
     message: String,
 }
 
+pub(crate) fn build_password_reset_url(headers: &HeaderMap, token: &str) -> String {
+    let origin = headers
+        .get("origin")
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .or_else(|| {
+            let proto = headers
+                .get("x-forwarded-proto")
+                .and_then(|value| value.to_str().ok())
+                .filter(|value| !value.is_empty())
+                .unwrap_or("http");
+
+            headers
+                .get("x-forwarded-host")
+                .or_else(|| headers.get("host"))
+                .and_then(|value| value.to_str().ok())
+                .filter(|value| !value.is_empty())
+                .map(|host| format!("{proto}://{host}"))
+        })
+        .unwrap_or_else(|| "http://localhost:5173".to_string());
+
+    format!("{origin}/reset-password?token={token}")
+}
+
 pub async fn forgot_password(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(req): Json<ForgotPasswordRequest>,
 ) -> ApiResult<ForgotPasswordResponse> {
     // Find user
@@ -60,7 +86,7 @@ pub async fn forgot_password(
         })?;
 
     // Send email
-    let reset_url = format!("http://localhost:5173/reset-password?token={token}");
+    let reset_url = build_password_reset_url(&headers, &token);
 
     if let Err(e) = state
         .email_service

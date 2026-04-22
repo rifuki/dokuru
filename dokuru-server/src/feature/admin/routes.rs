@@ -1,6 +1,6 @@
 use axum::{
     Router, middleware,
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 
 use crate::{
@@ -16,7 +16,13 @@ pub fn admin_routes() -> Router<AppState> {
         .route("/audits", get(audit::list_audits))
         .route("/log/level", post(log::handler::set_log_level))
         .route("/users", get(user::handler::list_users))
+        .route("/users/{id}", delete(user::handler::delete_user))
         .route("/users/{id}/role", post(user::handler::update_user_role))
+        .route("/users/{id}/status", post(user::handler::update_user_status))
+        .route(
+            "/users/{id}/reset-password",
+            post(user::handler::send_password_reset),
+        )
         .route("/stats", get(stats::handler::get_dashboard_stats))
         .route_layer(middleware::from_fn(admin_middleware))
         .route_layer(middleware::from_fn(auth_middleware))

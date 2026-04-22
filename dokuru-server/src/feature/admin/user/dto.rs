@@ -10,6 +10,8 @@ pub struct AdminUserResponse {
     pub username: Option<String>,
     pub name: String,
     pub role: String,
+    pub is_active: bool,
+    pub email_verified: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -18,4 +20,9 @@ pub struct AdminUserResponse {
 #[derive(Debug, Deserialize)]
 pub struct UpdateUserRoleRequest {
     pub role: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateUserStatusRequest {
+    pub is_active: bool,
 }

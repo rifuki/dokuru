@@ -4,6 +4,7 @@ import type { User } from "@/features/auth/types/auth-types";
 export interface UserWithTimestamps extends User {
   created_at?: string;
   updated_at?: string;
+  is_active?: boolean;
 }
 
 // Log level request

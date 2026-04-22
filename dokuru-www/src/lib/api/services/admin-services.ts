@@ -109,6 +109,20 @@ export const adminService = {
     );
   },
 
+  updateUserStatus: async (userId: string, isActive: boolean): Promise<void> => {
+    await apiClient.post<ApiResponse<void>>(API_ENDPOINTS.ADMIN.USER_STATUS(userId), {
+      is_active: isActive,
+    });
+  },
+
+  sendUserPasswordReset: async (userId: string): Promise<void> => {
+    await apiClient.post<ApiResponse<void>>(API_ENDPOINTS.ADMIN.USER_RESET_PASSWORD(userId));
+  },
+
+  deleteUser: async (userId: string): Promise<void> => {
+    await apiClient.delete<ApiResponse<void>>(API_ENDPOINTS.ADMIN.USER_DELETE(userId));
+  },
+
   getApiKeys: async (): Promise<ApiKey[]> => {
     const response = await apiClient.get<ApiResponse<ApiKey[]>>(
       API_ENDPOINTS.ADMIN.API_KEYS

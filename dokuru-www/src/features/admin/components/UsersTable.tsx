@@ -17,6 +17,7 @@ import {
   Search,
   Shield,
   User,
+  UserCheck,
   MoreHorizontal,
   ArrowUpDown,
   Ban,
@@ -62,8 +63,8 @@ interface UsersTableProps {
   onResetPassword: (user: UserWithTimestamps) => void;
   onBlockAccount: (user: UserWithTimestamps) => void;
   onDeleteAccount: (user: UserWithTimestamps) => void;
-  onBulkBlock: (count: number) => void;
-  onBulkDelete: (count: number) => void;
+  onBulkBlock: (users: UserWithTimestamps[]) => void;
+  onBulkDelete: (users: UserWithTimestamps[]) => void;
 }
 
 export function UsersTable({
@@ -186,6 +187,24 @@ export function UsersTable({
       },
     },
     {
+      id: "status",
+      header: "Status",
+      cell: ({ row }) => {
+        const isActive = row.original.is_active ?? true;
+        return isActive ? (
+          <Badge variant="outline" className="gap-1 bg-emerald-500/10 text-emerald-500 border-emerald-500/30">
+            <UserCheck className="h-3 w-3" />
+            Active
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="gap-1 bg-amber-500/10 text-amber-500 border-amber-500/30">
+            <Ban className="h-3 w-3" />
+            Blocked
+          </Badge>
+        );
+      },
+    },
+    {
       accessorKey: "created_at",
       header: ({ column }) => (
         <Button
@@ -247,7 +266,7 @@ export function UsersTable({
                 className="text-amber-600"
               >
                 <Ban className="mr-2 h-4 w-4" />
-                Block Account
+                {(user.is_active ?? true) ? "Block Account" : "Restore Account"}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -287,14 +306,19 @@ export function UsersTable({
 
   const selectedRows = table.getFilteredSelectedRowModel().rows;
   const selectedCount = selectedRows.length;
+  const selectedUsers = selectedRows.map((row) => row.original);
+  const bulkBlockCandidates = selectedUsers.filter(
+    (user) => user.id !== currentUser?.id && (user.is_active ?? true)
+  );
+  const bulkDeleteCandidates = selectedUsers.filter((user) => user.id !== currentUser?.id);
 
   const handleBulkBlock = () => {
-    onBulkBlock(selectedCount);
+    onBulkBlock(selectedUsers);
     table.toggleAllPageRowsSelected(false);
   };
 
   const handleBulkDelete = () => {
-    onBulkDelete(selectedCount);
+    onBulkDelete(selectedUsers);
     table.toggleAllPageRowsSelected(false);
   };
 
@@ -419,6 +443,7 @@ export function UsersTable({
                     size="sm"
                     className="h-8 border-amber-500 text-amber-600 hover:bg-amber-50 hover:text-amber-700"
                     onClick={handleBulkBlock}
+                    disabled={bulkBlockCandidates.length === 0}
                   >
                     <Ban className="mr-1 h-3 w-3" />
                     Block
@@ -428,6 +453,7 @@ export function UsersTable({
                     size="sm"
                     className="h-8 border-destructive text-destructive hover:bg-destructive/10"
                     onClick={handleBulkDelete}
+                    disabled={bulkDeleteCandidates.length === 0}
                   >
                     <Trash2 className="mr-1 h-3 w-3" />
                     Delete

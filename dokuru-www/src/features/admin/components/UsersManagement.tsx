@@ -14,16 +14,40 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useUsersList } from "@/features/admin/hooks/use-users-list";
 import { useUpdateUserRole } from "@/features/admin/hooks/use-update-user-role";
+import { adminService } from "@/lib/api/services/admin-services";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { UserWithTimestamps } from "@/features/admin/types/admin-types";
 import { UsersTable, type DialogType } from "./UsersTable";
 import { Users, UserCheck, UserX, TrendingUp } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { format, isSameDay, subDays } from "date-fns";
+import { useAuthUser } from "@/stores/use-auth-store";
 
 export function UsersManagement() {
   const { data: users, isLoading } = useUsersList();
   const { mutate: updateRole } = useUpdateUserRole();
+  const queryClient = useQueryClient();
+  const currentUser = useAuthUser();
+
+  const blockUserMutation = useMutation({
+    mutationFn: ({ userId, isActive }: { userId: string; isActive: boolean }) =>
+      adminService.updateUserStatus(userId, isActive),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+    },
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: (userId: string) => adminService.sendUserPasswordReset(userId),
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: (userId: string) => adminService.deleteUser(userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+    },
+  });
 
   const [dialogType, setDialogType] = useState<DialogType>(null);
   const [selectedUser, setSelectedUser] = useState<UserWithTimestamps | null>(null);
@@ -70,29 +94,110 @@ export function UsersManagement() {
   };
 
   const handleConfirmResetPassword = () => {
-    toast.success(`Password reset link sent to ${selectedUser?.email}`);
-    setDialogType(null);
-    setSelectedUser(null);
+    if (!selectedUser) return;
+
+    resetPasswordMutation.mutate(selectedUser.id, {
+      onSuccess: () => {
+        toast.success(`Password reset link sent to ${selectedUser.email}`);
+        setDialogType(null);
+        setSelectedUser(null);
+      },
+      onError: (error) => {
+        toast.error(error instanceof Error ? error.message : "Failed to send reset email");
+      },
+    });
   };
 
   const handleConfirmBlockAccount = () => {
-    toast.success(`${selectedUser?.name} has been blocked`);
-    setDialogType(null);
-    setSelectedUser(null);
+    if (!selectedUser) return;
+
+    const nextIsActive = !(selectedUser.is_active ?? true);
+    blockUserMutation.mutate(
+      { userId: selectedUser.id, isActive: nextIsActive },
+      {
+        onSuccess: () => {
+          toast.success(
+            nextIsActive
+              ? `${selectedUser.name} has been restored`
+              : `${selectedUser.name} has been blocked`
+          );
+          setDialogType(null);
+          setSelectedUser(null);
+        },
+        onError: (error) => {
+          toast.error(error instanceof Error ? error.message : "Failed to update account status");
+        },
+      }
+    );
   };
 
   const handleConfirmDeleteAccount = () => {
-    toast.success(`${selectedUser?.name} has been deleted`);
-    setDialogType(null);
-    setSelectedUser(null);
+    if (!selectedUser) return;
+
+    deleteUserMutation.mutate(selectedUser.id, {
+      onSuccess: () => {
+        toast.success(`${selectedUser.name} has been deleted`);
+        setDialogType(null);
+        setSelectedUser(null);
+      },
+      onError: (error) => {
+        toast.error(error instanceof Error ? error.message : "Failed to delete account");
+      },
+    });
   };
 
-  const handleBulkBlock = (count: number) => {
-    toast.success(`${count} users have been blocked`);
+  const handleBulkBlock = async (selectedUsers: UserWithTimestamps[]) => {
+    const candidates = selectedUsers.filter(
+      (user) => user.id !== currentUser?.id && (user.is_active ?? true)
+    );
+
+    if (candidates.length === 0) {
+      toast.info("No active users selected for blocking");
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      candidates.map((user) => adminService.updateUserStatus(user.id, false))
+    );
+
+    const successCount = results.filter((result) => result.status === "fulfilled").length;
+    const failedCount = results.length - successCount;
+
+    await queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+
+    if (successCount > 0) {
+      toast.success(`${successCount} user${successCount === 1 ? "" : "s"} blocked`);
+    }
+
+    if (failedCount > 0) {
+      toast.error(`${failedCount} user action${failedCount === 1 ? "" : "s"} failed`);
+    }
   };
 
-  const handleBulkDelete = (count: number) => {
-    toast.success(`${count} users have been deleted`);
+  const handleBulkDelete = async (selectedUsers: UserWithTimestamps[]) => {
+    const candidates = selectedUsers.filter((user) => user.id !== currentUser?.id);
+
+    if (candidates.length === 0) {
+      toast.info("No eligible users selected for deletion");
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      candidates.map((user) => adminService.deleteUser(user.id))
+    );
+
+    const successCount = results.filter((result) => result.status === "fulfilled").length;
+    const failedCount = results.length - successCount;
+
+    await queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+
+    if (successCount > 0) {
+      toast.success(`${successCount} user${successCount === 1 ? "" : "s"} deleted`);
+    }
+
+    if (failedCount > 0) {
+      toast.error(`${failedCount} user deletion${failedCount === 1 ? "" : "s"} failed`);
+    }
   };
 
   const getDialogContent = () => {
@@ -116,14 +221,18 @@ export function UsersManagement() {
           action: handleConfirmResetPassword,
           actionText: "Send Reset Link",
         };
-      case "block":
+      case "block": {
+        const isActive = selectedUser?.is_active ?? true;
         return {
-          title: "Block Account",
-          description: `Are you sure you want to block ${selectedUser?.name}? They will not be able to login until unblocked.`,
+          title: isActive ? "Block Account" : "Restore Account",
+          description: isActive
+            ? `Are you sure you want to block ${selectedUser?.name}? They will not be able to login until restored.`
+            : `Restore ${selectedUser?.name} so they can sign in again?`,
           action: handleConfirmBlockAccount,
-          actionText: "Block",
-          destructive: true,
+          actionText: isActive ? "Block" : "Restore",
+          destructive: isActive,
         };
+      }
       case "delete":
         return {
           title: "Delete Account",
