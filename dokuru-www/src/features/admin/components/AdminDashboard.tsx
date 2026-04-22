@@ -94,7 +94,7 @@ export function AdminDashboard() {
           description="Across all audits"
           icon={<Shield className="h-4 w-4" />}
           loading={isLoading}
-          color="amber"
+          color="orange"
         />
       </div>
 
@@ -107,7 +107,7 @@ export function AdminDashboard() {
           icon={<Shield className="h-4 w-4" />}
           loading={isLoading}
           href="/admin/users"
-          color="indigo"
+          color="purple"
         />
         <StatCard
           title="API Keys"
@@ -125,7 +125,7 @@ export function AdminDashboard() {
           icon={<Activity className="h-4 w-4" />}
           loading={isLoading}
           href="/admin/api-keys"
-          color="teal"
+          color="cyan"
         />
         <StatCard
           title="Relay Agents"
@@ -134,7 +134,7 @@ export function AdminDashboard() {
           icon={<Wifi className="h-4 w-4" />}
           loading={isLoading}
           href="/admin/agents"
-          color="rose"
+          color="pink"
         />
       </div>
 
