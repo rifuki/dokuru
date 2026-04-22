@@ -3,6 +3,7 @@ use std::sync::Arc;
 use bb8_redis::bb8;
 use dashmap::DashMap;
 use eyre::WrapErr;
+use tokio::sync::RwLock;
 
 use crate::{
     feature::{
@@ -53,6 +54,7 @@ pub struct AppState {
     pub email_service: Arc<EmailService>,
     pub session_blacklist: Option<Arc<dyn SessionBlacklist>>,
     pub log_reload_handle: Arc<ReloadFilterHandle>,
+    pub current_log_level: Arc<RwLock<String>>,
     pub ws_manager: WsManager,
     pub server_start_time: std::time::Instant,
     pub redis_pool: Option<Arc<bb8::Pool<bb8_redis::RedisConnectionManager>>>,
@@ -143,6 +145,9 @@ impl AppState {
         ));
 
         let email_service = Arc::new(EmailService::new(config.email.clone()));
+        let current_log_level = Arc::new(RwLock::new(
+            std::env::var("RUST_LOG").unwrap_or_else(|_| "debug".to_string()),
+        ));
 
         let agent_registry = Arc::new(DashMap::new());
         let ws_manager = WsManager::new();
@@ -164,6 +169,7 @@ impl AppState {
             email_service,
             session_blacklist,
             log_reload_handle: Arc::new(log_reload_handle),
+            current_log_level,
             ws_manager,
             server_start_time,
             redis_pool,
@@ -219,6 +225,9 @@ impl AppState {
         ));
 
         let email_service = Arc::new(EmailService::new(config.email.clone()));
+        let current_log_level = Arc::new(RwLock::new(
+            std::env::var("RUST_LOG").unwrap_or_else(|_| "debug".to_string()),
+        ));
 
         let agent_registry = Arc::new(DashMap::new());
         let ws_manager = WsManager::new();
@@ -240,6 +249,7 @@ impl AppState {
             email_service,
             session_blacklist: None,
             log_reload_handle: Arc::new(handle),
+            current_log_level,
             ws_manager,
             server_start_time,
             redis_pool: None,

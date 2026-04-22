@@ -10,6 +10,25 @@ use tracing_subscriber::{
 
 pub type ReloadFilterHandle = Handle<EnvFilter, Registry>;
 
+pub fn resolve_log_dir() -> PathBuf {
+    let primary = PathBuf::from("/var/log/dokuru");
+    if primary.is_dir() {
+        return primary;
+    }
+
+    std::env::temp_dir().join("dokuru")
+}
+
+pub fn latest_log_file_path() -> Option<PathBuf> {
+    let entries = std::fs::read_dir(resolve_log_dir()).ok()?;
+
+    entries
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_name().to_string_lossy().starts_with("api.log"))
+        .max_by_key(|entry| entry.metadata().and_then(|meta| meta.modified()).ok())
+        .map(|entry| entry.path())
+}
+
 pub fn setup_subscriber() -> (impl SubscriberInitExt, ReloadFilterHandle) {
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("debug"));
 

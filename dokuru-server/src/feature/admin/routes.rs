@@ -8,12 +8,14 @@ use crate::{
     state::AppState,
 };
 
-use super::{agent, audit, log, stats, user};
+use super::{agent, audit, log, stats, system, user};
 
 pub fn admin_routes() -> Router<AppState> {
     Router::new()
         .route("/agents", get(agent::list_agents))
         .route("/audits", get(audit::list_audits))
+        .route("/config", get(system::get_effective_config))
+        .route("/logs", get(log::handler::get_logs))
         .route("/log/level", post(log::handler::set_log_level))
         .route("/users", get(user::handler::list_users))
         .route("/users/{id}", delete(user::handler::delete_user))

@@ -1,98 +1,218 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
+import {
+  Activity,
+  Cable,
+  Cookie,
+  Database,
+  Mail,
+  RefreshCcw,
+  Server,
+  Settings2,
+  Upload,
+} from "lucide-react";
+
 import { adminService } from "@/lib/api/services/admin-services";
 import { AgentConnectionChart } from "@/features/admin/components/AgentConnectionChart";
 import { SystemHealthCard } from "@/features/admin/components/SystemHealthCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Activity, KeyRound, Settings2, Shield, Users, Wifi } from "lucide-react";
-import { toast } from "sonner";
-import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 export const Route = createFileRoute("/_authenticated/admin/settings")({
   component: AdminSettingsPage,
 });
 
-const LOG_LEVELS = [
-  { value: "trace", label: "Trace", description: "Most verbose logging" },
-  { value: "debug", label: "Debug", description: "Detailed debugging information" },
-  { value: "info", label: "Info", description: "General informational messages" },
-  { value: "warn", label: "Warning", description: "Warning messages" },
-  { value: "error", label: "Error", description: "Error messages only" },
-] as const;
+const LOG_LEVELS = ["trace", "debug", "info", "warn", "error"] as const;
+const LEVEL_PRIORITY: Record<string, number> = {
+  trace: 0,
+  debug: 1,
+  info: 2,
+  warn: 3,
+  error: 4,
+};
+
+const LEVEL_STYLES: Record<string, string> = {
+  trace: "text-slate-500",
+  debug: "text-sky-400",
+  info: "text-emerald-400",
+  warn: "text-amber-400",
+  error: "text-red-400",
+};
+
+type ParsedLogLine = {
+  timestamp: string | null;
+  level: string;
+  message: string;
+};
+
+function normalizeLevel(raw: string | undefined) {
+  const level = raw?.split("=").pop()?.trim().toLowerCase() ?? "info";
+  return LOG_LEVELS.includes(level as (typeof LOG_LEVELS)[number]) ? level : "info";
+}
+
+function formatLogTimestamp(raw: string) {
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw;
+  return date.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function parseLogLine(raw: string): ParsedLogLine {
+  const match = raw.match(/^(\S+)\s+([A-Z]+)\s+(.*)$/);
+  if (!match) {
+    return { timestamp: null, level: "info", message: raw };
+  }
+
+  return {
+    timestamp: formatLogTimestamp(match[1]),
+    level: match[2].toLowerCase(),
+    message: match[3],
+  };
+}
+
+function ConfigItem({
+  icon: Icon,
+  label,
+  value,
+  mono,
+}: {
+  icon: typeof Server;
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="rounded-xl border bg-card/60 px-4 py-4">
+      <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        <Icon className="h-3.5 w-3.5" />
+        {label}
+      </div>
+      <div className={`truncate text-sm ${mono ? "font-mono text-foreground/90" : "font-medium"}`}>{value || "—"}</div>
+    </div>
+  );
+}
+
+function MetricCard({
+  title,
+  value,
+  description,
+  icon: Icon,
+  accentClassName,
+}: {
+  title: string;
+  value: string | number;
+  description: string;
+  icon: typeof Activity;
+  accentClassName: string;
+}) {
+  return (
+    <div className="rounded-xl border bg-card px-4 py-4">
+      <div className="mb-3 flex items-center gap-3">
+        <div className={`rounded-lg p-2 ${accentClassName}`}>
+          <Icon className="h-4 w-4" />
+        </div>
+        <span className="text-sm font-medium text-muted-foreground">{title}</span>
+      </div>
+      <p className="text-2xl font-bold tracking-tight">{value}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+    </div>
+  );
+}
 
 function AdminSettingsPage() {
-  const [currentLogLevel, setCurrentLogLevel] = useState<string>(() => {
-    if (typeof window === "undefined") return "info";
-    return window.localStorage.getItem("dokuru_admin_log_level") ?? "info";
-  });
+  const [pendingLogLevel, setPendingLogLevel] = useState<string | null>(null);
+  const [filterLevel, setFilterLevel] = useState<string>("trace");
+  const [autoRefreshLogs, setAutoRefreshLogs] = useState(false);
 
-  const { data: stats, isLoading } = useQuery({
+  const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ["admin", "stats"],
     queryFn: adminService.getDashboardStats,
+  });
+
+  const {
+    data: logs,
+    isLoading: logsLoading,
+    isFetching: logsFetching,
+    refetch: refetchLogs,
+  } = useQuery({
+    queryKey: ["admin", "logs"],
+    queryFn: adminService.getLogs,
+    refetchInterval: autoRefreshLogs ? 3_000 : false,
+  });
+
+  const { data: config, isLoading: configLoading } = useQuery({
+    queryKey: ["admin", "config"],
+    queryFn: adminService.getEffectiveConfig,
   });
 
   const setLogLevelMutation = useMutation({
     mutationFn: (level: "trace" | "debug" | "info" | "warn" | "error") =>
       adminService.setLogLevel(level),
-    onSuccess: () => {
-      toast.success("Log level updated successfully");
+    onSuccess: (_, nextLevel) => {
+      setPendingLogLevel(null);
+      toast.success(`Runtime log level -> ${nextLevel}`);
+      void refetchLogs();
     },
     onError: () => {
       toast.error("Failed to update log level");
     },
   });
 
-  const handleLogLevelChange = (value: string) => {
-    setCurrentLogLevel(value);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("dokuru_admin_log_level", value);
-    }
-    setLogLevelMutation.mutate(value as "trace" | "debug" | "info" | "warn" | "error");
-  };
+  const currentLogLevel = pendingLogLevel ?? normalizeLevel(logs?.runtime_level);
+
+  const visibleLines = useMemo(() => {
+    const lines = logs?.lines ?? [];
+    return lines.filter((raw) => {
+      const parsed = parseLogLine(raw);
+      return (LEVEL_PRIORITY[parsed.level] ?? LEVEL_PRIORITY.info) >= (LEVEL_PRIORITY[filterLevel] ?? LEVEL_PRIORITY.trace);
+    });
+  }, [filterLevel, logs?.lines]);
 
   const metrics = [
     {
       title: "Users",
       value: stats?.total_users ?? 0,
       description: "Registered accounts",
-      icon: Users,
-      iconWrapClassName: "bg-blue-100 dark:bg-blue-950/30",
-      iconClassName: "text-blue-600",
+      icon: Activity,
+      accentClassName: "bg-blue-100 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400",
     },
     {
       title: "Agents",
       value: stats?.total_agents ?? 0,
       description: "Tracked by this instance",
-      icon: Activity,
-      iconWrapClassName: "bg-emerald-100 dark:bg-emerald-950/30",
-      iconClassName: "text-emerald-600",
+      icon: Server,
+      accentClassName: "bg-emerald-100 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400",
     },
     {
       title: "Audits",
       value: stats?.total_audits ?? 0,
       description: "Stored audit records",
-      icon: Shield,
-      iconWrapClassName: "bg-amber-100 dark:bg-amber-950/30",
-      iconClassName: "text-amber-600",
+      icon: Database,
+      accentClassName: "bg-amber-100 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400",
     },
     {
       title: "WebSockets",
       value: stats?.system_health.active_websockets ?? 0,
       description: "Active relay connections",
-      icon: Wifi,
-      iconWrapClassName: "bg-violet-100 dark:bg-violet-950/30",
-      iconClassName: "text-violet-600",
+      icon: Cable,
+      accentClassName: "bg-violet-100 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400",
     },
   ];
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">System Settings</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Application Settings</h1>
         <p className="text-muted-foreground">
-          Configure application-wide settings
+          Runtime controls, recent logs, and the effective server configuration.
         </p>
       </div>
 
@@ -102,34 +222,114 @@ function AdminSettingsPage() {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <Activity className="h-5 w-5 text-muted-foreground" />
-                <CardTitle>Runtime Controls</CardTitle>
+                <CardTitle>Runtime Logging</CardTitle>
               </div>
               <CardDescription>
-                Apply operational changes to the current Dokuru server process.
+                View recent application logs and adjust the runtime log level without restarting the server.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="log-level">Log Level</Label>
-                <Select value={currentLogLevel} onValueChange={handleLogLevelChange}>
-                  <SelectTrigger id="log-level">
-                    <SelectValue placeholder="Select log level" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LOG_LEVELS.map((level) => (
-                      <SelectItem key={level.value} value={level.value}>
-                        <div className="flex flex-col">
-                          <span className="font-medium">{level.label}</span>
-                          <span className="text-xs text-muted-foreground">{level.description}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <CardContent className="space-y-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div className="space-y-2">
+                  <Label htmlFor="log-level">Runtime Log Level</Label>
+                  <div className="flex gap-2">
+                    <Select value={currentLogLevel} onValueChange={setPendingLogLevel}>
+                      <SelectTrigger id="log-level" className="w-[220px]">
+                        <SelectValue placeholder="Select log level" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {LOG_LEVELS.map((level) => (
+                          <SelectItem key={level} value={level}>
+                            {level.toUpperCase()}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      onClick={() =>
+                        setLogLevelMutation.mutate(
+                          currentLogLevel as "trace" | "debug" | "info" | "warn" | "error"
+                        )
+                      }
+                      disabled={setLogLevelMutation.isPending}
+                    >
+                      {setLogLevelMutation.isPending ? "Applying..." : "Apply"}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline">{normalizeLevel(logs?.runtime_level).toUpperCase()}</Badge>
+                    <span className="text-muted-foreground">active runtime filter</span>
+                  </div>
+                  {logs?.log_file && (
+                    <div className="font-mono text-xs text-muted-foreground">{logs.log_file}</div>
+                  )}
+                </div>
               </div>
 
-              <div className="rounded-lg border border-dashed px-4 py-3 text-sm text-muted-foreground">
-                Changes apply immediately and affect server-side tracing output only. No restart required.
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">View</span>
+                  {LOG_LEVELS.map((level) => (
+                    <button
+                      key={level}
+                      type="button"
+                      onClick={() => setFilterLevel(level)}
+                      className={`rounded px-2 py-0.5 text-[10px] font-mono font-semibold uppercase transition ${
+                        filterLevel === level
+                          ? "bg-primary/15 text-primary"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {level}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAutoRefreshLogs((value) => !value)}
+                    className={`rounded px-2 py-1 text-[10px] font-semibold uppercase transition ${
+                      autoRefreshLogs ? "text-emerald-400" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {autoRefreshLogs ? "● live" : "live"}
+                  </button>
+                  <Button variant="outline" size="sm" onClick={() => void refetchLogs()} disabled={logsFetching}>
+                    <RefreshCcw className={`mr-2 h-3.5 w-3.5 ${logsFetching ? "animate-spin" : ""}`} />
+                    Refresh logs
+                  </Button>
+                </div>
+              </div>
+
+              <div className="h-72 overflow-y-auto rounded-xl border bg-black/40 p-3 font-mono text-[11px] leading-relaxed">
+                {logsLoading ? (
+                  <div className="flex h-full items-center justify-center text-muted-foreground">Loading logs...</div>
+                ) : visibleLines.length === 0 ? (
+                  <div className="flex h-full items-center justify-center text-muted-foreground">
+                    No logs matched the current filter.
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {visibleLines.map((raw, index) => {
+                      const parsed = parseLogLine(raw);
+                      return (
+                        <div key={`${parsed.timestamp ?? "raw"}-${index}`} className="flex gap-3">
+                          <span className="w-[72px] shrink-0 text-muted-foreground/70">
+                            {parsed.timestamp ?? "--:--:--"}
+                          </span>
+                          <span className={`w-10 shrink-0 font-semibold uppercase ${LEVEL_STYLES[parsed.level] ?? "text-slate-300"}`}>
+                            {parsed.level.slice(0, 4)}
+                          </span>
+                          <span className="text-slate-200">{parsed.message}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -138,59 +338,44 @@ function AdminSettingsPage() {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <Settings2 className="h-5 w-5 text-muted-foreground" />
-                <CardTitle>Platform Snapshot</CardTitle>
+                <CardTitle>Effective Configuration</CardTitle>
               </div>
               <CardDescription>
-                Quick operational metrics from the current Dokuru deployment.
+                The active server configuration after startup. Dokuru server is currently env-backed; TOML override is not enabled yet.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              {isLoading ? (
+            <CardContent className="space-y-4">
+              {configLoading ? (
                 <div className="flex h-32 items-center justify-center">
                   <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-primary" />
                 </div>
-              ) : (
-                <div className="grid gap-4 md:grid-cols-2">
-                  {metrics.map((metric) => (
-                    <div key={metric.title} className="rounded-xl border bg-card px-4 py-4">
-                      <div className="mb-3 flex items-center gap-3">
-                        <div className={`rounded-lg p-2 ${metric.iconWrapClassName}`}>
-                          <metric.icon className={`h-4 w-4 ${metric.iconClassName}`} />
-                        </div>
-                        <span className="text-sm font-medium text-muted-foreground">{metric.title}</span>
-                      </div>
-                      <p className="text-2xl font-bold tracking-tight">{metric.value}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">{metric.description}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-          </CardContent>
-          </Card>
+              ) : config ? (
+                <>
+                  <div className="flex flex-wrap items-center gap-2 rounded-lg border px-4 py-3 text-sm text-muted-foreground">
+                    <Badge variant="outline">{config.source}</Badge>
+                    <span>{config.is_production ? "Production mode" : "Development mode"}</span>
+                    <span>·</span>
+                    <span>{config.rust_env}</span>
+                  </div>
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <KeyRound className="h-5 w-5 text-muted-foreground" />
-                <CardTitle>Access Snapshot</CardTitle>
-              </div>
-              <CardDescription>
-                Current API key and relay activity at a glance.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4 sm:grid-cols-3">
-              <div className="rounded-lg border px-4 py-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">API Keys</p>
-                <p className="mt-2 text-2xl font-bold">{stats?.total_api_keys ?? 0}</p>
-              </div>
-              <div className="rounded-lg border px-4 py-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Active Keys</p>
-                <p className="mt-2 text-2xl font-bold">{stats?.active_api_keys ?? 0}</p>
-              </div>
-              <div className="rounded-lg border px-4 py-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Relay Agents</p>
-                <p className="mt-2 text-2xl font-bold">{stats?.relay_agents_count ?? 0}</p>
-              </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <ConfigItem icon={Server} label="API Port" value={String(config.server.port)} mono />
+                    <ConfigItem icon={Cable} label="CORS Origins" value={config.server.cors_allowed_origins.join(", ")} mono />
+                    <ConfigItem icon={Cookie} label="Cookie Policy" value={`${config.cookie.same_site} · ${config.cookie.secure ? "secure" : "insecure"}`} />
+                    <ConfigItem icon={Cookie} label="HttpOnly" value={config.cookie.http_only ? "enabled" : "disabled"} />
+                    <ConfigItem icon={Upload} label="Upload Dir" value={config.upload.upload_dir} mono />
+                    <ConfigItem icon={Upload} label="Upload Base URL" value={config.upload.base_url} mono />
+                    <ConfigItem icon={Mail} label="Email From" value={config.email.from_email} mono />
+                    <ConfigItem icon={Mail} label="Email Provider" value={config.email.provider} />
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <ConfigItem icon={Database} label="Redis" value={config.features.redis_enabled ? "enabled" : "disabled"} />
+                    <ConfigItem icon={Upload} label="Uploads" value={config.features.uploads_enabled ? "enabled" : "disabled"} />
+                    <ConfigItem icon={Mail} label="Email" value={config.features.email_enabled ? "enabled" : "disabled"} />
+                  </div>
+                </>
+              ) : null}
             </CardContent>
           </Card>
         </div>
@@ -207,11 +392,41 @@ function AdminSettingsPage() {
             </Card>
           )}
 
-          <AgentConnectionChart
-            agentsByMode={stats?.agents_by_mode}
-            totalAgents={stats?.total_agents ?? 0}
-            loading={isLoading}
-          />
+          <Card>
+            <CardHeader>
+              <CardTitle>Application Snapshot</CardTitle>
+              <CardDescription>Current usage and operational totals.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              {metrics.map((metric) => (
+                <MetricCard
+                  key={metric.title}
+                  title={metric.title}
+                  value={metric.value}
+                  description={metric.description}
+                  icon={metric.icon}
+                  accentClassName={metric.accentClassName}
+                />
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Cable className="h-5 w-5 text-muted-foreground" />
+                <CardTitle>Agent Connection Mix</CardTitle>
+              </div>
+              <CardDescription>How agents currently connect into Dokuru.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AgentConnectionChart
+                agentsByMode={stats?.agents_by_mode}
+                totalAgents={stats?.total_agents ?? 0}
+                loading={statsLoading}
+              />
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>

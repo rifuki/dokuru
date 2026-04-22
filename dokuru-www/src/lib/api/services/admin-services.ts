@@ -40,6 +40,41 @@ export interface CreateApiKeyResponse {
   expires_at: string | null;
 }
 
+export interface AdminLogsResponse {
+  lines: string[];
+  log_file: string | null;
+  runtime_level: string;
+}
+
+export interface EffectiveConfigResponse {
+  source: string;
+  rust_env: string;
+  is_production: boolean;
+  server: {
+    port: number;
+    cors_allowed_origins: string[];
+  };
+  cookie: {
+    same_site: string;
+    secure: boolean;
+    http_only: boolean;
+  };
+  upload: {
+    upload_dir: string;
+    base_url: string;
+    max_avatar_size_bytes: number;
+  };
+  email: {
+    from_email: string;
+    provider: string;
+  };
+  features: {
+    redis_enabled: boolean;
+    uploads_enabled: boolean;
+    email_enabled: boolean;
+  };
+}
+
 export const adminService = {
   getUsers: async (): Promise<UserWithTimestamps[]> => {
     const response = await apiClient.get<ApiResponse<UserWithTimestamps[]>>(
@@ -68,6 +103,32 @@ export const adminService = {
     const data = response.data.data;
     if (!data) {
       throw new Error("Failed to get dashboard stats");
+    }
+
+    return data;
+  },
+
+  getLogs: async (): Promise<AdminLogsResponse> => {
+    const response = await apiClient.get<ApiResponse<AdminLogsResponse>>(
+      API_ENDPOINTS.ADMIN.LOGS
+    );
+
+    const data = response.data.data;
+    if (!data) {
+      throw new Error("Failed to get logs");
+    }
+
+    return data;
+  },
+
+  getEffectiveConfig: async (): Promise<EffectiveConfigResponse> => {
+    const response = await apiClient.get<ApiResponse<EffectiveConfigResponse>>(
+      API_ENDPOINTS.ADMIN.CONFIG
+    );
+
+    const data = response.data.data;
+    if (!data) {
+      throw new Error("Failed to get config");
     }
 
     return data;

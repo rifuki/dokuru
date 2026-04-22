@@ -4,6 +4,7 @@ pub mod audit;
 pub mod log;
 pub mod routes;
 pub mod stats;
+pub mod system;
 pub mod user;
 
 pub use log::set_log_level;
