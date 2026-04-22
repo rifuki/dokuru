@@ -437,14 +437,17 @@ export function ContainerTerminal({
     ws.onopen = () => {
       setStatus("connected");
       setHasConnectedBefore(true);
+      term.options.disableStdin = false;
     };
     ws.onclose = () => {
       setStatus("disconnected");
       term.write("\r\n\x1b[31m✗ Connection closed\x1b[0m\r\n");
+      term.options.disableStdin = true;
     };
     ws.onerror = () => {
       setStatus("error");
       term.write("\r\n\x1b[31m✗ Connection error\x1b[0m\r\n");
+      term.options.disableStdin = true;
     };
     ws.onmessage = (e) => {
       const data = e.data instanceof ArrayBuffer ? new Uint8Array(e.data) : e.data;
@@ -478,13 +481,20 @@ export function ContainerTerminal({
   }, []);
 
   const disconnect = useCallback(() => {
-    // Update status immediately — don't rely on onclose firing
     setStatus("disconnected");
-    termRef.current?.write("\r\n\x1b[33m⏻ Disconnected\x1b[0m\r\n");
-    if (wsRef.current) {
-      wsRef.current.onclose = null; // prevent double-fire
-      wsRef.current.close();
-      wsRef.current = null;
+    if (termRef.current) {
+      termRef.current.write("\r\n\x1b[33m⏻ Disconnected\x1b[0m\r\n");
+      termRef.current.options.disableStdin = true;
+    }
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(new TextEncoder().encode("exit\n"));
+      setTimeout(() => {
+        if (wsRef.current) {
+          wsRef.current.onclose = null;
+          wsRef.current.close();
+          wsRef.current = null;
+        }
+      }, 100);
     }
   }, []);
 
