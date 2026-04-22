@@ -24,7 +24,7 @@ import {
   Terminal,
 } from "lucide-react";
 
-import { adminService } from "@/lib/api/services/admin-services";
+import { adminService, type ConfigSourceDetail } from "@/lib/api/services/admin-services";
 import { AgentConnectionChart } from "@/features/admin/components/AgentConnectionChart";
 import { SystemHealthCard } from "@/features/admin/components/SystemHealthCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -121,11 +121,6 @@ function parseLogLine(raw: string): ParsedLogLine {
 }
 
 type SourceKind = "env" | "local" | "secrets" | "defaults" | "runtime" | "unknown";
-
-export type ConfigSourceDetail = {
-  source: string;
-  value: string;
-};
 
 function parseSource(source?: string): { kind: SourceKind; label: string; detail: string } {
   if (!source) return { kind: "unknown", label: "?", detail: "" };

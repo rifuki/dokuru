@@ -46,12 +46,17 @@ export interface AdminLogsResponse {
   runtime_level: string;
 }
 
+export interface ConfigSourceDetail {
+  source: string;
+  value: string;
+}
+
 export interface EffectiveConfigResponse {
   source: string;
   local_config_path: string;
   rust_env: string;
   is_production: boolean;
-  field_sources: Record<string, string>;
+  field_sources: Record<string, ConfigSourceDetail[]>;
   bootstrap: {
     enabled: boolean;
     admin_email: string;
@@ -78,6 +83,20 @@ export interface EffectiveConfigResponse {
   email: {
     from_email: string;
     provider: string;
+  };
+  database: {
+    url_configured: boolean;
+    max_connections: number;
+    min_connections: number;
+  };
+  redis: {
+    url_configured: boolean;
+  };
+  auth: {
+    access_expiry_secs: number;
+    refresh_expiry_secs: number;
+    access_secret_configured: boolean;
+    refresh_secret_configured: boolean;
   };
   features: {
     redis_enabled: boolean;
@@ -193,6 +212,24 @@ export const adminService = {
     const data = response.data.data;
     if (!data) {
       throw new Error("Failed to reload config preview");
+    }
+
+    return data;
+  },
+
+  updateConfigField: async (
+    path: string[],
+    value: string,
+    target: "local" | "secrets" = "local"
+  ): Promise<LocalConfigResponse> => {
+    const response = await apiClient.patch<ApiResponse<LocalConfigResponse>>(
+      API_ENDPOINTS.ADMIN.CONFIG_FIELD,
+      { path, value, target }
+    );
+
+    const data = response.data.data;
+    if (!data) {
+      throw new Error("Failed to update config field");
     }
 
     return data;
