@@ -5,4 +5,5 @@ pub mod logging;
 pub mod persistence;
 pub mod server;
 pub mod storage;
+pub mod toml_config;
 pub mod web;

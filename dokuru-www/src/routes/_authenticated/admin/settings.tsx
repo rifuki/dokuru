@@ -341,7 +341,7 @@ function AdminSettingsPage() {
                 <CardTitle>Effective Configuration</CardTitle>
               </div>
               <CardDescription>
-                The active server configuration after startup. Dokuru server is currently env-backed; TOML override is not enabled yet.
+                The active server configuration after startup, resolved from embedded TOML defaults plus optional mounted files and environment overrides.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -361,6 +361,7 @@ function AdminSettingsPage() {
                   <div className="grid gap-4 md:grid-cols-2">
                     <ConfigItem icon={Server} label="API Port" value={String(config.server.port)} mono />
                     <ConfigItem icon={Cable} label="CORS Origins" value={config.server.cors_allowed_origins.join(", ")} mono />
+                    <ConfigItem icon={Activity} label="Default Log Level" value={config.logging.default_level} />
                     <ConfigItem icon={Cookie} label="Cookie Policy" value={`${config.cookie.same_site} · ${config.cookie.secure ? "secure" : "insecure"}`} />
                     <ConfigItem icon={Cookie} label="HttpOnly" value={config.cookie.http_only ? "enabled" : "disabled"} />
                     <ConfigItem icon={Upload} label="Upload Dir" value={config.upload.upload_dir} mono />

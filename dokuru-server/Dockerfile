@@ -34,6 +34,8 @@ FROM debian:bookworm-slim AS runtime
 
 WORKDIR /app
 
+RUN mkdir -p /app/config
+
 RUN apt-get update \
     && apt-get install -y ca-certificates libssl3 curl \
     && rm -rf /var/lib/apt/lists/*

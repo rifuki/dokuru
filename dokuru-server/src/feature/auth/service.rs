@@ -113,10 +113,7 @@ impl AuthService {
 
         // 6. Create session record
         if let Some(info) = device_info {
-            let refresh_expiry: i64 = std::env::var("JWT_REFRESH_EXPIRY_SECS")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(604_800); // default 7 days
+            let refresh_expiry = self.config.auth.refresh_expiry_secs;
 
             let expires_at =
                 chrono::DateTime::from_timestamp(tokens.session_iat + refresh_expiry, 0)
@@ -222,10 +219,7 @@ impl AuthService {
                 user.id,
                 info.device_type
             );
-            let refresh_expiry: i64 = std::env::var("JWT_REFRESH_EXPIRY_SECS")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(604_800); // default 7 days
+            let refresh_expiry = self.config.auth.refresh_expiry_secs;
 
             let expires_at =
                 chrono::DateTime::from_timestamp(tokens.session_iat + refresh_expiry, 0)

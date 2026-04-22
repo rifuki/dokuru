@@ -7,10 +7,11 @@ pub const REFRESH_COOKIE_PATH: &str = "/api/v1/auth";
 
 /// Build httpOnly refresh token cookie
 ///
-/// Configuration (via environment variables):
-/// - `COOKIE_SAMESITE`: "strict", "lax", or "none" (default: strict in prod, lax in dev)
-/// - `COOKIE_SECURE`: "true" or "false" (default: true in prod, false in dev)
-/// - `COOKIE_HTTPONLY`: "true" or "false" (default: true)
+/// Configuration (via layered app config):
+/// - `cookie.same_site`
+/// - `cookie.secure`
+/// - `cookie.http_only`
+/// - `auth.refresh_expiry_secs`
 ///
 /// SECURITY NOTES:
 /// - httpOnly: prevents XSS attacks from reading cookie
@@ -21,11 +22,6 @@ pub const REFRESH_COOKIE_PATH: &str = "/api/v1/auth";
 ///   - None: cross-domain with HTTPS (requires Secure=true)
 /// - path: limited to auth endpoints only
 pub fn create_refresh_cookie(token: &str, config: &Config) -> Cookie<'static> {
-    let expiry_secs = std::env::var("JWT_REFRESH_EXPIRY_SECS")
-        .ok()
-        .and_then(|v| v.parse::<i64>().ok())
-        .unwrap_or(604_800); // default 7 days
-
     let cookie_config = &config.cookie;
 
     Cookie::build((REFRESH_TOKEN_COOKIE, token.to_string()))
@@ -33,7 +29,7 @@ pub fn create_refresh_cookie(token: &str, config: &Config) -> Cookie<'static> {
         .secure(cookie_config.secure)
         .same_site(cookie_config.same_site)
         .path(REFRESH_COOKIE_PATH)
-        .max_age(time::Duration::seconds(expiry_secs))
+        .max_age(time::Duration::seconds(config.auth.refresh_expiry_secs))
         .build()
 }
 

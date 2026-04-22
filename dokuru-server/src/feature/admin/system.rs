@@ -15,6 +15,7 @@ pub struct EffectiveConfigResponse {
     pub rust_env: String,
     pub is_production: bool,
     pub server: ServerConfigView,
+    pub logging: LoggingConfigView,
     pub cookie: CookieConfigView,
     pub upload: UploadConfigView,
     pub email: EmailConfigView,
@@ -32,6 +33,11 @@ pub struct CookieConfigView {
     pub same_site: String,
     pub secure: bool,
     pub http_only: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LoggingConfigView {
+    pub default_level: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -62,12 +68,15 @@ pub async fn get_effective_config(
 
 fn config_snapshot(config: &Config) -> EffectiveConfigResponse {
     EffectiveConfigResponse {
-        source: "environment",
+        source: "toml + env override",
         rust_env: config.rust_env.clone(),
         is_production: config.is_production,
         server: ServerConfigView {
             port: config.server.port,
             cors_allowed_origins: config.server.cors_allowed_origins.clone(),
+        },
+        logging: LoggingConfigView {
+            default_level: config.logging.default_level.clone(),
         },
         cookie: CookieConfigView {
             same_site: format!("{:?}", config.cookie.same_site).to_lowercase(),

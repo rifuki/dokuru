@@ -145,9 +145,7 @@ impl AppState {
         ));
 
         let email_service = Arc::new(EmailService::new(config.email.clone()));
-        let current_log_level = Arc::new(RwLock::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "debug".to_string()),
-        ));
+        let current_log_level = Arc::new(RwLock::new(config.logging.default_level.clone()));
 
         let agent_registry = Arc::new(DashMap::new());
         let ws_manager = WsManager::new();
@@ -225,9 +223,7 @@ impl AppState {
         ));
 
         let email_service = Arc::new(EmailService::new(config.email.clone()));
-        let current_log_level = Arc::new(RwLock::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "debug".to_string()),
-        ));
+        let current_log_level = Arc::new(RwLock::new(config.logging.default_level.clone()));
 
         let agent_registry = Arc::new(DashMap::new());
         let ws_manager = WsManager::new();

@@ -54,6 +54,9 @@ export interface EffectiveConfigResponse {
     port: number;
     cors_allowed_origins: string[];
   };
+  logging: {
+    default_level: string;
+  };
   cookie: {
     same_site: string;
     secure: boolean;

@@ -29,8 +29,9 @@ pub fn latest_log_file_path() -> Option<PathBuf> {
         .map(|entry| entry.path())
 }
 
-pub fn setup_subscriber() -> (impl SubscriberInitExt, ReloadFilterHandle) {
-    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("debug"));
+pub fn setup_subscriber(default_level: &str) -> (impl SubscriberInitExt, ReloadFilterHandle) {
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_level));
 
     let (filter_layer, reload_handle) = reload::Layer::new(env_filter);
 

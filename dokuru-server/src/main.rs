@@ -22,7 +22,7 @@ async fn main() -> eyre::Result<()> {
     let config = config::Config::load()?;
 
     // 4. Set up logging
-    let (subscriber, reload_handle) = logging::setup_subscriber();
+    let (subscriber, reload_handle) = logging::setup_subscriber(&config.logging.default_level);
     subscriber.init();
     info!(
         port = config.server.port,

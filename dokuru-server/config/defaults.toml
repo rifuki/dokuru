@@ -1,0 +1,37 @@
+[app]
+rust_env = "development"
+
+[server]
+port = 9393
+cors_allowed_origins = ["http://localhost:5173"]
+
+[database]
+url = ""
+max_connections = 10
+min_connections = 1
+
+[redis]
+url = "redis://localhost:6379"
+
+[auth]
+access_secret = ""
+refresh_secret = ""
+access_expiry_secs = 3600
+refresh_expiry_secs = 604800
+
+[logging]
+default_level = "debug"
+
+[cookie]
+same_site = "lax"
+secure = false
+http_only = true
+
+[upload]
+dir = "./uploads"
+base_url = "http://localhost:9393/media"
+max_avatar_size = 2097152
+
+[email]
+resend_api_key = ""
+from_email = "noreply@dokuru.dev"

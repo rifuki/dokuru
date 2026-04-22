@@ -1,35 +1,24 @@
-use std::env;
-
 use chrono::{Duration, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use uuid::Uuid;
 
 use crate::feature::auth::types::claims::{Claims, Role, TokenType};
+use crate::infrastructure::config::auth_runtime;
 
 fn access_secret() -> Vec<u8> {
-    env::var("JWT_ACCESS_SECRET")
-        .expect("JWT_ACCESS_SECRET must be set")
-        .into_bytes()
+    auth_runtime().access_secret.clone().into_bytes()
 }
 
 fn refresh_secret() -> Vec<u8> {
-    env::var("JWT_REFRESH_SECRET")
-        .expect("JWT_REFRESH_SECRET must be set")
-        .into_bytes()
+    auth_runtime().refresh_secret.clone().into_bytes()
 }
 
 fn access_expiry_secs() -> i64 {
-    env::var("JWT_ACCESS_EXPIRY_SECS")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(3600) // default 1 hour
+    auth_runtime().access_expiry_secs
 }
 
 fn refresh_expiry_secs() -> i64 {
-    env::var("JWT_REFRESH_EXPIRY_SECS")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(604_800) // default 7 days
+    auth_runtime().refresh_expiry_secs
 }
 
 /// JWT Error types

@@ -90,6 +90,8 @@ services:
       - "traefik.http.routers.dokuru-api.tls.certresolver=letsencrypt"
       - "traefik.http.services.dokuru-server.loadbalancer.server.port=9393"
     env_file: ./dokuru-server/.env
+    volumes:
+      - ./dokuru-server/config:/app/config:ro
     # environment:
       # DATABASE_URL: postgres://dokuru:${DOKURU_DB_PASSWORD:-secret}@dokuru-db:5432/dokuru_db
       # REDIS_URL: redis://dokuru-redis:6379
