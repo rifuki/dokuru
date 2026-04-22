@@ -323,7 +323,7 @@ function RuleCard({ result, agentUrl, token }: {
             </AlertDialogContent>
         </AlertDialog>
 
-        <div className={cn("rounded-xl border bg-gradient-to-br from-[#0A0A0B] to-[#111113] border-l-4 transition-all hover:shadow-lg hover:scale-[1.01]", borderLeft)}>
+        <div className={cn("rounded-xl border bg-card dark:bg-gradient-to-br dark:from-[#0A0A0B] dark:to-[#111113] border-l-4 transition-all hover:shadow-lg hover:scale-[1.01]", borderLeft)}>
             {/* Header row */}
             <div
                 className={cn(
@@ -337,7 +337,7 @@ function RuleCard({ result, agentUrl, token }: {
                     <StatusIcon status={status} />
                     <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2 mb-2">
-                            <span className="font-mono text-xs font-black text-zinc-400 bg-white/5 px-2 py-1 rounded border border-white/10">
+                            <span className="font-mono text-xs font-black text-muted-foreground bg-muted/40 px-2 py-1 rounded border border-border">
                                 {rule.id}
                             </span>
                             {/* Pillar badge */}
@@ -360,8 +360,8 @@ function RuleCard({ result, agentUrl, token }: {
                                 </span>
                             )}
                         </div>
-                        <p className="font-semibold text-base leading-snug text-zinc-100">{rule.title}</p>
-                        <p className="text-sm text-zinc-400 mt-1 line-clamp-1">{message}</p>
+                        <p className="font-semibold text-base leading-snug text-foreground">{rule.title}</p>
+                        <p className="text-sm text-muted-foreground mt-1 line-clamp-1">{message}</p>
                     </div>
                 </button>
 
@@ -430,7 +430,7 @@ function RuleCard({ result, agentUrl, token }: {
                             <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-blue-400 mb-2">
                                 <Info className="h-4 w-4" /> About
                             </h5>
-                            <p className="text-sm text-zinc-300 leading-relaxed">{rule.description}</p>
+                            <p className="text-sm text-foreground/80 leading-relaxed">{rule.description}</p>
                         </div>
                     )}
 
@@ -469,7 +469,7 @@ function RuleCard({ result, agentUrl, token }: {
                             <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-emerald-400 mb-2">
                                 <Wrench className="h-4 w-4" /> Remediation
                             </h5>
-                            <p className="text-sm text-zinc-300 bg-black/30 rounded-lg p-3 font-mono leading-relaxed">{rule.remediation}</p>
+                            <p className="text-sm text-foreground/80 bg-muted/60 dark:bg-black/30 rounded-lg p-3 font-mono leading-relaxed">{rule.remediation}</p>
                         </div>
                     )}
 
@@ -479,17 +479,17 @@ function RuleCard({ result, agentUrl, token }: {
                             <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-[#2496ED] mb-2">
                                 <BookOpen className="h-4 w-4" /> Fix Guide
                             </h5>
-                            <pre className="text-sm bg-black/30 rounded-lg p-3 font-mono text-zinc-300 leading-relaxed whitespace-pre-wrap">{remediation_guide}</pre>
+                            <pre className="text-sm bg-muted/60 dark:bg-black/30 rounded-lg p-3 font-mono text-foreground/80 leading-relaxed whitespace-pre-wrap">{remediation_guide}</pre>
                         </div>
                     )}
 
                     {/* Audit Command */}
                     {audit_command && (
-                        <div className="bg-white/[0.02] border border-white/10 rounded-lg p-4">
-                            <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-zinc-300 mb-2">
+                        <div className="bg-muted/20 border border-border rounded-lg p-4">
+                            <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-foreground/80 mb-2">
                                 <Terminal className="h-4 w-4" /> Audit Command
                             </h5>
-                            <code className="block text-sm bg-black/50 text-emerald-400 p-3 rounded-lg overflow-x-auto font-mono border border-emerald-500/20">
+                            <code className="block text-sm bg-muted dark:bg-black/50 text-emerald-400 p-3 rounded-lg overflow-x-auto font-mono border border-emerald-500/20">
                                 $ {audit_command}
                             </code>
                         </div>
@@ -497,11 +497,11 @@ function RuleCard({ result, agentUrl, token }: {
 
                     {/* Raw Output */}
                     {raw_output && (
-                        <div className="bg-white/[0.02] border border-white/10 rounded-lg p-4">
-                            <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-zinc-300 mb-2">
+                        <div className="bg-muted/20 border border-border rounded-lg p-4">
+                            <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-foreground/80 mb-2">
                                 <FileText className="h-4 w-4" /> Raw Output
                             </h5>
-                            <pre className="text-xs bg-black/50 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap font-mono text-zinc-400 border border-white/10">
+                            <pre className="text-xs bg-muted dark:bg-black/50 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap font-mono text-muted-foreground border border-border">
                                 {raw_output}
                             </pre>
                         </div>
@@ -515,7 +515,7 @@ function RuleCard({ result, agentUrl, token }: {
                                     <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-violet-400 mb-2">
                                         <Info className="h-4 w-4" /> Rationale
                                     </h5>
-                                    <p className="text-sm text-zinc-300 leading-relaxed">{rationale}</p>
+                                    <p className="text-sm text-foreground/80 leading-relaxed">{rationale}</p>
                                 </div>
                             )}
                             {impact && (
@@ -523,7 +523,7 @@ function RuleCard({ result, agentUrl, token }: {
                                     <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-rose-400 mb-2">
                                         <AlertTriangle className="h-4 w-4" /> Impact
                                     </h5>
-                                    <p className="text-sm text-zinc-300 leading-relaxed">{impact}</p>
+                                    <p className="text-sm text-foreground/80 leading-relaxed">{impact}</p>
                                 </div>
                             )}
                         </div>
@@ -531,8 +531,8 @@ function RuleCard({ result, agentUrl, token }: {
 
                     {/* References */}
                     {references && references.length > 0 && (
-                        <div className="bg-white/[0.02] border border-white/10 rounded-lg p-4">
-                            <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-zinc-300 mb-3">
+                        <div className="bg-muted/20 border border-border rounded-lg p-4">
+                            <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-foreground/80 mb-3">
                                 <BookOpen className="h-4 w-4" /> References
                             </h5>
                             <div className="space-y-2">
@@ -583,8 +583,8 @@ function SectionHeader({ section, total, passed }: { section: string; total: num
                 <span className={cn("text-sm font-bold px-3 py-1.5 rounded-lg border shrink-0", meta.bg, meta.color, meta.border)}>
                     {meta.num}
                 </span>
-                <span className="text-sm font-semibold text-zinc-200 min-w-[120px]">{meta.label}</span>
-                <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden shadow-inner">
+                <span className="text-sm font-semibold text-foreground/90 min-w-[120px]">{meta.label}</span>
+                <div className="flex-1 h-1.5 bg-muted/40 rounded-full overflow-hidden shadow-inner">
                     <div
                         className={cn("h-full rounded-full transition-all duration-700", 
                             pct === 100 ? "bg-emerald-500 shadow-[0_0_8px_rgba(52,211,153,0.6)]" 
@@ -594,7 +594,7 @@ function SectionHeader({ section, total, passed }: { section: string; total: num
                         style={{ width: `${pct}%` }}
                     />
                 </div>
-                <span className="text-xs text-zinc-500 font-mono shrink-0 min-w-[50px] text-right">{passed}<span className="text-zinc-600">/</span>{total}</span>
+                <span className="text-xs text-muted-foreground/60 font-mono shrink-0 min-w-[50px] text-right">{passed}<span className="text-muted-foreground/40">/</span>{total}</span>
             </div>
         </div>
     );
@@ -711,20 +711,20 @@ function AuditDetailPage() {
             {auditData ? (
                 <>
                     {/* ── Summary Card ────────────────────────────────── */}
-                    <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-[#0A0A0B] via-[#111113] to-[#0A0A0B] overflow-hidden shadow-2xl">
+                    <div className="rounded-2xl border border-border bg-card dark:bg-gradient-to-br dark:from-[#0A0A0B] dark:via-[#111113] dark:to-[#0A0A0B] overflow-hidden shadow-2xl">
                         {/* Terminal-style header with glow */}
-                        <div className="flex items-center justify-between px-5 py-3 border-b border-white/10 bg-[#09090B]/80 backdrop-blur-sm">
+                        <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-muted/40 dark:bg-background dark:bg-[#09090B]/80 backdrop-blur-sm">
                             <div className="flex items-center gap-2 min-w-0">
                                 <div className="flex gap-1.5">
                                     <div className="h-3 w-3 shrink-0 rounded-full bg-red-500/80 shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
                                     <div className="h-3 w-3 shrink-0 rounded-full bg-yellow-500/80 shadow-[0_0_8px_rgba(234,179,8,0.5)]" />
                                     <div className="h-3 w-3 shrink-0 rounded-full bg-green-500/80 shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
                                 </div>
-                                <span className="ml-2 text-sm font-mono text-zinc-400 truncate">
-                                    {agent?.name ?? id} <span className="text-zinc-600">/</span> <span className="text-[#2496ED]">{auditData.hostname}</span>
+                                <span className="ml-2 text-sm font-mono text-muted-foreground truncate">
+                                    {agent?.name ?? id} <span className="text-muted-foreground/40">/</span> <span className="text-[#2496ED]">{auditData.hostname}</span>
                                 </span>
                             </div>
-                            <span className="text-xs font-mono text-zinc-500 shrink-0 ml-4">
+                            <span className="text-xs font-mono text-muted-foreground/60 shrink-0 ml-4">
                                 {fmtDate(auditData.timestamp).split(",")[1]?.trim() ?? fmtDate(auditData.timestamp)}
                             </span>
                         </div>
@@ -734,28 +734,28 @@ function AuditDetailPage() {
                             {/* Left: Score + stats */}
                             <div className="p-6 space-y-5">
                                 <div>
-                                    <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-zinc-500 mb-3">Audit Score</p>
+                                    <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground/60 mb-3">Audit Score</p>
                                     <div className="flex items-baseline gap-3">
                                         <span className={cn("text-7xl font-black tabular-nums leading-none",
-                                            auditData.summary.score >= 80 ? "text-emerald-400 drop-shadow-[0_0_20px_rgba(52,211,153,0.5)]"
-                                            : auditData.summary.score >= 60 ? "text-amber-400 drop-shadow-[0_0_20px_rgba(251,191,36,0.5)]"
-                                            : "text-rose-400 drop-shadow-[0_0_20px_rgba(251,113,133,0.5)]"
+                                            auditData.summary.score >= 80 ? "text-emerald-400 dark:drop-shadow-[0_0_20px_rgba(52,211,153,0.4)]"
+                                            : auditData.summary.score >= 60 ? "text-amber-400 dark:drop-shadow-[0_0_20px_rgba(251,191,36,0.4)]"
+                                            : "text-rose-400 dark:drop-shadow-[0_0_20px_rgba(251,113,133,0.4)]"
                                         )}>
                                             {auditData.summary.score}
                                         </span>
-                                        <span className="text-xl text-zinc-600 font-bold">/ 100</span>
+                                        <span className="text-xl text-muted-foreground/40 font-bold">/ 100</span>
                                     </div>
-                                    <div className="mt-3 h-2 w-full rounded-full bg-white/5 overflow-hidden shadow-inner">
+                                    <div className="mt-3 h-2 w-full rounded-full bg-muted/40 overflow-hidden shadow-inner">
                                         <div
                                             className={cn("h-full rounded-full transition-all duration-1000 ease-out",
-                                                auditData.summary.score >= 80 ? "bg-gradient-to-r from-emerald-500 to-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.6)]"
-                                                : auditData.summary.score >= 60 ? "bg-gradient-to-r from-amber-500 to-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.6)]"
-                                                : "bg-gradient-to-r from-rose-500 to-rose-400 shadow-[0_0_12px_rgba(251,113,133,0.6)]"
+                                                auditData.summary.score >= 80 ? "bg-gradient-to-r from-emerald-500 to-emerald-400 dark:shadow-[0_0_12px_rgba(52,211,153,0.6)]"
+                                                : auditData.summary.score >= 60 ? "bg-gradient-to-r from-amber-500 to-amber-400 dark:shadow-[0_0_12px_rgba(251,191,36,0.6)]"
+                                                : "bg-gradient-to-r from-rose-500 to-rose-400 dark:shadow-[0_0_12px_rgba(251,113,133,0.6)]"
                                             )}
                                             style={{ width: `${auditData.summary.score}%` }}
                                         />
                                     </div>
-                                    <p className="mt-2 text-xs text-zinc-500 font-mono">CIS Docker Benchmark v1.8.0 · {auditData.summary.total} rules</p>
+                                    <p className="mt-2 text-xs text-muted-foreground/60 font-mono">CIS Docker Benchmark v1.8.0 · {auditData.summary.total} rules</p>
                                 </div>
 
                                 <div className="grid grid-cols-3 gap-3">
@@ -764,12 +764,12 @@ function AuditDetailPage() {
                                         className={cn(
                                             "flex flex-col items-center py-3 rounded-xl border transition-all duration-200",
                                             statusFilter === "Pass"
-                                                ? "bg-emerald-500/20 border-emerald-500/50 ring-2 ring-emerald-500/30 shadow-[0_0_20px_rgba(52,211,153,0.3)]"
+                                                ? "bg-emerald-500/20 border-emerald-500/50 ring-2 ring-emerald-500/30 dark:shadow-[0_0_20px_rgba(52,211,153,0.3)]"
                                                 : "bg-emerald-500/5 border-emerald-500/20 hover:bg-emerald-500/10 hover:border-emerald-500/30"
                                         )}
                                     >
                                         <span className="text-2xl font-black text-emerald-400">{auditData.summary.passed}</span>
-                                        <span className="text-[9px] text-zinc-400 uppercase tracking-[0.15em] mt-1">Pass</span>
+                                        <span className="text-[9px] text-muted-foreground uppercase tracking-[0.15em] mt-1">Pass</span>
                                     </button>
                                     <button
                                         onClick={() => setStatusFilter(f => f === "Fail" ? "all" : "Fail")}
@@ -781,11 +781,11 @@ function AuditDetailPage() {
                                         )}
                                     >
                                         <span className="text-2xl font-black text-rose-400">{auditData.summary.failed}</span>
-                                        <span className="text-[9px] text-zinc-400 uppercase tracking-[0.15em] mt-1">Fail</span>
+                                        <span className="text-[9px] text-muted-foreground uppercase tracking-[0.15em] mt-1">Fail</span>
                                     </button>
-                                    <div className="flex flex-col items-center py-3 rounded-xl border border-white/10 bg-white/[0.02]">
-                                        <span className="text-2xl font-black text-zinc-400">{auditData.summary.total}</span>
-                                        <span className="text-[9px] text-zinc-500 uppercase tracking-[0.15em] mt-1">Total</span>
+                                    <div className="flex flex-col items-center py-3 rounded-xl border border-border bg-muted/20">
+                                        <span className="text-2xl font-black text-muted-foreground">{auditData.summary.total}</span>
+                                        <span className="text-[9px] text-muted-foreground/60 uppercase tracking-[0.15em] mt-1">Total</span>
                                     </div>
                                 </div>
 
@@ -796,11 +796,11 @@ function AuditDetailPage() {
                                         { icon: Container, label: "Containers", value: String(auditData.total_containers) },
                                         { icon: Clock, label: "Ran", value: fmtDate(auditData.timestamp).split(",")[1]?.trim() ?? fmtDate(auditData.timestamp) },
                                     ].map(({ icon: Icon, label, value }) => (
-                                        <div key={label} className="bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2 flex items-center gap-2 min-w-0 hover:bg-white/[0.04] transition-colors">
-                                            <Icon className="h-4 w-4 text-zinc-500 shrink-0" />
+                                        <div key={label} className="bg-muted/20 border border-white/5 rounded-lg px-3 py-2 flex items-center gap-2 min-w-0 hover:bg-white/[0.04] transition-colors">
+                                            <Icon className="h-4 w-4 text-muted-foreground/60 shrink-0" />
                                             <div className="min-w-0">
-                                                <p className="text-[9px] text-zinc-500 uppercase tracking-[0.15em]">{label}</p>
-                                                <p className="text-xs font-semibold text-zinc-300 truncate">{value}</p>
+                                                <p className="text-[9px] text-muted-foreground/60 uppercase tracking-[0.15em]">{label}</p>
+                                                <p className="text-xs font-semibold text-foreground/80 truncate">{value}</p>
                                             </div>
                                         </div>
                                     ))}
@@ -810,12 +810,12 @@ function AuditDetailPage() {
                             {/* Right: Pillar/Section breakdown with toggle */}
                             <div className="p-6 space-y-4">
                                 <div className="flex items-center justify-between">
-                                    <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-zinc-500">
+                                    <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground/60">
                                         {viewMode === "pillar" ? "Security Pillars" : "CIS Sections"}
                                     </p>
                                     <button
                                         onClick={() => setViewMode(m => m === "pillar" ? "section" : "pillar")}
-                                        className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-white/[0.02] border border-white/10 hover:bg-[#2496ED]/20 hover:border-[#2496ED]/50 hover:text-[#2496ED] transition-all text-zinc-400"
+                                        className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-muted/20 border border-border hover:bg-primary/20 hover:border-primary/50 hover:text-primary transition-all text-muted-foreground"
                                     >
                                         <ArrowLeftRight className="h-3 w-3" />
                                         Switch to {viewMode === "pillar" ? "Sections" : "Pillars"}
@@ -836,10 +836,10 @@ function AuditDetailPage() {
                                             <div key={pillar} className="space-y-2">
                                                 <div className="flex items-center gap-2">
                                                     <Icon size={14} className={meta.color} />
-                                                    <span className="text-sm font-semibold text-zinc-200">{meta.name}</span>
-                                                    <span className="text-xs text-zinc-500 font-mono ml-auto">{passed}<span className="text-zinc-600">/</span>{total}</span>
+                                                    <span className="text-sm font-semibold text-foreground/90">{meta.name}</span>
+                                                    <span className="text-xs text-muted-foreground/60 font-mono ml-auto">{passed}<span className="text-muted-foreground/40">/</span>{total}</span>
                                                 </div>
-                                                <div className="h-1.5 bg-white/5 rounded-full overflow-hidden shadow-inner">
+                                                <div className="h-1.5 bg-muted/40 rounded-full overflow-hidden shadow-inner">
                                                     <div
                                                         className={cn("h-full rounded-full transition-all duration-700", meta.barColor, 
                                                             pct > 0 && "shadow-[0_0_8px_currentColor]"
@@ -861,13 +861,13 @@ function AuditDetailPage() {
                                 )}
 
                                 {/* Quick Stats */}
-                                <div className="pt-4 mt-4 border-t border-white/10 grid grid-cols-2 gap-2">
-                                    <div className="bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2">
-                                        <p className="text-[9px] text-zinc-500 uppercase tracking-[0.15em]">Critical</p>
+                                <div className="pt-4 mt-4 border-t border-border grid grid-cols-2 gap-2">
+                                    <div className="bg-muted/20 border border-white/5 rounded-lg px-3 py-2">
+                                        <p className="text-[9px] text-muted-foreground/60 uppercase tracking-[0.15em]">Critical</p>
                                         <p className="text-lg font-black text-rose-400">{auditData.results.filter(r => r.rule.severity === "High" && r.status === "Fail").length}</p>
                                     </div>
-                                    <div className="bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2">
-                                        <p className="text-[9px] text-zinc-500 uppercase tracking-[0.15em]">Medium</p>
+                                    <div className="bg-muted/20 border border-white/5 rounded-lg px-3 py-2">
+                                        <p className="text-[9px] text-muted-foreground/60 uppercase tracking-[0.15em]">Medium</p>
                                         <p className="text-lg font-black text-amber-400">{auditData.results.filter(r => r.rule.severity === "Medium" && r.status === "Fail").length}</p>
                                     </div>
                                 </div>
@@ -879,18 +879,18 @@ function AuditDetailPage() {
                     <div className="space-y-4">
                         {/* Search bar */}
                         <div className="relative">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
                             <Input
                                 type="text"
                                 placeholder="Search rules by ID, title, or message..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-11 pr-11 h-11 bg-white/[0.02] border-white/10 text-zinc-200 placeholder:text-zinc-500 focus:border-[#2496ED]/50 focus:ring-[#2496ED]/20"
+                                className="pl-11 pr-11 h-11 bg-muted/20 border-border text-foreground/90 placeholder:text-muted-foreground/60 focus:border-[#2496ED]/50 focus:ring-[#2496ED]/20"
                             />
                             {searchQuery && (
                                 <button
                                     onClick={() => setSearchQuery("")}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground/80 transition-colors"
                                 >
                                     <X className="h-4 w-4" />
                                 </button>
@@ -900,11 +900,11 @@ function AuditDetailPage() {
                         {/* View mode toggle + filters */}
                         <div className="flex flex-wrap gap-3 items-center">
                             {/* View mode toggle */}
-                            <div className="flex items-center gap-1 border border-white/10 rounded-lg p-1 bg-white/[0.02]">
+                            <div className="flex items-center gap-1 border border-border rounded-lg p-1 bg-muted/20">
                                 <button
                                     onClick={() => setViewMode("pillar")}
                                     className={cn("flex items-center gap-1.5 text-xs px-3 py-2 rounded font-bold transition-all",
-                                        viewMode === "pillar" ? "bg-[#2496ED] text-white shadow-[0_0_12px_rgba(36,150,237,0.3)]" : "hover:bg-white/5 text-zinc-400")}
+                                        viewMode === "pillar" ? "bg-[#2496ED] text-white dark:shadow-[0_0_12px_rgba(36,150,237,0.3)]" : "hover:bg-muted/40 text-muted-foreground")}
                                 >
                                     <Layers className="h-3.5 w-3.5" />
                                     Pillars
@@ -912,7 +912,7 @@ function AuditDetailPage() {
                                 <button
                                     onClick={() => setViewMode("section")}
                                     className={cn("flex items-center gap-1.5 text-xs px-3 py-2 rounded font-bold transition-all",
-                                        viewMode === "section" ? "bg-[#2496ED] text-white shadow-[0_0_12px_rgba(36,150,237,0.3)]" : "hover:bg-white/5 text-zinc-400")}
+                                        viewMode === "section" ? "bg-[#2496ED] text-white dark:shadow-[0_0_12px_rgba(36,150,237,0.3)]" : "hover:bg-muted/40 text-muted-foreground")}
                                 >
                                     <Terminal className="h-3.5 w-3.5" />
                                     Sections
@@ -924,11 +924,11 @@ function AuditDetailPage() {
                             {/* Pillar filters (only show in pillar view) */}
                             {viewMode === "pillar" && (
                                 <>
-                                    <span className="text-xs text-zinc-500 font-semibold">Pillar:</span>
+                                    <span className="text-xs text-muted-foreground/60 font-semibold">Pillar:</span>
                                     <button
                                         onClick={() => setPillarFilter("all")}
                                         className={cn("text-xs px-3 py-1.5 rounded-lg border font-bold transition-all",
-                                            pillarFilter === "all" ? "bg-[#2496ED] text-white border-[#2496ED]/50 shadow-[0_0_12px_rgba(36,150,237,0.3)]" : "bg-white/[0.02] border-white/10 text-zinc-400 hover:bg-white/5")}
+                                            pillarFilter === "all" ? "bg-[#2496ED] text-white border-[#2496ED]/50 dark:shadow-[0_0_12px_rgba(36,150,237,0.3)]" : "bg-muted/20 border-border text-muted-foreground hover:bg-muted/40")}
                                     >
                                         All
                                     </button>
@@ -941,7 +941,7 @@ function AuditDetailPage() {
                                                 className={cn("inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-bold transition-all",
                                                     pillarFilter === pillar
                                                         ? cn(meta.bg, meta.color, meta.border, "shadow-sm")
-                                                        : "bg-white/[0.02] border-white/10 text-zinc-400 hover:bg-white/5")}
+                                                        : "bg-muted/20 border-border text-muted-foreground hover:bg-muted/40")}
                                             >
                                                 <Icon size={12} />
                                                 {meta.name}
@@ -954,11 +954,11 @@ function AuditDetailPage() {
                             {/* Section filters (only show in section view) */}
                             {viewMode === "section" && (
                                 <>
-                                    <span className="text-xs text-zinc-500 font-semibold">Section:</span>
+                                    <span className="text-xs text-muted-foreground/60 font-semibold">Section:</span>
                                     <button
                                         onClick={() => setSectionFilter("all")}
                                         className={cn("text-xs px-3 py-1.5 rounded-lg border font-bold transition-all",
-                                            sectionFilter === "all" ? "bg-[#2496ED] text-white border-[#2496ED]/50 shadow-[0_0_12px_rgba(36,150,237,0.3)]" : "bg-white/[0.02] border-white/10 text-zinc-400 hover:bg-white/5")}
+                                            sectionFilter === "all" ? "bg-[#2496ED] text-white border-[#2496ED]/50 dark:shadow-[0_0_12px_rgba(36,150,237,0.3)]" : "bg-muted/20 border-border text-muted-foreground hover:bg-muted/40")}
                                     >
                                         All
                                     </button>
@@ -970,7 +970,7 @@ function AuditDetailPage() {
                                                 className={cn("text-xs px-3 py-1.5 rounded-lg border font-bold transition-all",
                                                     sectionFilter === s
                                                         ? cn(meta.bg, meta.color, meta.border, "shadow-sm")
-                                                        : "bg-white/[0.02] border-white/10 text-zinc-400 hover:bg-white/5")}
+                                                        : "bg-muted/20 border-border text-muted-foreground hover:bg-muted/40")}
                                             >
                                                 {meta.num} {meta.label}
                                             </button>
@@ -988,7 +988,7 @@ function AuditDetailPage() {
                                         setPillarFilter("all");
                                         setSearchQuery("");
                                     }}
-                                    className="text-xs px-3 py-1.5 text-zinc-400 hover:text-rose-400 ml-auto font-bold transition-colors"
+                                    className="text-xs px-3 py-1.5 text-muted-foreground hover:text-rose-400 ml-auto font-bold transition-colors"
                                 >
                                     Clear all
                                 </button>
@@ -998,7 +998,7 @@ function AuditDetailPage() {
 
                     {/* ── Results grouped by pillar or section ───────── */}
                     {Object.keys(groupedResults).length === 0 ? (
-                        <div className="text-center py-16 text-zinc-500 text-sm">
+                        <div className="text-center py-16 text-muted-foreground/60 text-sm">
                             No results match the current filters.
                         </div>
                     ) : (
@@ -1018,12 +1018,12 @@ function AuditDetailPage() {
 
                                     return (
                                         <div key={groupName}>
-                                            <div className="flex items-center gap-3 mb-4 pb-3 border-b border-white/10">
+                                            <div className="flex items-center gap-3 mb-4 pb-3 border-b border-border">
                                                 <Icon size={16} className={meta.color} />
                                                 <span className={cn("text-sm font-black px-3 py-1.5 rounded-lg border inline-flex items-center gap-2", meta.bg, meta.color, meta.border)}>
                                                     {groupName}
                                                 </span>
-                                                <Badge variant="outline" className="text-xs ml-auto font-mono font-bold bg-white/[0.02] border-white/10 text-zinc-400">
+                                                <Badge variant="outline" className="text-xs ml-auto font-mono font-bold bg-muted/20 border-border text-muted-foreground">
                                                     {results.filter(r => r.status === "Pass").length}/{results.length}
                                                 </Badge>
                                             </div>
@@ -1050,12 +1050,12 @@ function AuditDetailPage() {
                                     const meta = sectionMeta(groupName);
                                     return (
                                         <div key={groupName}>
-                                            <div className="flex items-center gap-3 mb-4 pb-3 border-b border-white/10">
+                                            <div className="flex items-center gap-3 mb-4 pb-3 border-b border-border">
                                                 <span className={cn("text-sm font-black px-3 py-1.5 rounded-lg border", meta.bg, meta.color, meta.border)}>
                                                     {meta.num} {meta.label}
                                                 </span>
-                                                <span className="text-sm text-zinc-400 font-medium">{groupName}</span>
-                                                <Badge variant="outline" className="text-xs ml-auto font-mono font-bold bg-white/[0.02] border-white/10 text-zinc-400">
+                                                <span className="text-sm text-muted-foreground font-medium">{groupName}</span>
+                                                <Badge variant="outline" className="text-xs ml-auto font-mono font-bold bg-muted/20 border-border text-muted-foreground">
                                                     {results.filter(r => r.status === "Pass").length}/{results.length}
                                                 </Badge>
                                             </div>

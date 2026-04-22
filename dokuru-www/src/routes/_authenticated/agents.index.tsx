@@ -344,6 +344,10 @@ function AgentsList() {
   const [sortField, setSortField]         = useState<SortField>("name");
   const [sortDir, setSortDir]             = useState<SortDir>("asc");
 
+  // Pagination
+  const PAGE_SIZE = 10;
+  const [page, setPage] = useState(1);
+
   useEffect(() => { fetchAgents(); }, [fetchAgents]);
 
   const handleAgentUpdated = (updated: Agent) => { updateAgent(updated); };
@@ -394,7 +398,14 @@ function AgentsList() {
     setConnFilter("all");
     setStatusFilter("all");
     setVersionFilter("all");
+    setPage(1);
   };
+
+  // Reset to page 1 whenever filters change
+  const applySearch = (v: string) => { setSearch(v); setPage(1); };
+  const applyConn   = (v: ConnectionFilter) => { setConnFilter(v); setPage(1); };
+  const applyStatus = (v: StatusFilter) => { setStatusFilter(v); setPage(1); };
+  const applyVer    = (v: string) => { setVersionFilter(v); setPage(1); };
 
   // Build filtered + sorted list.
   const displayAgents = agents
@@ -442,6 +453,11 @@ function AgentsList() {
     });
 
   const sortLabels: Record<SortField, string> = { name: "Name", status: "Status", connection: "Connection" };
+
+  // Pagination derived values
+  const totalPages  = Math.max(1, Math.ceil(displayAgents.length / PAGE_SIZE));
+  const safePage    = Math.min(page, totalPages);
+  const pagedAgents = displayAgents.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   return (
     <div className="max-w-7xl mx-auto w-full space-y-6">
@@ -509,7 +525,7 @@ function AgentsList() {
                     <DropdownMenuCheckboxItem
                       key={v}
                       checked={connFilter === v}
-                      onCheckedChange={() => setConnFilter(v)}
+                      onCheckedChange={() => applyConn(v)}
                     >
                       {v === "all" ? "All connections" : v.charAt(0).toUpperCase() + v.slice(1)}
                     </DropdownMenuCheckboxItem>
@@ -535,7 +551,7 @@ function AgentsList() {
                     <DropdownMenuCheckboxItem
                       key={v}
                       checked={statusFilter === v}
-                      onCheckedChange={() => setStatusFilter(v)}
+                      onCheckedChange={() => applyStatus(v)}
                     >
                       {v === "all" ? "All statuses" : v.charAt(0).toUpperCase() + v.slice(1)}
                     </DropdownMenuCheckboxItem>
@@ -559,7 +575,7 @@ function AgentsList() {
                 <DropdownMenuContent align="start" className="w-48">
                   <DropdownMenuCheckboxItem
                     checked={versionFilter === "all"}
-                    onCheckedChange={() => setVersionFilter("all")}
+                    onCheckedChange={() => applyVer("all")}
                   >
                     All versions
                   </DropdownMenuCheckboxItem>
@@ -568,7 +584,7 @@ function AgentsList() {
                     <DropdownMenuCheckboxItem
                       key={v}
                       checked={versionFilter === v}
-                      onCheckedChange={() => setVersionFilter(v)}
+                      onCheckedChange={() => applyVer(v)}
                     >
                       Docker {v}
                     </DropdownMenuCheckboxItem>
@@ -596,7 +612,7 @@ function AgentsList() {
                 <input
                   type="text"
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => applySearch(e.target.value)}
                   placeholder="Search by name, status, URL..."
                   className="w-full pl-10 pr-8 py-1.5 bg-muted/50 border border-border rounded text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-miku-primary/50"
                 />
@@ -640,7 +656,7 @@ function AgentsList() {
           </div>
 
           {/* Agent list */}
-          <div className="divide-y divide-white/5">
+          <div className="divide-y divide-border">
             {displayAgents.length === 0 ? (
               <div className="py-12 text-center">
                 <Search className="w-8 h-8 mx-auto text-muted-foreground/30 mb-3" />
@@ -649,7 +665,7 @@ function AgentsList() {
                   <X className="w-3 h-3" /> Clear filters
                 </button>
               </div>
-            ) : displayAgents.map((agent) => (
+            ) : pagedAgents.map((agent) => (
               <AgentCard
                 key={agent.id}
                 data={{
@@ -664,6 +680,69 @@ function AgentsList() {
               />
             ))}
           </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/20">
+              <p className="text-xs text-muted-foreground">
+                Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, displayAgents.length)} of {displayAgents.length} agents
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage(1)}
+                  disabled={safePage === 1}
+                  className="px-2 py-1 text-xs rounded border border-border bg-background hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  «
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={safePage === 1}
+                  className="px-2.5 py-1 text-xs rounded border border-border bg-background hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  ‹
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter((p) => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
+                  .reduce<(number | "…")[]>((acc, p, idx, arr) => {
+                    if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push("…");
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((p, i) =>
+                    p === "…" ? (
+                      <span key={`ellipsis-${i}`} className="px-1.5 py-1 text-xs text-muted-foreground">…</span>
+                    ) : (
+                      <button
+                        key={p}
+                        onClick={() => setPage(p as number)}
+                        className={`px-2.5 py-1 text-xs rounded border transition-colors ${
+                          safePage === p
+                            ? "bg-primary text-primary-foreground border-primary font-semibold"
+                            : "border-border bg-background hover:bg-muted"
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    )
+                  )}
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safePage === totalPages}
+                  className="px-2.5 py-1 text-xs rounded border border-border bg-background hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  ›
+                </button>
+                <button
+                  onClick={() => setPage(totalPages)}
+                  disabled={safePage === totalPages}
+                  className="px-2 py-1 text-xs rounded border border-border bg-background hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  »
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
