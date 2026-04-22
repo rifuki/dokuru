@@ -12,9 +12,7 @@ use crate::{
     state::AppState,
 };
 
-pub async fn get_current_document(
-    State(state): State<AppState>,
-) -> ApiResult<Option<Document>> {
+pub async fn get_current_document(State(state): State<AppState>) -> ApiResult<Option<Document>> {
     let doc = state.document_repo.get_current().await.map_err(|e| {
         tracing::error!("Failed to get document: {}", e);
         ApiError::default()
@@ -107,10 +105,7 @@ pub async fn upload_document(
         .with_message("No file provided"))
 }
 
-pub async fn delete_document(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-) -> ApiResult<()> {
+pub async fn delete_document(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResult<()> {
     if let Ok(Some(doc)) = state.document_repo.get_current().await
         && doc.id == id
     {

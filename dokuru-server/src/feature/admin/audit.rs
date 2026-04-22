@@ -33,7 +33,7 @@ pub struct AdminAuditListResponse {
 
 pub async fn list_audits(State(state): State<AppState>) -> ApiResult<AdminAuditListResponse> {
     let audits = sqlx::query_as::<_, AdminAuditListItem>(
-        r#"
+        r"
         SELECT
             ar.id,
             ar.agent_id,
@@ -51,7 +51,7 @@ pub async fn list_audits(State(state): State<AppState>) -> ApiResult<AdminAuditL
         JOIN agents a ON a.id = ar.agent_id
         JOIN users u ON u.id = ar.user_id
         ORDER BY ar.ran_at DESC, ar.created_at DESC
-        "#,
+        ",
     )
     .fetch_all(state.db.pool())
     .await

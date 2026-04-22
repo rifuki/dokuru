@@ -1,4 +1,8 @@
-use axum::{Json, extract::State, http::{HeaderMap, StatusCode}};
+use axum::{
+    Json,
+    extract::State,
+    http::{HeaderMap, StatusCode},
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -96,7 +100,8 @@ pub async fn forgot_password(
         })?;
 
     // Send email
-    let reset_url = build_password_reset_url(&headers, &state.config.server.cors_allowed_origins, &token);
+    let reset_url =
+        build_password_reset_url(&headers, &state.config.server.cors_allowed_origins, &token);
 
     if let Err(e) = state
         .email_service

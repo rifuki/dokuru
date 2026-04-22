@@ -1,13 +1,18 @@
-use axum::{Extension, Json, extract::Path, extract::State, http::{HeaderMap, StatusCode}};
+use axum::{
+    Extension, Json,
+    extract::Path,
+    extract::State,
+    http::{HeaderMap, StatusCode},
+};
 use chrono::{Duration, Utc};
 use uuid::Uuid;
 
 use crate::{
     feature::{
         admin::user::dto::{AdminUserResponse, UpdateUserRoleRequest, UpdateUserStatusRequest},
+        auth::AuthUser,
         auth::auth_method::AuthProvider,
         auth::handlers::password_reset::build_password_reset_url,
-        auth::AuthUser,
     },
     infrastructure::web::response::{ApiError, ApiResult, ApiSuccess, codes::generic},
     state::AppState,
@@ -229,7 +234,8 @@ pub async fn send_password_reset(
         .await
         .map_err(|error| ApiError::default().log_only(error))?;
 
-    let reset_url = build_password_reset_url(&headers, &state.config.server.cors_allowed_origins, &token);
+    let reset_url =
+        build_password_reset_url(&headers, &state.config.server.cors_allowed_origins, &token);
     state
         .email_service
         .send_password_reset_email(&user.email, &reset_url)

@@ -18,7 +18,10 @@ pub fn admin_routes() -> Router<AppState> {
         .route("/users", get(user::handler::list_users))
         .route("/users/{id}", delete(user::handler::delete_user))
         .route("/users/{id}/role", post(user::handler::update_user_role))
-        .route("/users/{id}/status", post(user::handler::update_user_status))
+        .route(
+            "/users/{id}/status",
+            post(user::handler::update_user_status),
+        )
         .route(
             "/users/{id}/reset-password",
             post(user::handler::send_password_reset),
