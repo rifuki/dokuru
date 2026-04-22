@@ -369,6 +369,7 @@ export function ContainerTerminal({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  const roRef = useRef<ResizeObserver | null>(null);
   const shellMenuRef = useRef<HTMLDivElement>(null);
   const [shouldConnect, setShouldConnect] = useState(false);
   const [termDimensions, setTermDimensions] = useState({ cols: 80, rows: 24 });
@@ -467,9 +468,11 @@ export function ContainerTerminal({
       queueMicrotask(() => setTermDimensions({ cols: term.cols, rows: term.rows }));
     });
     ro.observe(wrapperRef.current);
+    roRef.current = ro;
 
     return () => {
       ro.disconnect();
+      roRef.current = null;
       term.dispose();
       termRef.current = null;
       setShouldConnect(false);
@@ -515,7 +518,9 @@ export function ContainerTerminal({
   const reconnect = useCallback(() => {
     if (!wrapperRef.current) return;
     
-    // Cleanup existing terminal
+    // Cleanup existing terminal and observer
+    roRef.current?.disconnect();
+    roRef.current = null;
     termRef.current?.dispose();
     termRef.current = null;
     setShouldConnect(false);
@@ -537,6 +542,13 @@ export function ContainerTerminal({
       fit.fit();
       termRef.current = term;
       fitRef.current = fit;
+
+      const ro = new ResizeObserver(() => {
+        fit.fit();
+        queueMicrotask(() => setTermDimensions({ cols: term.cols, rows: term.rows }));
+      });
+      ro.observe(wrapperRef.current);
+      roRef.current = ro;
 
       setTermDimensions({ cols: term.cols, rows: term.rows });
       setShouldConnect(true);
