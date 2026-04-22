@@ -185,6 +185,7 @@ export function AppSidebar() {
                       asChild
                       isActive={isActive(item.href)}
                       tooltip={item.title}
+                      className="text-sm! py-2! data-[active=true]:bg-miku-primary/15 data-[active=true]:text-miku-primary data-[active=true]:font-medium"
                     >
                       <Link to={item.href}>
                         <item.icon className="size-4" />
