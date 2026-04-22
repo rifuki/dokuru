@@ -387,6 +387,8 @@ export function ContainerTerminal({
   const { sendMessage, lastMessage, readyState, getWebSocket } = useWebSocket(wsUrl, {
     shouldReconnect: () => false,
     reconnectAttempts: 0,
+    reconnectInterval: 0,
+    retryOnError: false,
     share: false,
     onOpen: () => {
       if (termRef.current) termRef.current.options.disableStdin = false;
@@ -403,7 +405,7 @@ export function ContainerTerminal({
         termRef.current.options.disableStdin = true;
       }
     },
-  });
+  }, wsUrl !== null);
 
   const status: TermStatus = 
     readyState === ReadyState.OPEN ? "connected" :
@@ -470,6 +472,7 @@ export function ContainerTerminal({
       ro.disconnect();
       term.dispose();
       termRef.current = null;
+      setShouldConnect(false);
     };
   }, [active]);
 
@@ -510,10 +513,34 @@ export function ContainerTerminal({
   }, [readyState, sendMessage, getWebSocket]);
 
   const reconnect = useCallback(() => {
+    if (!wrapperRef.current) return;
+    
+    // Cleanup existing terminal
     termRef.current?.dispose();
     termRef.current = null;
     setShouldConnect(false);
-    setTimeout(() => setShouldConnect(true), 100);
+
+    // Reinitialize terminal
+    queueMicrotask(() => {
+      if (!wrapperRef.current) return;
+      
+      const term = new Terminal({
+        cursorBlink: true,
+        fontSize: 13,
+        fontFamily: '"Cascadia Code", "Fira Code", monospace',
+        theme: { background: "#0d1117", foreground: "#c9d1d9", cursor: "#58a6ff" },
+        scrollback: 5000,
+      });
+      const fit = new FitAddon();
+      term.loadAddon(fit);
+      term.open(wrapperRef.current);
+      fit.fit();
+      termRef.current = term;
+      fitRef.current = fit;
+
+      setTermDimensions({ cols: term.cols, rows: term.rows });
+      setShouldConnect(true);
+    });
   }, []);
 
   const isConnected    = status === "connected";
