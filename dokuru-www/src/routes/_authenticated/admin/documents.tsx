@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   FileText, Trash2, RefreshCw, Upload,
@@ -25,26 +25,41 @@ export const Route = createFileRoute("/_authenticated/admin/documents")({
 
 /* ─── PDF blob hook ─────────────────────────────────────────────────────────── */
 
+type PdfState = { blobUrl: string | null; isLoading: boolean };
+type PdfAction =
+  | { type: "start" }
+  | { type: "done"; url: string }
+  | { type: "fail" };
+
+function pdfReducer(_: PdfState, action: PdfAction): PdfState {
+  if (action.type === "start") return { blobUrl: null, isLoading: true };
+  if (action.type === "done") return { blobUrl: action.url, isLoading: false };
+  return { blobUrl: null, isLoading: false };
+}
+
 function usePdfBlob(docId: string | undefined) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [{ blobUrl, isLoading }, dispatch] = useReducer(pdfReducer, {
+    blobUrl: null,
+    isLoading: false,
+  });
 
   useEffect(() => {
     if (!docId) return;
 
     let cancelled = false;
     let objectUrl: string | null = null;
-    setBlobUrl(null);
-    setIsLoading(true);
+
+    dispatch({ type: "start" });
 
     getOrFetchPdfBlob(docId)
       .then((blob) => {
         if (cancelled) return;
         objectUrl = URL.createObjectURL(blob);
-        setBlobUrl(objectUrl);
+        dispatch({ type: "done", url: objectUrl });
       })
-      .catch(() => { if (!cancelled) console.warn("PDF unavailable"); })
-      .finally(() => { if (!cancelled) setIsLoading(false); });
+      .catch(() => {
+        if (!cancelled) dispatch({ type: "fail" });
+      });
 
     return () => {
       cancelled = true;

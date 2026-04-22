@@ -32,8 +32,14 @@ pub async fn serve_document_file(State(state): State<AppState>) -> Response {
     };
 
     let mut headers = HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/pdf"));
-    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("private, max-age=86400"));
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/pdf"),
+    );
+    headers.insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("private, max-age=86400"),
+    );
     if let Ok(v) = format!("inline; filename=\"{}\"", doc.name).parse() {
         headers.insert(header::CONTENT_DISPOSITION, v);
     }
@@ -83,8 +89,8 @@ pub async fn upload_document(
             .unwrap_or("application/pdf")
             .to_string();
 
-        let is_pdf = content_type.starts_with("application/pdf")
-            || name.to_lowercase().ends_with(".pdf");
+        let is_pdf =
+            content_type.starts_with("application/pdf") || name.to_lowercase().ends_with(".pdf");
         if !is_pdf {
             return Err(ApiError::default()
                 .with_code(StatusCode::BAD_REQUEST)

@@ -1,6 +1,6 @@
 use axum::{
     Router, middleware,
-    routing::{delete, get, post},
+    routing::{delete, get, patch, post},
 };
 
 use crate::{
@@ -19,6 +19,7 @@ pub fn admin_routes() -> Router<AppState> {
             "/config/local",
             get(system::get_local_config).put(system::save_local_config),
         )
+        .route("/config/field", patch(system::update_config_field))
         .route("/logs", get(log::handler::get_logs))
         .route("/log/level", post(log::handler::set_log_level))
         .route("/users", get(user::handler::list_users))

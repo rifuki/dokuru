@@ -199,8 +199,7 @@ pub async fn update_config_field(
     Json(req): Json<UpdateConfigFieldRequest>,
 ) -> ApiResult<LocalConfigResponse> {
     if req.path.is_empty() {
-        return Err(crate::ApiError::default()
-            .log_only(eyre::eyre!("path must not be empty")));
+        return Err(crate::ApiError::default().log_only(eyre::eyre!("path must not be empty")));
     }
 
     let target = req.target.as_deref().unwrap_or("local");
@@ -222,7 +221,6 @@ pub async fn update_config_field(
         })
         .with_message("Field updated"))
 }
-
 
 #[allow(clippy::too_many_lines)]
 fn config_snapshot(config: &Config) -> EffectiveConfigResponse {
@@ -246,15 +244,16 @@ fn config_snapshot(config: &Config) -> EffectiveConfigResponse {
             std::env::var(*key)
                 .ok()
                 .is_some_and(|value| !value.trim().is_empty())
-        }) {
-            if let Ok(value) = std::env::var(key) {
-                sources.push(ConfigSourceDetail {
-                    source: format!("env:{key}"),
-                    value,
-                });
-            }
+        })
+            && let Ok(value) = std::env::var(key)
+        {
+            sources.push(ConfigSourceDetail {
+                source: format!("env:{key}"),
+                value,
+            });
         }
 
+        #[allow(clippy::option_if_let_else)]
         let get_val_str = |doc: Option<&toml_edit::DocumentMut>, p: &[&str]| -> Option<String> {
             let item = toml_config::value_at_path(doc?, p)?;
             if let Some(s) = item.as_str() {
@@ -374,10 +373,7 @@ fn config_snapshot(config: &Config) -> EffectiveConfigResponse {
     );
     field_sources.insert(
         "upload.dir".to_string(),
-        sources_for(
-            &["upload", "dir"],
-            &["UPLOAD_DIR", "DOKURU__UPLOAD__DIR"],
-        ),
+        sources_for(&["upload", "dir"], &["UPLOAD_DIR", "DOKURU__UPLOAD__DIR"]),
     );
     field_sources.insert(
         "upload.base_url".to_string(),
@@ -411,22 +407,25 @@ fn config_snapshot(config: &Config) -> EffectiveConfigResponse {
         "database.max_connections".to_string(),
         sources_for(
             &["database", "max_connections"],
-            &["DATABASE_MAX_CONNECTIONS", "DOKURU__DATABASE__MAX_CONNECTIONS"],
+            &[
+                "DATABASE_MAX_CONNECTIONS",
+                "DOKURU__DATABASE__MAX_CONNECTIONS",
+            ],
         ),
     );
     field_sources.insert(
         "database.min_connections".to_string(),
         sources_for(
             &["database", "min_connections"],
-            &["DATABASE_MIN_CONNECTIONS", "DOKURU__DATABASE__MIN_CONNECTIONS"],
+            &[
+                "DATABASE_MIN_CONNECTIONS",
+                "DOKURU__DATABASE__MIN_CONNECTIONS",
+            ],
         ),
     );
     field_sources.insert(
         "redis.url".to_string(),
-        sources_for(
-            &["redis", "url"],
-            &["REDIS_URL", "DOKURU__REDIS__URL"],
-        ),
+        sources_for(&["redis", "url"], &["REDIS_URL", "DOKURU__REDIS__URL"]),
     );
     field_sources.insert(
         "auth.access_secret".to_string(),
@@ -488,7 +487,11 @@ fn config_snapshot(config: &Config) -> EffectiveConfigResponse {
         },
         email: EmailConfigView {
             from_email: config.email.from_email.clone(),
-            provider: if !config.email.resend_api_key.is_empty() { "resend" } else { "none" },
+            provider: if config.email.resend_api_key.is_empty() {
+                "none"
+            } else {
+                "resend"
+            },
         },
         database: DatabaseConfigView {
             url_configured: !config.database.url.is_empty(),
