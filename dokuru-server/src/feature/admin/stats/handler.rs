@@ -14,7 +14,12 @@ pub async fn get_dashboard_stats(
 ) -> ApiResult<DashboardStatsResponse> {
     let dashboard_stats = state
         .stats_service
-        .get_dashboard_stats(state.db.pool())
+        .get_dashboard_stats(
+            state.db.pool(),
+            &state.agent_registry,
+            state.redis_pool.as_deref(),
+            state.server_start_time,
+        )
         .await
         .map_err(|e| crate::infrastructure::web::response::ApiError::default().log_only(e))?;
 

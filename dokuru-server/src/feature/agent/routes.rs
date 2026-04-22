@@ -19,6 +19,7 @@ pub fn agent_routes() -> Router<AppState> {
                 .put(handlers::update_agent)
                 .delete(handlers::delete_agent),
         )
+        .route("/{id}/heartbeat", post(handlers::agent_heartbeat))
         .route("/{id}/audit", post(audit_handlers::save_audit))
         .route("/{id}/audit/latest", get(audit_handlers::get_latest_audit))
         .route(

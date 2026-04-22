@@ -41,7 +41,11 @@ pub async fn start_relay_mode(config: Config) -> Result<()> {
     info!("Starting relay mode, connecting to {}", RELAY_SERVER);
 
     // Get agent token from config
-    let token = generate_agent_token(&config);
+    let token = config.auth.relay_token.ok_or_else(|| {
+        eyre::eyre!(
+            "No relay token configured. Please set relay_token in config or run onboarding."
+        )
+    })?;
 
     loop {
         match connect_and_run(&token).await {
@@ -191,10 +195,4 @@ fn execute_command(command: &str, _payload: serde_json::Value) -> Result<serde_j
         }
         _ => Err(eyre::eyre!("Unknown command: {}", command)),
     }
-}
-
-fn generate_agent_token(config: &Config) -> String {
-    // For relay mode, we need to generate a token from the hash
-    // This is a placeholder - in production, token should be stored separately
-    format!("dok_{}", &config.auth.token_hash[..32])
 }

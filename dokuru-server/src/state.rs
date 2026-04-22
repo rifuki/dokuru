@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use bb8_redis::bb8;
 use dashmap::DashMap;
 use eyre::WrapErr;
 
@@ -51,6 +52,8 @@ pub struct AppState {
     pub session_blacklist: Option<Arc<dyn SessionBlacklist>>,
     pub log_reload_handle: Arc<ReloadFilterHandle>,
     pub ws_manager: WsManager,
+    pub server_start_time: std::time::Instant,
+    pub redis_pool: Option<Arc<bb8::Pool<bb8_redis::RedisConnectionManager>>>,
 }
 
 impl std::fmt::Debug for AppState {
@@ -92,22 +95,29 @@ impl AppState {
         let session_service = SessionService::new(db.clone(), session_repo);
 
         // Initialize Redis if configured
-        let session_blacklist: Option<Arc<dyn SessionBlacklist>> = if let Some(ref _redis_url) =
-            config.redis_url
-        {
+        #[allow(clippy::type_complexity)]
+        let (session_blacklist, redis_pool): (
+            Option<Arc<dyn SessionBlacklist>>,
+            Option<Arc<bb8::Pool<bb8_redis::RedisConnectionManager>>>,
+        ) = if let Some(ref _redis_url) = config.redis_url {
             match create_redis_pool(&config).await {
                 Ok(pool) => {
                     tracing::info!("✅ Redis session blacklist enabled");
-                    Some(Arc::new(RedisSessionBlacklist::new(pool)) as Arc<dyn SessionBlacklist>)
+                    let pool_arc = Arc::new(pool);
+                    (
+                        Some(Arc::new(RedisSessionBlacklist::new((*pool_arc).clone()))
+                            as Arc<dyn SessionBlacklist>),
+                        Some(pool_arc),
+                    )
                 }
                 Err(e) => {
                     tracing::warn!("⚠️  Redis not available (session blacklist disabled): {e}");
-                    None
+                    (None, None)
                 }
             }
         } else {
             tracing::info!("ℹ️  Redis not configured (session blacklist disabled)");
-            None
+            (None, None)
         };
 
         let auth_service = Arc::new(AuthService::new(
@@ -133,6 +143,7 @@ impl AppState {
 
         let agent_registry = Arc::new(DashMap::new());
         let ws_manager = WsManager::new();
+        let server_start_time = std::time::Instant::now();
 
         Ok(Self {
             config: Arc::new(config),
@@ -150,6 +161,8 @@ impl AppState {
             session_blacklist,
             log_reload_handle: Arc::new(log_reload_handle),
             ws_manager,
+            server_start_time,
+            redis_pool,
         })
     }
 
@@ -205,6 +218,7 @@ impl AppState {
 
         let agent_registry = Arc::new(DashMap::new());
         let ws_manager = WsManager::new();
+        let server_start_time = std::time::Instant::now();
 
         Self {
             config: Arc::new(config),
@@ -222,6 +236,8 @@ impl AppState {
             session_blacklist: None,
             log_reload_handle: Arc::new(handle),
             ws_manager,
+            server_start_time,
+            redis_pool: None,
         }
     }
 }

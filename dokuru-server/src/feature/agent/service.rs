@@ -74,14 +74,12 @@ impl AgentService {
         user_id: Uuid,
         dto: UpdateAgentDto,
     ) -> Result<Option<AgentResponse>> {
-        let (token_hash, encrypted_token) = if let Some(token) = &dto.token {
+        let (token_hash, encrypted_token) = dto.token.as_ref().map_or((None, None), |token| {
             (
                 Some(Self::hash_token(token)),
                 Some(Self::encrypt_token(token)),
             )
-        } else {
-            (None, None)
-        };
+        });
 
         let params = crate::feature::agent::repository::UpdateAgentParams {
             name: &dto.name,

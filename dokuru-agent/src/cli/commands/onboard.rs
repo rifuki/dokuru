@@ -243,9 +243,10 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
         None
     };
     let token_hash = agent_token.as_deref().map(hash_token);
+    let relay_token = agent_token.clone(); // Save actual token for relay mode
 
     run_step("Writing Dokuru configuration", || {
-        write_config_file(&config, token_hash.clone())
+        write_config_file(&config, token_hash.clone(), relay_token.clone())
     })?;
     if stderr().is_terminal() {
         cliclack::log::info(format!("→ {}", runtime_config_path(&config).display()))?;

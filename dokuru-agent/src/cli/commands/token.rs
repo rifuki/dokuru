@@ -52,7 +52,7 @@ pub fn rotate_token_impl(config: &super::super::helpers::InstallerConfig) -> Res
 
     run_step("Generating new token", || Ok(()))?;
     run_step("Updating configuration", || {
-        write_config_file(config, Some(new_hash))
+        write_config_file(config, Some(new_hash), Some(new_token.clone()))
     })?;
 
     cliclack::log::info(format!("→ {}/config.toml", config.config_dir.display()))?;

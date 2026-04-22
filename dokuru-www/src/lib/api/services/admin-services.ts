@@ -1,17 +1,12 @@
 import { apiClient, API_ENDPOINTS } from "@/lib/api";
 import type { ApiResponse } from "@/lib/api/types";
 import type { UserWithTimestamps } from "@/features/admin/types/admin-types";
+import type { DashboardStats } from "@/features/admin/types/stats";
+
+export type { DashboardStats };
 
 export interface LogLevelRequest {
   level: "trace" | "debug" | "info" | "warn" | "error";
-}
-
-export interface DashboardStats {
-  total_users: number;
-  total_admins: number;
-  total_api_keys: number;
-  active_api_keys: number;
-  new_users_this_month: number;
 }
 
 export interface ApiKey {

@@ -57,7 +57,7 @@ pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> 
 }
 
 /// Handle WebSocket connection
-#[allow(clippy::cognitive_complexity)]
+#[allow(clippy::cognitive_complexity, clippy::too_many_lines)]
 async fn handle_socket(socket: WebSocket, state: AppState) {
     let (mut sender, mut receiver) = socket.split();
     let (tx, mut rx) = mpsc::unbounded_channel::<String>();
@@ -107,6 +107,14 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         ))
         .await;
 
+    // Update last_seen on connect
+    let _ = sqlx::query!(
+        "UPDATE agents SET last_seen = NOW() WHERE id = $1",
+        agent_id
+    )
+    .execute(state.db.pool())
+    .await;
+
     // Register connection
     let registry = state.agent_registry.clone();
     registry.insert(
@@ -120,6 +128,25 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 
     info!("Agent {} connected via relay", agent_id);
     state.ws_manager.broadcast_agent_connected(agent_id);
+
+    // Spawn periodic heartbeat task to update last_seen every 30 seconds
+    let db_pool = state.db.pool().clone();
+    let agent_id_clone = agent_id;
+    let heartbeat_task = tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+            let result = sqlx::query!(
+                "UPDATE agents SET last_seen = NOW() WHERE id = $1",
+                agent_id_clone
+            )
+            .execute(&db_pool)
+            .await;
+
+            if result.is_err() {
+                break;
+            }
+        }
+    });
 
     // Spawn task to send messages to agent
     let mut send_task = tokio::spawn(async move {
@@ -150,8 +177,14 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 
     // Wait for either task to finish
     tokio::select! {
-        _ = &mut send_task => recv_task.abort(),
-        _ = &mut recv_task => send_task.abort(),
+        _ = &mut send_task => {
+            recv_task.abort();
+            heartbeat_task.abort();
+        },
+        _ = &mut recv_task => {
+            send_task.abort();
+            heartbeat_task.abort();
+        },
     }
 
     // Cleanup

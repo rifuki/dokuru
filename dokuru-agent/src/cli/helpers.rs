@@ -717,7 +717,11 @@ pub fn install_binary(source: &Path, destination: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn write_config_file(config: &InstallerConfig, token_hash: Option<String>) -> Result<()> {
+pub fn write_config_file(
+    config: &InstallerConfig,
+    token_hash: Option<String>,
+    relay_token: Option<String>,
+) -> Result<()> {
     fs::create_dir_all(&config.config_dir)
         .wrap_err_with(|| format!("Failed to create {}", config.config_dir.display()))?;
 
@@ -742,7 +746,12 @@ pub fn write_config_file(config: &InstallerConfig, token_hash: Option<String>) -
     let resolved_token = token_hash
         .or_else(|| existing.as_ref().map(|c| c.auth.token_hash.clone()))
         .unwrap_or_default();
-    let existing_access = existing.map(|c| c.access).unwrap_or_default();
+    let existing_access = existing
+        .as_ref()
+        .map(|c| c.access.clone())
+        .unwrap_or_default();
+    let resolved_relay_token =
+        relay_token.or_else(|| existing.as_ref().and_then(|c| c.auth.relay_token.clone()));
 
     let runtime_config = RuntimeConfig {
         server: ServerConfig {
@@ -755,6 +764,7 @@ pub fn write_config_file(config: &InstallerConfig, token_hash: Option<String>) -
         },
         auth: AuthConfig {
             token_hash: resolved_token,
+            relay_token: resolved_relay_token,
         },
         access: existing_access,
     };
@@ -780,7 +790,7 @@ pub fn write_config_file(config: &InstallerConfig, token_hash: Option<String>) -
 
 /// Write config file preserving existing token
 pub fn write_config_file_preserve_token(config: &InstallerConfig) -> Result<()> {
-    write_config_file(config, None)
+    write_config_file(config, None, None)
 }
 
 pub fn write_systemd_unit(config: &InstallerConfig, preflight: &Preflight) -> Result<()> {

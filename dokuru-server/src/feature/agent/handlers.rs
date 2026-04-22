@@ -112,3 +112,29 @@ pub async fn delete_agent(
             .with_message("Agent not found"))
     }
 }
+
+/// POST /api/v1/agents/:id/heartbeat
+///
+/// Agent heartbeat to update last_seen timestamp
+pub async fn agent_heartbeat(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path(id): Path<Uuid>,
+) -> ApiResult<()> {
+    let result = sqlx::query!(
+        "UPDATE agents SET last_seen = NOW() WHERE id = $1 AND user_id = $2",
+        id,
+        auth_user.user_id
+    )
+    .execute(state.db.pool())
+    .await
+    .map_err(|e| ApiError::default().log_only(e))?;
+
+    if result.rows_affected() == 0 {
+        return Err(ApiError::default()
+            .with_code(StatusCode::NOT_FOUND)
+            .with_message("Agent not found"));
+    }
+
+    Ok(ApiSuccess::default().with_message("Heartbeat received"))
+}
