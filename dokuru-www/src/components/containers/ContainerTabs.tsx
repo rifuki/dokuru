@@ -364,7 +364,7 @@ export function ContainerTerminal({
   const fitRef = useRef<FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const [status, setStatus] = useState<TermStatus>("idle");
-  const hasConnectedBefore = useRef(false);
+  const [hasConnectedBefore, setHasConnectedBefore] = useState(false);
 
   const connect = useCallback(() => {
     if (!wrapperRef.current) return;
@@ -396,7 +396,7 @@ export function ContainerTerminal({
 
     ws.onopen = () => {
       setStatus("connected");
-      hasConnectedBefore.current = true;
+      setHasConnectedBefore(true);
     };
     ws.onclose = () => {
       setStatus("disconnected");
