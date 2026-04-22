@@ -136,19 +136,21 @@ function ConfigRow({
   mono?: boolean;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 rounded-xl border bg-card/60 px-4 py-3">
-      <div className="min-w-0 flex-1">
-        <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-          <Icon className="h-3.5 w-3.5" />
-          {label}
+    <div className="flex items-center justify-between gap-4 py-3 px-1 border-b last:border-0 border-border/50 transition-colors hover:bg-muted/30">
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted/50 text-muted-foreground">
+          <Icon className="h-4 w-4" />
         </div>
-        <div className={`truncate text-sm ${mono ? "font-mono text-foreground/90" : "font-medium"}`}>{value || "—"}</div>
+        <div className="text-sm font-medium text-foreground/90">{label}</div>
       </div>
-      {source ? (
-        <Badge variant="outline" className="shrink-0 text-[10px]">
-          {formatSourceLabel(source)}
-        </Badge>
-      ) : null}
+      <div className="flex items-center gap-3 text-right shrink-0">
+        <div className={`truncate max-w-[200px] sm:max-w-[300px] text-sm ${mono ? "font-mono text-muted-foreground" : "text-muted-foreground"}`}>{value || "—"}</div>
+        {source ? (
+          <Badge variant="secondary" className="shrink-0 text-[10px] font-medium uppercase tracking-wider px-1.5 py-0">
+            {formatSourceLabel(source)}
+          </Badge>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -163,12 +165,14 @@ function ConfigSection({
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-3 rounded-2xl border bg-card/40 p-4">
+    <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold">{title}</h3>
-        <p className="text-xs text-muted-foreground mt-1">{description}</p>
+        <h3 className="text-base font-medium tracking-tight text-foreground/90">{title}</h3>
+        <p className="text-sm text-muted-foreground mt-1">{description}</p>
       </div>
-      <div className="grid gap-3">{children}</div>
+      <div className="rounded-xl border bg-card px-4 shadow-sm">
+        {children}
+      </div>
     </div>
   );
 }
@@ -331,40 +335,39 @@ function AdminSettingsPage() {
       </div>
 
       <section className="rounded-2xl border bg-card overflow-hidden">
-        <div className="flex flex-col gap-4 px-5 py-4 lg:flex-row lg:items-start lg:justify-between">
-          <button
-            type="button"
-            onClick={() => setLogsOpen((value) => !value)}
-            className="flex items-center gap-3 text-left text-foreground transition hover:text-foreground/90"
-          >
-            {logsOpen ? (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            )}
-            <div className="rounded-lg border bg-primary/5 p-2 text-primary">
+        <div className="flex flex-col gap-4 border-b bg-muted/10 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => setLogsOpen((value) => !value)}
+              className="group flex h-8 w-8 shrink-0 items-center justify-center rounded-md hover:bg-muted"
+            >
+              {logsOpen ? (
+                <ChevronDown className="h-5 w-5 text-muted-foreground transition-transform group-hover:text-foreground" />
+              ) : (
+                <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:text-foreground" />
+              )}
+            </button>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-background text-primary shadow-sm">
               <Terminal className="h-4 w-4" />
             </div>
-            <div>
-              <div className="text-lg font-semibold">Runtime Logging</div>
-              <div className="text-sm text-muted-foreground">
-                Inspect recent application logs and tune runtime verbosity without restarting the server.
-              </div>
+            <div className="min-w-0">
+              <div className="truncate text-base font-semibold tracking-tight">Runtime Logging</div>
             </div>
-          </button>
+          </div>
 
-          <div className="flex flex-wrap items-center gap-3 lg:justify-end">
-            <div className="flex items-center gap-2 rounded-xl border bg-card/60 px-3 py-2">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Runtime
+          <div className="flex w-full items-center gap-1.5 overflow-x-auto rounded-xl border bg-background p-1 shadow-sm lg:w-auto">
+            <div className="flex items-center gap-1 border-r border-border/50 px-2">
+              <span className="mr-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                Level
               </span>
               <Select value={currentLogLevel} onValueChange={setPendingLogLevel}>
-                <SelectTrigger className="h-9 w-[180px] border-0 bg-transparent px-2 shadow-none">
-                  <SelectValue placeholder="Select log level" />
+                <SelectTrigger className="h-7 w-[90px] border-0 bg-transparent px-2 text-xs shadow-none focus:ring-0">
+                  <SelectValue placeholder="Level" />
                 </SelectTrigger>
                 <SelectContent>
                   {LOG_LEVELS.map((level) => (
-                    <SelectItem key={level} value={level}>
+                    <SelectItem key={level} value={level} className="text-xs">
                       {level.toUpperCase()}
                     </SelectItem>
                   ))}
@@ -372,33 +375,41 @@ function AdminSettingsPage() {
               </Select>
               <Button
                 size="sm"
+                variant="ghost"
+                className="h-7 px-2.5 text-xs font-medium hover:bg-primary/10 hover:text-primary"
                 onClick={() =>
                   setLogLevelMutation.mutate(
                     currentLogLevel as "trace" | "debug" | "info" | "warn" | "error"
                   )
                 }
-                disabled={setLogLevelMutation.isPending}
+                disabled={setLogLevelMutation.isPending || currentLogLevel === normalizeLevel(logs?.runtime_level)}
               >
-                {setLogLevelMutation.isPending ? "Applying..." : "Apply"}
+                {setLogLevelMutation.isPending ? "..." : "Apply"}
               </Button>
             </div>
 
-            <div className="flex items-center gap-2 rounded-xl border bg-card/60 px-3 py-2">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            <div className="flex items-center gap-1 px-2">
+              <span className="mr-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                 Live
               </span>
               <button
                 type="button"
                 onClick={() => setAutoRefreshLogs((value) => !value)}
-                className={`rounded px-2 py-1 text-[10px] font-semibold uppercase transition ${
-                  autoRefreshLogs ? "text-emerald-400" : "text-muted-foreground hover:text-foreground"
+                className={`h-6 rounded-md px-2 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                  autoRefreshLogs ? "bg-emerald-500/15 text-emerald-500" : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 }`}
               >
-                {autoRefreshLogs ? "on" : "off"}
+                {autoRefreshLogs ? "ON" : "OFF"}
               </button>
-              <Button variant="outline" size="sm" onClick={() => void refetchLogs()} disabled={logsFetching}>
-                <RefreshCcw className={`mr-2 h-3.5 w-3.5 ${logsFetching ? "animate-spin" : ""}`} />
-                Refresh logs
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-7 px-2 text-muted-foreground hover:text-foreground" 
+                onClick={() => void refetchLogs()} 
+                disabled={logsFetching}
+              >
+                <RefreshCcw className={`h-3.5 w-3.5 ${logsFetching ? "animate-spin" : ""}`} />
+                <span className="sr-only">Refresh logs</span>
               </Button>
             </div>
           </div>
@@ -463,7 +474,7 @@ function AdminSettingsPage() {
         ) : null}
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+      <div className="space-y-6">
         <div className="space-y-6">
           <Card>
             <CardHeader>
@@ -475,18 +486,18 @@ function AdminSettingsPage() {
                 The active server configuration after startup, resolved from embedded TOML defaults plus optional mounted files and environment overrides.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-5">
+            <CardContent className="space-y-8 pt-6">
               {configLoading ? (
                 <div className="flex h-32 items-center justify-center">
                   <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-primary" />
                 </div>
               ) : config ? (
                 <>
-                  <div className="flex flex-wrap items-center gap-2 rounded-xl border px-4 py-3 text-sm text-muted-foreground">
-                    <Badge variant="outline">{config.source}</Badge>
-                    <span>{config.is_production ? "Production mode" : "Development mode"}</span>
-                    <span>·</span>
-                    <span>{config.rust_env}</span>
+                  <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-muted/20 px-4 py-3 text-sm shadow-sm">
+                    <Badge variant="secondary" className="font-normal uppercase tracking-wider text-[10px]">{config.source}</Badge>
+                    <span className="font-medium text-foreground/90">{config.is_production ? "Production Mode" : "Development Mode"}</span>
+                    <span className="text-border">•</span>
+                    <span className="font-mono text-xs text-muted-foreground">{config.rust_env}</span>
                   </div>
 
                   <ConfigSection
@@ -543,112 +554,132 @@ function AdminSettingsPage() {
                 Edit `local.toml` overrides here. These values override `defaults.toml`, but environment variables still take precedence.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline">local.toml</Badge>
-                  <span>{localConfig?.path ?? config?.local_config_path ?? "config/local.toml"}</span>
+            <CardContent className="pt-2 pb-6">
+              <div className="overflow-hidden rounded-xl border bg-muted/10 shadow-sm focus-within:ring-1 focus-within:ring-primary/50 transition-shadow">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/30 px-4 py-2.5">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <FileCode2 className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium text-foreground/90">local.toml</span>
+                    </div>
+                    <span className="hidden text-xs text-muted-foreground sm:inline-block">
+                      {localConfig?.path ?? config?.local_config_path ?? "config/local.toml"}
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="font-normal uppercase tracking-wider text-[10px] hidden sm:inline-flex px-1.5 py-0">
+                      env wins
+                    </Badge>
+                    <div className="h-4 w-px bg-border mx-1 hidden sm:block" />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+                      onClick={() => void reloadConfigMutation.mutateAsync()}
+                      disabled={reloadConfigMutation.isPending}
+                    >
+                      <RefreshCcw className={`mr-1.5 h-3 w-3 ${reloadConfigMutation.isPending ? "animate-spin" : ""}`} />
+                      Reload Config
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        setLocalConfigDraft(null);
+                        void refetchLocalConfig();
+                      }}
+                      disabled={localConfigFetching}
+                    >
+                      <RefreshCcw className={`mr-1.5 h-3 w-3 ${localConfigFetching ? "animate-spin" : ""}`} />
+                      Reload File
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline">env wins</Badge>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void reloadConfigMutation.mutateAsync()}
-                    disabled={reloadConfigMutation.isPending}
-                  >
-                    <RefreshCcw className={`mr-2 h-3.5 w-3.5 ${reloadConfigMutation.isPending ? "animate-spin" : ""}`} />
-                    Reload config
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setLocalConfigDraft(null);
-                      void refetchLocalConfig();
-                    }}
-                    disabled={localConfigFetching}
-                  >
-                    <RefreshCcw className={`mr-2 h-3.5 w-3.5 ${localConfigFetching ? "animate-spin" : ""}`} />
-                    Reload file
-                  </Button>
-                </div>
-              </div>
 
-              <textarea
-                value={editorContent}
-                onChange={(event) => setLocalConfigDraft(event.target.value)}
-                spellCheck={false}
-                className="min-h-[280px] w-full rounded-xl border bg-black/40 p-4 font-mono text-sm text-slate-200 outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                placeholder={LOCAL_TOML_PLACEHOLDER}
-              />
-
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-xs text-muted-foreground">
-                  {localConfigLoading
-                    ? "Loading local.toml..."
-                    : localConfig?.exists
-                    ? "Editing existing local.toml"
-                    : "local.toml does not exist yet; saving here will create it."}
+                <div className="relative">
+                  <textarea
+                    value={editorContent}
+                    onChange={(event) => setLocalConfigDraft(event.target.value)}
+                    spellCheck={false}
+                    className="min-h-[320px] w-full resize-y bg-black/40 p-5 font-mono text-[13px] leading-relaxed text-slate-200 outline-none placeholder:text-muted-foreground/50 focus:bg-black/60 transition-colors"
+                    placeholder={LOCAL_TOML_PLACEHOLDER}
+                  />
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => saveLocalConfigMutation.mutate("")}
-                    disabled={saveLocalConfigMutation.isPending}
-                  >
-                    Reset local.toml
-                  </Button>
-                  <Button
-                    onClick={() => saveLocalConfigMutation.mutate(editorContent)}
-                    disabled={saveLocalConfigMutation.isPending}
-                  >
-                    {saveLocalConfigMutation.isPending ? "Saving..." : "Save local.toml"}
-                  </Button>
+
+                <div className="flex flex-col gap-3 border-t bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-xs text-muted-foreground flex items-center gap-2">
+                    <div className={`h-2 w-2 rounded-full ${localConfig?.exists ? 'bg-emerald-500/80 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-amber-500/80 shadow-[0_0_8px_rgba(245,158,11,0.5)]'}`} />
+                    {localConfigLoading
+                      ? "Loading file state..."
+                      : localConfig?.exists
+                      ? "Editing existing file."
+                      : "File does not exist; saving will create it."}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 text-xs font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => saveLocalConfigMutation.mutate("")}
+                      disabled={saveLocalConfigMutation.isPending}
+                    >
+                      Reset File
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-8 px-4 text-xs font-semibold shadow-sm"
+                      onClick={() => saveLocalConfigMutation.mutate(editorContent)}
+                      disabled={saveLocalConfigMutation.isPending}
+                    >
+                      {saveLocalConfigMutation.isPending ? "Saving..." : "Save Changes"}
+                    </Button>
+                  </div>
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        <div className="space-y-6">
-          {stats?.system_health ? (
-            <SystemHealthCard health={stats.system_health} />
-          ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle>System Health</CardTitle>
-                <CardDescription>Waiting for runtime health data.</CardDescription>
-              </CardHeader>
-            </Card>
-          )}
-
+      <div className="grid gap-6 lg:grid-cols-3">
+        {stats?.system_health ? (
+          <SystemHealthCard health={stats.system_health} />
+        ) : (
           <Card>
             <CardHeader>
-              <CardTitle>Application Snapshot</CardTitle>
-              <CardDescription>Current usage and operational totals.</CardDescription>
+              <CardTitle>System Health</CardTitle>
+              <CardDescription>Waiting for runtime health data.</CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-              {metrics.map((metric) => (
-                <MetricCard
-                  key={metric.title}
-                  title={metric.title}
-                  value={metric.value}
-                  description={metric.description}
-                  icon={metric.icon}
-                  accentClassName={metric.accentClassName}
-                />
-              ))}
-            </CardContent>
           </Card>
+        )}
 
-          <AgentConnectionChart
-            agentsByMode={stats?.agents_by_mode}
-            totalAgents={stats?.total_agents ?? 0}
-            loading={statsLoading}
-          />
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Application Snapshot</CardTitle>
+            <CardDescription>Current usage and operational totals.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 grid-cols-2">
+            {metrics.map((metric) => (
+              <MetricCard
+                key={metric.title}
+                title={metric.title}
+                value={metric.value}
+                description={metric.description}
+                icon={metric.icon}
+                accentClassName={metric.accentClassName}
+              />
+            ))}
+          </CardContent>
+        </Card>
+
+        <AgentConnectionChart
+          agentsByMode={stats?.agents_by_mode}
+          totalAgents={stats?.total_agents ?? 0}
+          loading={statsLoading}
+        />
       </div>
+    </div>
     </div>
   );
 }

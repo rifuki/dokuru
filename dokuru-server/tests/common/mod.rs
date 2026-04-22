@@ -64,7 +64,7 @@ pub async fn build_test_app() -> (Router, ContainerAsync<Postgres>) {
 
     let config = Config::load().expect("Failed to load config");
     let db = Database::from_pool(pool);
-    let state = AppState::new_for_test(config, db);
+    let state = AppState::new_for_test(config, &db);
 
     (app_routes(state), container)
 }

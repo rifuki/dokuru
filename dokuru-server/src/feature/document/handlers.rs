@@ -1,6 +1,7 @@
 use axum::{
     extract::{Multipart, Path, State},
-    http::StatusCode,
+    http::{HeaderMap, HeaderValue, StatusCode, header},
+    response::{IntoResponse, Response},
 };
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
@@ -11,6 +12,34 @@ use crate::{
     infrastructure::web::response::{ApiError, ApiResult, ApiSuccess},
     state::AppState,
 };
+
+pub async fn serve_document_file(State(state): State<AppState>) -> Response {
+    let doc = match state.document_repo.get_current().await {
+        Ok(Some(d)) => d,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(e) => {
+            tracing::error!("Failed to get document: {}", e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let bytes = match fs::read(&doc.file_path).await {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::error!("Failed to read document file: {}", e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let mut headers = HeaderMap::new();
+    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/pdf"));
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("private, max-age=86400"));
+    if let Ok(v) = format!("inline; filename=\"{}\"", doc.name).parse() {
+        headers.insert(header::CONTENT_DISPOSITION, v);
+    }
+
+    (StatusCode::OK, headers, bytes).into_response()
+}
 
 pub async fn get_current_document(State(state): State<AppState>) -> ApiResult<Option<Document>> {
     let doc = state.document_repo.get_current().await.map_err(|e| {
@@ -54,7 +83,9 @@ pub async fn upload_document(
             .unwrap_or("application/pdf")
             .to_string();
 
-        if content_type != "application/pdf" {
+        let is_pdf = content_type.starts_with("application/pdf")
+            || name.to_lowercase().ends_with(".pdf");
+        if !is_pdf {
             return Err(ApiError::default()
                 .with_code(StatusCode::BAD_REQUEST)
                 .with_message("Only PDF files are allowed"));
