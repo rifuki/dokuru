@@ -80,7 +80,7 @@ function ContainerRow({
 
   return (
     <TooltipProvider>
-      <div className="group border rounded-lg bg-card hover:shadow-md transition-all duration-200 overflow-hidden">
+      <div className={`group border rounded-lg bg-card hover:shadow-md transition-all duration-200 overflow-hidden ${!isRunning ? "opacity-60 hover:opacity-100" : ""}`}>
         {/* Row header */}
         <div
           className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-accent/50 transition-colors select-none"
