@@ -1,7 +1,7 @@
 import { Fragment } from "react";
 import { createRootRoute, Link, Outlet } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
-import { Home, Search } from "lucide-react";
+import { Home } from "lucide-react";
 
 // Providers
 import TanStackProvider from "@/providers/TanStackProvider";
@@ -41,20 +41,12 @@ function NotFoundComponent() {
             The page you're looking for doesn't exist or has been moved.
           </p>
         </div>
-        <div className="flex gap-3 justify-center">
-          <Button asChild>
-            <Link to="/">
-              <Home className="mr-2 h-4 w-4" />
-              Go Home
-            </Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link to="/agents">
-              <Search className="mr-2 h-4 w-4" />
-              View Agents
-            </Link>
-          </Button>
-        </div>
+        <Button asChild>
+          <Link to="/">
+            <Home className="mr-2 h-4 w-4" />
+            Go Home
+          </Link>
+        </Button>
       </div>
     </div>
   );
