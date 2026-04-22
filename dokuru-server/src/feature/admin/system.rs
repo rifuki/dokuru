@@ -18,6 +18,7 @@ pub struct EffectiveConfigResponse {
     pub rust_env: String,
     pub is_production: bool,
     pub field_sources: BTreeMap<String, String>,
+    pub bootstrap: BootstrapConfigView,
     pub server: ServerConfigView,
     pub logging: LoggingConfigView,
     pub cookie: CookieConfigView,
@@ -30,6 +31,14 @@ pub struct EffectiveConfigResponse {
 pub struct ServerConfigView {
     pub port: u16,
     pub cors_allowed_origins: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BootstrapConfigView {
+    pub enabled: bool,
+    pub admin_email: String,
+    pub admin_username: String,
+    pub admin_name: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -76,10 +85,19 @@ pub struct SaveLocalConfigRequest {
     pub content: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct ReloadConfigResponse {
+    pub message: String,
+    pub effective_config: EffectiveConfigResponse,
+    pub applied_immediately: Vec<&'static str>,
+    pub restart_required: Vec<&'static str>,
+}
+
 pub async fn get_effective_config(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
 ) -> ApiResult<EffectiveConfigResponse> {
-    Ok(ApiSuccess::default().with_data(config_snapshot(&state.config)))
+    let config = Config::load().map_err(|error| crate::ApiError::default().log_only(error))?;
+    Ok(ApiSuccess::default().with_data(config_snapshot(&config)))
 }
 
 pub async fn get_local_config() -> ApiResult<LocalConfigResponse> {
@@ -114,6 +132,29 @@ pub async fn save_local_config(
         .with_message("Local config saved"))
 }
 
+#[allow(clippy::unused_async)]
+pub async fn reload_config(State(_state): State<AppState>) -> ApiResult<ReloadConfigResponse> {
+    let config = Config::load().map_err(|error| crate::ApiError::default().log_only(error))?;
+
+    Ok(ApiSuccess::default().with_data(ReloadConfigResponse {
+        message: "Configuration files reloaded for validation and preview. Some subsystems still require process restart to fully apply changes.".to_string(),
+        effective_config: config_snapshot(&config),
+        applied_immediately: vec![
+            "settings preview",
+            "field source tracing",
+            "local.toml editor state",
+        ],
+        restart_required: vec![
+            "server port",
+            "cors layer",
+            "database pool",
+            "redis pool",
+            "storage provider",
+            "email client",
+        ],
+    }))
+}
+
 #[allow(clippy::too_many_lines)]
 fn config_snapshot(config: &Config) -> EffectiveConfigResponse {
     let default_doc =
@@ -129,36 +170,68 @@ fn config_snapshot(config: &Config) -> EffectiveConfigResponse {
 
     let mut field_sources = BTreeMap::new();
     let source_for = |path: &[&str], env_keys: &[&str]| {
-        if env_keys.iter().any(|key| {
+        if let Some(key) = env_keys.iter().find(|key| {
             std::env::var(key)
                 .ok()
                 .is_some_and(|value| !value.trim().is_empty())
         }) {
-            return "env override".to_string();
+            return format!("env: {key}");
         }
         if local_doc
             .as_ref()
             .and_then(|doc| toml_config::value_at_path(doc, path))
             .is_some()
         {
-            return "local.toml".to_string();
+            return "file: local.toml".to_string();
         }
         if secrets_doc
             .as_ref()
             .and_then(|doc| toml_config::value_at_path(doc, path))
             .is_some()
         {
-            return "secrets.toml".to_string();
+            return "file: secrets.toml".to_string();
         }
         if default_doc
             .as_ref()
             .and_then(|doc| toml_config::value_at_path(doc, path))
             .is_some()
         {
-            return "defaults.toml".to_string();
+            return "file: defaults.toml".to_string();
         }
         "runtime".to_string()
     };
+
+    field_sources.insert(
+        "bootstrap.enabled".to_string(),
+        source_for(
+            &["bootstrap", "enabled"],
+            &["BOOTSTRAP_ENABLED", "DOKURU__BOOTSTRAP__ENABLED"],
+        ),
+    );
+    field_sources.insert(
+        "bootstrap.admin_email".to_string(),
+        source_for(
+            &["bootstrap", "admin_email"],
+            &["BOOTSTRAP_ADMIN_EMAIL", "DOKURU__BOOTSTRAP__ADMIN_EMAIL"],
+        ),
+    );
+    field_sources.insert(
+        "bootstrap.admin_username".to_string(),
+        source_for(
+            &["bootstrap", "admin_username"],
+            &[
+                "BOOTSTRAP_ADMIN_USERNAME",
+                "DOKURU__BOOTSTRAP__ADMIN_USERNAME",
+            ],
+        ),
+    );
+    field_sources.insert(
+        "bootstrap.admin_name".to_string(),
+        source_for(
+            &["bootstrap", "admin_name"],
+            &["BOOTSTRAP_ADMIN_NAME", "DOKURU__BOOTSTRAP__ADMIN_NAME"],
+        ),
+    );
 
     field_sources.insert(
         "server.port".to_string(),
@@ -220,6 +293,12 @@ fn config_snapshot(config: &Config) -> EffectiveConfigResponse {
         rust_env: config.rust_env.clone(),
         is_production: config.is_production,
         field_sources,
+        bootstrap: BootstrapConfigView {
+            enabled: config.bootstrap.enabled,
+            admin_email: config.bootstrap.admin_email.clone(),
+            admin_username: config.bootstrap.admin_username.clone(),
+            admin_name: config.bootstrap.admin_name.clone(),
+        },
         server: ServerConfigView {
             port: config.server.port,
             cors_allowed_origins: config.server.cors_allowed_origins.clone(),

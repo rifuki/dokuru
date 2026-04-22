@@ -4,7 +4,10 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   Activity,
+  BadgeInfo,
   Cable,
+  ChevronDown,
+  ChevronRight,
   Cookie,
   Database,
   FileCode2,
@@ -12,6 +15,7 @@ import {
   RefreshCcw,
   Server,
   Settings2,
+  Terminal,
   Upload,
 } from "lucide-react";
 
@@ -19,7 +23,6 @@ import { adminService } from "@/lib/api/services/admin-services";
 import { AgentConnectionChart } from "@/features/admin/components/AgentConnectionChart";
 import { SystemHealthCard } from "@/features/admin/components/SystemHealthCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -143,6 +146,7 @@ function AdminSettingsPage() {
   const [filterLevel, setFilterLevel] = useState<string>("trace");
   const [autoRefreshLogs, setAutoRefreshLogs] = useState(false);
   const [localConfigDraft, setLocalConfigDraft] = useState<string | null>(null);
+  const [logsOpen, setLogsOpen] = useState(true);
 
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ["admin", "stats"],
@@ -200,6 +204,18 @@ function AdminSettingsPage() {
     },
   });
 
+  const reloadConfigMutation = useMutation({
+    mutationFn: () => adminService.reloadConfig(),
+    onSuccess: async (result) => {
+      toast.success(result.message);
+      setLocalConfigDraft(null);
+      await Promise.all([refetchConfig(), refetchLocalConfig()]);
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to reload config preview");
+    },
+  });
+
   const currentLogLevel = pendingLogLevel ?? normalizeLevel(logs?.runtime_level);
 
   const effectiveSources = config?.field_sources ?? {};
@@ -254,124 +270,132 @@ function AdminSettingsPage() {
         </p>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Activity className="h-5 w-5 text-muted-foreground" />
-                <CardTitle>Runtime Logging</CardTitle>
+      <section className="rounded-2xl border bg-card">
+        <div className="flex flex-col gap-4 px-5 py-4 lg:flex-row lg:items-start lg:justify-between">
+          <button
+            type="button"
+            onClick={() => setLogsOpen((value) => !value)}
+            className="flex items-center gap-2 text-left text-foreground transition hover:text-foreground/90"
+          >
+            {logsOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+            <Terminal className="h-4 w-4 text-primary" />
+            <div>
+              <div className="text-sm font-semibold">Runtime Logging</div>
+              <div className="text-xs text-muted-foreground">
+                View recent application logs and adjust runtime verbosity without restarting the server.
               </div>
-              <CardDescription>
-                View recent application logs and adjust the runtime log level without restarting the server.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <div className="space-y-2">
-                  <Label htmlFor="log-level">Runtime Log Level</Label>
-                  <div className="flex gap-2">
-                    <Select value={currentLogLevel} onValueChange={setPendingLogLevel}>
-                      <SelectTrigger id="log-level" className="w-[220px]">
-                        <SelectValue placeholder="Select log level" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {LOG_LEVELS.map((level) => (
-                          <SelectItem key={level} value={level}>
-                            {level.toUpperCase()}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      onClick={() =>
-                        setLogLevelMutation.mutate(
-                          currentLogLevel as "trace" | "debug" | "info" | "warn" | "error"
-                        )
-                      }
-                      disabled={setLogLevelMutation.isPending}
-                    >
-                      {setLogLevelMutation.isPending ? "Applying..." : "Apply"}
-                    </Button>
-                  </div>
-                </div>
+            </div>
+          </button>
 
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">{normalizeLevel(logs?.runtime_level).toUpperCase()}</Badge>
-                    <span className="text-muted-foreground">active runtime filter</span>
-                  </div>
-                  {logs?.log_file && (
-                    <div className="font-mono text-xs text-muted-foreground">{logs.log_file}</div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">View</span>
+          <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+            <div className="flex items-center gap-2 rounded-lg border px-2 py-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Runtime</span>
+              <Select value={currentLogLevel} onValueChange={setPendingLogLevel}>
+                <SelectTrigger id="log-level" className="h-8 w-[160px] border-0 bg-transparent px-2 shadow-none">
+                  <SelectValue placeholder="Select log level" />
+                </SelectTrigger>
+                <SelectContent>
                   {LOG_LEVELS.map((level) => (
-                    <button
-                      key={level}
-                      type="button"
-                      onClick={() => setFilterLevel(level)}
-                      className={`rounded px-2 py-0.5 text-[10px] font-mono font-semibold uppercase transition ${
-                        filterLevel === level
-                          ? "bg-primary/15 text-primary"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {level}
-                    </button>
+                    <SelectItem key={level} value={level}>
+                      {level.toUpperCase()}
+                    </SelectItem>
                   ))}
-                </div>
+                </SelectContent>
+              </Select>
+              <Button
+                size="sm"
+                onClick={() =>
+                  setLogLevelMutation.mutate(
+                    currentLogLevel as "trace" | "debug" | "info" | "warn" | "error"
+                  )
+                }
+                disabled={setLogLevelMutation.isPending}
+              >
+                {setLogLevelMutation.isPending ? "Applying..." : "Apply"}
+              </Button>
+            </div>
 
-                <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Live</span>
+              <button
+                type="button"
+                onClick={() => setAutoRefreshLogs((value) => !value)}
+                className={`rounded px-2 py-1 text-[10px] font-semibold uppercase transition ${
+                  autoRefreshLogs ? "text-emerald-400" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {autoRefreshLogs ? "● on" : "off"}
+              </button>
+              <Button variant="outline" size="sm" onClick={() => void refetchLogs()} disabled={logsFetching}>
+                <RefreshCcw className={`mr-2 h-3.5 w-3.5 ${logsFetching ? "animate-spin" : ""}`} />
+                Refresh logs
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {logsOpen ? (
+          <div className="border-t px-4 pb-4 pt-3">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-black/20 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">View</span>
+                {LOG_LEVELS.map((level) => (
                   <button
+                    key={level}
                     type="button"
-                    onClick={() => setAutoRefreshLogs((value) => !value)}
-                    className={`rounded px-2 py-1 text-[10px] font-semibold uppercase transition ${
-                      autoRefreshLogs ? "text-emerald-400" : "text-muted-foreground hover:text-foreground"
+                    onClick={() => setFilterLevel(level)}
+                    className={`rounded px-2 py-0.5 text-[10px] font-mono font-semibold uppercase transition ${
+                      filterLevel === level
+                        ? "bg-primary/15 text-primary"
+                        : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    {autoRefreshLogs ? "● live" : "live"}
+                    {level}
                   </button>
-                  <Button variant="outline" size="sm" onClick={() => void refetchLogs()} disabled={logsFetching}>
-                    <RefreshCcw className={`mr-2 h-3.5 w-3.5 ${logsFetching ? "animate-spin" : ""}`} />
-                    Refresh logs
-                  </Button>
+                ))}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <Badge variant="outline">{normalizeLevel(logs?.runtime_level).toUpperCase()}</Badge>
+                <span className="text-muted-foreground">active runtime filter</span>
+                {logs?.log_file ? (
+                  <span className="font-mono text-xs text-muted-foreground">{logs.log_file}</span>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="h-80 overflow-y-auto rounded-xl border bg-black/40 p-3 font-mono text-[11px] leading-relaxed">
+              {logsLoading ? (
+                <div className="flex h-full items-center justify-center text-muted-foreground">Loading logs...</div>
+              ) : visibleLines.length === 0 ? (
+                <div className="flex h-full items-center justify-center text-muted-foreground">
+                  No logs matched the current filter.
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-1">
+                  {visibleLines.map((raw, index) => {
+                    const parsed = parseLogLine(raw);
+                    return (
+                      <div key={`${parsed.timestamp ?? "raw"}-${index}`} className="flex gap-3 py-[1px]">
+                        <span className="w-[72px] shrink-0 text-muted-foreground/70">
+                          {parsed.timestamp ?? "--:--:--"}
+                        </span>
+                        <span className={`w-10 shrink-0 font-semibold uppercase ${LEVEL_STYLES[parsed.level] ?? "text-slate-300"}`}>
+                          {parsed.level.slice(0, 4)}
+                        </span>
+                        <span className="whitespace-pre-wrap break-words text-slate-200">{parsed.message}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </section>
 
-              <div className="h-72 overflow-y-auto rounded-xl border bg-black/40 p-3 font-mono text-[11px] leading-relaxed">
-                {logsLoading ? (
-                  <div className="flex h-full items-center justify-center text-muted-foreground">Loading logs...</div>
-                ) : visibleLines.length === 0 ? (
-                  <div className="flex h-full items-center justify-center text-muted-foreground">
-                    No logs matched the current filter.
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    {visibleLines.map((raw, index) => {
-                      const parsed = parseLogLine(raw);
-                      return (
-                        <div key={`${parsed.timestamp ?? "raw"}-${index}`} className="flex gap-3">
-                          <span className="w-[72px] shrink-0 text-muted-foreground/70">
-                            {parsed.timestamp ?? "--:--:--"}
-                          </span>
-                          <span className={`w-10 shrink-0 font-semibold uppercase ${LEVEL_STYLES[parsed.level] ?? "text-slate-300"}`}>
-                            {parsed.level.slice(0, 4)}
-                          </span>
-                          <span className="text-slate-200">{parsed.message}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+        <div className="space-y-6">
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
@@ -397,6 +421,10 @@ function AdminSettingsPage() {
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
+                    <ConfigItem icon={BadgeInfo} label="Bootstrap Enabled" value={config.bootstrap.enabled ? "enabled" : "disabled"} source={effectiveSources["bootstrap.enabled"]} />
+                    <ConfigItem icon={BadgeInfo} label="Bootstrap Email" value={config.bootstrap.admin_email} source={effectiveSources["bootstrap.admin_email"]} mono />
+                    <ConfigItem icon={BadgeInfo} label="Bootstrap Username" value={config.bootstrap.admin_username} source={effectiveSources["bootstrap.admin_username"]} mono />
+                    <ConfigItem icon={BadgeInfo} label="Bootstrap Name" value={config.bootstrap.admin_name} source={effectiveSources["bootstrap.admin_name"]} />
                     <ConfigItem icon={Server} label="API Port" value={String(config.server.port)} source={effectiveSources["server.port"]} mono />
                     <ConfigItem icon={Cable} label="CORS Origins" value={config.server.cors_allowed_origins.join(", ")} source={effectiveSources["server.cors_allowed_origins"]} mono />
                     <ConfigItem icon={Activity} label="Default Log Level" value={config.logging.default_level} source={effectiveSources["logging.default_level"]} />
@@ -439,6 +467,15 @@ function AdminSettingsPage() {
                   <Button
                     variant="outline"
                     size="sm"
+                    onClick={() => void reloadConfigMutation.mutateAsync()}
+                    disabled={reloadConfigMutation.isPending}
+                  >
+                    <RefreshCcw className={`mr-2 h-3.5 w-3.5 ${reloadConfigMutation.isPending ? "animate-spin" : ""}`} />
+                    Reload config
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => {
                       setLocalConfigDraft(null);
                       void refetchLocalConfig();
@@ -463,9 +500,18 @@ function AdminSettingsPage() {
                 <div className="text-xs text-muted-foreground">
                   {localConfigLoading ? "Loading local.toml..." : localConfig?.exists ? "Editing existing local.toml" : "local.toml does not exist yet; saving here will create it."}
                 </div>
-                <Button onClick={() => saveLocalConfigMutation.mutate(editorContent)} disabled={saveLocalConfigMutation.isPending}>
-                  {saveLocalConfigMutation.isPending ? "Saving..." : "Save local.toml"}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => saveLocalConfigMutation.mutate("")}
+                    disabled={saveLocalConfigMutation.isPending}
+                  >
+                    Reset local.toml
+                  </Button>
+                  <Button onClick={() => saveLocalConfigMutation.mutate(editorContent)} disabled={saveLocalConfigMutation.isPending}>
+                    {saveLocalConfigMutation.isPending ? "Saving..." : "Save local.toml"}
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>

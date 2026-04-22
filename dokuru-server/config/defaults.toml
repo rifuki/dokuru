@@ -10,15 +10,19 @@
 [app]
 rust_env = "development"
 
-[bootstrap]
-enabled = true
-admin_email = "admin@dokuru.dev"
-admin_username = "admin"
-admin_name = "Administrator"
+[logging]
+default_level = "debug"
 
 [server]
 port = 9393
 cors_allowed_origins = ["http://localhost:5173"]
+
+[bootstrap]
+enabled = true
+admin_email = "admin@dokuru.rifuki.dev"
+admin_username = "admin"
+admin_name = "Administrator"
+
 
 [database]
 url = ""
@@ -34,18 +38,19 @@ refresh_secret = ""
 access_expiry_secs = 3600
 refresh_expiry_secs = 604800
 
-[logging]
-default_level = "debug"
-
 [cookie]
-same_site = "lax"
-secure = false
-http_only = true
+same_site = "lax"   # strict | lax | none. Default: strict (prod), lax (dev)
+secure = false      # true | false. Default: true (prod), false (dev)
+http_only = true    # true | false. Default: true
+# Scenarios:
+# - Cross-port dev (5173->8080): lax (default dev)
+# - Cross-subdomain: none + secure=true
+# - Same origin: strict (most secure)
 
 [upload]
 dir = "./uploads"
 base_url = "http://localhost:9393/media"
-max_avatar_size = 2097152
+max_avatar_size = 2097152 # 2 MB in bytes
 
 [email]
 resend_api_key = ""

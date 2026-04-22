@@ -52,6 +52,12 @@ export interface EffectiveConfigResponse {
   rust_env: string;
   is_production: boolean;
   field_sources: Record<string, string>;
+  bootstrap: {
+    enabled: boolean;
+    admin_email: string;
+    admin_username: string;
+    admin_name: string;
+  };
   server: {
     port: number;
     cors_allowed_origins: string[];
@@ -84,6 +90,13 @@ export interface LocalConfigResponse {
   path: string;
   content: string;
   exists: boolean;
+}
+
+export interface ReloadConfigResponse {
+  message: string;
+  effective_config: EffectiveConfigResponse;
+  applied_immediately: string[];
+  restart_required: string[];
 }
 
 export const adminService = {
@@ -167,6 +180,19 @@ export const adminService = {
     const data = response.data.data;
     if (!data) {
       throw new Error("Failed to save local config");
+    }
+
+    return data;
+  },
+
+  reloadConfig: async (): Promise<ReloadConfigResponse> => {
+    const response = await apiClient.post<ApiResponse<ReloadConfigResponse>>(
+      API_ENDPOINTS.ADMIN.CONFIG_RELOAD
+    );
+
+    const data = response.data.data;
+    if (!data) {
+      throw new Error("Failed to reload config preview");
     }
 
     return data;

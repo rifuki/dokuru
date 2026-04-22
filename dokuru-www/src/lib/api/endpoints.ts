@@ -19,6 +19,7 @@ export const API_ENDPOINTS = {
     LOGS: "/admin/logs",
     CONFIG: "/admin/config",
     CONFIG_LOCAL: "/admin/config/local",
+    CONFIG_RELOAD: "/admin/config/reload",
     LOG_LEVEL: "/admin/log/level",
     STATS: "/admin/stats",
     USER_ROLE: (id: string) => `/admin/users/${id}/role`,
