@@ -16,7 +16,13 @@ import { useIsAuthenticated } from "@/stores/use-auth-store";
 
 export const Route = createRootRoute({
   component: RootComponent,
-  notFoundComponent: NotFoundComponent,
+  notFoundComponent: () => (
+    <TanStackProvider>
+      <ThemeProvider defaultTheme="system" enableSystem attribute="class">
+        <NotFoundComponent />
+      </ThemeProvider>
+    </TanStackProvider>
+  ),
 });
 
 function RootComponent() {
