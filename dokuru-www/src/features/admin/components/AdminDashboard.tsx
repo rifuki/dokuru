@@ -1,6 +1,6 @@
 import {
-  Users, Key, Shield, AlertCircle, Activity,
-  BarChart3, Wifi, RefreshCw, Bot
+  Users, Key, Shield, AlertCircle,
+  BarChart3, RefreshCw, Bot
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,6 @@ import { useDashboardStats } from "@/features/admin/hooks/use-dashboard-stats";
 import { useQueryClient } from "@tanstack/react-query";
 import { adminKeys } from "@/features/admin/hooks/use-dashboard-stats";
 
-import { StatCard } from "./StatCard";
 import { SystemHealthCard } from "./SystemHealthCard";
 import { RecentRegistrationsTable } from "./RecentRegistrationsTable";
 import { AgentConnectionChart } from "./AgentConnectionChart";
@@ -38,14 +37,12 @@ export function AdminDashboard() {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Admin Dashboard</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Platform overview — users, agents, audits & system health
-          </p>
+          <h1 className="text-xl font-semibold">Overview</h1>
+          <p className="text-sm text-muted-foreground">Platform metrics and system status</p>
         </div>
         <Button
           variant="outline"
@@ -59,151 +56,110 @@ export function AdminDashboard() {
         </Button>
       </div>
 
-      {/* Row 1 — Primary metrics */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Total Users"
-          value={stats?.total_users ?? 0}
-          description={`${stats?.new_users_this_month ?? 0} new this month`}
-          icon={<Users className="h-4 w-4" />}
-          loading={isLoading}
-          href="/admin/users"
-          color="blue"
-        />
-        <StatCard
-          title="Total Agents"
-          value={stats?.total_agents ?? 0}
-          description={`${stats?.active_agents ?? 0} active recently`}
-          icon={<Bot className="h-4 w-4" />}
-          loading={isLoading}
-          href="/admin/agents"
-          color="green"
-        />
-        <StatCard
-          title="Total Audits"
-          value={stats?.total_audits ?? 0}
-          description={`${stats?.audits_this_month ?? 0} this month`}
-          icon={<BarChart3 className="h-4 w-4" />}
-          loading={isLoading}
-          href="/admin/audits"
-          color="purple"
-        />
-        <StatCard
-          title="Avg Security Score"
-          value={`${Math.round(stats?.average_score ?? 0)}%`}
-          description="Across all audits"
-          icon={<Shield className="h-4 w-4" />}
-          loading={isLoading}
-          color="orange"
-        />
+      {/* Stats Grid - Compact */}
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+        <Link to="/admin/users" className="group">
+          <div className="border rounded-lg p-3 hover:border-primary/50 transition-colors">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-muted-foreground">Users</span>
+              <Users className="h-3.5 w-3.5 text-muted-foreground/50" />
+            </div>
+            <div className="text-2xl font-semibold">{isLoading ? "—" : stats?.total_users ?? 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              +{stats?.new_users_this_month ?? 0} this month
+            </p>
+          </div>
+        </Link>
+
+        <Link to="/admin/agents" className="group">
+          <div className="border rounded-lg p-3 hover:border-primary/50 transition-colors">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-muted-foreground">Agents</span>
+              <Bot className="h-3.5 w-3.5 text-muted-foreground/50" />
+            </div>
+            <div className="text-2xl font-semibold">{isLoading ? "—" : stats?.total_agents ?? 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {stats?.active_agents ?? 0} active
+            </p>
+          </div>
+        </Link>
+
+        <Link to="/admin/audits" className="group">
+          <div className="border rounded-lg p-3 hover:border-primary/50 transition-colors">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-muted-foreground">Audits</span>
+              <BarChart3 className="h-3.5 w-3.5 text-muted-foreground/50" />
+            </div>
+            <div className="text-2xl font-semibold">{isLoading ? "—" : stats?.total_audits ?? 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {stats?.audits_this_month ?? 0} this month
+            </p>
+          </div>
+        </Link>
+
+        <div className="border rounded-lg p-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-muted-foreground">Avg Score</span>
+            <Shield className="h-3.5 w-3.5 text-muted-foreground/50" />
+          </div>
+          <div className="text-2xl font-semibold">{isLoading ? "—" : `${Math.round(stats?.average_score ?? 0)}%`}</div>
+          <p className="text-xs text-muted-foreground mt-1">Security rating</p>
+        </div>
       </div>
 
-      {/* Row 2 — Secondary metrics */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Administrators"
-          value={stats?.total_admins ?? 0}
-          description="With full platform access"
-          icon={<Shield className="h-4 w-4" />}
-          loading={isLoading}
-          href="/admin/users"
-          color="purple"
-        />
-        <StatCard
-          title="API Keys"
-          value={stats?.total_api_keys ?? 0}
-          description="Total created"
-          icon={<Key className="h-4 w-4" />}
-          loading={isLoading}
-          href="/admin/api-keys"
-          color="cyan"
-        />
-        <StatCard
-          title="Active Keys"
-          value={stats?.active_api_keys ?? 0}
-          description="Currently active"
-          icon={<Activity className="h-4 w-4" />}
-          loading={isLoading}
-          href="/admin/api-keys"
-          color="cyan"
-        />
-        <StatCard
-          title="Relay Agents"
-          value={stats?.relay_agents_count ?? 0}
-          description="Via WebSocket relay"
-          icon={<Wifi className="h-4 w-4" />}
-          loading={isLoading}
-          href="/admin/agents"
-          color="pink"
-        />
-      </div>
-
-      {/* Charts row */}
-      <div className="grid gap-3 lg:grid-cols-5">
-        {/* Audit Activity — wider */}
-        <div className="lg:col-span-3">
+      {/* Main Content Grid */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        {/* Left Column - Charts */}
+        <div className="lg:col-span-2 space-y-4">
           <AuditActivityChart
             activity={stats?.audit_activity}
             loading={isLoading}
           />
-        </div>
-
-        {/* Agent Connection Types */}
-        <div className="lg:col-span-2">
-          <AgentConnectionChart
-            agentsByMode={stats?.agents_by_mode}
-            totalAgents={stats?.total_agents ?? 0}
-            loading={isLoading}
-          />
-        </div>
-      </div>
-
-      {/* Bottom row */}
-      <div className="grid gap-3 lg:grid-cols-5">
-        {/* Recent Registrations */}
-        <div className="lg:col-span-3">
+          
           <RecentRegistrationsTable
             registrations={stats?.recent_registrations}
             loading={isLoading}
           />
         </div>
 
-        {/* System Health */}
-        <div className="lg:col-span-2">
+        {/* Right Column - Sidebar */}
+        <div className="space-y-4">
+          <AgentConnectionChart
+            agentsByMode={stats?.agents_by_mode}
+            totalAgents={stats?.total_agents ?? 0}
+            loading={isLoading}
+          />
+
           {stats?.system_health ? (
             <SystemHealthCard health={stats.system_health} />
           ) : (
-            <div className="rounded-xl border border-border bg-card h-full flex items-center justify-center text-muted-foreground text-sm p-6">
-              {isLoading ? "Loading system health..." : "System health unavailable"}
+            <div className="rounded-lg border bg-card h-full flex items-center justify-center text-muted-foreground text-sm p-6">
+              {isLoading ? "Loading..." : "System health unavailable"}
             </div>
           )}
-        </div>
-      </div>
 
-      {/* Quick Navigation */}
-      <div>
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2.5">Quick Actions</p>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            { label: "Manage Users",    desc: "View, edit, and manage accounts",  href: "/admin/users",    icon: Users,     color: "text-blue-500 bg-blue-500/10" },
-            { label: "Manage Agents",   desc: "Monitor all registered agents",    href: "/admin/agents",   icon: Bot,       color: "text-emerald-500 bg-emerald-500/10" },
-            { label: "Audit Results",   desc: "Browse platform-wide audit logs",  href: "/admin/audits",   icon: BarChart3, color: "text-purple-500 bg-purple-500/10" },
-            { label: "API Keys",        desc: "Create and manage access keys",    href: "/admin/api-keys", icon: Key,       color: "text-cyan-500 bg-cyan-500/10" },
-          ].map((item) => (
-            <Link
-              key={item.href}
-              to={item.href}
-              className="group flex items-center gap-3 rounded-xl border border-border bg-card p-3.5 hover:border-border/80 hover:bg-accent/30 transition-all duration-150"
-            >
-              <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${item.color}`}>
-                <item.icon className="h-4 w-4" />
+          {/* Quick Stats */}
+          <div className="border rounded-lg p-4 space-y-3">
+            <h3 className="text-sm font-medium">Quick Stats</h3>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Admins</span>
+                <span className="font-medium">{stats?.total_admins ?? 0}</span>
               </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium leading-tight">{item.label}</p>
-                <p className="text-xs text-muted-foreground mt-0.5 truncate">{item.desc}</p>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">API Keys</span>
+                <span className="font-medium">{stats?.total_api_keys ?? 0}</span>
               </div>
-            </Link>
-          ))}
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Active Keys</span>
+                <span className="font-medium">{stats?.active_api_keys ?? 0}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Relay Agents</span>
+                <span className="font-medium">{stats?.relay_agents_count ?? 0}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -42,50 +42,39 @@ export function AgentConnectionChart({ agentsByMode, totalAgents = 0, loading }:
   const hasData = chartData.length > 0;
 
   return (
-    <Card className="border-border">
+    <Card>
       <CardHeader className="pb-3">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-[hsl(220,50%,96%)] dark:bg-[hsl(220,50%,15%)] flex items-center justify-center">
-            <Server className="h-4 w-4 text-[hsl(220,50%,55%)]" />
-          </div>
-          <div>
-            <CardTitle className="text-base font-semibold">Connection Types</CardTitle>
-            <CardDescription className="text-xs">Agent distribution</CardDescription>
-          </div>
-        </div>
+        <CardTitle className="text-base font-semibold">Connection Types</CardTitle>
+        <CardDescription className="text-xs">Agent distribution</CardDescription>
       </CardHeader>
       <CardContent className="pt-0">
         {loading ? (
-          <div className="h-[180px] flex items-center justify-center">
-            <div className="flex flex-col items-center gap-2">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-[hsl(220,50%,55%)]" />
-              <p className="text-sm text-muted-foreground">Loading...</p>
-            </div>
+          <div className="h-[160px] flex items-center justify-center">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted border-t-primary" />
           </div>
         ) : !hasData ? (
-          <div className="h-[180px] flex flex-col items-center justify-center gap-2 text-muted-foreground">
-            <Server className="h-10 w-10 opacity-20" />
-            <p className="text-sm">No agents yet</p>
+          <div className="h-[160px] flex flex-col items-center justify-center gap-2 text-muted-foreground">
+            <Server className="h-8 w-8 opacity-20" />
+            <p className="text-xs">No agents yet</p>
           </div>
         ) : (
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4">
             {/* Donut chart */}
-            <div className="relative h-[140px] w-[140px] shrink-0">
+            <div className="relative h-[120px] w-[120px] shrink-0">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={chartData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={45}
-                    outerRadius={65}
-                    paddingAngle={4}
+                    innerRadius={40}
+                    outerRadius={55}
+                    paddingAngle={3}
                     dataKey="value"
                     nameKey="label"
                     startAngle={90}
                     endAngle={-270}
-                    animationDuration={800}
-                    animationEasing="ease-out"
+                    animationDuration={600}
                   >
                     {chartData.map((entry, i) => (
                       <Cell key={i} fill={entry.color} stroke="hsl(var(--card))" strokeWidth={2} />
@@ -96,36 +85,36 @@ export function AgentConnectionChart({ agentsByMode, totalAgents = 0, loading }:
               </ResponsiveContainer>
               {/* Center label */}
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-2xl font-semibold">{totalAgents}</span>
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">total</span>
+                <span className="text-xl font-semibold">{totalAgents}</span>
+                <span className="text-[9px] text-muted-foreground uppercase tracking-wider">total</span>
               </div>
             </div>
 
             {/* Legend - SHOW ALL MODES */}
-            <div className="flex-1 space-y-2">
+            <div className="flex-1 space-y-1.5">
               {allData.map((m) => {
                 const count = m.value;
                 const pct = totalAgents > 0 ? Math.round((count / totalAgents) * 100) : 0;
                 const isZero = count === 0;
                 return (
-                  <div key={m.key} className="flex items-center justify-between gap-3 group">
-                    <div className="flex items-center gap-2 flex-1">
+                  <div key={m.key} className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 flex-1">
                       <div 
-                        className="h-2.5 w-2.5 rounded-full shrink-0 transition-transform group-hover:scale-125" 
+                        className="h-2 w-2 rounded-full shrink-0" 
                         style={{ 
                           backgroundColor: m.color,
                           opacity: isZero ? 0.3 : 1
                         }} 
                       />
-                      <span className={`text-sm ${isZero ? "text-muted-foreground/50" : "text-muted-foreground"}`}>
+                      <span className={`text-xs ${isZero ? "text-muted-foreground/50" : "text-muted-foreground"}`}>
                         {m.label}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className={`text-sm font-semibold ${isZero ? "text-muted-foreground/50" : ""}`}>
+                    <div className="flex items-center gap-1">
+                      <span className={`text-xs font-medium ${isZero ? "text-muted-foreground/50" : ""}`}>
                         {count}
                       </span>
-                      <span className={`text-xs min-w-[2.5rem] text-right ${isZero ? "text-muted-foreground/40" : "text-muted-foreground"}`}>
+                      <span className={`text-xs min-w-[2rem] text-right ${isZero ? "text-muted-foreground/40" : "text-muted-foreground"}`}>
                         {pct}%
                       </span>
                     </div>

@@ -16,19 +16,18 @@ function UserAvatar({ name, email }: { name?: string | null; email: string }) {
     ? name.slice(0, 2).toUpperCase()
     : email.slice(0, 2).toUpperCase();
 
-  // Muted colors
   const colors = [
-    "bg-[hsl(220,45%,96%)] text-[hsl(220,50%,50%)] dark:bg-[hsl(220,45%,15%)] dark:text-[hsl(220,50%,60%)]",
-    "bg-[hsl(260,40%,96%)] text-[hsl(260,45%,55%)] dark:bg-[hsl(260,40%,15%)] dark:text-[hsl(260,45%,65%)]",
-    "bg-[hsl(142,40%,96%)] text-[hsl(142,45%,45%)] dark:bg-[hsl(142,40%,15%)] dark:text-[hsl(142,45%,55%)]",
-    "bg-[hsl(30,45%,96%)] text-[hsl(30,50%,50%)] dark:bg-[hsl(30,45%,15%)] dark:text-[hsl(30,50%,60%)]",
-    "bg-[hsl(330,40%,96%)] text-[hsl(330,45%,55%)] dark:bg-[hsl(330,40%,15%)] dark:text-[hsl(330,45%,65%)]",
-    "bg-[hsl(180,40%,96%)] text-[hsl(180,40%,45%)] dark:bg-[hsl(180,40%,15%)] dark:text-[hsl(180,40%,55%)]",
+    "bg-blue-100 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400",
+    "bg-purple-100 text-purple-600 dark:bg-purple-950/30 dark:text-purple-400",
+    "bg-emerald-100 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400",
+    "bg-amber-100 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400",
+    "bg-pink-100 text-pink-600 dark:bg-pink-950/30 dark:text-pink-400",
+    "bg-cyan-100 text-cyan-600 dark:bg-cyan-950/30 dark:text-cyan-400",
   ];
   const idx = initials.charCodeAt(0) % colors.length;
 
   return (
-    <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center text-xs font-semibold shrink-0", colors[idx])}>
+    <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center text-xs font-semibold shrink-0", colors[idx])}>
       {initials}
     </div>
   );
@@ -36,21 +35,16 @@ function UserAvatar({ name, email }: { name?: string | null; email: string }) {
 
 export function RecentRegistrationsTable({ registrations, loading }: RecentRegistrationsTableProps) {
   return (
-    <Card className="border-border">
+    <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-[hsl(220,50%,96%)] dark:bg-[hsl(220,50%,15%)] flex items-center justify-center">
-              <Users className="h-4 w-4 text-[hsl(220,50%,55%)]" />
-            </div>
-            <CardTitle className="text-base font-semibold">Recent Users</CardTitle>
-          </div>
+          <CardTitle className="text-base font-semibold">Recent Users</CardTitle>
           <Link
             to="/admin/users"
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors group"
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             View all
-            <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
+            <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
       </CardHeader>
@@ -59,22 +53,22 @@ export function RecentRegistrationsTable({ registrations, loading }: RecentRegis
           <div className="px-6 pb-4 space-y-3">
             {[...Array(3)].map((_, i) => (
               <div key={i} className="flex items-center gap-3 animate-pulse">
-                <div className="h-9 w-9 rounded-lg bg-muted" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-3 w-32 bg-muted rounded" />
-                  <div className="h-2 w-24 bg-muted rounded" />
+                <div className="h-8 w-8 rounded-lg bg-muted" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-3 w-28 bg-muted rounded" />
+                  <div className="h-2 w-20 bg-muted rounded" />
                 </div>
               </div>
             ))}
           </div>
         ) : !registrations || registrations.length === 0 ? (
-          <div className="px-6 py-8 text-center text-sm text-muted-foreground">
+          <div className="px-6 py-8 text-center text-xs text-muted-foreground">
             No recent registrations
           </div>
         ) : (
           <div className="divide-y divide-border/50">
             {registrations.map((user) => (
-              <div key={user.id} className="px-6 py-3 flex items-center gap-3 hover:bg-muted/30 transition-colors">
+              <div key={user.id} className="px-6 py-2.5 flex items-center gap-3 hover:bg-muted/30 transition-colors">
                 <UserAvatar name={user.username} email={user.email} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{user.username || user.email}</p>
@@ -82,13 +76,13 @@ export function RecentRegistrationsTable({ registrations, loading }: RecentRegis
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {user.email_verified ? (
-                    <Badge variant="outline" className="gap-1 text-[hsl(142,45%,45%)] border-[hsl(142,40%,85%)] bg-[hsl(142,40%,96%)] dark:bg-[hsl(142,40%,15%)]">
-                      <CheckCircle2 className="h-3 w-3" />
+                    <Badge variant="outline" className="gap-1 text-[10px] h-5 px-1.5 text-emerald-600 border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30">
+                      <CheckCircle2 className="h-2.5 w-2.5" />
                       Verified
                     </Badge>
                   ) : (
-                    <Badge variant="outline" className="gap-1 text-[hsl(38,50%,50%)] border-[hsl(38,45%,85%)] bg-[hsl(38,45%,96%)] dark:bg-[hsl(38,45%,15%)]">
-                      <Clock className="h-3 w-3" />
+                    <Badge variant="outline" className="gap-1 text-[10px] h-5 px-1.5 text-amber-600 border-amber-200 bg-amber-50 dark:bg-amber-950/30">
+                      <Clock className="h-2.5 w-2.5" />
                       Pending
                     </Badge>
                   )}

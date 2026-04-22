@@ -1,12 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Server } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { agentApi } from "@/lib/api/agent";
+import { useAgentStore } from "@/stores/use-agent-store";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Server, Activity, Clock } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 
 export const Route = createFileRoute("/_authenticated/admin/agents")({
   component: AdminAgentsPage,
 });
 
 function AdminAgentsPage() {
+  const { data: agents = [], isLoading } = useQuery({
+    queryKey: ["admin-agents"],
+    queryFn: agentApi.list,
+  });
+
+  const { agentInfo } = useAgentStore();
+
   return (
     <div className="space-y-6">
       <div>
@@ -16,30 +28,71 @@ function AdminAgentsPage() {
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Server className="h-5 w-5 text-muted-foreground" />
-            <CardTitle>Coming Soon</CardTitle>
-          </div>
-          <CardDescription>
-            Agent management interface is under development. You can currently manage agents through
-            the main Agents page.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            This page will include:
-          </p>
-          <ul className="mt-2 space-y-1 text-sm text-muted-foreground list-disc list-inside">
-            <li>View all agents with detailed information</li>
-            <li>Monitor agent status and connection health</li>
-            <li>Manage agent tokens and permissions</li>
-            <li>View agent audit history</li>
-            <li>Bulk operations on multiple agents</li>
-          </ul>
-        </CardContent>
-      </Card>
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Agent</TableHead>
+              <TableHead>URL</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Created</TableHead>
+              <TableHead>Last Updated</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                  Loading agents...
+                </TableCell>
+              </TableRow>
+            ) : agents.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                  No agents registered
+                </TableCell>
+              </TableRow>
+            ) : (
+              agents.map((agent) => {
+                const info = agentInfo[agent.id];
+                const isOnline = info?.wsOnline === true;
+
+                return (
+                  <TableRow key={agent.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Server className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium">{agent.name}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-mono text-sm text-muted-foreground">
+                      {agent.url}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={isOnline ? "default" : "secondary"}>
+                        <Activity className="h-3 w-3 mr-1" />
+                        {isOnline ? "Online" : "Offline"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {formatDistanceToNow(new Date(agent.created_at), { addSuffix: true })}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {formatDistanceToNow(new Date(agent.updated_at), { addSuffix: true })}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

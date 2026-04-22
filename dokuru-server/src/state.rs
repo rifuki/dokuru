@@ -17,6 +17,7 @@ use crate::{
             service::AuthService,
             session::{SessionRepositoryImpl, SessionService},
         },
+        document::DocumentRepository,
         user::{
             UserProfileRepository, UserProfileRepositoryImpl, UserRepository, UserRepositoryImpl,
         },
@@ -47,6 +48,7 @@ pub struct AppState {
     pub agent_registry: AgentRegistry,
     pub audit_service: Arc<AuditResultService>,
     pub stats_service: Arc<StatsService>,
+    pub document_repo: Arc<DocumentRepository>,
     pub storage: Arc<dyn StorageProvider>,
     pub email_service: Arc<EmailService>,
     pub session_blacklist: Option<Arc<dyn SessionBlacklist>>,
@@ -89,6 +91,7 @@ impl AppState {
         let auth_method_repo = Arc::new(AuthMethodRepositoryImpl::new());
         let session_repo = Arc::new(SessionRepositoryImpl::new());
         let stats_repository: Arc<dyn StatsRepository> = Arc::new(StatsRepositoryImpl::new());
+        let document_repo = Arc::new(DocumentRepository::new(db.pool()));
 
         // Services
         let auth_method_service = AuthMethodService::new(db.clone(), auth_method_repo);
@@ -156,6 +159,7 @@ impl AppState {
             agent_registry,
             audit_service,
             stats_service,
+            document_repo,
             storage,
             email_service,
             session_blacklist,
@@ -222,7 +226,7 @@ impl AppState {
 
         Self {
             config: Arc::new(config),
-            db,
+            db: db.clone(),
             auth_service,
             user_repo,
             user_profile_repo,
@@ -231,6 +235,7 @@ impl AppState {
             agent_registry,
             audit_service,
             stats_service,
+            document_repo: Arc::new(DocumentRepository::new(db.pool())),
             storage,
             email_service,
             session_blacklist: None,

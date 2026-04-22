@@ -1,4 +1,4 @@
-use axum::{Router, extract::Query, http::StatusCode, response::Json, routing::get};
+use axum::{Router, extract::Query, extract::ws::{Message, WebSocket, WebSocketUpgrade}, http::StatusCode, response::{Json, Response}, routing::get};
 use bollard::system::EventsOptions;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -30,7 +30,9 @@ pub fn routes<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
 {
-    Router::new().route("/docker/events", get(get_events))
+    Router::new()
+        .route("/docker/events", get(get_events))
+        .route("/docker/events/stream", get(events_stream))
 }
 
 async fn get_events(
@@ -81,4 +83,49 @@ async fn get_events(
     }
 
     Ok(Json(events))
+}
+
+
+async fn events_stream(ws: WebSocketUpgrade) -> Response {
+    ws.on_upgrade(handle_events_stream)
+}
+
+async fn handle_events_stream(mut ws: WebSocket) {
+    let Ok(docker) = get_docker_client() else {
+        return;
+    };
+
+    let mut stream = docker.events(None::<EventsOptions<String>>);
+
+    while let Some(event) = stream.next().await {
+        if let Ok(evt) = event {
+            let event_type = evt.typ.map(|t| format!("{t:?}")).unwrap_or_default();
+            let actor_id = evt
+                .actor
+                .as_ref()
+                .and_then(|a| a.id.clone())
+                .unwrap_or_default();
+            let attributes = evt
+                .actor
+                .as_ref()
+                .and_then(|a| a.attributes.clone())
+                .unwrap_or_else(HashMap::new);
+
+            let response = EventResponse {
+                r#type: event_type,
+                action: evt.action.unwrap_or_default(),
+                actor: EventActor {
+                    id: actor_id,
+                    attributes,
+                },
+                time: evt.time.unwrap_or_default(),
+            };
+
+            if let Ok(json) = serde_json::to_string(&response) {
+                if ws.send(Message::Text(json.into())).await.is_err() {
+                    break;
+                }
+            }
+        }
+    }
 }

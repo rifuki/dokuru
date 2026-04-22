@@ -8,15 +8,15 @@ interface SystemHealthCardProps {
 }
 
 const statusConfig = {
-  healthy:  { icon: CheckCircle2,  color: "text-[hsl(142,45%,45%)]", bg: "bg-[hsl(142,40%,96%)] dark:bg-[hsl(142,40%,15%)]", label: "Healthy",  dot: "bg-[hsl(142,45%,45%)]" },
-  degraded: { icon: AlertTriangle, color: "text-[hsl(38,50%,50%)]",  bg: "bg-[hsl(38,45%,96%)] dark:bg-[hsl(38,45%,15%)]",   label: "Degraded", dot: "bg-[hsl(38,50%,50%)] animate-pulse" },
-  down:     { icon: XCircle,       color: "text-[hsl(0,45%,50%)]",   bg: "bg-[hsl(0,40%,96%)] dark:bg-[hsl(0,40%,15%)]",     label: "Down",     dot: "bg-[hsl(0,45%,50%)]" },
+  healthy:  { icon: CheckCircle2,  color: "text-emerald-600", bg: "bg-emerald-100 dark:bg-emerald-950/30", label: "Healthy",  dot: "bg-emerald-500" },
+  degraded: { icon: AlertTriangle, color: "text-amber-600",  bg: "bg-amber-100 dark:bg-amber-950/30",   label: "Degraded", dot: "bg-amber-500 animate-pulse" },
+  down:     { icon: XCircle,       color: "text-red-600",   bg: "bg-red-100 dark:bg-red-950/30",     label: "Down",     dot: "bg-red-500" },
 };
 
 function StatusBadge({ status }: { status: "healthy" | "degraded" | "down" }) {
   const cfg = statusConfig[status] ?? statusConfig.healthy;
   return (
-    <div className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium", cfg.bg, cfg.color)}>
+    <div className={cn("flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium", cfg.bg, cfg.color)}>
       <div className={cn("h-1.5 w-1.5 rounded-full", cfg.dot)} />
       {cfg.label}
     </div>
@@ -35,21 +35,16 @@ function formatUptime(seconds: number) {
 
 export function SystemHealthCard({ health }: SystemHealthCardProps) {
   return (
-    <Card className="border-border">
+    <Card>
       <CardHeader className="pb-3">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-[hsl(220,50%,96%)] dark:bg-[hsl(220,50%,15%)] flex items-center justify-center">
-            <Activity className="h-4 w-4 text-[hsl(220,50%,55%)]" />
-          </div>
-          <CardTitle className="text-base font-semibold">System Health</CardTitle>
-        </div>
+        <CardTitle className="text-base font-semibold">System Health</CardTitle>
       </CardHeader>
       <CardContent className="space-y-0 divide-y divide-border/50">
         {/* Database */}
-        <div className="flex items-center justify-between py-3 first:pt-0">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-[hsl(220,50%,96%)] dark:bg-[hsl(220,50%,15%)] flex items-center justify-center">
-              <Database className="h-4 w-4 text-[hsl(220,50%,55%)]" />
+        <div className="flex items-center justify-between py-2.5 first:pt-0">
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-lg bg-blue-100 dark:bg-blue-950/30 flex items-center justify-center">
+              <Database className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
               <p className="text-sm font-medium">Database</p>
@@ -61,10 +56,10 @@ export function SystemHealthCard({ health }: SystemHealthCardProps) {
 
         {/* Redis */}
         {health.redis && (
-          <div className="flex items-center justify-between py-3">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-lg bg-[hsl(0,45%,96%)] dark:bg-[hsl(0,45%,15%)] flex items-center justify-center">
-                <Activity className="h-4 w-4 text-[hsl(0,45%,50%)]" />
+          <div className="flex items-center justify-between py-2.5">
+            <div className="flex items-center gap-2.5">
+              <div className="h-8 w-8 rounded-lg bg-red-100 dark:bg-red-950/30 flex items-center justify-center">
+                <Activity className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
               </div>
               <div>
                 <p className="text-sm font-medium">Redis</p>
@@ -76,24 +71,24 @@ export function SystemHealthCard({ health }: SystemHealthCardProps) {
         )}
 
         {/* Server */}
-        <div className="flex items-center justify-between py-3">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-[hsl(142,40%,96%)] dark:bg-[hsl(142,40%,15%)] flex items-center justify-center">
-              <Server className="h-4 w-4 text-[hsl(142,45%,45%)]" />
+        <div className="flex items-center justify-between py-2.5">
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-lg bg-emerald-100 dark:bg-emerald-950/30 flex items-center justify-center">
+              <Server className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div>
               <p className="text-sm font-medium">Server</p>
-              <p className="text-xs text-muted-foreground">Uptime {formatUptime(health.server_uptime_seconds)}</p>
+              <p className="text-xs text-muted-foreground">Up {formatUptime(health.server_uptime_seconds)}</p>
             </div>
           </div>
           <StatusBadge status="healthy" />
         </div>
 
         {/* WebSocket */}
-        <div className="flex items-center justify-between py-3 last:pb-0">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-[hsl(180,40%,96%)] dark:bg-[hsl(180,40%,15%)] flex items-center justify-center">
-              <Wifi className="h-4 w-4 text-[hsl(180,40%,50%)]" />
+        <div className="flex items-center justify-between py-2.5 last:pb-0">
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-lg bg-cyan-100 dark:bg-cyan-950/30 flex items-center justify-center">
+              <Wifi className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
             </div>
             <div>
               <p className="text-sm font-medium">WebSocket</p>
