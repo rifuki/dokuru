@@ -7,6 +7,7 @@ import {
   Cable,
   Cookie,
   Database,
+  FileCode2,
   Mail,
   RefreshCcw,
   Server,
@@ -43,6 +44,11 @@ const LEVEL_STYLES: Record<string, string> = {
   warn: "text-amber-400",
   error: "text-red-400",
 };
+
+const LOCAL_TOML_PLACEHOLDER = `# Example
+[logging]
+default_level = "info"
+`;
 
 type ParsedLogLine = {
   timestamp: string | null;
@@ -82,18 +88,23 @@ function ConfigItem({
   icon: Icon,
   label,
   value,
+  source,
   mono,
 }: {
   icon: typeof Server;
   label: string;
   value: string;
+  source?: string;
   mono?: boolean;
 }) {
   return (
     <div className="rounded-xl border bg-card/60 px-4 py-4">
-      <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        <Icon className="h-3.5 w-3.5" />
-        {label}
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          <Icon className="h-3.5 w-3.5" />
+          {label}
+        </div>
+        {source ? <Badge variant="outline" className="text-[10px] capitalize">{source}</Badge> : null}
       </div>
       <div className={`truncate text-sm ${mono ? "font-mono text-foreground/90" : "font-medium"}`}>{value || "—"}</div>
     </div>
@@ -131,6 +142,7 @@ function AdminSettingsPage() {
   const [pendingLogLevel, setPendingLogLevel] = useState<string | null>(null);
   const [filterLevel, setFilterLevel] = useState<string>("trace");
   const [autoRefreshLogs, setAutoRefreshLogs] = useState(false);
+  const [localConfigDraft, setLocalConfigDraft] = useState<string | null>(null);
 
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ["admin", "stats"],
@@ -148,9 +160,19 @@ function AdminSettingsPage() {
     refetchInterval: autoRefreshLogs ? 3_000 : false,
   });
 
-  const { data: config, isLoading: configLoading } = useQuery({
+  const { data: config, isLoading: configLoading, refetch: refetchConfig } = useQuery({
     queryKey: ["admin", "config"],
     queryFn: adminService.getEffectiveConfig,
+  });
+
+  const {
+    data: localConfig,
+    isLoading: localConfigLoading,
+    isFetching: localConfigFetching,
+    refetch: refetchLocalConfig,
+  } = useQuery({
+    queryKey: ["admin", "config", "local"],
+    queryFn: adminService.getLocalConfig,
   });
 
   const setLogLevelMutation = useMutation({
@@ -166,7 +188,21 @@ function AdminSettingsPage() {
     },
   });
 
+  const saveLocalConfigMutation = useMutation({
+    mutationFn: (content: string) => adminService.saveLocalConfig(content),
+    onSuccess: (result) => {
+      setLocalConfigDraft(result.content);
+      toast.success("local.toml saved");
+      void Promise.all([refetchLocalConfig(), refetchConfig()]);
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to save local config");
+    },
+  });
+
   const currentLogLevel = pendingLogLevel ?? normalizeLevel(logs?.runtime_level);
+
+  const effectiveSources = config?.field_sources ?? {};
 
   const visibleLines = useMemo(() => {
     const lines = logs?.lines ?? [];
@@ -175,6 +211,8 @@ function AdminSettingsPage() {
       return (LEVEL_PRIORITY[parsed.level] ?? LEVEL_PRIORITY.info) >= (LEVEL_PRIORITY[filterLevel] ?? LEVEL_PRIORITY.trace);
     });
   }, [filterLevel, logs?.lines]);
+
+  const editorContent = localConfigDraft ?? localConfig?.content ?? "";
 
   const metrics = [
     {
@@ -359,14 +397,14 @@ function AdminSettingsPage() {
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
-                    <ConfigItem icon={Server} label="API Port" value={String(config.server.port)} mono />
-                    <ConfigItem icon={Cable} label="CORS Origins" value={config.server.cors_allowed_origins.join(", ")} mono />
-                    <ConfigItem icon={Activity} label="Default Log Level" value={config.logging.default_level} />
-                    <ConfigItem icon={Cookie} label="Cookie Policy" value={`${config.cookie.same_site} · ${config.cookie.secure ? "secure" : "insecure"}`} />
-                    <ConfigItem icon={Cookie} label="HttpOnly" value={config.cookie.http_only ? "enabled" : "disabled"} />
-                    <ConfigItem icon={Upload} label="Upload Dir" value={config.upload.upload_dir} mono />
-                    <ConfigItem icon={Upload} label="Upload Base URL" value={config.upload.base_url} mono />
-                    <ConfigItem icon={Mail} label="Email From" value={config.email.from_email} mono />
+                    <ConfigItem icon={Server} label="API Port" value={String(config.server.port)} source={effectiveSources["server.port"]} mono />
+                    <ConfigItem icon={Cable} label="CORS Origins" value={config.server.cors_allowed_origins.join(", ")} source={effectiveSources["server.cors_allowed_origins"]} mono />
+                    <ConfigItem icon={Activity} label="Default Log Level" value={config.logging.default_level} source={effectiveSources["logging.default_level"]} />
+                    <ConfigItem icon={Cookie} label="Cookie Policy" value={`${config.cookie.same_site} · ${config.cookie.secure ? "secure" : "insecure"}`} source={effectiveSources["cookie.same_site"]} />
+                    <ConfigItem icon={Cookie} label="HttpOnly" value={config.cookie.http_only ? "enabled" : "disabled"} source={effectiveSources["cookie.http_only"]} />
+                    <ConfigItem icon={Upload} label="Upload Dir" value={config.upload.upload_dir} source={effectiveSources["upload.dir"]} mono />
+                    <ConfigItem icon={Upload} label="Upload Base URL" value={config.upload.base_url} source={effectiveSources["upload.base_url"]} mono />
+                    <ConfigItem icon={Mail} label="Email From" value={config.email.from_email} source={effectiveSources["email.from_email"]} mono />
                     <ConfigItem icon={Mail} label="Email Provider" value={config.email.provider} />
                   </div>
 
@@ -377,6 +415,58 @@ function AdminSettingsPage() {
                   </div>
                 </>
               ) : null}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <FileCode2 className="h-5 w-5 text-muted-foreground" />
+                <CardTitle>Local Override Editor</CardTitle>
+              </div>
+              <CardDescription>
+                Edit `local.toml` overrides here. These values override `defaults.toml`, but can still be overridden by environment variables.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">local.toml</Badge>
+                  <span>{localConfig?.path ?? config?.local_config_path ?? "config/local.toml"}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">env wins</Badge>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setLocalConfigDraft(null);
+                      void refetchLocalConfig();
+                    }}
+                    disabled={localConfigFetching}
+                  >
+                    <RefreshCcw className={`mr-2 h-3.5 w-3.5 ${localConfigFetching ? "animate-spin" : ""}`} />
+                    Reload file
+                  </Button>
+                </div>
+              </div>
+
+              <textarea
+                value={editorContent}
+                onChange={(event) => setLocalConfigDraft(event.target.value)}
+                spellCheck={false}
+                className="min-h-[280px] w-full rounded-xl border bg-black/40 p-4 font-mono text-sm text-slate-200 outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                placeholder={LOCAL_TOML_PLACEHOLDER}
+              />
+
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs text-muted-foreground">
+                  {localConfigLoading ? "Loading local.toml..." : localConfig?.exists ? "Editing existing local.toml" : "local.toml does not exist yet; saving here will create it."}
+                </div>
+                <Button onClick={() => saveLocalConfigMutation.mutate(editorContent)} disabled={saveLocalConfigMutation.isPending}>
+                  {saveLocalConfigMutation.isPending ? "Saving..." : "Save local.toml"}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>

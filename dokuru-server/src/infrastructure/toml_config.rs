@@ -1,5 +1,7 @@
 use config::{Config as ConfigBuilder, Environment, File, FileFormat};
 use serde::Deserialize;
+use std::path::PathBuf;
+use toml_edit::{DocumentMut, Item};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct TomlConfig {
@@ -91,4 +93,69 @@ impl TomlConfig {
             .try_deserialize()
             .map_err(|error| eyre::eyre!("Failed to deserialize TOML config: {error}"))
     }
+}
+
+pub fn config_dir() -> PathBuf {
+    PathBuf::from("config")
+}
+
+pub fn local_config_path() -> PathBuf {
+    config_dir().join("local.toml")
+}
+
+pub fn secrets_config_path() -> PathBuf {
+    config_dir().join("secrets.toml")
+}
+
+pub fn read_toml_document(path: &std::path::Path) -> eyre::Result<Option<DocumentMut>> {
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let content = std::fs::read_to_string(path)
+        .map_err(|error| eyre::eyre!("Failed to read {}: {error}", path.display()))?;
+
+    let value = content
+        .parse::<DocumentMut>()
+        .map_err(|error| eyre::eyre!("Failed to parse {}: {error}", path.display()))?;
+
+    Ok(Some(value))
+}
+
+pub fn value_at_path<'a>(value: &'a DocumentMut, path: &[&str]) -> Option<&'a Item> {
+    let mut current: &Item = value.as_item();
+
+    for segment in path {
+        current = current.get(*segment)?;
+    }
+
+    Some(current)
+}
+
+pub fn read_local_config_string() -> eyre::Result<String> {
+    let path = local_config_path();
+    if !path.exists() {
+        return Ok(String::new());
+    }
+
+    std::fs::read_to_string(&path)
+        .map_err(|error| eyre::eyre!("Failed to read {}: {error}", path.display()))
+}
+
+pub fn write_local_config_string(content: &str) -> eyre::Result<()> {
+    let trimmed = content.trim();
+    if !trimmed.is_empty() {
+        trimmed
+            .parse::<DocumentMut>()
+            .map_err(|error| eyre::eyre!("Invalid TOML content: {error}"))?;
+    }
+
+    let path = local_config_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| eyre::eyre!("Failed to create {}: {error}", parent.display()))?;
+    }
+
+    std::fs::write(&path, if trimmed.is_empty() { "" } else { content })
+        .map_err(|error| eyre::eyre!("Failed to write {}: {error}", path.display()))
 }

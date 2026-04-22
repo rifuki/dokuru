@@ -15,6 +15,10 @@ pub fn admin_routes() -> Router<AppState> {
         .route("/agents", get(agent::list_agents))
         .route("/audits", get(audit::list_audits))
         .route("/config", get(system::get_effective_config))
+        .route(
+            "/config/local",
+            get(system::get_local_config).put(system::save_local_config),
+        )
         .route("/logs", get(log::handler::get_logs))
         .route("/log/level", post(log::handler::set_log_level))
         .route("/users", get(user::handler::list_users))

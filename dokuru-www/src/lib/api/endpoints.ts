@@ -18,6 +18,7 @@ export const API_ENDPOINTS = {
     AUDITS: "/admin/audits",
     LOGS: "/admin/logs",
     CONFIG: "/admin/config",
+    CONFIG_LOCAL: "/admin/config/local",
     LOG_LEVEL: "/admin/log/level",
     STATS: "/admin/stats",
     USER_ROLE: (id: string) => `/admin/users/${id}/role`,

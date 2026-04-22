@@ -1,0 +1,16 @@
+[server]
+# Example: tighten CORS for a specific deployed frontend
+cors_allowed_origins = ["https://app.dokuru.rifuki.dev"]
+
+[logging]
+# Lower runtime noise by default in production-like local runs
+default_level = "info"
+
+[upload]
+# Override public upload base URL without touching defaults.toml
+base_url = "https://api.dokuru.rifuki.dev/media"
+
+[cookie]
+# Example cross-subdomain cookie policy
+same_site = "none"
+secure = true

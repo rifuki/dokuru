@@ -48,8 +48,10 @@ export interface AdminLogsResponse {
 
 export interface EffectiveConfigResponse {
   source: string;
+  local_config_path: string;
   rust_env: string;
   is_production: boolean;
+  field_sources: Record<string, string>;
   server: {
     port: number;
     cors_allowed_origins: string[];
@@ -76,6 +78,12 @@ export interface EffectiveConfigResponse {
     uploads_enabled: boolean;
     email_enabled: boolean;
   };
+}
+
+export interface LocalConfigResponse {
+  path: string;
+  content: string;
+  exists: boolean;
 }
 
 export const adminService = {
@@ -132,6 +140,33 @@ export const adminService = {
     const data = response.data.data;
     if (!data) {
       throw new Error("Failed to get config");
+    }
+
+    return data;
+  },
+
+  getLocalConfig: async (): Promise<LocalConfigResponse> => {
+    const response = await apiClient.get<ApiResponse<LocalConfigResponse>>(
+      API_ENDPOINTS.ADMIN.CONFIG_LOCAL
+    );
+
+    const data = response.data.data;
+    if (!data) {
+      throw new Error("Failed to get local config");
+    }
+
+    return data;
+  },
+
+  saveLocalConfig: async (content: string): Promise<LocalConfigResponse> => {
+    const response = await apiClient.put<ApiResponse<LocalConfigResponse>>(
+      API_ENDPOINTS.ADMIN.CONFIG_LOCAL,
+      { content }
+    );
+
+    const data = response.data.data;
+    if (!data) {
+      throw new Error("Failed to save local config");
     }
 
     return data;
