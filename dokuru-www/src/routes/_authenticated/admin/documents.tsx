@@ -30,7 +30,7 @@ function usePdfBlob(docId: string | undefined) {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (!docId) { setBlobUrl(null); return; }
+    if (!docId) return;
 
     let cancelled = false;
     let objectUrl: string | null = null;
