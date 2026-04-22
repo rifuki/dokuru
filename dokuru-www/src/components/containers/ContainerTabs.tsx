@@ -10,6 +10,8 @@ import {
   RotateCw,
   Cpu,
   MemoryStick,
+  Plug,
+  Unplug,
 } from "lucide-react";
 import { dockerApi, type Container } from "@/services/docker-api";
 import { Badge } from "@/components/ui/badge";
@@ -454,30 +456,69 @@ export function ContainerTerminal({
     error:        "Error",
   }[status];
 
+  const ConnectIcon = hasConnectedBefore ? RotateCw : Plug;
+  const isDisconnected = status === "disconnected" || status === "error" || status === "idle";
+
   return (
-    <div className={`rounded-lg border overflow-hidden shadow-lg ${!active ? "hidden" : ""}`}>
-      <div className="flex items-center justify-between px-4 py-2.5 bg-[#0d1117] border-b border-white/10">
-        <div className="flex items-center gap-3">
-          <TerminalIcon className="h-4 w-4 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground font-mono">/bin/sh</span>
-          <Badge variant="secondary" className="text-[10px]">{containerId.slice(0, 12)}</Badge>
-          {/* Status indicator */}
-          <div className="flex items-center gap-1.5 ml-1">
-            <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${statusDot}`} />
-            <span className="text-[11px] text-muted-foreground">{statusLabel}</span>
-          </div>
+    <div className={`rounded-xl border border-white/8 overflow-hidden shadow-2xl ${!active ? "hidden" : ""}`}>
+      {/* Title bar */}
+      <div className="flex items-center gap-3 px-4 py-3 bg-[#161b22] border-b border-white/8 select-none">
+        {/* macOS-style window dots */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="h-3 w-3 rounded-full bg-[#ff5f56]" />
+          <span className="h-3 w-3 rounded-full bg-[#ffbd2e]" />
+          <span className="h-3 w-3 rounded-full bg-[#27c93f]" />
         </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-7 text-xs px-3 hover:bg-white/10"
+
+        <div className="h-4 w-px bg-white/10 shrink-0" />
+
+        {/* Shell path */}
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <span className="text-[#58a6ff] font-mono text-xs font-bold shrink-0">❯_</span>
+          <span className="text-xs text-[#8b949e] font-mono">/bin/sh</span>
+          <span className="font-mono text-[11px] bg-white/5 border border-white/10 text-[#8b949e] px-2 py-0.5 rounded-md">
+            {containerId.slice(0, 12)}
+          </span>
+        </div>
+
+        {/* Status pill */}
+        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-medium font-mono shrink-0 ${
+          status === "connected"
+            ? "bg-green-500/10 border-green-500/20 text-green-400"
+            : status === "connecting"
+            ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-400"
+            : "bg-white/5 border-white/10 text-[#8b949e]"
+        }`}>
+          <span className={`h-1.5 w-1.5 rounded-full bg-current shrink-0 ${
+            status === "connecting" ? "animate-pulse" : ""
+          }`} />
+          {statusLabel}
+        </div>
+
+        {/* Connect / Reconnect button */}
+        <button
           onClick={connect}
           disabled={status === "connecting"}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium font-mono transition-all shrink-0 border ${
+            isDisconnected && status !== "idle"
+              ? "bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20"
+              : status === "connected"
+              ? "bg-white/5 border-white/10 text-[#8b949e] hover:bg-white/10 hover:text-white"
+              : status === "idle"
+              ? "bg-[#238636]/20 border-[#238636]/30 text-[#3fb950] hover:bg-[#238636]/30"
+              : "bg-white/5 border-white/10 text-[#8b949e] opacity-60 cursor-not-allowed"
+          }`}
         >
-          <RotateCw className={`h-3 w-3 mr-1.5 ${status === "connecting" ? "animate-spin" : ""}`} />
+          {status === "connecting"
+            ? <RotateCw className="h-3 w-3 animate-spin" />
+            : isDisconnected && status !== "idle"
+            ? <Unplug className="h-3 w-3" />
+            : <ConnectIcon className="h-3 w-3" />
+          }
           {hasConnectedBefore ? "Reconnect" : "Connect"}
-        </Button>
+        </button>
       </div>
+
       <div ref={wrapperRef} className="h-96 bg-[#0d1117]" />
     </div>
   );
