@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Plus, RefreshCw, Container, Box, HardDrive, Search, ChevronDown, ArrowUpDown, Edit, Trash2, Cpu, Server, Eye, EyeOff, Cloud, Globe, Link2, Loader2, WifiOff, AlertTriangle } from "lucide-react";
 import { AddAgentModal } from "@/components/agents/AddAgentModal";
-import { agentDirectApi, type DockerInfo } from "@/lib/api/agent-direct";
+import { agentDirectApi } from "@/lib/api/agent-direct";
 import { agentApi } from "@/lib/api/agent";
 import { setAgentToken } from "@/stores/use-agent-store";
 import type { Agent } from "@/types/agent";
