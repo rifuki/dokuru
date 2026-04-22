@@ -119,10 +119,10 @@ function ContainerRow({
                 <Button
                   size="sm"
                   variant="ghost"
-                  className={`h-9 w-9 p-0 ${
+                  className={`h-9 w-9 p-0 text-muted-foreground ${
                     isRunning
-                      ? "text-yellow-500/70 hover:bg-yellow-500/10 hover:text-yellow-500"
-                      : "text-green-500/70 hover:bg-green-500/10 hover:text-green-500"
+                      ? "hover:bg-destructive/10 hover:text-destructive"
+                      : "hover:bg-green-500/10 hover:text-green-500"
                   }`}
                   onClick={() => isRunning ? onStop(container.id) : onStart(container.id)}
                   disabled={isThisPending}
