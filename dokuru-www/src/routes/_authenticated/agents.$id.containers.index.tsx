@@ -86,12 +86,11 @@ function ContainerRow({
           className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-accent/50 transition-colors select-none"
           onClick={() => setExpanded((v) => !v)}
         >
-          <div className={`flex items-center justify-center w-8 h-8 shrink-0 rounded-md transition-colors ${
-            isRunning
-              ? "bg-green-500/15 text-green-500 group-hover:bg-green-500/25"
-              : "bg-muted/60 text-muted-foreground group-hover:bg-muted"
-          }`}>
+          <div className="relative flex items-center justify-center w-8 h-8 shrink-0 rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
             <ContainerIcon className="h-4 w-4" />
+            <span className={`absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full border border-card ${
+              isRunning ? "bg-green-500" : "bg-muted-foreground/40"
+            }`} />
           </div>
 
           <div className="min-w-0 flex-1 grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_6rem_minmax(0,2fr)] gap-4 items-center">
@@ -286,7 +285,6 @@ function ContainersPage() {
       <PageHeader
         icon={ContainerIcon}
         title="Containers"
-        accent="green"
         loading={isLoading}
         stats={[
           { value: running, label: "running", pulse: running > 0 },
