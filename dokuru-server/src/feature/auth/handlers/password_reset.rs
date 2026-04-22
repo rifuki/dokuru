@@ -18,12 +18,22 @@ pub struct ForgotPasswordResponse {
     message: String,
 }
 
-pub(crate) fn build_password_reset_url(headers: &HeaderMap, token: &str) -> String {
+pub(crate) fn build_password_reset_url(
+    headers: &HeaderMap,
+    fallback_origins: &[String],
+    token: &str,
+) -> String {
     let origin = headers
         .get("origin")
         .and_then(|value| value.to_str().ok())
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
+        .or_else(|| {
+            fallback_origins
+                .iter()
+                .find(|origin| !origin.is_empty() && *origin != "*")
+                .cloned()
+        })
         .or_else(|| {
             let proto = headers
                 .get("x-forwarded-proto")
@@ -38,7 +48,7 @@ pub(crate) fn build_password_reset_url(headers: &HeaderMap, token: &str) -> Stri
                 .filter(|value| !value.is_empty())
                 .map(|host| format!("{proto}://{host}"))
         })
-        .unwrap_or_else(|| "http://localhost:5173".to_string());
+        .unwrap_or_else(|| "https://app.dokuru.rifuki.dev".to_string());
 
     format!("{origin}/reset-password?token={token}")
 }
@@ -86,7 +96,7 @@ pub async fn forgot_password(
         })?;
 
     // Send email
-    let reset_url = build_password_reset_url(&headers, &token);
+    let reset_url = build_password_reset_url(&headers, &state.config.server.cors_allowed_origins, &token);
 
     if let Err(e) = state
         .email_service

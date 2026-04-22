@@ -229,7 +229,7 @@ pub async fn send_password_reset(
         .await
         .map_err(|error| ApiError::default().log_only(error))?;
 
-    let reset_url = build_password_reset_url(&headers, &token);
+    let reset_url = build_password_reset_url(&headers, &state.config.server.cors_allowed_origins, &token);
     state
         .email_service
         .send_password_reset_email(&user.email, &reset_url)
