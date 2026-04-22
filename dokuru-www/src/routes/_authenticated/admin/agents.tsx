@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
+import { useState } from "react";
 import { adminService } from "@/lib/api/services/admin-services";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
@@ -151,6 +152,10 @@ const columns: ColumnDef<AdminAgent>[] = [
 ];
 
 function AdminAgentsPage() {
+  const [recentAgentsThreshold] = useState(
+    () => new Date().getTime() - 7 * 24 * 60 * 60 * 1000
+  );
+
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ["admin", "agents"],
     queryFn: adminService.getAdminAgents,
@@ -161,7 +166,7 @@ function AdminAgentsPage() {
   const onlineAgents = agents.filter((agent) => isRecentlySeen(agent.last_seen)).length;
   const relayAgents = agents.filter((agent) => agent.access_mode === "relay").length;
   const recentAgents = agents.filter(
-    (agent) => Date.now() - new Date(agent.created_at).getTime() <= 7 * 24 * 60 * 60 * 1000
+    (agent) => new Date(agent.created_at).getTime() >= recentAgentsThreshold
   ).length;
 
   return (
