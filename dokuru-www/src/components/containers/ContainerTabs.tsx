@@ -371,7 +371,8 @@ export function ContainerTerminal({
     wsRef.current?.close();
     termRef.current?.dispose();
 
-    setStatus("connecting");
+    // Defer to avoid synchronous setState inside useEffect
+    queueMicrotask(() => setStatus("connecting"));
 
     const term = new Terminal({
       cursorBlink: true,
