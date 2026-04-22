@@ -1,7 +1,11 @@
 import { apiClient, API_ENDPOINTS } from "@/lib/api";
 import type { ApiResponse } from "@/lib/api/types";
 import type { UserWithTimestamps } from "@/features/admin/types/admin-types";
-import type { DashboardStats } from "@/features/admin/types/stats";
+import type {
+  AdminAgentListResponse,
+  AdminAuditListResponse,
+  DashboardStats,
+} from "@/features/admin/types/stats";
 
 export type { DashboardStats };
 
@@ -64,6 +68,32 @@ export const adminService = {
     const data = response.data.data;
     if (!data) {
       throw new Error("Failed to get dashboard stats");
+    }
+
+    return data;
+  },
+
+  getAdminAgents: async (): Promise<AdminAgentListResponse> => {
+    const response = await apiClient.get<ApiResponse<AdminAgentListResponse>>(
+      API_ENDPOINTS.ADMIN.AGENTS
+    );
+
+    const data = response.data.data;
+    if (!data) {
+      throw new Error("Failed to get agents");
+    }
+
+    return data;
+  },
+
+  getAdminAudits: async (): Promise<AdminAuditListResponse> => {
+    const response = await apiClient.get<ApiResponse<AdminAuditListResponse>>(
+      API_ENDPOINTS.ADMIN.AUDITS
+    );
+
+    const data = response.data.data;
+    if (!data) {
+      throw new Error("Failed to get audits");
     }
 
     return data;

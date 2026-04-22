@@ -1,3 +1,5 @@
+pub mod agent;
+pub mod audit;
 pub mod api_key;
 pub mod log;
 pub mod routes;

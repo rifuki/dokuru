@@ -14,6 +14,8 @@ export const API_ENDPOINTS = {
   },
   ADMIN: {
     USERS: "/admin/users",
+    AGENTS: "/admin/agents",
+    AUDITS: "/admin/audits",
     LOG_LEVEL: "/admin/log/level",
     STATS: "/admin/stats",
     USER_ROLE: (id: string) => `/admin/users/${id}/role`,

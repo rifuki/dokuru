@@ -62,9 +62,30 @@ export interface AdminAgent {
   status: string;
   last_seen: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface AdminAgentListResponse {
   agents: AdminAgent[];
+  total: number;
+}
+
+export interface AdminAudit {
+  id: string;
+  agent_id: string;
+  agent_name: string;
+  user_email: string;
+  hostname: string;
+  docker_version: string;
+  total_rules: number;
+  passed: number;
+  failed: number;
+  score: number;
+  ran_at: string;
+  created_at: string;
+}
+
+export interface AdminAuditListResponse {
+  audits: AdminAudit[];
   total: number;
 }
