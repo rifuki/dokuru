@@ -440,14 +440,6 @@ export function ContainerTerminal({
     };
   }, []);
 
-  const statusDot = {
-    idle:         "bg-muted-foreground/40",
-    connecting:   "bg-yellow-400 animate-pulse",
-    connected:    "bg-green-400",
-    disconnected: "bg-red-400",
-    error:        "bg-red-400",
-  }[status];
-
   const statusLabel = {
     idle:         "Not connected",
     connecting:   "Connecting…",
