@@ -17,8 +17,6 @@ function AdminAgentsPage() {
     queryFn: agentApi.list,
   });
 
-  const { agentInfos } = useAgentStore();
-
   return (
     <div className="space-y-6">
       <div>

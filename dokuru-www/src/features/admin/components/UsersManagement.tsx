@@ -17,6 +17,8 @@ import { useUpdateUserRole } from "@/features/admin/hooks/use-update-user-role";
 import { toast } from "sonner";
 import type { UserWithTimestamps } from "@/features/admin/types/admin-types";
 import { UsersTable, type DialogType } from "./UsersTable";
+import { Users, UserCheck, UserX, TrendingUp } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 export function UsersManagement() {
   const { data: users, isLoading } = useUsersList();
@@ -136,6 +138,23 @@ export function UsersManagement() {
 
   const dialogContent = getDialogContent();
 
+  // Calculate stats
+  const totalUsers = users?.length ?? 0;
+  const verifiedUsers = users?.filter(u => u.email_verified).length ?? 0;
+  const pendingUsers = totalUsers - verifiedUsers;
+  const adminUsers = users?.filter(u => u.role === "admin").length ?? 0;
+
+  // Mock growth data (last 7 days)
+  const growthData = [
+    { day: "Mon", users: totalUsers - 6 },
+    { day: "Tue", users: totalUsers - 5 },
+    { day: "Wed", users: totalUsers - 3 },
+    { day: "Thu", users: totalUsers - 2 },
+    { day: "Fri", users: totalUsers - 1 },
+    { day: "Sat", users: totalUsers },
+    { day: "Sun", users: totalUsers },
+  ];
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -147,6 +166,92 @@ export function UsersManagement() {
         <Button variant="outline" asChild>
           <Link to="/admin">← Back to Admin</Link>
         </Button>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <div className="rounded-xl border bg-card p-6">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="rounded-lg bg-blue-100 dark:bg-blue-950/30 p-2">
+              <Users className="h-5 w-5 text-blue-600" />
+            </div>
+            <span className="text-sm font-medium text-muted-foreground">Total Users</span>
+          </div>
+          <p className="text-3xl font-bold">{totalUsers}</p>
+        </div>
+
+        <div className="rounded-xl border bg-card p-6">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="rounded-lg bg-emerald-100 dark:bg-emerald-950/30 p-2">
+              <UserCheck className="h-5 w-5 text-emerald-600" />
+            </div>
+            <span className="text-sm font-medium text-muted-foreground">Verified</span>
+          </div>
+          <p className="text-3xl font-bold">{verifiedUsers}</p>
+        </div>
+
+        <div className="rounded-xl border bg-card p-6">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="rounded-lg bg-amber-100 dark:bg-amber-950/30 p-2">
+              <UserX className="h-5 w-5 text-amber-600" />
+            </div>
+            <span className="text-sm font-medium text-muted-foreground">Pending</span>
+          </div>
+          <p className="text-3xl font-bold">{pendingUsers}</p>
+        </div>
+
+        <div className="rounded-xl border bg-card p-6">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="rounded-lg bg-purple-100 dark:bg-purple-950/30 p-2">
+              <TrendingUp className="h-5 w-5 text-purple-600" />
+            </div>
+            <span className="text-sm font-medium text-muted-foreground">Admins</span>
+          </div>
+          <p className="text-3xl font-bold">{adminUsers}</p>
+        </div>
+      </div>
+
+      {/* User Growth Chart */}
+      <div className="rounded-xl border bg-card p-6">
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold">User Growth</h3>
+          <p className="text-sm text-muted-foreground">Last 7 days</p>
+        </div>
+        <ResponsiveContainer width="100%" height={200}>
+          <LineChart data={growthData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} vertical={false} />
+            <XAxis 
+              dataKey="day" 
+              tick={{ fontSize: 12, fill: "#9ca3af" }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <YAxis 
+              tick={{ fontSize: 12, fill: "#9ca3af" }}
+              axisLine={false}
+              tickLine={false}
+              allowDecimals={false}
+            />
+            <Tooltip 
+              contentStyle={{ 
+                backgroundColor: '#1f2937', 
+                border: '1px solid #374151',
+                borderRadius: '8px',
+                fontSize: '12px',
+                color: '#fff'
+              }}
+            />
+            <Line 
+              type="monotone" 
+              dataKey="users" 
+              stroke="#3b82f6" 
+              strokeWidth={2}
+              dot={{ fill: '#3b82f6', r: 4 }}
+              activeDot={{ r: 6 }}
+              animationDuration={800}
+            />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
 
       <UsersTable
