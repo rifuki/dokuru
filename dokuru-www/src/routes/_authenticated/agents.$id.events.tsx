@@ -40,7 +40,7 @@ const ACTION_COLORS: Record<string, string> = {
   tag:         "bg-slate-500/10 text-slate-400",
 };
 
-const ITEMS_PER_PAGE = 25;
+const PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
 
 function EventsPage() {
   const { id } = Route.useParams();
@@ -49,13 +49,14 @@ function EventsPage() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState<number>(10);
 
   const agentToken = agent ? (agent.token ?? getAgentToken(agent.id) ?? "") : "";
 
   const { events, clearEvents, isConnected, isConnecting } = useDockerEvents(
     agent?.url ?? "",
     agentToken,
-    { enabled: !paused && !!agent },
+    { enabled: !paused && !!agent, historySecs: 86400 },
   );
 
   const filtered = useMemo(() => {
@@ -73,9 +74,9 @@ function EventsPage() {
     });
   }, [events, search, typeFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const safePage = Math.min(page, totalPages);
-  const pageEvents = filtered.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
+  const pageEvents = filtered.slice((safePage - 1) * perPage, safePage * perPage);
 
   const exportJSON = () => {
     const blob = new Blob([JSON.stringify(filtered, null, 2)], { type: "application/json" });
@@ -145,7 +146,21 @@ function EventsPage() {
           </SelectContent>
         </Select>
 
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-xs text-muted-foreground whitespace-nowrap">Rows per page</span>
+          <Select
+            value={String(perPage)}
+            onValueChange={(v) => { setPerPage(Number(v)); setPage(1); }}
+          >
+            <SelectTrigger className="w-20">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PER_PAGE_OPTIONS.map((n) => (
+                <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button variant="outline" size="sm" onClick={exportJSON} className="gap-2">
             <Download className="size-4" /> JSON
           </Button>
@@ -215,7 +230,7 @@ function EventsPage() {
           <span>
             {filtered.length === 0
               ? "No events"
-              : `Showing ${(safePage - 1) * ITEMS_PER_PAGE + 1}–${Math.min(safePage * ITEMS_PER_PAGE, filtered.length)} of ${filtered.length} events`}
+              : `Showing ${(safePage - 1) * perPage + 1}–${Math.min(safePage * perPage, filtered.length)} of ${filtered.length} events`}
           </span>
 
           {totalPages > 1 && (
