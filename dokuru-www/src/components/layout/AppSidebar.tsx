@@ -20,6 +20,7 @@ import {
   Layers,
   Home,
   Box,
+  Settings,
 } from "lucide-react";
 
 import {
@@ -172,7 +173,10 @@ export function AppSidebar() {
               <SidebarMenu>
                 {[
                   { title: "Users", href: "/admin/users", icon: Users },
+                  { title: "Agents", href: "/admin/agents", icon: Server },
+                  { title: "Audits", href: "/admin/audits", icon: ShieldCheck },
                   { title: "API Keys", href: "/admin/api-keys", icon: Key },
+                  { title: "Settings", href: "/admin/settings", icon: Settings },
                 ].map((item) => (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton

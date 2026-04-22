@@ -30,6 +30,7 @@ import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
 import { Route as AuthenticatedAdminAuditsRouteImport } from './routes/_authenticated/admin/audits'
 import { Route as AuthenticatedAdminApiKeysRouteImport } from './routes/_authenticated/admin/api-keys'
+import { Route as AuthenticatedAdminAgentsRouteImport } from './routes/_authenticated/admin/agents'
 import { Route as AuthenticatedAgentsIdIndexRouteImport } from './routes/_authenticated/agents.$id.index'
 import { Route as AuthenticatedAgentsIdVolumesRouteImport } from './routes/_authenticated/agents.$id.volumes'
 import { Route as AuthenticatedAgentsIdStacksRouteImport } from './routes/_authenticated/agents.$id.stacks'
@@ -162,6 +163,12 @@ const AuthenticatedAdminApiKeysRoute =
   AuthenticatedAdminApiKeysRouteImport.update({
     id: '/api-keys',
     path: '/api-keys',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminAgentsRoute =
+  AuthenticatedAdminAgentsRouteImport.update({
+    id: '/agents',
+    path: '/agents',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
 const AuthenticatedAgentsIdIndexRoute =
@@ -301,6 +308,7 @@ export interface FileRoutesByFullPath {
   '/verify-email-change': typeof VerifyEmailChangeRoute
   '/admin': typeof AuthenticatedAdminRouteWithChildren
   '/settings': typeof AuthenticatedSettingsRouteWithChildren
+  '/admin/agents': typeof AuthenticatedAdminAgentsRoute
   '/admin/api-keys': typeof AuthenticatedAdminApiKeysRoute
   '/admin/audits': typeof AuthenticatedAdminAuditsRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
@@ -342,6 +350,7 @@ export interface FileRoutesByTo {
   '/verify-email': typeof VerifyEmailRoute
   '/verify-email-change': typeof VerifyEmailChangeRoute
   '/': typeof AuthenticatedIndexRoute
+  '/admin/agents': typeof AuthenticatedAdminAgentsRoute
   '/admin/api-keys': typeof AuthenticatedAdminApiKeysRoute
   '/admin/audits': typeof AuthenticatedAdminAuditsRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
@@ -379,6 +388,7 @@ export interface FileRoutesById {
   '/_authenticated/admin': typeof AuthenticatedAdminRouteWithChildren
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteWithChildren
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/admin/agents': typeof AuthenticatedAdminAgentsRoute
   '/_authenticated/admin/api-keys': typeof AuthenticatedAdminApiKeysRoute
   '/_authenticated/admin/audits': typeof AuthenticatedAdminAuditsRoute
   '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
@@ -424,6 +434,7 @@ export interface FileRouteTypes {
     | '/verify-email-change'
     | '/admin'
     | '/settings'
+    | '/admin/agents'
     | '/admin/api-keys'
     | '/admin/audits'
     | '/admin/settings'
@@ -465,6 +476,7 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/verify-email-change'
     | '/'
+    | '/admin/agents'
     | '/admin/api-keys'
     | '/admin/audits'
     | '/admin/settings'
@@ -501,6 +513,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin'
     | '/_authenticated/settings'
     | '/_authenticated/'
+    | '/_authenticated/admin/agents'
     | '/_authenticated/admin/api-keys'
     | '/_authenticated/admin/audits'
     | '/_authenticated/admin/settings'
@@ -694,6 +707,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminApiKeysRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/admin/agents': {
+      id: '/_authenticated/admin/agents'
+      path: '/agents'
+      fullPath: '/admin/agents'
+      preLoaderRoute: typeof AuthenticatedAdminAgentsRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/agents/$id/': {
       id: '/_authenticated/agents/$id/'
       path: '/'
@@ -845,6 +865,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedAdminRouteChildren {
+  AuthenticatedAdminAgentsRoute: typeof AuthenticatedAdminAgentsRoute
   AuthenticatedAdminApiKeysRoute: typeof AuthenticatedAdminApiKeysRoute
   AuthenticatedAdminAuditsRoute: typeof AuthenticatedAdminAuditsRoute
   AuthenticatedAdminSettingsRoute: typeof AuthenticatedAdminSettingsRoute
@@ -853,6 +874,7 @@ interface AuthenticatedAdminRouteChildren {
 }
 
 const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
+  AuthenticatedAdminAgentsRoute: AuthenticatedAdminAgentsRoute,
   AuthenticatedAdminApiKeysRoute: AuthenticatedAdminApiKeysRoute,
   AuthenticatedAdminAuditsRoute: AuthenticatedAdminAuditsRoute,
   AuthenticatedAdminSettingsRoute: AuthenticatedAdminSettingsRoute,
