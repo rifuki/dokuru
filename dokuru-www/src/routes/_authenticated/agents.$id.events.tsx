@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Activity, Download, Pause, Play, Trash2, Filter } from "lucide-react";
+import { Activity, Download, Pause, Play, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { useDockerEvents } from "@/hooks/useDockerEvents";
 import { useAgentStore, getAgentToken } from "@/stores/use-agent-store";
@@ -18,94 +18,87 @@ export const Route = createFileRoute("/_authenticated/agents/$id/events")({
   component: EventsPage,
 });
 
+const TYPE_COLORS: Record<string, string> = {
+  container: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+  image:     "bg-purple-500/10 text-purple-400 border-purple-500/20",
+  network:   "bg-green-500/10 text-green-400 border-green-500/20",
+  volume:    "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
+  exec:      "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
+};
+
+const ACTION_COLORS: Record<string, string> = {
+  create:      "bg-emerald-500/10 text-emerald-400",
+  start:       "bg-blue-500/10 text-blue-400",
+  stop:        "bg-yellow-500/10 text-yellow-400",
+  destroy:     "bg-red-500/10 text-red-400",
+  die:         "bg-red-500/10 text-red-400",
+  kill:        "bg-red-500/10 text-red-400",
+  exec_create: "bg-cyan-500/10 text-cyan-400",
+  exec_start:  "bg-cyan-500/10 text-cyan-400",
+  pull:        "bg-indigo-500/10 text-indigo-400",
+  push:        "bg-indigo-500/10 text-indigo-400",
+  tag:         "bg-slate-500/10 text-slate-400",
+};
+
+const ITEMS_PER_PAGE = 25;
+
 function EventsPage() {
   const { id } = Route.useParams();
   const agent = useAgentStore((s) => s.agents.find((a) => a.id === id));
   const [paused, setPaused] = useState(false);
-  const [filter, setFilter] = useState("");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 100;
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [page, setPage] = useState(1);
 
   const agentToken = agent ? (agent.token ?? getAgentToken(agent.id) ?? "") : "";
 
-  const { events, clearEvents, isConnected } = useDockerEvents(
-    agent?.url || "",
+  const { events, clearEvents, isConnected, isConnecting } = useDockerEvents(
+    agent?.url ?? "",
     agentToken,
-    { enabled: !paused && !!agent }
+    { enabled: !paused && !!agent },
   );
 
-  const filteredEvents = useMemo(() => {
-    return events.filter((event) => {
-      const matchesType = typeFilter === "all" || event.type.toLowerCase() === typeFilter;
-      const matchesSearch =
-        !filter ||
-        event.type.toLowerCase().includes(filter.toLowerCase()) ||
-        event.action.toLowerCase().includes(filter.toLowerCase()) ||
-        event.actor.id.toLowerCase().includes(filter.toLowerCase());
-      return matchesType && matchesSearch;
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return events.filter((e) => {
+      if (typeFilter !== "all" && e.type.toLowerCase() !== typeFilter) return false;
+      if (!q) return true;
+      const name = e.actor.attributes.name ?? e.actor.id.slice(0, 12);
+      return (
+        e.type.toLowerCase().includes(q) ||
+        e.action.toLowerCase().includes(q) ||
+        name.toLowerCase().includes(q) ||
+        e.actor.id.toLowerCase().includes(q)
+      );
     });
-  }, [events, filter, typeFilter]);
+  }, [events, search, typeFilter]);
 
-  const paginatedEvents = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return filteredEvents.slice(start, start + itemsPerPage);
-  }, [filteredEvents, currentPage]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(page, totalPages);
+  const pageEvents = filtered.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
 
-  const totalPages = Math.ceil(filteredEvents.length / itemsPerPage);
-
-  const exportToJSON = () => {
-    const data = JSON.stringify(filteredEvents, null, 2);
-    const blob = new Blob([data], { type: "application/json" });
+  const exportJSON = () => {
+    const blob = new Blob([JSON.stringify(filtered, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
-    a.download = `docker-events-${Date.now()}.json`;
-    a.click();
+    a.href = url; a.download = `docker-events-${Date.now()}.json`; a.click();
     URL.revokeObjectURL(url);
   };
 
-  const exportToTXT = () => {
-    const data = filteredEvents
-      .map((e) => {
-        const date = new Date(e.time * 1000).toLocaleString();
-        const name = e.actor.attributes.name || e.actor.id.slice(0, 12);
-        return `${date} ${e.type} ${e.action}: ${name}`;
-      })
-      .join("\n");
-    const blob = new Blob([data], { type: "text/plain" });
+  const exportTXT = () => {
+    const text = filtered.map((e) => {
+      const ts = new Date(e.time * 1000).toLocaleString();
+      const name = e.actor.attributes.name ?? e.actor.id.slice(0, 12);
+      return `${ts}  ${e.type.padEnd(10)} ${e.action.padEnd(15)} ${name}`;
+    }).join("\n");
+    const blob = new Blob([text], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
-    a.download = `docker-events-${Date.now()}.txt`;
-    a.click();
+    a.href = url; a.download = `docker-events-${Date.now()}.txt`; a.click();
     URL.revokeObjectURL(url);
   };
 
-  const getEventColor = (type: string) => {
-    const colors: Record<string, string> = {
-      container: "text-blue-400",
-      image: "text-purple-400",
-      network: "text-green-400",
-      volume: "text-yellow-400",
-      exec: "text-cyan-400",
-    };
-    return colors[type.toLowerCase()] || "text-gray-400";
-  };
-
-  const getActionBadge = (action: string) => {
-    const badges: Record<string, string> = {
-      create: "bg-green-500/10 text-green-400 border-green-500/20",
-      start: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-      stop: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
-      destroy: "bg-red-500/10 text-red-400 border-red-500/20",
-      die: "bg-red-500/10 text-red-400 border-red-500/20",
-      kill: "bg-red-500/10 text-red-400 border-red-500/20",
-      exec_create: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
-      exec_start: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
-    };
-    return badges[action.toLowerCase()] || "bg-muted/20 text-muted-foreground border-border";
-  };
+  const statusLabel = isConnecting ? "Connecting…" : isConnected ? "Live" : "Disconnected";
 
   return (
     <div className="max-w-7xl mx-auto w-full space-y-4">
@@ -114,138 +107,125 @@ function EventsPage() {
         title="Events"
         stats={[
           {
-            value: isConnected ? "Live" : "Disconnected",
+            value: statusLabel,
             label: "real-time stream",
             pulse: isConnected,
           },
         ]}
       />
 
-      {/* Controls */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPaused(!paused)}
-            className="gap-2"
-          >
-            {paused ? <Play className="size-4" /> : <Pause className="size-4" />}
-            {paused ? "Resume" : "Pause"}
-          </Button>
-          <Button variant="outline" size="sm" onClick={clearEvents} className="gap-2">
-            <Trash2 className="size-4" />
-            Clear
-          </Button>
-        </div>
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="outline" size="sm" onClick={() => setPaused((p) => !p)} className="gap-2">
+          {paused ? <Play className="size-4" /> : <Pause className="size-4" />}
+          {paused ? "Resume" : "Pause"}
+        </Button>
+        <Button variant="outline" size="sm" onClick={clearEvents} className="gap-2">
+          <Trash2 className="size-4" /> Clear
+        </Button>
 
-        <div className="flex items-center gap-2 flex-1">
-          <Input
-            placeholder="Search events..."
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            className="max-w-xs"
-          />
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-40">
-              <Filter className="size-4 mr-2" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="container">Container</SelectItem>
-              <SelectItem value="image">Image</SelectItem>
-              <SelectItem value="network">Network</SelectItem>
-              <SelectItem value="volume">Volume</SelectItem>
-              <SelectItem value="exec">Exec</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        <Input
+          placeholder="Search type, action, name…"
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          className="max-w-56"
+        />
 
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={exportToJSON} className="gap-2">
-            <Download className="size-4" />
-            JSON
+        <Select value={typeFilter} onValueChange={(v) => { setTypeFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-36">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Types</SelectItem>
+            <SelectItem value="container">Container</SelectItem>
+            <SelectItem value="image">Image</SelectItem>
+            <SelectItem value="network">Network</SelectItem>
+            <SelectItem value="volume">Volume</SelectItem>
+            <SelectItem value="exec">Exec</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <div className="ml-auto flex gap-2">
+          <Button variant="outline" size="sm" onClick={exportJSON} className="gap-2">
+            <Download className="size-4" /> JSON
           </Button>
-          <Button variant="outline" size="sm" onClick={exportToTXT} className="gap-2">
-            <Download className="size-4" />
-            TXT
+          <Button variant="outline" size="sm" onClick={exportTXT} className="gap-2">
+            <Download className="size-4" /> TXT
           </Button>
         </div>
       </div>
 
-      {/* Events List */}
-      <div className="rounded-2xl border border-border bg-card">
-        <div className="p-4 border-b border-border flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            Showing {paginatedEvents.length} of {filteredEvents.length} events
-          </div>
-          {totalPages > 1 && (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                Page {currentPage} of {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-              >
-                Next
-              </Button>
-            </div>
-          )}
+      {/* Table */}
+      <div className="rounded-2xl border border-border bg-card overflow-hidden">
+        {/* Header */}
+        <div className="grid grid-cols-[180px_90px_160px_1fr] gap-x-4 px-4 py-2 border-b border-border bg-muted/30 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <span>Date</span>
+          <span>Type</span>
+          <span>Action</span>
+          <span>Actor</span>
         </div>
 
+        {/* Rows */}
         <div className="divide-y divide-border">
-          {paginatedEvents.length === 0 ? (
-            <div className="p-16 text-center text-muted-foreground">
-              {paused ? "Stream paused" : "No events yet"}
+          {pageEvents.length === 0 ? (
+            <div className="py-16 text-center text-sm text-muted-foreground">
+              {paused ? "Stream paused — resume to see new events" : isConnecting ? "Connecting to event stream…" : "No events yet"}
             </div>
           ) : (
-            paginatedEvents.map((event, idx) => {
-              const date = new Date(event.time * 1000);
-              const timestamp = date.toLocaleString("en-US", {
-                year: "numeric",
-                month: "2-digit",
-                day: "2-digit",
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit",
+            pageEvents.map((event, idx) => {
+              const ts = new Date(event.time * 1000).toLocaleString("en-US", {
+                month: "2-digit", day: "2-digit", year: "numeric",
+                hour: "2-digit", minute: "2-digit", second: "2-digit",
                 hour12: false,
               });
-              const name = event.actor.attributes.name || event.actor.id.slice(0, 12);
+              const type = event.type.toLowerCase();
+              const action = event.action.toLowerCase();
+              const name = event.actor.attributes.name ?? event.actor.id.slice(0, 12);
+              const image = event.actor.attributes.image;
 
               return (
                 <div
-                  key={`${event.time}-${idx}`}
-                  className="p-3 hover:bg-muted/5 transition-colors font-mono text-sm"
+                  key={`${event.time}-${event.actor.id}-${idx}`}
+                  className="grid grid-cols-[180px_90px_160px_1fr] gap-x-4 px-4 py-2.5 hover:bg-muted/5 transition-colors text-sm font-mono items-center"
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="text-muted-foreground text-xs">{timestamp}</span>
-                    <span className={`font-medium ${getEventColor(event.type)}`}>
-                      {event.type}
-                    </span>
-                    <span
-                      className={`px-2 py-0.5 rounded-md border text-xs ${getActionBadge(
-                        event.action
-                      )}`}
-                    >
-                      {event.action}
-                    </span>
-                    <span className="text-foreground">{name}</span>
+                  <span className="text-xs text-muted-foreground tabular-nums">{ts}</span>
+
+                  <span className={`inline-flex w-fit items-center px-2 py-0.5 rounded border text-[11px] font-semibold uppercase ${TYPE_COLORS[type] ?? "bg-muted/20 text-muted-foreground border-border"}`}>
+                    {event.type}
+                  </span>
+
+                  <span className={`inline-flex w-fit items-center px-2 py-0.5 rounded text-[11px] font-medium ${ACTION_COLORS[action] ?? "bg-muted/10 text-muted-foreground"}`}>
+                    {event.action}
+                  </span>
+
+                  <div className="min-w-0">
+                    <span className="font-semibold text-foreground truncate">{name}</span>
+                    {image && (
+                      <span className="ml-2 text-xs text-muted-foreground truncate">{image}</span>
+                    )}
                   </div>
                 </div>
               );
             })
+          )}
+        </div>
+
+        {/* Footer / Pagination */}
+        <div className="px-4 py-3 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
+          <span>
+            {filtered.length === 0
+              ? "No events"
+              : `Showing ${(safePage - 1) * ITEMS_PER_PAGE + 1}–${Math.min(safePage * ITEMS_PER_PAGE, filtered.length)} of ${filtered.length} events`}
+          </span>
+
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => setPage(1)} disabled={safePage === 1}>«</Button>
+              <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1}>‹</Button>
+              <span className="px-3 tabular-nums">{safePage} / {totalPages}</span>
+              <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}>›</Button>
+              <Button variant="outline" size="sm" className="h-7 px-2" onClick={() => setPage(totalPages)} disabled={safePage === totalPages}>»</Button>
+            </div>
           )}
         </div>
       </div>
