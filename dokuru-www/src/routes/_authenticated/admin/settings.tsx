@@ -462,7 +462,6 @@ function AdminSettingsPage() {
   const effectiveSources = config?.field_sources ?? {};
   const editorContent = localConfigDraft ?? localConfig?.content ?? "";
 
-  const [showSecrets, setShowSecrets] = useState(false);
 
   const updateFieldMutation = useMutation({
     mutationFn: ({ path, value, target }: { path: string[]; value: string; target?: "local" | "secrets" }) =>
