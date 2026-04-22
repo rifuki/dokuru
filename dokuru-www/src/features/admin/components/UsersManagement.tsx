@@ -19,6 +19,7 @@ import type { UserWithTimestamps } from "@/features/admin/types/admin-types";
 import { UsersTable, type DialogType } from "./UsersTable";
 import { Users, UserCheck, UserX, TrendingUp } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { format, isSameDay, subDays } from "date-fns";
 
 export function UsersManagement() {
   const { data: users, isLoading } = useUsersList();
@@ -144,16 +145,21 @@ export function UsersManagement() {
   const pendingUsers = totalUsers - verifiedUsers;
   const adminUsers = users?.filter(u => u.role === "admin").length ?? 0;
 
-  // Mock growth data (last 7 days)
-  const growthData = [
-    { day: "Mon", users: totalUsers - 6 },
-    { day: "Tue", users: totalUsers - 5 },
-    { day: "Wed", users: totalUsers - 3 },
-    { day: "Thu", users: totalUsers - 2 },
-    { day: "Fri", users: totalUsers - 1 },
-    { day: "Sat", users: totalUsers },
-    { day: "Sun", users: totalUsers },
-  ];
+  const growthData = Array.from({ length: 7 }, (_, index) => {
+    const date = subDays(new Date(), 6 - index);
+    const registrations = users?.filter((user) => {
+      if (!user.created_at) return false;
+      return isSameDay(new Date(user.created_at), date);
+    }).length ?? 0;
+
+    return {
+      day: format(date, "EEE"),
+      dateLabel: format(date, "MMM d"),
+      users: registrations,
+    };
+  });
+
+  const recentRegistrations = growthData.reduce((sum, entry) => sum + entry.users, 0);
 
   return (
     <div className="space-y-6">
@@ -213,9 +219,15 @@ export function UsersManagement() {
 
       {/* User Growth Chart */}
       <div className="rounded-xl border bg-card p-6">
-        <div className="mb-4">
-          <h3 className="text-lg font-semibold">User Growth</h3>
-          <p className="text-sm text-muted-foreground">Last 7 days</p>
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold">New Registrations</h3>
+            <p className="text-sm text-muted-foreground">Actual signups in the last 7 days</p>
+          </div>
+          <div className="text-right">
+            <p className="text-2xl font-bold">{recentRegistrations}</p>
+            <p className="text-xs text-muted-foreground">new users</p>
+          </div>
         </div>
         <ResponsiveContainer width="100%" height={200}>
           <LineChart data={growthData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
@@ -239,6 +251,11 @@ export function UsersManagement() {
                 borderRadius: '8px',
                 fontSize: '12px',
                 color: '#fff'
+              }}
+              formatter={(value) => [`${value} user${value === 1 ? "" : "s"}`, "Registrations"]}
+              labelFormatter={(label, payload) => {
+                const point = payload?.[0]?.payload as { dateLabel?: string } | undefined;
+                return point?.dateLabel ?? label;
               }}
             />
             <Line 
