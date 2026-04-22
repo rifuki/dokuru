@@ -47,10 +47,11 @@ export function AdminDashboard() {
   };
 
   const liveOnlineAgents = adminAgents.length > 0 ? liveAgentCounts.online : (stats?.active_agents ?? 0);
+  const recentHeartbeatAgents = adminAgents.length > 0 ? liveAgentCounts.recentHeartbeat : (stats?.active_agents ?? 0);
 
   const statCards = [
     { label: "Total Users", value: stats?.total_users ?? 0, change: `+${stats?.new_users_this_month ?? 0} this month`, icon: Users, href: "/admin/users", color: "text-blue-600 bg-blue-50 dark:bg-blue-950/30" },
-    { label: "Online Agents", value: liveOnlineAgents, change: `${stats?.total_agents ?? 0} registered`, icon: Activity, href: "/admin/agents", color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30" },
+    { label: "Reachable Agents", value: liveOnlineAgents, change: `${recentHeartbeatAgents} recent heartbeat`, icon: Activity, href: "/admin/agents", color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30" },
     { label: "Total Audits", value: stats?.total_audits ?? 0, change: `${stats?.audits_this_month ?? 0} this month`, icon: Shield, href: "/admin/audits", color: "text-purple-600 bg-purple-50 dark:bg-purple-950/30" },
     { label: "Security Score", value: `${Math.round(stats?.average_score ?? 0)}%`, change: "Average", icon: TrendingUp, color: "text-amber-600 bg-amber-50 dark:bg-amber-950/30" },
   ];

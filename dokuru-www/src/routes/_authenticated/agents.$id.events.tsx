@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Activity, Download, Pause, Play, Trash2, Filter } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { useDockerEvents } from "@/hooks/useDockerEvents";
-import { useAgentStore } from "@/stores/use-agent-store";
+import { useAgentStore, getAgentToken } from "@/stores/use-agent-store";
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,8 +27,11 @@ function EventsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 100;
 
+  const agentToken = agent ? (agent.token ?? getAgentToken(agent.id) ?? "") : "";
+
   const { events, clearEvents, isConnected } = useDockerEvents(
     agent?.url || "",
+    agentToken,
     { enabled: !paused && !!agent }
   );
 

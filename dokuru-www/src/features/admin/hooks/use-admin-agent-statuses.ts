@@ -5,6 +5,11 @@ export type AdminAgentResolvedStatus = "online" | "offline" | "never" | "stale";
 
 const RELAY_ONLINE_WINDOW_MS = 5 * 60 * 1000;
 
+export function hasRecentHeartbeat(lastSeen: string | null) {
+  if (!lastSeen) return false;
+  return Date.now() - new Date(lastSeen).getTime() <= RELAY_ONLINE_WINDOW_MS;
+}
+
 export function useAdminAgentStatuses(agents: AdminAgent[]) {
   const signature = agents
     .map((agent) => `${agent.id}:${agent.url}:${agent.access_mode}:${agent.last_seen ?? "none"}`)
@@ -59,9 +64,12 @@ export function useAdminAgentStatuses(agents: AdminAgent[]) {
     (acc, agent) => {
       const status = statuses[agent.id] ?? (agent.last_seen ? "stale" : "never");
       acc[status] += 1;
+      if (hasRecentHeartbeat(agent.last_seen)) {
+        acc.recentHeartbeat += 1;
+      }
       return acc;
     },
-    { online: 0, offline: 0, never: 0, stale: 0 }
+    { online: 0, offline: 0, never: 0, stale: 0, recentHeartbeat: 0 }
   );
 
   return {

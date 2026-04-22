@@ -7,9 +7,10 @@ use axum::{
     routing::get,
 };
 use bollard::system::EventsOptions;
-use futures::StreamExt;
+use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use tokio::time::{Duration, interval};
 
 use super::get_docker_client;
 
@@ -96,41 +97,61 @@ async fn events_stream(ws: WebSocketUpgrade) -> Response {
     ws.on_upgrade(handle_events_stream)
 }
 
-async fn handle_events_stream(mut ws: WebSocket) {
+async fn handle_events_stream(ws: WebSocket) {
     let Ok(docker) = get_docker_client() else {
         return;
     };
 
-    let mut stream = docker.events(None::<EventsOptions<String>>);
+    let (mut sender, mut receiver) = ws.split();
+    let mut docker_stream = docker.events(None::<EventsOptions<String>>);
+    // 15 s keepalive — matches /ws handler, stays under Cloudflare Tunnel idle timeout.
+    let mut ticker = interval(Duration::from_secs(15));
+    ticker.tick().await; // skip first immediate tick
 
-    while let Some(event) = stream.next().await {
-        if let Ok(evt) = event {
-            let event_type = evt.typ.map(|t| format!("{t:?}")).unwrap_or_default();
-            let actor_id = evt
-                .actor
-                .as_ref()
-                .and_then(|a| a.id.clone())
-                .unwrap_or_default();
-            let attributes = evt
-                .actor
-                .as_ref()
-                .and_then(|a| a.attributes.clone())
-                .unwrap_or_else(HashMap::new);
+    loop {
+        tokio::select! {
+            _ = ticker.tick() => {
+                if sender.send(Message::Ping(vec![].into())).await.is_err() {
+                    break;
+                }
+            }
+            msg = receiver.next() => {
+                match msg {
+                    Some(Ok(Message::Close(_))) | None => break,
+                    Some(Err(_)) => break,
+                    _ => {} // pong or other — ignore
+                }
+            }
+            event = docker_stream.next() => {
+                let Some(Ok(evt)) = event else { break };
 
-            let response = EventResponse {
-                r#type: event_type,
-                action: evt.action.unwrap_or_default(),
-                actor: EventActor {
-                    id: actor_id,
-                    attributes,
-                },
-                time: evt.time.unwrap_or_default(),
-            };
+                let event_type = evt.typ.map(|t| format!("{t:?}")).unwrap_or_default();
+                let actor_id = evt
+                    .actor
+                    .as_ref()
+                    .and_then(|a| a.id.clone())
+                    .unwrap_or_default();
+                let attributes = evt
+                    .actor
+                    .as_ref()
+                    .and_then(|a| a.attributes.clone())
+                    .unwrap_or_else(HashMap::new);
 
-            if let Ok(json) = serde_json::to_string(&response)
-                && ws.send(Message::Text(json.into())).await.is_err()
-            {
-                break;
+                let response = EventResponse {
+                    r#type: event_type,
+                    action: evt.action.unwrap_or_default(),
+                    actor: EventActor {
+                        id: actor_id,
+                        attributes,
+                    },
+                    time: evt.time.unwrap_or_default(),
+                };
+
+                if let Ok(json) = serde_json::to_string(&response) {
+                    if sender.send(Message::Text(json.into())).await.is_err() {
+                        break;
+                    }
+                }
             }
         }
     }

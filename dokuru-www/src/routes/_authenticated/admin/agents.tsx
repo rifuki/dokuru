@@ -5,6 +5,7 @@ import { formatDistanceToNow } from "date-fns";
 import { adminService } from "@/lib/api/services/admin-services";
 import {
   type AdminAgentResolvedStatus,
+  hasRecentHeartbeat,
   useAdminAgentStatuses,
 } from "@/features/admin/hooks/use-admin-agent-statuses";
 import { DataTable } from "@/components/ui/data-table";
@@ -108,8 +109,8 @@ function AdminAgentsPage() {
     refetch: refetchStatuses,
   } = useAdminAgentStatuses(agents);
   const totalAgents = data?.total ?? 0;
-  const onlineAgents = counts.online;
-  const relayAgents = agents.filter((agent) => agent.access_mode === "relay").length;
+  const reachableAgents = counts.online;
+  const recentHeartbeatAgents = counts.recentHeartbeat;
   const staleAgents = counts.stale + counts.offline;
 
   const columns: ColumnDef<AdminAgent>[] = [
@@ -144,7 +145,7 @@ function AdminAgentsPage() {
     {
       id: "status",
       accessorFn: (row) => resolveAgentStatus(row, liveStatuses[row.id]),
-      header: "Status",
+      header: "Reachable",
       cell: ({ row }) => <StatusBadge status={resolveAgentStatus(row.original, liveStatuses[row.original.id])} />,
     },
     {
@@ -159,13 +160,13 @@ function AdminAgentsPage() {
     {
       id: "lastSeenAt",
       accessorFn: (row) => row.last_seen ?? "",
-      header: "Last Seen",
+      header: "Last Heartbeat",
       cell: ({ row }) => {
         const agent = row.original;
         const resolvedStatus = resolveAgentStatus(agent, liveStatuses[agent.id]);
 
-        if (resolvedStatus === "online") {
-          return <span className="text-sm text-emerald-500">Live now</span>;
+        if (hasRecentHeartbeat(agent.last_seen)) {
+          return <span className="text-sm text-emerald-500">Recent</span>;
         }
 
         if (!agent.last_seen) {
@@ -193,6 +194,9 @@ function AdminAgentsPage() {
           <p className="text-muted-foreground">
             Monitor every registered agent across all user accounts with live reachability checks.
           </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Reachable = browser can hit the agent now. Heartbeat = server last saw the agent recently.
+          </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => void handleRefresh()} disabled={isFetching || isCheckingStatuses}>
           <RefreshCw className={`mr-2 h-4 w-4 ${isFetching || isCheckingStatuses ? "animate-spin" : ""}`} />
@@ -210,17 +214,17 @@ function AdminAgentsPage() {
           iconClassName="text-blue-600"
         />
         <SummaryCard
-          title="Online Now"
-          value={onlineAgents}
+          title="Reachable Now"
+          value={reachableAgents}
           description="Live health check or active relay presence"
           icon={RadioTower}
           iconWrapClassName="bg-emerald-100 dark:bg-emerald-950/30"
           iconClassName="text-emerald-600"
         />
         <SummaryCard
-          title="Relay Agents"
-          value={relayAgents}
-          description="Connected through Dokuru relay"
+          title="Recent Heartbeat"
+          value={recentHeartbeatAgents}
+          description="Server heartbeat in the last 5 minutes"
           icon={Link2}
           iconWrapClassName="bg-amber-100 dark:bg-amber-950/30"
           iconClassName="text-amber-600"

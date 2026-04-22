@@ -16,12 +16,13 @@ interface UseDockerEventsOptions {
   maxEvents?: number;
 }
 
-export function useDockerEvents(agentUrl: string, options: UseDockerEventsOptions = {}) {
+export function useDockerEvents(agentUrl: string, agentToken: string, options: UseDockerEventsOptions = {}) {
   const { enabled = true, maxEvents = 1000 } = options;
   const [events, setEvents] = useState<DockerEvent[]>([]);
   const eventsRef = useRef<DockerEvent[]>([]);
 
-  const wsUrl = agentUrl.replace(/^http/, "ws") + "/docker/events/stream";
+  const wsUrl = agentUrl.replace(/^http/, "ws") + "/docker/events/stream" +
+    (agentToken ? `?token=${encodeURIComponent(agentToken)}` : "");
 
   const { lastMessage, readyState } = useWebSocket(
     wsUrl,
