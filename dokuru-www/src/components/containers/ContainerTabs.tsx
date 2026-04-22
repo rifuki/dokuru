@@ -11,6 +11,7 @@ import {
   Cpu,
   MemoryStick,
   Plug,
+  PowerOff,
   ChevronDown,
   Loader2,
 } from "lucide-react";
@@ -476,18 +477,22 @@ export function ContainerTerminal({
     };
   }, []);
 
-  const statusLabel = {
-    idle:         "Not connected",
-    connecting:   "Connecting…",
-    connected:    "Connected",
-    disconnected: "Disconnected",
-    error:        "Error",
-  }[status];
+  const disconnect = useCallback(() => {
+    // Update status immediately — don't rely on onclose firing
+    setStatus("disconnected");
+    termRef.current?.write("\r\n\x1b[33m⏻ Disconnected\x1b[0m\r\n");
+    if (wsRef.current) {
+      wsRef.current.onclose = null; // prevent double-fire
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+  }, []);
 
-  const isConnected  = status === "connected";
-  const isConnecting = status === "connecting";
-  const isDetecting  = active && detectedShell === null;
-  const shellLabel   = selectedShell.split("/").pop()!;
+  const isConnected    = status === "connected";
+  const isConnecting   = status === "connecting";
+  const isDisconnected = status === "disconnected" || status === "error";
+  const isDetecting    = active && detectedShell === null;
+  const shellLabel     = selectedShell.split("/").pop()!;
 
   return (
     <div className={`rounded-xl overflow-hidden border border-border shadow-lg ${!active ? "hidden" : ""}`}>
@@ -497,7 +502,7 @@ export function ContainerTerminal({
 
         {/* Status accent line at top */}
         <div className={`absolute inset-x-0 top-0 h-px transition-colors duration-500 ${
-          isConnected  ? "bg-gradient-to-r from-transparent via-emerald-500/40 to-transparent"
+          isConnected    ? "bg-gradient-to-r from-transparent via-emerald-500/40 to-transparent"
           : isConnecting ? "bg-gradient-to-r from-transparent via-primary/30 to-transparent"
           : "bg-border"
         }`} />
@@ -572,45 +577,70 @@ export function ContainerTerminal({
 
         <div className="flex-1" />
 
-        {/* Status pill */}
-        <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-mono font-medium shrink-0 transition-all duration-300 ${
-          isConnected
-            ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-500"
-            : isConnecting
-            ? "bg-primary/10 border-primary/25 text-primary"
-            : "bg-muted border-border text-muted-foreground"
-        }`}>
-          {isConnecting
-            ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
-            : <span className="h-1.5 w-1.5 rounded-full bg-current shrink-0" />
-          }
-          {statusLabel}
-        </div>
+        {/* Status indicator — disconnected only shown if we've had a session before */}
+        {(isConnected || isConnecting || (isDisconnected && hasConnectedBefore)) && (
+          <div className={`flex items-center gap-1.5 text-[11px] font-mono font-medium uppercase tracking-wide shrink-0 transition-colors duration-300 ${
+            isConnected    ? "text-emerald-500"
+            : isConnecting ? "text-primary"
+            : "text-destructive"
+          }`}>
+            {isConnecting
+              ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
+              : <span className={`h-1.5 w-1.5 rounded-full bg-current shrink-0 ${isConnected ? "animate-pulse" : ""}`} />
+            }
+            {isConnected ? "Connected" : isConnecting ? "Connecting" : "Disconnected"}
+          </div>
+        )}
 
-        {/* Connect / Reconnect button */}
-        <button
-          onClick={() => connect()}
-          disabled={isConnecting}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-mono font-medium transition-all shrink-0 border ${
-            isConnecting
-              ? "bg-muted border-border text-muted-foreground cursor-not-allowed"
-              : hasConnectedBefore
-              ? "bg-muted border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground hover:border-border"
-              : "bg-primary/15 border-primary/30 text-primary hover:bg-primary/25"
-          }`}
-        >
-          {isConnecting
-            ? <RotateCw className="h-3 w-3 animate-spin" />
-            : hasConnectedBefore
-            ? <RotateCw className="h-3 w-3" />
-            : <Plug className="h-3 w-3" />
-          }
-          {hasConnectedBefore ? "Reconnect" : "Connect"}
-        </button>
+        {/* Actions */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Disconnect button — only when connected, labeled so it's findable */}
+          {isConnected && (
+            <button
+              onClick={disconnect}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-mono font-medium border border-border/60 text-muted-foreground hover:text-destructive hover:border-destructive/40 hover:bg-destructive/10 transition-all"
+            >
+              <PowerOff className="h-3 w-3" />
+              Disconnect
+            </button>
+          )}
+
+          {/* Connect / Reconnect button — hidden when connected */}
+          {!isConnected && (
+            <button
+              onClick={() => connect()}
+              disabled={isConnecting}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-mono font-medium transition-all border ${
+                isConnecting
+                  ? "bg-muted border-border text-muted-foreground cursor-not-allowed"
+                  : hasConnectedBefore
+                  ? "bg-muted border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  : "bg-primary/15 border-primary/30 text-primary hover:bg-primary/25"
+              }`}
+            >
+              {isConnecting
+                ? <RotateCw className="h-3 w-3 animate-spin" />
+                : hasConnectedBefore
+                ? <RotateCw className="h-3 w-3" />
+                : <Plug className="h-3 w-3" />
+              }
+              {hasConnectedBefore ? "Reconnect" : "Connect"}
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* ── Terminal body ──────────────────────────────────────────────────────── */}
-      <div ref={wrapperRef} className="h-96 bg-background pt-2 px-1" />
+      {/* ── Terminal body ──────────────────────────────────────────────────────────
+          Outer div owns the padding + background. Inner div (wrapperRef) fills
+          the *content area* via height:100% — so FitAddon measures the right
+          dimensions (padding pixels are NOT counted as usable rows).
+          Both share #0d1117 so the padding gap is seamless.                      */}
+      <div
+        className="h-96"
+        style={{ background: "#0d1117", padding: "10px 6px 4px", boxSizing: "border-box", position: "relative" }}
+      >
+        <div ref={wrapperRef} style={{ height: "100%", width: "100%", overflow: "hidden" }} />
+      </div>
     </div>
   );
 }
