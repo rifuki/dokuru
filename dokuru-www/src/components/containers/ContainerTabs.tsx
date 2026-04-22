@@ -468,6 +468,7 @@ export function ContainerTerminal({
     term.loadAddon(fit);
     term.open(wrapperRef.current);
     fit.fit();
+    term.clear(); // Clear any previous content
     termRef.current = term;
     fitRef.current = fit;
 
@@ -553,6 +554,7 @@ export function ContainerTerminal({
       term.loadAddon(fit);
       term.open(wrapperRef.current);
       fit.fit();
+      term.clear(); // Clear any previous content
       termRef.current = term;
       fitRef.current = fit;
 
