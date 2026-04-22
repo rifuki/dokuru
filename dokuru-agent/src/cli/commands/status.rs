@@ -78,10 +78,18 @@ pub fn run_status() -> Result<()> {
         "unreachable"
     };
 
+    // Overall health check
+    let overall_healthy = api_healthy && (!access_mode.contains("Cloudflare") || tunnel_healthy);
+
     note(
         "Status",
         format!(
-            "Version   {version}\nService   {service_status}\nDocker    {docker_status}\nAPI       {api_status}"
+            "Version   {version}\nService   {service_status}\nDocker    {docker_status}\nAPI       {api_status}\nOverall   {}",
+            if overall_healthy {
+                "✓ Healthy"
+            } else {
+                "✗ Issues detected"
+            }
         ),
     )?;
 
@@ -90,8 +98,10 @@ pub fn run_status() -> Result<()> {
         if tunnel_healthy {
             "✓ Tunnel healthy"
         } else {
-            "✗ Tunnel unreachable (may be expired)"
+            "✗ Tunnel DOWN - Cannot reach endpoint"
         }
+    } else if access_mode.contains("Relay") {
+        "WebSocket relay mode"
     } else {
         "Direct mode"
     };
@@ -102,8 +112,8 @@ pub fn run_status() -> Result<()> {
     )?;
 
     if !tunnel_healthy && access_mode.contains("Cloudflare") {
-        log::warning(
-            "Tunnel URL may be expired. Run: sudo dokuru configure → Access → Refresh Tunnel URL",
+        log::error(
+            "❌ Cloudflare Tunnel is DOWN! Agent is NOT accessible from outside.\n   → Restart tunnel: sudo systemctl restart dokuru-tunnel\n   → Or switch to Relay mode: sudo dokuru configure",
         )?;
     }
 
