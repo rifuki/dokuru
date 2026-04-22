@@ -13,6 +13,8 @@ interface AgentState {
   isLoading: boolean;
   error: string | null;
   agentOnlineStatus: Record<string, boolean>;
+  agentConnectingStatus: Record<string, boolean>;
+  agentConnectionError: Record<string, string | null>;
   agentInfos: Record<string, AgentInfoEntry>;
 
   fetchAgents: () => Promise<void>;
@@ -21,6 +23,8 @@ interface AgentState {
   deleteAgent: (id: string) => Promise<void>;
   clearError: () => void;
   setAgentOnline: (id: string, online: boolean) => void;
+  setAgentConnecting: (id: string, connecting: boolean) => void;
+  setAgentConnectionError: (id: string, error: string | null) => void;
   setAgentInfo: (id: string, info: DockerInfo | null) => void;
   setAgentInfoLoading: (id: string, loading: boolean) => void;
 }
@@ -30,6 +34,8 @@ export const useAgentStore = create<AgentState>((set) => ({
   isLoading: false,
   error: null,
   agentOnlineStatus: {},
+  agentConnectingStatus: {},
+  agentConnectionError: {},
   agentInfos: {},
 
   fetchAgents: async () => {
@@ -46,12 +52,11 @@ export const useAgentStore = create<AgentState>((set) => ({
     set({ isLoading: true, error: null });
     try {
       const agent = await agentApi.create(dto);
-      
-      // Save token to localStorage (only returned on create)
+
       if (agent.token) {
         localStorage.setItem(`agent_token_${agent.id}`, agent.token);
       }
-      
+
       set((state) => ({
         agents: [agent, ...state.agents],
         isLoading: false,
@@ -83,12 +88,21 @@ export const useAgentStore = create<AgentState>((set) => ({
   },
 
   clearError: () => set({ error: null }),
+
   setAgentOnline: (id, online) =>
     set((state) => ({ agentOnlineStatus: { ...state.agentOnlineStatus, [id]: online } })),
+
+  setAgentConnecting: (id, connecting) =>
+    set((state) => ({ agentConnectingStatus: { ...state.agentConnectingStatus, [id]: connecting } })),
+
+  setAgentConnectionError: (id, error) =>
+    set((state) => ({ agentConnectionError: { ...state.agentConnectionError, [id]: error } })),
+
   setAgentInfo: (id, info) =>
     set((state) => ({
       agentInfos: { ...state.agentInfos, [id]: { info, loading: false } },
     })),
+
   setAgentInfoLoading: (id, loading) =>
     set((state) => ({
       agentInfos: {

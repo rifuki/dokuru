@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useAgentStore, getAgentToken } from "@/stores/use-agent-store";
+import { useAgentStore, getAgentToken, type AgentInfoEntry } from "@/stores/use-agent-store";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, RefreshCw, Container, Box, HardDrive, Search, ChevronDown, ArrowUpDown, Edit, Trash2, Cpu, Server, Eye, EyeOff, Cloud, Globe, Link2 } from "lucide-react";
+import { Plus, RefreshCw, Container, Box, HardDrive, Search, ChevronDown, ArrowUpDown, Edit, Trash2, Cpu, Server, Eye, EyeOff, Cloud, Globe, Link2, Loader2, WifiOff, AlertTriangle } from "lucide-react";
 import { AddAgentModal } from "@/components/agents/AddAgentModal";
 import { agentDirectApi, type DockerInfo } from "@/lib/api/agent-direct";
 import { agentApi } from "@/lib/api/agent";
@@ -29,17 +29,25 @@ export const Route = createFileRoute("/_authenticated/agents/")({
 
 type AgentWithInfo = {
   agent: Agent;
-  info: DockerInfo | null;
-  loading: boolean;
-  wsOnline: boolean | undefined; // undefined = not yet determined
+  infoEntry: AgentInfoEntry | undefined;
+  wsOnline: boolean | undefined;  // undefined = never connected yet
+  isConnecting: boolean;          // WS is in connecting state
+  connectionError: string | null; // last WS close reason
 };
 
 function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick: () => void; onUpdated: (agent: Agent) => void }) {
-  const { agent, info, loading, wsOnline } = data;
+  const { agent, infoEntry, wsOnline, isConnecting, connectionError } = data;
   const { deleteAgent } = useAgentStore();
-  // Agent is considered "online" only when: WS is up AND we have fresh info.
-  // wsOnline === undefined means still connecting (treat as not-yet-known).
-  const isOnline = !loading && info !== null && wsOnline === true;
+  const info = infoEntry?.info ?? null;
+  const infoLoading = infoEntry?.loading ?? true;
+
+  // Tri-state connection:
+  //   isConnecting = WS is in the process of connecting (blink blue)
+  //   isOnline     = WS successfully connected
+  //   isOffline    = WS disconnected/failed
+  const isOnline = !isConnecting && wsOnline === true;
+  const isOffline = !isConnecting && wsOnline === false;
+
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editName, setEditName] = useState(agent.name);
@@ -89,13 +97,15 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
         onClick={onClick}
       >
         <div className="p-4 flex items-center gap-6">
-          <div className="w-14 flex items-center justify-center shrink-0">
+          <div className="w-14 flex items-center justify-center shrink-0 relative">
             <img
               src="/docker.svg"
               alt="Docker"
-              className="w-14 h-14 transition-all duration-300"
+              className={`w-14 h-14 transition-all duration-300 ${isConnecting ? "animate-pulse" : ""}`}
               style={
-                !loading && !isOnline
+                isConnecting
+                  ? { filter: "brightness(0) saturate(100%) invert(47%) sepia(93%) saturate(2000%) hue-rotate(194deg) brightness(105%) contrast(101%)" }
+                  : isOffline
                   ? { filter: "brightness(0) saturate(100%) invert(27%) sepia(51%) saturate(2878%) hue-rotate(346deg) brightness(104%) contrast(97%)" }
                   : undefined
               }
@@ -106,12 +116,20 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
             <div className="flex items-center gap-3 flex-wrap">
               <span className="text-base font-bold text-foreground tracking-tight">{agent.name}</span>
               <span
-                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-[11px] font-semibold uppercase ${isOnline
-                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-                  : "border-gray-500/30 bg-gray-500/10 text-gray-400"
-                  }`}
+                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-[11px] font-semibold uppercase ${
+                  isConnecting
+                    ? "border-blue-500/30 bg-blue-500/10 text-blue-400"
+                    : isOnline
+                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                    : "border-red-500/30 bg-red-500/10 text-red-400"
+                }`}
               >
-                {isOnline ? "●" : "○"} {isOnline ? "UP" : "DOWN"}
+                {isConnecting
+                  ? <><Loader2 className="w-2.5 h-2.5 animate-spin" /> CONNECTING</>
+                  : isOnline
+                  ? <>● UP</>
+                  : <>○ DOWN</>
+                }
               </span>
               <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-[11px] font-medium border-blue-500/30 bg-blue-500/10 text-blue-400">
                 {agent.access_mode === 'cloudflare' && <><Cloud className="h-3 w-3" /> Cloudflare</>}
@@ -129,13 +147,18 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
               </span>
             </div>
 
-            {loading ? (
+            {isConnecting && !info ? (
+              <div className="flex items-center gap-2 mt-3">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-400" />
+                <span className="text-[12px] text-blue-400/80">Connecting to agent...</span>
+              </div>
+            ) : infoLoading && !info ? (
               <div className="flex items-center gap-2 mt-3">
                 <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-miku-primary" />
-                <span className="text-[12px] text-muted-foreground/70">Loading...</span>
+                <span className="text-[12px] text-muted-foreground/70">Fetching Docker info...</span>
               </div>
             ) : info ? (
-              // Show last-known stats even when WS is temporarily offline.
+              // Show last-known stats, dimmed when WS is temporarily offline.
               <div className={`flex items-center mt-3 text-[12px] font-medium flex-wrap divide-x divide-border transition-opacity ${!isOnline ? "opacity-50" : "text-muted-foreground"}`}>
                 <div className="flex items-center gap-1.5 pr-3">
                   <Container className="w-3.5 h-3.5" />
@@ -168,8 +191,18 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
                   <span>{(info.memory_total / 1024 / 1024 / 1024).toFixed(0)} GB RAM</span>
                 </div>
               </div>
+            ) : isOffline ? (
+              <div className="flex items-center gap-2 mt-3">
+                <WifiOff className="h-3.5 w-3.5 text-red-400/70" />
+                <span className="text-[12px] text-red-400/70">
+                  {connectionError ?? "Unable to connect"}
+                </span>
+              </div>
             ) : (
-              <p className="text-[12px] text-muted-foreground/50 mt-3">Unable to connect</p>
+              <div className="flex items-center gap-2 mt-3">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-400/70" />
+                <span className="text-[12px] text-amber-400/70">Docker info unavailable</span>
+              </div>
             )}
           </div>
         </div>
@@ -178,19 +211,23 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
       <div className="w-[180px] border-l border-border flex flex-col justify-center gap-2 px-4 py-3 bg-muted/30">
         <button
           className={`flex items-center justify-center gap-2 h-9 w-full rounded text-sm font-semibold transition-all ${
-            loading
+            isConnecting
               ? "bg-blue-500/10 border border-blue-500/30 text-blue-400 cursor-wait"
               : isOnline
               ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 ring-1 ring-emerald-500/20 cursor-pointer"
-              : "bg-gray-500/10 border border-gray-500/30 text-gray-400 cursor-not-allowed"
+              : "bg-red-500/10 border border-red-500/30 text-red-400 cursor-not-allowed"
           }`}
           onClick={isOnline ? onClick : undefined}
-          disabled={!isOnline || loading}
+          disabled={!isOnline || isConnecting}
         >
-          <span className={`w-2 h-2 rounded-full ${
-            loading ? "bg-blue-400 animate-pulse" : isOnline ? "bg-emerald-400 animate-pulse" : "bg-gray-400"
-          }`}></span>
-          {loading ? "Connecting..." : isOnline ? "Connected" : "Disconnected"}
+          {isConnecting ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <span className={`w-2 h-2 rounded-full ${
+              isOnline ? "bg-emerald-400 animate-pulse" : "bg-red-400"
+            }`} />
+          )}
+          {isConnecting ? "Connecting..." : isOnline ? "Connected" : "Disconnected"}
         </button>
       </div>
 
@@ -290,7 +327,7 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
 
 function AgentsList() {
   const navigate = useNavigate();
-  const { agents, isLoading, fetchAgents, updateAgent, agentInfos, setAgentInfo, setAgentInfoLoading, agentOnlineStatus } = useAgentStore();
+  const { agents, isLoading, fetchAgents, updateAgent, agentInfos, setAgentInfo, setAgentInfoLoading, agentOnlineStatus, agentConnectingStatus, agentConnectionError } = useAgentStore();
   const [localAgents, setLocalAgents] = useState<Agent[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
@@ -433,9 +470,10 @@ function AgentsList() {
                 key={agent.id}
                 data={{
                   agent,
-                  info: agentInfos[agent.id]?.info ?? null,
-                  loading: agentInfos[agent.id]?.loading ?? true,
+                  infoEntry: agentInfos[agent.id],
                   wsOnline: agentOnlineStatus[agent.id],
+                  isConnecting: !!agentConnectingStatus[agent.id],
+                  connectionError: agentConnectionError[agent.id] ?? null,
                 }}
                 onClick={() => navigate({ to: `/agents/${agent.id}` })}
                 onUpdated={handleAgentUpdated}

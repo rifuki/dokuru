@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/collapsible";
 import { useAuthUser } from "@/stores/use-auth-store";
 import { useAgentStore } from "@/stores/use-agent-store";
+import { Loader2 } from "lucide-react";
 import { useRealtimeAgents } from "@/hooks/useRealtimeAgents";
 import { useAgentConnections } from "@/hooks/useAgentConnections";
 
@@ -60,7 +61,7 @@ export function AppSidebar() {
   const user = useAuthUser();
   const isAdmin = user?.role === "admin";
   const location = useLocation();
-  const { agents, fetchAgents, agentOnlineStatus, setAgentOnline } = useAgentStore();
+  const { agents, fetchAgents, agentOnlineStatus, agentConnectingStatus, setAgentOnline } = useAgentStore();
   const { state: sidebarState } = useSidebar();
   const isIconMode = sidebarState === "collapsed";
   const [openAgents, setOpenAgents] = useState<Record<string, boolean>>({});
@@ -214,9 +215,17 @@ export function AppSidebar() {
             <div className={isIconMode ? "flex flex-col gap-1.5" : "px-2 flex flex-col gap-1.5"}>
               {agents.map((agent) => {
                 const isAgentActive = location.pathname.startsWith(`/agents/${agent.id}`);
-                const isOnline = !!agentOnlineStatus[agent.id];
+                const isConnecting = !!agentConnectingStatus[agent.id];
+                const isOnline = !isConnecting && agentOnlineStatus[agent.id] === true;
+                const isOffline = !isConnecting && agentOnlineStatus[agent.id] === false;
                 const AgentIcon = isOnline ? Bot : BotOff;
-                const iconColor = isOnline ? "text-green-500" : "text-red-500";
+                const iconColor = isConnecting
+                  ? "text-blue-400"
+                  : isOnline
+                  ? "text-green-500"
+                  : isOffline
+                  ? "text-red-500"
+                  : "text-muted-foreground";
                 return (
                   <Collapsible
                     key={agent.id}
@@ -239,7 +248,10 @@ export function AppSidebar() {
                         <CollapsibleTrigger asChild>
                           {isIconMode ? (
                             <SidebarMenuButton tooltip={agent.name} isActive={isAgentActive}>
-                              <AgentIcon className={`size-5 ${iconColor}`} />
+                              {isConnecting
+                                ? <Loader2 className="size-5 text-blue-400 animate-spin" />
+                                : <AgentIcon className={`size-5 ${iconColor}`} />
+                              }
                             </SidebarMenuButton>
                           ) : (
                             <button
@@ -250,7 +262,10 @@ export function AppSidebar() {
                                   : "text-sidebar-foreground hover:bg-sidebar-accent/40"
                               }`}
                             >
-                              <AgentIcon className={`size-5 shrink-0 ${iconColor}`} />
+                              {isConnecting
+                                ? <Loader2 className="size-5 shrink-0 text-blue-400 animate-spin" />
+                                : <AgentIcon className={`size-5 shrink-0 ${iconColor}`} />
+                              }
                               <span className="flex-1 truncate text-left">{agent.name}</span>
                               <ChevronDown
                                 className={`size-5 shrink-0 text-sidebar-foreground/50 transition-transform duration-200 ${

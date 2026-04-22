@@ -8,41 +8,37 @@ const RECONNECT_MAX_MS  = 30_000;
 /**
  * Maintains one WebSocket connection per non-relay agent.
  *
- * On connect  → marks agent online  immediately.
- * On close    → marks agent offline immediately, schedules reconnect
- *               with exponential backoff (2s → 4s → 8s … capped at 30s).
+ * On connecting → marks agent as "connecting" (blinking blue state).
+ * On connect   → marks agent online, clears connecting state.
+ * On close     → marks agent offline, clears connecting state,
+ *                schedules reconnect with exponential backoff (2s → 4s → … → 30s).
  *
  * Relay agents are excluded — their status comes from the backend WS
  * (agent:connected / agent:disconnected events in useRealtimeAgents).
- *
- * Auth: token is passed as ?token= query param because browsers cannot
- * set the Authorization header during a WebSocket upgrade.
  */
 export function useAgentConnections(agents: Agent[]) {
-    const { setAgentOnline } = useAgentStore();
+    const { setAgentOnline, setAgentConnecting, setAgentConnectionError } = useAgentStore();
 
-    // Use refs so closures always see current values without re-running effect.
-    const setOnlineRef   = useRef(setAgentOnline);
-    setOnlineRef.current = setAgentOnline;
+    const setOnlineRef      = useRef(setAgentOnline);
+    const setConnectingRef  = useRef(setAgentConnecting);
+    const setConnErrRef     = useRef(setAgentConnectionError);
+    setOnlineRef.current     = setAgentOnline;
+    setConnectingRef.current = setAgentConnecting;
+    setConnErrRef.current    = setAgentConnectionError;
 
     const wsMap      = useRef(new Map<string, WebSocket>());
     const timerMap   = useRef(new Map<string, ReturnType<typeof setTimeout>>());
     const attemptMap = useRef(new Map<string, number>());
 
-    // Keep a stable ref to the agents list for use inside ws callbacks.
     const agentsRef   = useRef(agents);
     agentsRef.current = agents;
 
-    // Sync connections whenever the set of agents (or their URLs) changes.
-    // Does NOT close existing connections — only adds new ones and removes
-    // stale ones.  Unmount cleanup is handled by the effect below.
     useEffect(() => {
         const eligible = agents.filter(
             (a) => a.access_mode !== "relay" && a.url && a.url !== "relay",
         );
         const eligibleIds = new Set(eligible.map((a) => a.id));
 
-        // Tear down connections for agents that were removed or whose URL changed.
         for (const [id, ws] of wsMap.current) {
             const agent = eligible.find((a) => a.id === id);
             const expectedWsUrl = agent
@@ -51,14 +47,14 @@ export function useAgentConnections(agents: Agent[]) {
             const urlChanged = expectedWsUrl && !ws.url.startsWith(expectedWsUrl);
 
             if (!eligibleIds.has(id) || urlChanged) {
-                ws.onclose = null; // prevent reconnect loop
+                ws.onclose = null;
                 ws.close();
                 wsMap.current.delete(id);
                 clearReconnect(id);
+                setConnectingRef.current(id, false);
             }
         }
 
-        // Open connections for new agents (existing open/connecting ones are skipped).
         for (const agent of eligible) {
             const existing = wsMap.current.get(agent.id);
             if (existing && existing.readyState <= WebSocket.OPEN) continue;
@@ -67,12 +63,12 @@ export function useAgentConnections(agents: Agent[]) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [agents.map((a) => a.id + a.url).join(",")]);
 
-    // Close all connections only when the hook unmounts (sidebar leaves DOM).
     useEffect(() => {
         return () => {
-            for (const ws of wsMap.current.values()) {
+            for (const [id, ws] of wsMap.current) {
                 ws.onclose = null;
                 ws.close();
+                setConnectingRef.current(id, false);
             }
             for (const timer of timerMap.current.values()) clearTimeout(timer);
             wsMap.current.clear();
@@ -86,22 +82,34 @@ export function useAgentConnections(agents: Agent[]) {
         const wsUrl  = agent.url.replace(/^http/, "ws") + `/ws?token=${encodeURIComponent(token)}`;
 
         console.log(`[WS] connecting → ${agent.name} (${wsUrl.split("?")[0]})`);
+
+        // Mark as connecting immediately so UI shows pulsing blue state.
+        setConnectingRef.current(agent.id, true);
+        setConnErrRef.current(agent.id, null);
+
         const ws = new WebSocket(wsUrl);
         wsMap.current.set(agent.id, ws);
 
         ws.onopen = () => {
             const attempt = attemptMap.current.get(agent.id) ?? 0;
             console.log(`[WS] connected  → ${agent.name} (attempt ${attempt})`);
+            setConnectingRef.current(agent.id, false);
             setOnlineRef.current(agent.id, true);
+            setConnErrRef.current(agent.id, null);
             attemptMap.current.set(agent.id, 0);
         };
 
         ws.onclose = (ev) => {
+            const reason = ev.reason || resolveCloseReason(ev.code);
             console.warn(
                 `[WS] closed     → ${agent.name}  code=${ev.code} wasClean=${ev.wasClean}` +
                 (ev.reason ? `  reason="${ev.reason}"` : ""),
             );
+            setConnectingRef.current(agent.id, false);
             setOnlineRef.current(agent.id, false);
+            if (!ev.wasClean) {
+                setConnErrRef.current(agent.id, reason);
+            }
             wsMap.current.delete(agent.id);
             scheduleReconnect(agent.id);
         };
@@ -110,7 +118,6 @@ export function useAgentConnections(agents: Agent[]) {
             console.error(`[WS] error      → ${agent.name}`, ev);
         };
 
-        // Log server-side ping messages from the agent binary (sent every 10s).
         ws.onmessage = (ev) => {
             try {
                 const msg = JSON.parse(ev.data as string) as { type: string };
@@ -134,7 +141,6 @@ export function useAgentConnections(agents: Agent[]) {
 
         const timer = setTimeout(() => {
             timerMap.current.delete(agentId);
-            // Look up the latest agent data when reconnecting.
             const latestAgent = agentsRef.current.find((a) => a.id === agentId);
             if (latestAgent) openWs(latestAgent);
         }, delay);
@@ -148,5 +154,17 @@ export function useAgentConnections(agents: Agent[]) {
             clearTimeout(timer);
             timerMap.current.delete(agentId);
         }
+    }
+}
+
+function resolveCloseReason(code: number): string {
+    switch (code) {
+        case 1001: return "Agent going away";
+        case 1006: return "Connection lost (timeout or network error)";
+        case 1011: return "Agent internal error";
+        case 1012: return "Agent restarting";
+        case 4001: return "Authentication failed";
+        case 4003: return "Access denied";
+        default:   return `Connection closed (code ${code})`;
     }
 }
