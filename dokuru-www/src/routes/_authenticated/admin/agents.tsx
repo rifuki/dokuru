@@ -3,6 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import { adminService } from "@/lib/api/services/admin-services";
+import {
+  type AdminAgentResolvedStatus,
+  useAdminAgentStatuses,
+} from "@/features/admin/hooks/use-admin-agent-statuses";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,33 +17,12 @@ export const Route = createFileRoute("/_authenticated/admin/agents")({
   component: AdminAgentsPage,
 });
 
-const ONLINE_WINDOW_MS = 5 * 60 * 1000;
-
-type LiveStatus = "online" | "offline";
-
-function isRecentlySeen(lastSeen: string | null) {
-  if (!lastSeen) return false;
-  return Date.now() - new Date(lastSeen).getTime() <= ONLINE_WINDOW_MS;
-}
-
-function resolveAgentStatus(agent: AdminAgent, liveStatus?: LiveStatus) {
-  if (liveStatus === "online") {
-    return "online" as const;
+function resolveAgentStatus(agent: AdminAgent, liveStatus?: AdminAgentResolvedStatus) {
+  if (liveStatus) {
+    return liveStatus;
   }
 
-  if (agent.access_mode === "relay") {
-    return isRecentlySeen(agent.last_seen) ? ("online" as const) : ("offline" as const);
-  }
-
-  if (!agent.last_seen) {
-    return liveStatus === "offline" ? ("offline" as const) : ("never" as const);
-  }
-
-  if (isRecentlySeen(agent.last_seen)) {
-    return "online" as const;
-  }
-
-  return liveStatus === "offline" ? ("offline" as const) : ("stale" as const);
+  return agent.last_seen ? ("stale" as const) : ("never" as const);
 }
 
 function ConnectionBadge({ mode }: { mode: string }) {
@@ -57,7 +40,7 @@ function ConnectionBadge({ mode }: { mode: string }) {
   );
 }
 
-function StatusBadge({ status }: { status: ReturnType<typeof resolveAgentStatus> }) {
+function StatusBadge({ status }: { status: AdminAgentResolvedStatus }) {
   if (status === "online") {
     return (
       <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30">
@@ -119,40 +102,15 @@ function AdminAgentsPage() {
   const agents = data?.agents ?? [];
 
   const {
-    data: liveStatuses = {},
+    statuses: liveStatuses,
+    counts,
     isFetching: isCheckingStatuses,
     refetch: refetchStatuses,
-  } = useQuery<Record<string, LiveStatus>>({
-    queryKey: ["admin", "agents", "live-status", agents.map((agent) => `${agent.id}:${agent.url}`).join("|")],
-    enabled: agents.length > 0,
-    staleTime: 15_000,
-    queryFn: async () => {
-      const results = await Promise.all(
-        agents.map(async (agent) => {
-          if (agent.access_mode === "relay") {
-            return [agent.id, isRecentlySeen(agent.last_seen) ? "online" : "offline"] as const;
-          }
-
-          try {
-            const response = await fetch(`${agent.url}/health`, {
-              method: "GET",
-              signal: AbortSignal.timeout(5_000),
-            });
-
-            return [agent.id, response.ok ? "online" : "offline"] as const;
-          } catch {
-            return [agent.id, "offline"] as const;
-          }
-        })
-      );
-
-      return Object.fromEntries(results);
-    },
-  });
+  } = useAdminAgentStatuses(agents);
   const totalAgents = data?.total ?? 0;
-  const onlineAgents = agents.filter((agent) => resolveAgentStatus(agent, liveStatuses[agent.id]) === "online").length;
+  const onlineAgents = counts.online;
   const relayAgents = agents.filter((agent) => agent.access_mode === "relay").length;
-  const staleAgents = agents.filter((agent) => resolveAgentStatus(agent, liveStatuses[agent.id]) === "stale").length;
+  const staleAgents = counts.stale + counts.offline;
 
   const columns: ColumnDef<AdminAgent>[] = [
     {
