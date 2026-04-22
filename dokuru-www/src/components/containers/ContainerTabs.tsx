@@ -398,16 +398,10 @@ export function ContainerTerminal({
       if (ws && 'binaryType' in ws) ws.binaryType = 'arraybuffer';
     },
     onClose: () => {
-      if (termRef.current) {
-        termRef.current.write("\r\n\x1b[31m✗ Connection closed\x1b[0m\r\n");
-        termRef.current.options.disableStdin = true;
-      }
+      if (termRef.current) termRef.current.options.disableStdin = true;
     },
     onError: () => {
-      if (termRef.current) {
-        termRef.current.write("\r\n\x1b[31m✗ Connection error\x1b[0m\r\n");
-        termRef.current.options.disableStdin = true;
-      }
+      if (termRef.current) termRef.current.options.disableStdin = true;
     },
   }, wsUrl !== null);
 
