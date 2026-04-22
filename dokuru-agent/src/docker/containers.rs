@@ -196,7 +196,11 @@ const SHELL_PRIORITY: &[&str] = &["/bin/bash", "/bin/sh"];
 
 /// Resolve which shell to use. Tries `shell` param first, then falls back
 /// to the priority list by checking if the binary exists in the container.
-async fn resolve_shell(docker: &bollard::Docker, container_id: &str, preferred: Option<String>) -> String {
+async fn resolve_shell(
+    docker: &bollard::Docker,
+    container_id: &str,
+    preferred: Option<String>,
+) -> String {
     if let Some(s) = preferred {
         if !s.is_empty() {
             return s;
@@ -211,14 +215,25 @@ async fn resolve_shell(docker: &bollard::Docker, container_id: &str, preferred: 
                     attach_stdout: Some(true),
                     attach_stderr: Some(true),
                     tty: Some(false),
-                    cmd: Some(vec!["test".to_owned(), "-f".to_owned(), candidate.to_string()]),
+                    cmd: Some(vec![
+                        "test".to_owned(),
+                        "-f".to_owned(),
+                        candidate.to_string(),
+                    ]),
                     ..Default::default()
                 },
             )
             .await;
         if let Ok(exec) = probe {
             if let Ok(bollard::exec::StartExecResults::Attached { mut output, .. }) = docker
-                .start_exec(&exec.id, Some(bollard::exec::StartExecOptions { detach: false, tty: false, output_capacity: None }))
+                .start_exec(
+                    &exec.id,
+                    Some(bollard::exec::StartExecOptions {
+                        detach: false,
+                        tty: false,
+                        output_capacity: None,
+                    }),
+                )
                 .await
             {
                 // Drain output; exit code 0 means the file exists.
@@ -234,7 +249,9 @@ async fn resolve_shell(docker: &bollard::Docker, container_id: &str, preferred: 
 }
 
 /// GET /docker/containers/{id}/shell — returns the best available shell for the container.
-async fn detect_shell_handler(Path(id): Path<String>) -> Result<Json<serde_json::Value>, StatusCode> {
+async fn detect_shell_handler(
+    Path(id): Path<String>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
     let docker = get_docker_client().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let shell = resolve_shell(&docker, &id, None).await;
     Ok(Json(serde_json::json!({ "shell": shell })))
@@ -252,7 +269,13 @@ async fn container_exec(
 }
 
 #[allow(clippy::too_many_lines)]
-async fn handle_exec(container_id: String, ws: WebSocket, rows: u16, cols: u16, preferred_shell: Option<String>) {
+async fn handle_exec(
+    container_id: String,
+    ws: WebSocket,
+    rows: u16,
+    cols: u16,
+    preferred_shell: Option<String>,
+) {
     let Ok(docker) = get_docker_client() else {
         return;
     };
