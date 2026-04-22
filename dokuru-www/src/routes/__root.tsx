@@ -31,8 +31,6 @@ function RootComponent() {
 }
 
 function NotFoundComponent() {
-  const hasToken = typeof window !== "undefined" && localStorage.getItem("accessToken");
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <div className="text-center space-y-6 max-w-md">
@@ -44,9 +42,9 @@ function NotFoundComponent() {
           </p>
         </div>
         <Button asChild>
-          <Link to={hasToken ? "/" : "/login"}>
+          <Link to="/">
             <Home className="mr-2 h-4 w-4" />
-            {hasToken ? "Go Home" : "Login"}
+            Go Home
           </Link>
         </Button>
       </div>
