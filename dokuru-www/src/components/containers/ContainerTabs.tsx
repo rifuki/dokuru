@@ -475,7 +475,7 @@ export function ContainerTerminal({
           disabled={status === "connecting"}
         >
           <RotateCw className={`h-3 w-3 mr-1.5 ${status === "connecting" ? "animate-spin" : ""}`} />
-          {hasConnectedBefore.current ? "Reconnect" : "Connect"}
+          {hasConnectedBefore ? "Reconnect" : "Connect"}
         </Button>
       </div>
       <div ref={wrapperRef} className="h-96 bg-[#0d1117]" />
