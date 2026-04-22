@@ -410,16 +410,6 @@ export function ContainerTerminal({
     readyState === ReadyState.CONNECTING ? "connecting" :
     readyState === ReadyState.CLOSED ? "disconnected" : "error";
 
-  // Send newline on connection to trigger shell prompt
-  useEffect(() => {
-    if (readyState === ReadyState.OPEN) {
-      const timer = setTimeout(() => {
-        sendMessage(new TextEncoder().encode("\n"));
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [readyState, sendMessage]);
-
   // Detect available shell when tab becomes active (once)
   useEffect(() => {
     if (!active || detectedShell !== null) return;
