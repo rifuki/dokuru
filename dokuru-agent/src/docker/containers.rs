@@ -201,10 +201,10 @@ async fn resolve_shell(
     container_id: &str,
     preferred: Option<String>,
 ) -> String {
-    if let Some(s) = preferred {
-        if !s.is_empty() {
-            return s;
-        }
+    if let Some(s) = preferred
+        && !s.is_empty()
+    {
+        return s;
     }
     // Auto-detect: run `test -f <shell>` for each candidate.
     for candidate in SHELL_PRIORITY {
@@ -218,14 +218,14 @@ async fn resolve_shell(
                     cmd: Some(vec![
                         "test".to_owned(),
                         "-f".to_owned(),
-                        candidate.to_string(),
+                        (*candidate).to_string(),
                     ]),
                     ..Default::default()
                 },
             )
             .await;
-        if let Ok(exec) = probe {
-            if let Ok(bollard::exec::StartExecResults::Attached { mut output, .. }) = docker
+        if let Ok(exec) = probe
+            && let Ok(bollard::exec::StartExecResults::Attached { mut output, .. }) = docker
                 .start_exec(
                     &exec.id,
                     Some(bollard::exec::StartExecOptions {
@@ -235,13 +235,12 @@ async fn resolve_shell(
                     }),
                 )
                 .await
-            {
-                // Drain output; exit code 0 means the file exists.
-                while output.next().await.is_some() {}
-                let info = docker.inspect_exec(&exec.id).await.unwrap_or_default();
-                if info.exit_code == Some(0) {
-                    return candidate.to_string();
-                }
+        {
+            // Drain output; exit code 0 means the file exists.
+            while output.next().await.is_some() {}
+            let info = docker.inspect_exec(&exec.id).await.unwrap_or_default();
+            if info.exit_code == Some(0) {
+                return (*candidate).to_string();
             }
         }
     }
