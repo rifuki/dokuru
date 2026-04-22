@@ -79,13 +79,13 @@ export function AuditActivityChart({ activity, loading }: AuditActivityChartProp
                   dataKey="date"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                  tick={{ fontSize: 11, fill: "#9ca3af" }}
                   dy={8}
                 />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                  tick={{ fontSize: 11, fill: "#9ca3af" }}
                   allowDecimals={false}
                   width={30}
                 />

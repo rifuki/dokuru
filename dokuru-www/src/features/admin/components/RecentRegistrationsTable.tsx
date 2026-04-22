@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Clock, Users, ArrowRight } from "lucide-react";
+import { CheckCircle2, Clock, ArrowRight } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { DashboardStats } from "../types/stats";

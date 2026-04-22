@@ -1,4 +1,11 @@
-use axum::{Router, extract::Query, extract::ws::{Message, WebSocket, WebSocketUpgrade}, http::StatusCode, response::{Json, Response}, routing::get};
+use axum::{
+    Router,
+    extract::Query,
+    extract::ws::{Message, WebSocket, WebSocketUpgrade},
+    http::StatusCode,
+    response::{Json, Response},
+    routing::get,
+};
 use bollard::system::EventsOptions;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -85,7 +92,6 @@ async fn get_events(
     Ok(Json(events))
 }
 
-
 async fn events_stream(ws: WebSocketUpgrade) -> Response {
     ws.on_upgrade(handle_events_stream)
 }
@@ -121,10 +127,10 @@ async fn handle_events_stream(mut ws: WebSocket) {
                 time: evt.time.unwrap_or_default(),
             };
 
-            if let Ok(json) = serde_json::to_string(&response) {
-                if ws.send(Message::Text(json.into())).await.is_err() {
-                    break;
-                }
+            if let Ok(json) = serde_json::to_string(&response)
+                && ws.send(Message::Text(json.into())).await.is_err()
+            {
+                break;
             }
         }
     }

@@ -1,4 +1,4 @@
-import { apiClient } from "./axios-instance";
+import apiClient from "./axios-instance";
 
 export interface Document {
   id: string;

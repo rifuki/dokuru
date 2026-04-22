@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Activity, Download, Pause, Play, Trash2, Filter } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
-import { useDockerEvents, type DockerEvent } from "@/hooks/useDockerEvents";
+import { useDockerEvents } from "@/hooks/useDockerEvents";
 import { useAgentStore } from "@/stores/use-agent-store";
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";

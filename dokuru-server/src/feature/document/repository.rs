@@ -1,13 +1,13 @@
+use crate::feature::document::entity::Document;
 use sqlx::PgPool;
 use uuid::Uuid;
-use crate::feature::document::entity::Document;
 
 pub struct DocumentRepository {
     pool: PgPool,
 }
 
 impl DocumentRepository {
-    pub fn new(pool: PgPool) -> Self {
+    pub const fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
@@ -17,7 +17,13 @@ impl DocumentRepository {
             .await
     }
 
-    pub async fn create(&self, name: String, file_path: String, file_size: i64, mime_type: String) -> Result<Document, sqlx::Error> {
+    pub async fn create(
+        &self,
+        name: String,
+        file_path: String,
+        file_size: i64,
+        mime_type: String,
+    ) -> Result<Document, sqlx::Error> {
         sqlx::query_as::<_, Document>(
             "INSERT INTO documents (name, file_path, file_size, mime_type) VALUES ($1, $2, $3, $4) RETURNING *"
         )

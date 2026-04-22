@@ -100,19 +100,15 @@ function AdminSettingsPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Total Users</p>
-                <p className="text-2xl font-bold">{stats?.totalUsers ?? 0}</p>
+                <p className="text-2xl font-bold">{stats?.total_users ?? 0}</p>
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Total Agents</p>
-                <p className="text-2xl font-bold">{stats?.totalAgents ?? 0}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Active Sessions</p>
-                <p className="text-2xl font-bold">{stats?.activeSessions ?? 0}</p>
+                <p className="text-2xl font-bold">{stats?.total_agents ?? 0}</p>
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Total Audits</p>
-                <p className="text-2xl font-bold">{stats?.totalAudits ?? 0}</p>
+                <p className="text-2xl font-bold">{stats?.total_audits ?? 0}</p>
               </div>
             </div>
           </CardContent>

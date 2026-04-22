@@ -1,6 +1,6 @@
 pub mod entity;
-pub mod repository;
 pub mod handlers;
+pub mod repository;
 pub mod routes;
 
 pub use entity::Document;

@@ -91,7 +91,7 @@ impl AppState {
         let auth_method_repo = Arc::new(AuthMethodRepositoryImpl::new());
         let session_repo = Arc::new(SessionRepositoryImpl::new());
         let stats_repository: Arc<dyn StatsRepository> = Arc::new(StatsRepositoryImpl::new());
-        let document_repo = Arc::new(DocumentRepository::new(db.pool()));
+        let document_repo = Arc::new(DocumentRepository::new(db.pool().clone()));
 
         // Services
         let auth_method_service = AuthMethodService::new(db.clone(), auth_method_repo);
@@ -171,7 +171,7 @@ impl AppState {
     }
 
     /// Build AppState from an existing Database — used by integration tests
-    pub fn new_for_test(config: Config, db: Database) -> Self {
+    pub fn new_for_test(config: Config, db: &Database) -> Self {
         use crate::infrastructure::storage::LocalStorage;
         use tracing_subscriber::{EnvFilter, Registry, reload};
 
@@ -235,7 +235,7 @@ impl AppState {
             agent_registry,
             audit_service,
             stats_service,
-            document_repo: Arc::new(DocumentRepository::new(db.pool())),
+            document_repo: Arc::new(DocumentRepository::new(db.pool().clone())),
             storage,
             email_service,
             session_blacklist: None,

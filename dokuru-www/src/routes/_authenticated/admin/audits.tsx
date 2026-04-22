@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { agentApi } from "@/lib/api/agent";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Shield, Clock, ExternalLink } from "lucide-react";
+import { Clock, ExternalLink } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 
@@ -85,18 +85,18 @@ function AdminAuditsPage() {
                   <TableCell className="font-medium">{audit.agentName}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      {getScoreBadge(audit.score)}
-                      <span className="text-sm text-muted-foreground">{audit.score}%</span>
+                      {getScoreBadge(audit.summary.score)}
+                      <span className="text-sm text-muted-foreground">{audit.summary.score}%</span>
                     </div>
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className="text-green-600">
-                      {audit.passed}
+                      {audit.summary.passed}
                     </Badge>
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className="text-red-600">
-                      {audit.failed}
+                      {audit.summary.failed}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
@@ -106,7 +106,7 @@ function AdminAuditsPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Link to="/agents/$id/audits/$auditId" params={{ id: audit.agentId, auditId: audit.id }}>
+                    <Link to="/agents/$id/audits/$auditId" params={{ id: audit.agentId, auditId: audit.id! }}>
                       <Button variant="ghost" size="sm">
                         <ExternalLink className="h-4 w-4" />
                       </Button>
