@@ -21,12 +21,11 @@ pub struct ConfigSourceDetail {
 pub struct EffectiveConfigResponse {
     pub source: &'static str,
     pub local_config_path: String,
-    pub rust_env: String,
     pub is_production: bool,
     pub field_sources: BTreeMap<String, Vec<ConfigSourceDetail>>,
+    pub app: AppConfigView,
     pub bootstrap: BootstrapConfigView,
     pub server: ServerConfigView,
-    pub logging: LoggingConfigView,
     pub cookie: CookieConfigView,
     pub upload: UploadConfigView,
     pub email: EmailConfigView,
@@ -34,6 +33,12 @@ pub struct EffectiveConfigResponse {
     pub redis: RedisConfigView,
     pub auth: AuthConfigView,
     pub features: FeatureConfigView,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AppConfigView {
+    pub rust_env: String,
+    pub rust_log: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -55,11 +60,6 @@ pub struct CookieConfigView {
     pub same_site: String,
     pub secure: bool,
     pub http_only: bool,
-}
-
-#[derive(Debug, Serialize)]
-pub struct LoggingConfigView {
-    pub default_level: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -343,10 +343,10 @@ fn config_snapshot(config: &Config) -> EffectiveConfigResponse {
         ),
     );
     field_sources.insert(
-        "logging.default_level".to_string(),
+        "app.rust_log".to_string(),
         sources_for(
-            &["logging", "default_level"],
-            &["RUST_LOG", "DOKURU__LOGGING__DEFAULT_LEVEL"],
+            &["app", "rust_log"],
+            &["RUST_LOG", "DOKURU__APP__RUST_LOG"],
         ),
     );
     field_sources.insert(
@@ -458,9 +458,12 @@ fn config_snapshot(config: &Config) -> EffectiveConfigResponse {
     EffectiveConfigResponse {
         source: "toml + env override",
         local_config_path: toml_config::local_config_path().display().to_string(),
-        rust_env: config.rust_env.clone(),
         is_production: config.is_production,
         field_sources,
+        app: AppConfigView {
+            rust_env: config.rust_env.clone(),
+            rust_log: config.logging.default_level.clone(),
+        },
         bootstrap: BootstrapConfigView {
             enabled: config.bootstrap.enabled,
             admin_email: config.bootstrap.admin_email.clone(),
@@ -470,9 +473,6 @@ fn config_snapshot(config: &Config) -> EffectiveConfigResponse {
         server: ServerConfigView {
             port: config.server.port,
             cors_allowed_origins: config.server.cors_allowed_origins.clone(),
-        },
-        logging: LoggingConfigView {
-            default_level: config.logging.default_level.clone(),
         },
         cookie: CookieConfigView {
             same_site: format!("{:?}", config.cookie.same_site).to_lowercase(),

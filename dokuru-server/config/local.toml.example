@@ -2,6 +2,10 @@
 # This file is intended to be safe to edit and safe to commit only if it contains no secrets.
 # It overrides defaults.toml, but can still be overridden by environment variables and .env.
 
+[app]
+rust_env = "development"
+rust_log = "debug"
+
 [server]
 # Example: tighten CORS for a specific deployed frontend
 cors_allowed_origins = ["https://app.dokuru.rifuki.dev"]

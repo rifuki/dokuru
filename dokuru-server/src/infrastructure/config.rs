@@ -229,8 +229,8 @@ impl LoggingConfig {
     fn from_sources(toml: &TomlConfig) -> Self {
         Self {
             default_level: env_override("RUST_LOG")
-                .or_else(|| env_override("DOKURU__LOGGING__DEFAULT_LEVEL"))
-                .unwrap_or_else(|| toml.logging.default_level.clone()),
+                .or_else(|| env_override("DOKURU__APP__RUST_LOG"))
+                .unwrap_or_else(|| toml.app.rust_log.clone()),
         }
     }
 }

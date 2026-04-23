@@ -11,7 +11,6 @@ pub struct TomlConfig {
     pub database: DatabaseConfig,
     pub redis: RedisConfig,
     pub auth: AuthConfig,
-    pub logging: LoggingConfig,
     pub cookie: CookieConfig,
     pub upload: UploadConfig,
     pub email: EmailConfig,
@@ -20,6 +19,7 @@ pub struct TomlConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct AppConfig {
     pub rust_env: String,
+    pub rust_log: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -54,11 +54,6 @@ pub struct AuthConfig {
     pub refresh_secret: Option<String>,
     pub access_expiry_secs: i64,
     pub refresh_expiry_secs: i64,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct LoggingConfig {
-    pub default_level: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

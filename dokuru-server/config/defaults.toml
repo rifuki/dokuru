@@ -9,9 +9,7 @@
 
 [app]
 rust_env = "development"
-
-[logging]
-default_level = "debug"
+rust_log = "debug"
 
 [server]
 port = 9393
