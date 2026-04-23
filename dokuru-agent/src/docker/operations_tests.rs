@@ -1,27 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    #[test]
-    fn test_container_state_parsing() {
-        assert_eq!(parse_state("running"), "running");
-        assert_eq!(parse_state("exited"), "exited");
-        assert_eq!(parse_state("paused"), "paused");
-    }
-
-    #[test]
-    fn test_format_container_name() {
-        let name = "/my-container";
-        let formatted = name.trim_start_matches('/');
-        assert_eq!(formatted, "my-container");
-    }
-
-    #[test]
-    fn test_parse_port_bindings() {
-        let port = "0.0.0.0:8080->80/tcp";
-        assert!(port.contains("8080"));
-        assert!(port.contains("80"));
-    }
+    use bollard::Docker;
+    use bollard::container::ListContainersOptions;
 
     #[tokio::test]
     async fn test_docker_client_creation() {
@@ -59,8 +39,4 @@ mod tests {
         assert_eq!(parts[0], "nginx");
         assert_eq!(parts[1], "latest");
     }
-}
-
-fn parse_state(state: &str) -> &str {
-    state
 }

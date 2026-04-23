@@ -8,6 +8,8 @@ pub mod service;
 
 #[cfg(test)]
 mod dto_tests;
+#[cfg(test)]
+mod service_tests;
 
 pub use dto::{AgentResponse, CreateAgentDto, UpdateAgentDto};
 pub use entity::Agent;

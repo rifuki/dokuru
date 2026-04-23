@@ -344,10 +344,7 @@ fn config_snapshot(config: &Config) -> EffectiveConfigResponse {
     );
     field_sources.insert(
         "app.rust_log".to_string(),
-        sources_for(
-            &["app", "rust_log"],
-            &["RUST_LOG", "DOKURU__APP__RUST_LOG"],
-        ),
+        sources_for(&["app", "rust_log"], &["RUST_LOG", "DOKURU__APP__RUST_LOG"]),
     );
     field_sources.insert(
         "cookie.same_site".to_string(),

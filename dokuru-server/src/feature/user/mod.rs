@@ -8,6 +8,8 @@ mod routes;
 
 #[cfg(test)]
 mod entity_tests;
+#[cfg(test)]
+mod service_tests;
 
 pub use avatar::{delete_avatar, upload_avatar};
 pub use dto::{CreateUser, UpdateUser};

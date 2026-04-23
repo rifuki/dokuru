@@ -7,6 +7,9 @@ pub mod session;
 pub mod types;
 pub mod utils;
 
+#[cfg(test)]
+mod service_tests;
+
 pub use handlers::{
     change_password, list_sessions, login, logout, logout_all_sessions, me, refresh, register,
     revoke_session,
