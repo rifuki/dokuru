@@ -56,3 +56,13 @@ bun.lockb
 *.njsproj
 *.sln
 *.sw?
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+*.log.*
+
+# Windows
+Thumbs.db
