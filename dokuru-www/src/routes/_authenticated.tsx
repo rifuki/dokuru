@@ -31,7 +31,15 @@ const userNotifications = [
   { id: 2, title: "Announcement", description: "Scheduled maintenance on Sunday", time: "2 days ago", unread: false },
 ];
 
-const WS_URL = import.meta.env.VITE_WS_URL || "wss://api.dokuru.rifuki.dev/ws";
+// Derive WebSocket URL from API base URL
+const getWsUrl = () => {
+  const apiUrl = import.meta.env.VITE_API_BASE_URL || "https://api.dokuru.rifuki.dev/api/v1";
+  const baseUrl = apiUrl.replace(/\/api\/v1$/, "");
+  const wsProtocol = baseUrl.startsWith("https") ? "wss" : "ws";
+  return `${wsProtocol}://${baseUrl.replace(/^https?:\/\//, "")}/ws`;
+};
+
+const WS_URL = getWsUrl();
 
 export const Route = createFileRoute("/_authenticated")({
     component: AppLayout,
