@@ -28,11 +28,11 @@ export function useDockerEvents(agentUrl: string, agentToken: string, options: U
   const wsUrl = agentUrl.replace(/^http/, "ws") + "/docker/events/stream" +
     (agentToken ? `?token=${encodeURIComponent(agentToken)}` : "");
 
-  // Clear events immediately whenever the agent changes.
+  // Clear events when agent changes - schedule as microtask to avoid sync setState in effect
   useEffect(() => {
     eventsRef.current = [];
-    setEvents([]);
     historyLoadedForRef.current = "";
+    Promise.resolve().then(() => setEvents([]));
   }, [agentUrl]);
 
   const { lastMessage, readyState } = useWebSocket(

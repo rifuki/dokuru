@@ -27,23 +27,31 @@ export function SessionsSettings() {
     const [sessions, setSessions] = useState<Session[]>([]);
     const [loadingSessions, setLoadingSessions] = useState(false);
     const [logoutAllDialogOpen, setLogoutAllDialogOpen] = useState(false);
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
 
     useEffect(() => {
+        let cancelled = false;
+        const fetchSessions = async () => {
+            setLoadingSessions(true);
+            try {
+                const response = await apiClient.get('/auth/sessions');
+                if (!cancelled) {
+                    setSessions(response.data?.data || []);
+                }
+            } catch (error) {
+                if (!cancelled) {
+                    console.error("Failed to fetch sessions", error);
+                    toast.error("Failed to load sessions");
+                }
+            } finally {
+                if (!cancelled) {
+                    setLoadingSessions(false);
+                }
+            }
+        };
         fetchSessions();
-    }, []);
-
-    const fetchSessions = async () => {
-        setLoadingSessions(true);
-        try {
-            const response = await apiClient.get('/auth/sessions');
-            setSessions(response.data?.data || []);
-        } catch (error) {
-            console.error("Failed to fetch sessions", error);
-            toast.error("Failed to load sessions");
-        } finally {
-            setLoadingSessions(false);
-        }
-    };
+        return () => { cancelled = true; };
+    }, [refreshTrigger]);
 
     const handleRevokeSession = async (sessionId: string) => {
         try {
@@ -60,7 +68,7 @@ export function SessionsSettings() {
             await apiClient.delete('/auth/sessions');
             toast.success("All other sessions logged out");
             setLogoutAllDialogOpen(false);
-            fetchSessions();
+            setRefreshTrigger(prev => prev + 1);
         } catch {
             toast.error("Failed to logout sessions");
         }

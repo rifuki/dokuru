@@ -22,66 +22,91 @@ export function useAgentConnections(agents: Agent[]) {
     const setOnlineRef      = useRef(setAgentOnline);
     const setConnectingRef  = useRef(setAgentConnecting);
     const setConnErrRef     = useRef(setAgentConnectionError);
-    setOnlineRef.current     = setAgentOnline;
-    setConnectingRef.current = setAgentConnecting;
-    setConnErrRef.current    = setAgentConnectionError;
 
     const wsMap      = useRef(new Map<string, WebSocket>());
     const timerMap   = useRef(new Map<string, ReturnType<typeof setTimeout>>());
     const attemptMap = useRef(new Map<string, number>());
 
     const agentsRef   = useRef(agents);
-    agentsRef.current = agents;
 
     useEffect(() => {
-        const eligible = agents.filter(
-            (a) => a.access_mode !== "relay" && a.url && a.url !== "relay",
-        );
-        const eligibleIds = new Set(eligible.map((a) => a.id));
+        setOnlineRef.current     = setAgentOnline;
+        setConnectingRef.current = setAgentConnecting;
+        setConnErrRef.current    = setAgentConnectionError;
+        agentsRef.current = agents;
+    });
 
-        for (const [id, ws] of wsMap.current) {
-            const agent = eligible.find((a) => a.id === id);
-            const expectedWsUrl = agent
-                ? agent.url.replace(/^http/, "ws") + "/ws"
-                : null;
-            const urlChanged = expectedWsUrl && !ws.url.startsWith(expectedWsUrl);
-
-            const currentToken = agent ? (agent.token ?? getAgentToken(agent.id) ?? "") : "";
-            const tokenChanged = expectedWsUrl &&
-                !ws.url.includes(`token=${encodeURIComponent(currentToken)}`);
-
-            if (!eligibleIds.has(id) || urlChanged || tokenChanged) {
-                ws.onclose = null;
-                ws.close();
-                wsMap.current.delete(id);
-                clearReconnect(id);
-                setConnectingRef.current(id, false);
-            }
+    const clearReconnect = (agentId: string) => {
+        const timer = timerMap.current.get(agentId);
+        if (timer !== undefined) {
+            clearTimeout(timer);
+            timerMap.current.delete(agentId);
         }
+    };
 
-        for (const agent of eligible) {
-            const existing = wsMap.current.get(agent.id);
-            if (existing && existing.readyState <= WebSocket.OPEN) continue;
-            openWs(agent);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [agents.map((a) => a.id + a.url + (a.token ?? "")).join(",")]);
+    const scheduleReconnect = (agentId: string) => {
+        clearReconnect(agentId);
 
-    useEffect(() => {
-        return () => {
-            for (const [id, ws] of wsMap.current) {
-                ws.onclose = null;
-                ws.close();
-                setConnectingRef.current(id, false);
-            }
-            for (const timer of timerMap.current.values()) clearTimeout(timer);
-            wsMap.current.clear();
-            timerMap.current.clear();
-            attemptMap.current.clear();
+        const attempt = attemptMap.current.get(agentId) ?? 0;
+        const delay   = Math.min(RECONNECT_BASE_MS * 2 ** attempt, RECONNECT_MAX_MS);
+        attemptMap.current.set(agentId, attempt + 1);
+
+        const agent = agentsRef.current.find((a) => a.id === agentId);
+        const name  = agent?.name ?? agentId;
+        console.log(`[WS] reconnect  → ${name} in ${delay}ms (attempt ${attempt + 1})`);
+
+        const timer = setTimeout(() => {
+            timerMap.current.delete(agentId);
+            const latestAgent = agentsRef.current.find((a) => a.id === agentId);
+            if (latestAgent) openWs(latestAgent);
+        }, delay);
+
+        timerMap.current.set(agentId, timer);
+    };
+
+    const connectWebSocket = (agent: Agent, wsUrl: string) => {
+        const ws = new WebSocket(wsUrl);
+        wsMap.current.set(agent.id, ws);
+
+        ws.onopen = () => {
+            const attempt = attemptMap.current.get(agent.id) ?? 0;
+            console.log(`[WS] connected  → ${agent.name} (attempt ${attempt})`);
+            setConnectingRef.current(agent.id, false);
+            setOnlineRef.current(agent.id, true);
+            setConnErrRef.current(agent.id, null);
+            attemptMap.current.set(agent.id, 0);
         };
-    }, []);
 
-    function openWs(agent: Agent) {
+        ws.onclose = (ev) => {
+            const reason = ev.reason || resolveCloseReason(ev.code);
+            console.warn(
+                `[WS] closed     → ${agent.name}  code=${ev.code} wasClean=${ev.wasClean}` +
+                (ev.reason ? `  reason="${ev.reason}"` : ""),
+            );
+            setConnectingRef.current(agent.id, false);
+            setOnlineRef.current(agent.id, false);
+            if (!ev.wasClean) {
+                setConnErrRef.current(agent.id, reason);
+            }
+            wsMap.current.delete(agent.id);
+            scheduleReconnect(agent.id);
+        };
+
+        ws.onerror = (ev) => {
+            console.error(`[WS] error      → ${agent.name}`, ev);
+        };
+
+        ws.onmessage = (ev) => {
+            try {
+                const msg = JSON.parse(ev.data as string) as { type: string };
+                if (msg.type === "ping") {
+                    console.debug(`[WS] ping       ← ${agent.name}`);
+                }
+            } catch { /* ignore non-JSON */ }
+        };
+    };
+
+    const openWs = (agent: Agent) => {
         const token  = agent.token ?? getAgentToken(agent.id) ?? "";
         const wsUrl  = agent.url.replace(/^http/, "ws") + `/ws?token=${encodeURIComponent(token)}`;
 
@@ -126,77 +151,58 @@ export function useAgentConnections(agents: Agent[]) {
             setConnErrRef.current(agent.id, errorMsg);
             scheduleReconnect(agent.id);
         });
-    }
+    };
 
-    function connectWebSocket(agent: Agent, wsUrl: string) {
-        const ws = new WebSocket(wsUrl);
-        wsMap.current.set(agent.id, ws);
+    useEffect(() => {
+        const eligible = agents.filter(
+            (a) => a.access_mode !== "relay" && a.url && a.url !== "relay",
+        );
+        const eligibleIds = new Set(eligible.map((a) => a.id));
 
-        ws.onopen = () => {
-            const attempt = attemptMap.current.get(agent.id) ?? 0;
-            console.log(`[WS] connected  → ${agent.name} (attempt ${attempt})`);
-            setConnectingRef.current(agent.id, false);
-            setOnlineRef.current(agent.id, true);
-            setConnErrRef.current(agent.id, null);
-            attemptMap.current.set(agent.id, 0);
-        };
+        for (const [id, ws] of wsMap.current) {
+            const agent = eligible.find((a) => a.id === id);
+            const expectedWsUrl = agent
+                ? agent.url.replace(/^http/, "ws") + "/ws"
+                : null;
+            const urlChanged = expectedWsUrl && !ws.url.startsWith(expectedWsUrl);
 
-        ws.onclose = (ev) => {
-            const reason = ev.reason || resolveCloseReason(ev.code);
-            console.warn(
-                `[WS] closed     → ${agent.name}  code=${ev.code} wasClean=${ev.wasClean}` +
-                (ev.reason ? `  reason="${ev.reason}"` : ""),
-            );
-            setConnectingRef.current(agent.id, false);
-            setOnlineRef.current(agent.id, false);
-            if (!ev.wasClean) {
-                setConnErrRef.current(agent.id, reason);
+            const currentToken = agent ? (agent.token ?? getAgentToken(agent.id) ?? "") : "";
+            const tokenChanged = expectedWsUrl &&
+                !ws.url.includes(`token=${encodeURIComponent(currentToken)}`);
+
+            if (!eligibleIds.has(id) || urlChanged || tokenChanged) {
+                ws.onclose = null;
+                ws.close();
+                wsMap.current.delete(id);
+                clearReconnect(id);
+                setConnectingRef.current(id, false);
             }
-            wsMap.current.delete(agent.id);
-            scheduleReconnect(agent.id);
-        };
-
-        ws.onerror = (ev) => {
-            console.error(`[WS] error      → ${agent.name}`, ev);
-        };
-
-        ws.onmessage = (ev) => {
-            try {
-                const msg = JSON.parse(ev.data as string) as { type: string };
-                if (msg.type === "ping") {
-                    console.debug(`[WS] ping       ← ${agent.name}`);
-                }
-            } catch { /* ignore non-JSON */ }
-        };
-    }
-
-    function scheduleReconnect(agentId: string) {
-        clearReconnect(agentId);
-
-        const attempt = attemptMap.current.get(agentId) ?? 0;
-        const delay   = Math.min(RECONNECT_BASE_MS * 2 ** attempt, RECONNECT_MAX_MS);
-        attemptMap.current.set(agentId, attempt + 1);
-
-        const agent = agentsRef.current.find((a) => a.id === agentId);
-        const name  = agent?.name ?? agentId;
-        console.log(`[WS] reconnect  → ${name} in ${delay}ms (attempt ${attempt + 1})`);
-
-        const timer = setTimeout(() => {
-            timerMap.current.delete(agentId);
-            const latestAgent = agentsRef.current.find((a) => a.id === agentId);
-            if (latestAgent) openWs(latestAgent);
-        }, delay);
-
-        timerMap.current.set(agentId, timer);
-    }
-
-    function clearReconnect(agentId: string) {
-        const timer = timerMap.current.get(agentId);
-        if (timer !== undefined) {
-            clearTimeout(timer);
-            timerMap.current.delete(agentId);
         }
-    }
+
+        for (const agent of eligible) {
+            const existing = wsMap.current.get(agent.id);
+            if (existing && existing.readyState <= WebSocket.OPEN) continue;
+            openWs(agent);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [agents.map((a) => a.id + a.url + (a.token ?? "")).join(",")]);
+
+    useEffect(() => {
+        const ws = wsMap.current;
+        const timers = timerMap.current;
+        const attempts = attemptMap.current;
+        return () => {
+            for (const [id, socket] of ws) {
+                socket.onclose = null;
+                socket.close();
+                setConnectingRef.current(id, false);
+            }
+            for (const timer of timers.values()) clearTimeout(timer);
+            ws.clear();
+            timers.clear();
+            attempts.clear();
+        };
+    }, []);
 }
 
 function resolveCloseReason(code: number): string {
