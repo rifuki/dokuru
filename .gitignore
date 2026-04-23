@@ -34,6 +34,8 @@ dist-ssr/
 .env.development.local
 .env.test.local
 .env.production.local
+docker-compose.override.yaml
+docker-compose.override.yml
 docker-compose.prod.yml
 
 # Vite/Bun

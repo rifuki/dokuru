@@ -14,6 +14,8 @@ pub use rule_registry::RuleRegistry;
 pub use types::*;
 
 #[cfg(test)]
+mod engine_tests;
+#[cfg(test)]
 mod types_tests;
 
 use bollard::{API_DEFAULT_VERSION, Docker};

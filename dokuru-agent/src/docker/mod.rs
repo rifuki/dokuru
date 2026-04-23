@@ -7,6 +7,8 @@ pub mod volumes;
 
 #[cfg(test)]
 mod containers_tests;
+#[cfg(test)]
+mod operations_tests;
 
 use bollard::Docker;
 use eyre::Result;
