@@ -62,6 +62,13 @@ bun.lockb
 # macOS
 .DS_Store
 
+# Screenshots
+Screenshot*.png
+*.png
+!public/**/*.png
+!src/**/*.png
+!templates/**/*.png
+
 # Logs
 *.log
 *.log.*
