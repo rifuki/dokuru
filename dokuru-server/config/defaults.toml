@@ -15,7 +15,7 @@ default_level = "debug"
 
 [server]
 port = 9393
-cors_allowed_origins = ["http://localhost:5173"]
+cors_allowed_origins = ["https://app.dokuru.rifuki.dev", "http://localhost:5173"]
 
 [bootstrap]
 enabled = true
@@ -49,7 +49,7 @@ http_only = true    # true | false. Default: true
 
 [upload]
 dir = "./uploads"
-base_url = "http://localhost:9393/media"
+base_url = "https://api.dokuru.rifuki.dev/media"
 max_avatar_size = 2097152 # 2 MB in bytes
 
 [email]

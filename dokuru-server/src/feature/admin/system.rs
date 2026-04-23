@@ -244,8 +244,7 @@ fn config_snapshot(config: &Config) -> EffectiveConfigResponse {
             std::env::var(*key)
                 .ok()
                 .is_some_and(|value| !value.trim().is_empty())
-        })
-            && let Ok(value) = std::env::var(key)
+        }) && let Ok(value) = std::env::var(key)
         {
             sources.push(ConfigSourceDetail {
                 source: format!("env:{key}"),
