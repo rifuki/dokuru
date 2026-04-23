@@ -66,3 +66,11 @@ bun.lockb
 
 # Windows
 Thumbs.db
+
+# Uploads
+dokuru-server/uploads/
+
+# Lock files
+bun.lock
+Cargo.lock
+package-lock.json
