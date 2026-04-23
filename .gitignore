@@ -62,12 +62,10 @@ bun.lockb
 # macOS
 .DS_Store
 
-# Screenshots
-Screenshot*.png
-*.png
-!public/**/*.png
-!src/**/*.png
-!templates/**/*.png
+# Config prod files
+dokuru-server/config/local.prod.toml
+dokuru-server/config/secrets.prod.toml
+dokuru-server/config/*.prod.toml
 
 # Logs
 *.log
