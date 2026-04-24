@@ -1,4 +1,5 @@
 pub mod avatar;
+pub mod domain;
 pub mod dto;
 pub mod email_change;
 pub mod entity;

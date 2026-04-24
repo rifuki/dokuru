@@ -4,6 +4,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::feature::auth::types::Role;
+use crate::feature::user::domain;
 
 /// User entity - Core identity (minimal, fast lookup)
 #[derive(Debug, Clone, FromRow, Serialize)]
@@ -20,7 +21,7 @@ pub struct User {
 
 impl User {
     pub fn role(&self) -> Role {
-        Role::try_from(self.role.as_str()).unwrap_or(Role::User)
+        domain::parse_role_or_default(&self.role)
     }
 }
 
@@ -92,6 +93,6 @@ pub struct UserWithProfile {
 
 impl UserWithProfile {
     pub fn role(&self) -> Role {
-        Role::try_from(self.role.as_str()).unwrap_or(Role::User)
+        domain::parse_role_or_default(&self.role)
     }
 }

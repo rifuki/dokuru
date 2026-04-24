@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use super::super::*;
+    use crate::feature::user::{domain, entity};
     use uuid::Uuid;
 
     #[test]
@@ -13,23 +13,29 @@ mod tests {
 
     #[test]
     fn test_user_role_validation() {
-        assert!(is_valid_role("admin"));
-        assert!(is_valid_role("user"));
-        assert!(is_valid_role("moderator"));
-        assert!(!is_valid_role("invalid"));
-        assert!(!is_valid_role(""));
+        assert!(domain::is_valid_role("admin"));
+        assert!(domain::is_valid_role("user"));
+        assert!(!domain::is_valid_role("moderator"));
+        assert!(!domain::is_valid_role("invalid"));
+        assert!(!domain::is_valid_role(""));
     }
 
     #[test]
     fn test_email_normalization() {
-        assert_eq!(normalize_email("User@Example.COM"), "user@example.com");
-        assert_eq!(normalize_email("TEST@DOMAIN.COM"), "test@domain.com");
+        assert_eq!(
+            domain::normalize_email("User@Example.COM"),
+            "user@example.com"
+        );
+        assert_eq!(
+            domain::normalize_email("TEST@DOMAIN.COM"),
+            "test@domain.com"
+        );
     }
 
     #[test]
     fn test_username_normalization() {
-        assert_eq!(normalize_username("UserName"), "username");
-        assert_eq!(normalize_username("TEST_USER"), "test_user");
+        assert_eq!(domain::normalize_username("UserName"), "username");
+        assert_eq!(domain::normalize_username("TEST_USER"), "test_user");
     }
 
     #[test]
@@ -90,35 +96,15 @@ mod tests {
             updated_at: Utc::now(),
         };
 
-        assert!(is_profile_complete(&complete_profile));
-        assert!(!is_profile_complete(&incomplete_profile));
+        assert!(domain::is_profile_complete(&complete_profile));
+        assert!(!domain::is_profile_complete(&incomplete_profile));
     }
 
     #[test]
     fn test_user_status_check() {
-        assert!(is_user_active(true, true));
-        assert!(!is_user_active(false, true));
-        assert!(!is_user_active(true, false));
-        assert!(!is_user_active(false, false));
-    }
-
-    fn is_valid_role(role: &str) -> bool {
-        matches!(role, "admin" | "user" | "moderator")
-    }
-
-    fn normalize_email(email: &str) -> String {
-        email.to_lowercase()
-    }
-
-    fn normalize_username(username: &str) -> String {
-        username.to_lowercase()
-    }
-
-    fn is_profile_complete(profile: &entity::UserProfile) -> bool {
-        profile.full_name.is_some() && profile.avatar_url.is_some() && profile.bio.is_some()
-    }
-
-    fn is_user_active(is_active: bool, email_verified: bool) -> bool {
-        is_active && email_verified
+        assert!(domain::is_user_active(true, true));
+        assert!(!domain::is_user_active(false, true));
+        assert!(!domain::is_user_active(true, false));
+        assert!(!domain::is_user_active(false, false));
     }
 }

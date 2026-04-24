@@ -1,3 +1,4 @@
+/* use no memo */
 import {
   type ColumnDef,
   type RowSelectionState,
@@ -72,6 +73,7 @@ export function DataTable<TData>({
 
   const allColumns = onDeleteSelected ? [selectionColumn, ...columns] : columns;
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns: allColumns,
