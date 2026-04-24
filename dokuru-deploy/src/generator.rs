@@ -1,57 +1,106 @@
-use crate::config::{
-    AppConfig, AuthConfig, BootstrapConfig, CookieConfig, DatabaseConfig, DeployConfig,
-    EmailConfig, LocalToml, RedisConfig, SecretsToml, ServerConfig, UploadConfig,
-};
-use anyhow::Result;
+use crate::config::DeployConfig;
+use anyhow::{Context, Result};
 use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 
 pub fn generate_local_toml(config: &DeployConfig, output_path: &Path) -> Result<()> {
-    let local_toml = LocalToml {
-        app: AppConfig {
-            rust_env: "production".to_string(),
-            rust_log: "info".to_string(),
-        },
-        server: ServerConfig {
-            cors_allowed_origins: config.cors_origins(),
-        },
-        bootstrap: BootstrapConfig { enabled: true },
-        upload: UploadConfig {
-            base_url: config.upload_base_url(),
-        },
-        cookie: CookieConfig {
-            same_site: "none".to_string(),
-            secure: true,
-        },
-    };
-
-    let toml_string = toml::to_string_pretty(&local_toml)?;
-    fs::write(output_path, toml_string)?;
+    let example_path = output_path
+        .parent()
+        .context("local.toml output path must have a parent directory")?
+        .join("local.toml.example");
+    let example_content = fs::read_to_string(&example_path)
+        .with_context(|| format!("failed to read {}", example_path.display()))?;
+    let content = render_local_toml(&example_content, config)?;
+    fs::write(output_path, content)?;
     Ok(())
 }
 
-pub fn generate_secrets_toml(config: &DeployConfig, output_path: &Path) -> Result<()> {
-    let secrets_toml = SecretsToml {
-        database: DatabaseConfig {
-            url: config.database_url(),
-        },
-        redis: RedisConfig {
-            url: "redis://dokuru-redis:6379".to_string(),
-        },
-        auth: AuthConfig {
-            access_secret: config.jwt_access_secret.clone(),
-            refresh_secret: config.jwt_refresh_secret.clone(),
-        },
-        email: EmailConfig {
-            resend_api_key: config.resend_api_key.clone(),
-            from_email: format!("noreply@{}", config.base_domain),
-        },
-    };
+fn render_local_toml(example_content: &str, config: &DeployConfig) -> Result<String> {
+    let mut doc: toml::Value = toml::from_str(example_content)?;
 
-    let toml_string = toml::to_string_pretty(&secrets_toml)?;
-    fs::write(output_path, toml_string)?;
+    table_mut(&mut doc, "app")?.insert(
+        "rust_env".to_string(),
+        toml::Value::String("production".to_string()),
+    );
+    table_mut(&mut doc, "app")?.insert(
+        "rust_log".to_string(),
+        toml::Value::String("info".to_string()),
+    );
+    table_mut(&mut doc, "server")?.insert(
+        "cors_allowed_origins".to_string(),
+        toml::Value::Array(
+            config
+                .cors_origins()
+                .into_iter()
+                .map(toml::Value::String)
+                .collect(),
+        ),
+    );
+    table_mut(&mut doc, "bootstrap")?.insert("enabled".to_string(), toml::Value::Boolean(true));
+    table_mut(&mut doc, "upload")?.insert(
+        "base_url".to_string(),
+        toml::Value::String(config.upload_base_url()),
+    );
+    table_mut(&mut doc, "cookie")?.insert(
+        "same_site".to_string(),
+        toml::Value::String("none".to_string()),
+    );
+    table_mut(&mut doc, "cookie")?.insert("secure".to_string(), toml::Value::Boolean(true));
+
+    Ok(toml::to_string_pretty(&doc)?)
+}
+
+fn table_mut<'a>(
+    doc: &'a mut toml::Value,
+    table_name: &str,
+) -> Result<&'a mut toml::map::Map<String, toml::Value>> {
+    doc.get_mut(table_name)
+        .and_then(toml::Value::as_table_mut)
+        .with_context(|| format!("TOML example is missing [{table_name}] table"))
+}
+
+pub fn generate_secrets_toml(config: &DeployConfig, output_path: &Path) -> Result<()> {
+    let example_path = output_path
+        .parent()
+        .context("secrets.toml output path must have a parent directory")?
+        .join("secrets.toml.example");
+    let example_content = fs::read_to_string(&example_path)
+        .with_context(|| format!("failed to read {}", example_path.display()))?;
+    let content = render_secrets_toml(&example_content, config)?;
+    fs::write(output_path, content)?;
     Ok(())
+}
+
+fn render_secrets_toml(example_content: &str, config: &DeployConfig) -> Result<String> {
+    let mut doc: toml::Value = toml::from_str(example_content)?;
+
+    table_mut(&mut doc, "database")?.insert(
+        "url".to_string(),
+        toml::Value::String(config.database_url()),
+    );
+    table_mut(&mut doc, "redis")?.insert(
+        "url".to_string(),
+        toml::Value::String("redis://dokuru-redis:6379".to_string()),
+    );
+    table_mut(&mut doc, "auth")?.insert(
+        "access_secret".to_string(),
+        toml::Value::String(config.jwt_access_secret.clone()),
+    );
+    table_mut(&mut doc, "auth")?.insert(
+        "refresh_secret".to_string(),
+        toml::Value::String(config.jwt_refresh_secret.clone()),
+    );
+    table_mut(&mut doc, "email")?.insert(
+        "resend_api_key".to_string(),
+        toml::Value::String(config.resend_api_key.clone()),
+    );
+    table_mut(&mut doc, "email")?.insert(
+        "from_email".to_string(),
+        toml::Value::String(format!("noreply@{}", config.base_domain)),
+    );
+
+    Ok(toml::to_string_pretty(&doc)?)
 }
 
 pub fn generate_docker_compose_override(
@@ -179,15 +228,132 @@ pub fn generate_secret(length: usize) -> String {
 }
 
 pub fn generate_env_file(config: &DeployConfig, output_path: &Path) -> Result<()> {
-    let env_content = format!(
-        "# Local development overrides for cargo run.\n\
-         # Docker Compose production reads config/*.toml and explicit compose environment instead.\n\
-         RUST_ENV=development\n\
-         DATABASE_URL=postgres://{}:{}@localhost:5432/{}\n\
-         REDIS_URL=redis://localhost:6379\n",
-        config.db_user, config.db_password, config.db_name
-    );
-
-    fs::write(output_path, env_content)?;
+    fs::write(output_path, render_env_file(config))?;
     Ok(())
+}
+
+fn render_env_file(config: &DeployConfig) -> String {
+    format!(
+        "# Database connection string\n\
+         # All other config lives in config/*.toml files\n\
+         DATABASE_URL=postgres://{}:{}@localhost:5432/{}\n",
+        config.db_user, config.db_password, config.db_name
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use toml::Value as TomlValue;
+
+    fn config() -> DeployConfig {
+        DeployConfig {
+            base_domain: "dokuru.rifuki.dev".to_string(),
+            landing_domain: "dokuru.rifuki.dev".to_string(),
+            www_domain: "app.dokuru.rifuki.dev".to_string(),
+            api_domain: "api.dokuru.rifuki.dev".to_string(),
+            db_name: "dokuru_db".to_string(),
+            db_user: "dokuru".to_string(),
+            db_password: "secret".to_string(),
+            jwt_access_secret: "access-secret".to_string(),
+            jwt_refresh_secret: "refresh-secret".to_string(),
+            resend_api_key: "re_test".to_string(),
+        }
+    }
+
+    fn local_example() -> &'static str {
+        r#"
+[app]
+rust_env = "development"
+rust_log = "trace"
+
+[server]
+cors_allowed_origins = ["http://localhost:5173"]
+
+[bootstrap]
+enabled = false
+
+[upload]
+base_url = "http://localhost:9393/media"
+
+[cookie]
+same_site = "lax"
+secure = false
+"#
+    }
+
+    fn secrets_example() -> &'static str {
+        r#"
+[database]
+url = "postgres://dokuru:secret@localhost:5432/dokuru_db"
+
+[redis]
+url = "redis://localhost:6379"
+
+[auth]
+access_secret = "change-me-access-secret-min-32-chars"
+refresh_secret = "change-me-refresh-secret-min-32-chars"
+
+[email]
+resend_api_key = "your_resend_api_key_here"
+from_email = "noreply@dokuru.rifuki.dev"
+"#
+    }
+
+    #[test]
+    fn local_toml_is_rendered_from_example() {
+        let content = render_local_toml(local_example(), &config()).unwrap();
+        let doc = content.parse::<TomlValue>().unwrap();
+
+        assert_eq!(doc["app"]["rust_env"].as_str(), Some("production"));
+        assert_eq!(doc["app"]["rust_log"].as_str(), Some("info"));
+        assert_eq!(
+            doc["server"]["cors_allowed_origins"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(TomlValue::as_str)
+                .collect::<Vec<_>>(),
+            [Some("https://app.dokuru.rifuki.dev")]
+        );
+        assert_eq!(
+            doc["upload"]["base_url"].as_str(),
+            Some("https://api.dokuru.rifuki.dev/media")
+        );
+        assert_eq!(doc["cookie"]["same_site"].as_str(), Some("none"));
+        assert_eq!(doc["cookie"]["secure"].as_bool(), Some(true));
+    }
+
+    #[test]
+    fn secrets_toml_is_rendered_from_example() {
+        let content = render_secrets_toml(secrets_example(), &config()).unwrap();
+        let doc = content.parse::<TomlValue>().unwrap();
+
+        assert_eq!(
+            doc["database"]["url"].as_str(),
+            Some("postgres://dokuru:secret@dokuru-db:5432/dokuru_db")
+        );
+        assert_eq!(
+            doc["redis"]["url"].as_str(),
+            Some("redis://dokuru-redis:6379")
+        );
+        assert_eq!(doc["auth"]["access_secret"].as_str(), Some("access-secret"));
+        assert_eq!(
+            doc["auth"]["refresh_secret"].as_str(),
+            Some("refresh-secret")
+        );
+        assert_eq!(doc["email"]["resend_api_key"].as_str(), Some("re_test"));
+        assert_eq!(
+            doc["email"]["from_email"].as_str(),
+            Some("noreply@dokuru.rifuki.dev")
+        );
+    }
+
+    #[test]
+    fn env_file_only_contains_database_url() {
+        assert_eq!(
+            render_env_file(&config()),
+            "# Database connection string\n# All other config lives in config/*.toml files\nDATABASE_URL=postgres://dokuru:secret@localhost:5432/dokuru_db\n"
+        );
+    }
 }

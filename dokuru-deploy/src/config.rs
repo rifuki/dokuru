@@ -1,5 +1,3 @@
-use serde::{Deserialize, Serialize};
-
 #[derive(Debug, Clone)]
 pub struct DeployConfig {
     pub base_domain: String,
@@ -29,71 +27,4 @@ impl DeployConfig {
     pub fn upload_base_url(&self) -> String {
         format!("https://{}/media", self.api_domain)
     }
-}
-
-// TOML structures
-#[derive(Debug, Serialize, Deserialize)]
-pub struct LocalToml {
-    pub app: AppConfig,
-    pub server: ServerConfig,
-    pub bootstrap: BootstrapConfig,
-    pub upload: UploadConfig,
-    pub cookie: CookieConfig,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct AppConfig {
-    pub rust_env: String,
-    pub rust_log: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ServerConfig {
-    pub cors_allowed_origins: Vec<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct BootstrapConfig {
-    pub enabled: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct UploadConfig {
-    pub base_url: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CookieConfig {
-    pub same_site: String,
-    pub secure: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SecretsToml {
-    pub database: DatabaseConfig,
-    pub redis: RedisConfig,
-    pub auth: AuthConfig,
-    pub email: EmailConfig,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DatabaseConfig {
-    pub url: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RedisConfig {
-    pub url: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct AuthConfig {
-    pub access_secret: String,
-    pub refresh_secret: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct EmailConfig {
-    pub resend_api_key: String,
-    pub from_email: String,
 }

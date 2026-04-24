@@ -987,7 +987,7 @@ fn show_completion(
 
     note(
         "Generated files",
-        "dokuru-server/config/local.toml\ndokuru-server/config/secrets.toml\ndokuru-server/.env\ndocker-compose.override.yaml",
+        "dokuru-server/config/local.toml\ndokuru-server/config/secrets.toml\ndokuru-server/.env (DATABASE_URL only)\ndocker-compose.override.yaml",
     )?;
 
     // Show deployment-specific instructions
