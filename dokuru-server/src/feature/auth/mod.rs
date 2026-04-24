@@ -1,4 +1,5 @@
 pub mod auth_method;
+pub mod domain;
 pub mod handlers;
 mod repository;
 mod routes;

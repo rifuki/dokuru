@@ -77,13 +77,6 @@ pub struct ChangePasswordRequest {
 pub fn hash_password(
     password: &str,
 ) -> Result<String, crate::feature::auth::repository::AuthError> {
-    use argon2::{
-        Argon2,
-        password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
-    };
-    let salt = SaltString::generate(&mut OsRng);
-    Argon2::default()
-        .hash_password(password.as_bytes(), &salt)
-        .map(|h| h.to_string())
+    crate::feature::auth::domain::hash_password(password)
         .map_err(|_| crate::feature::auth::repository::AuthError::HashError)
 }
