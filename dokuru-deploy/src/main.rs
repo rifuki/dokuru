@@ -1,9 +1,11 @@
+mod compose;
 mod config;
 mod generator;
 
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use cliclack::{confirm, input, intro, outro, outro_cancel, select};
+use compose::{Compose, doctor, services_or_default};
 use config::DeployConfig;
 use generator::{
     generate_docker_compose_override, generate_env_file, generate_local_toml, generate_secret,
@@ -45,6 +47,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Generate production config files and compose overrides
     Init {
         #[arg(long)]
         domain: Option<String>,
@@ -59,37 +62,166 @@ enum Commands {
         #[arg(long)]
         output: Option<PathBuf>,
     },
+    /// Validate local prerequisites and Dokuru config files
+    Doctor(ProjectArgs),
+    /// Show Docker Compose service status
+    Status(ServiceArgs),
+    /// Run the server container healthcheck
+    Health(ProjectArgs),
+    /// Pull images, start infrastructure, run migrations, and roll out apps
+    Deploy(DeployArgs),
+    /// Start Compose services without running migrations
+    Up(ServiceArgs),
+    /// Alias for up
+    Start(ServiceArgs),
+    /// Pull Compose service images
+    Pull(ServiceArgs),
+    /// Run database migrations through the migration image
+    Migrate(RunArgs),
+    /// Stop Compose services
+    Down(DownArgs),
+}
+
+#[derive(Args, Clone)]
+struct ProjectArgs {
+    /// Dokuru project directory containing docker-compose.yaml
+    #[arg(long, value_name = "DIR", default_value = ".")]
+    project_dir: PathBuf,
+}
+
+#[derive(Args, Clone)]
+struct RunArgs {
+    #[command(flatten)]
+    project: ProjectArgs,
+
+    /// Print commands without executing them
+    #[arg(long)]
+    dry_run: bool,
+
+    /// Override the Compose VERSION image tag
+    #[arg(long)]
+    version: Option<String>,
+}
+
+#[derive(Args, Clone)]
+struct ServiceArgs {
+    #[command(flatten)]
+    run: RunArgs,
+
+    /// Compose services to target. Defaults to Dokuru app services.
+    #[arg(long = "service", value_name = "SERVICE")]
+    services: Vec<String>,
+}
+
+#[derive(Args, Clone)]
+struct DeployArgs {
+    #[command(flatten)]
+    service: ServiceArgs,
+
+    /// Skip docker compose pull before rollout
+    #[arg(long)]
+    no_pull: bool,
+
+    /// Skip database migrations before app rollout
+    #[arg(long)]
+    skip_migrations: bool,
+}
+
+#[derive(Args, Clone)]
+struct DownArgs {
+    #[command(flatten)]
+    project: ProjectArgs,
+
+    /// Print commands without executing them
+    #[arg(long)]
+    dry_run: bool,
+
+    /// Also remove named volumes
+    #[arg(long)]
+    volumes: bool,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let (domain, db_name, db_user, db_password, resend_key, output) = match cli.command {
-        Some(Commands::Init {
+    let Some(command) = cli.command else {
+        return run_init(
+            cli.domain,
+            cli.db_name.unwrap_or_else(|| "dokuru_db".to_string()),
+            cli.db_user.unwrap_or_else(|| "dokuru".to_string()),
+            cli.db_password,
+            cli.resend_key,
+            cli.output.unwrap_or_else(|| PathBuf::from(".")),
+        );
+    };
+
+    match command {
+        Commands::Init {
             domain,
             db_name,
             db_user,
             db_password,
             resend_key,
             output,
-        }) => (domain, db_name, db_user, db_password, resend_key, output),
-        None => (
-            cli.domain,
-            cli.db_name,
-            cli.db_user,
-            cli.db_password,
-            cli.resend_key,
-            cli.output,
+        } => run_init(
+            domain,
+            db_name.unwrap_or_else(|| "dokuru_db".to_string()),
+            db_user.unwrap_or_else(|| "dokuru".to_string()),
+            db_password,
+            resend_key,
+            output.unwrap_or_else(|| PathBuf::from(".")),
         ),
-    };
+        Commands::Doctor(args) => doctor(&args.project_dir),
+        Commands::Status(args) => run_status(&args),
+        Commands::Health(args) => run_health(args),
+        Commands::Deploy(args) => run_deploy(&args),
+        Commands::Up(args) | Commands::Start(args) => run_up(&args),
+        Commands::Pull(args) => run_pull(&args),
+        Commands::Migrate(args) => run_migrate(&args),
+        Commands::Down(args) => run_down(args),
+    }
+}
 
-    run_init(
-        domain,
-        db_name.unwrap_or_else(|| "dokuru_db".to_string()),
-        db_user.unwrap_or_else(|| "dokuru".to_string()),
-        db_password,
-        resend_key,
-        output.unwrap_or_else(|| PathBuf::from(".")),
+fn run_status(args: &ServiceArgs) -> Result<()> {
+    let compose = compose_from_run_args(&args.run)?;
+    compose.status(&services_or_default(&args.services, &[]))
+}
+
+fn run_health(args: ProjectArgs) -> Result<()> {
+    let compose = Compose::new(args.project_dir, false, None)?;
+    compose.health()
+}
+
+fn run_deploy(args: &DeployArgs) -> Result<()> {
+    let compose = compose_from_run_args(&args.service.run)?;
+    compose.deploy(&args.service.services, !args.no_pull, !args.skip_migrations)
+}
+
+fn run_up(args: &ServiceArgs) -> Result<()> {
+    let compose = compose_from_run_args(&args.run)?;
+    compose.up(&services_or_default(&args.services, &[]))
+}
+
+fn run_pull(args: &ServiceArgs) -> Result<()> {
+    let compose = compose_from_run_args(&args.run)?;
+    compose.pull(&services_or_default(&args.services, &[]))
+}
+
+fn run_migrate(args: &RunArgs) -> Result<()> {
+    let compose = compose_from_run_args(args)?;
+    compose.migrate()
+}
+
+fn run_down(args: DownArgs) -> Result<()> {
+    let compose = Compose::new(args.project.project_dir, args.dry_run, None)?;
+    compose.down(args.volumes)
+}
+
+fn compose_from_run_args(args: &RunArgs) -> Result<Compose> {
+    Compose::new(
+        args.project.project_dir.clone(),
+        args.dry_run,
+        args.version.clone(),
     )
 }
 
