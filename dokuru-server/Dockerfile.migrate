@@ -1,15 +1,15 @@
-ARG RUST_IMAGE=rust:1.95.0-trixie
+ARG RUST_IMAGE=rust:1.95.0-alpine3.22
 FROM ${RUST_IMAGE} AS builder
+
+RUN apk add --no-cache build-base
 
 RUN cargo install sqlx-cli --version 0.8.6 --locked --no-default-features --features rustls,postgres
 
-FROM debian:trixie-slim AS runtime
+FROM scratch AS runtime
 
 WORKDIR /migrations
 
 COPY --from=builder /usr/local/cargo/bin/sqlx /usr/local/bin/sqlx
 COPY migrations ./migrations
-COPY migrate.sh /migrate.sh
-RUN chmod +x /migrate.sh
 
-ENTRYPOINT ["/migrate.sh"]
+ENTRYPOINT ["/usr/local/bin/sqlx", "migrate", "run", "--source", "migrations"]

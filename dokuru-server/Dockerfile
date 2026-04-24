@@ -1,8 +1,9 @@
 # =============================================================================
 # Chef — install cargo-chef for dependency layer caching
 # =============================================================================
-ARG RUST_IMAGE=rust:1.95.0-trixie
+ARG RUST_IMAGE=rust:1.95.0-alpine3.22
 FROM ${RUST_IMAGE} AS chef
+RUN apk add --no-cache build-base
 RUN cargo install cargo-chef --locked
 WORKDIR /app
 
@@ -28,20 +29,17 @@ ENV SQLX_OFFLINE=true
 RUN cargo build --release --bin dokuru-server
 
 # =============================================================================
-# Runtime — minimal image
+# Runtime — static binary image
 # =============================================================================
-FROM debian:trixie-slim AS runtime
+FROM scratch AS runtime
 
 WORKDIR /app
 
-RUN mkdir -p /app/config
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=builder /app/target/release/dokuru-server .
+COPY --from=builder /app/target/release/dokuru-server /app/dokuru-server
 
 EXPOSE 9393
 
-CMD ["./dokuru-server"]
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 --start-period=30s \
+    CMD ["/app/dokuru-server", "--healthcheck"]
+
+CMD ["/app/dokuru-server"]

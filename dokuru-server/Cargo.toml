@@ -71,7 +71,11 @@ rand = "0.8.5"
 # Auth
 jsonwebtoken = "9"
 argon2 = "0.5.3"
-rustls = { version = "0.23", features = ["ring", "std"] }
+rustls = { version = "0.23", default-features = false, features = [
+  "ring",
+  "std",
+  "tls12",
+] }
 
 # Redis
 bb8-redis = "0.26"

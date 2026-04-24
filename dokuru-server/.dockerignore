@@ -1,11 +1,14 @@
 # Rust build artifacts
 target/
-Cargo.lock
 
 # Environment files
 .env
 .env.*
 !.env.example
+config/local.toml
+config/local.prod.toml
+config/secrets.toml
+config/secrets.prod.toml
 
 # IDE
 .idea/
