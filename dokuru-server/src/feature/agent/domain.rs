@@ -106,7 +106,7 @@ pub fn validate_status(status: &str) -> Result<AgentStatus, AgentValidationError
     AgentStatus::parse(status)
 }
 
-pub fn validate_token(token: &str) -> Result<(), AgentValidationError> {
+pub const fn validate_token(token: &str) -> Result<(), AgentValidationError> {
     if token.is_empty() {
         Err(AgentValidationError::EmptyToken)
     } else {

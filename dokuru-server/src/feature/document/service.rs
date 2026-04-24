@@ -64,13 +64,14 @@ impl DocumentService {
             fs::create_dir_all(parent).await?;
         }
         fs::write(&file_path, &upload.bytes).await?;
+        let file_size = i64::try_from(upload.bytes.len()).unwrap_or(0);
 
         let document = self
             .repository
             .create(
                 upload.original_name,
                 file_path.to_string_lossy().to_string(),
-                upload.bytes.len() as i64,
+                file_size,
                 upload.content_type,
             )
             .await

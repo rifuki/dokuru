@@ -51,7 +51,7 @@ pub fn is_pdf(file_name: &str, content_type: &str) -> bool {
     content_type.starts_with(PDF_CONTENT_TYPE) || file_name.to_lowercase().ends_with(".pdf")
 }
 
-pub fn validate_size(size: usize) -> Result<(), DocumentValidationError> {
+pub const fn validate_size(size: usize) -> Result<(), DocumentValidationError> {
     if size == 0 {
         return Err(DocumentValidationError::EmptyFile);
     }

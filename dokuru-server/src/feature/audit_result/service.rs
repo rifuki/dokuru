@@ -1,9 +1,9 @@
-use chrono::DateTime;
 use eyre::Result;
 use sqlx::PgPool;
 use std::sync::Arc;
 use uuid::Uuid;
 
+use super::domain::{AuditSummary, parse_ran_at_or_now, usize_to_i32_or_zero};
 use super::dto::{AuditResultResponse, AuditSummaryResponse, SaveAuditDto};
 use super::entity::AuditResultRecord;
 use super::repository::AuditResultRepository;
@@ -24,8 +24,13 @@ impl AuditResultService {
         user_id: Uuid,
         dto: SaveAuditDto,
     ) -> Result<AuditResultResponse> {
-        let ran_at = DateTime::parse_from_rfc3339(&dto.timestamp)
-            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc));
+        let ran_at = parse_ran_at_or_now(&dto.timestamp);
+        let summary = AuditSummary::from_wire(
+            dto.summary.total,
+            dto.summary.passed,
+            dto.summary.failed,
+            dto.summary.score,
+        );
 
         let record = AuditResultRecord {
             id: Uuid::new_v4(),
@@ -33,12 +38,12 @@ impl AuditResultService {
             user_id,
             hostname: dto.hostname,
             docker_version: dto.docker_version,
-            total_containers: i32::try_from(dto.total_containers).unwrap_or(0),
+            total_containers: usize_to_i32_or_zero(dto.total_containers),
             results: dto.results,
-            total_rules: i32::try_from(dto.summary.total).unwrap_or(0),
-            passed: i32::try_from(dto.summary.passed).unwrap_or(0),
-            failed: i32::try_from(dto.summary.failed).unwrap_or(0),
-            score: i32::from(dto.summary.score),
+            total_rules: summary.total,
+            passed: summary.passed,
+            failed: summary.failed,
+            score: summary.score,
             ran_at,
             created_at: chrono::Utc::now(),
         };
@@ -82,6 +87,13 @@ impl AuditResultService {
     }
 
     fn to_response(record: AuditResultRecord) -> AuditResultResponse {
+        let summary = AuditSummary::from_record(
+            record.total_rules,
+            record.passed,
+            record.failed,
+            record.score,
+        );
+
         AuditResultResponse {
             id: record.id,
             agent_id: record.agent_id,
@@ -91,10 +103,10 @@ impl AuditResultService {
             total_containers: record.total_containers,
             results: record.results,
             summary: AuditSummaryResponse {
-                total: record.total_rules,
-                passed: record.passed,
-                failed: record.failed,
-                score: record.score,
+                total: summary.total,
+                passed: summary.passed,
+                failed: summary.failed,
+                score: summary.score,
             },
             ran_at: record.ran_at,
             created_at: record.created_at,
