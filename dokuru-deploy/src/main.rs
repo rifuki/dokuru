@@ -427,7 +427,7 @@ fn run_init(
         println!("     From:     noreply@{}", config.base_domain);
         println!();
 
-        let proceed: bool = confirm("Generate configuration files?")
+        let proceed: bool = confirm("Proceed and save configuration files?")
             .initial_value(true)
             .interact()?;
 
