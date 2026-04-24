@@ -294,7 +294,7 @@ fn run_init(
     } else if is_interactive {
         println!("\n🗄️  Database Configuration\n");
         
-        let auto_gen: bool = confirm("Auto-generate secure database password?")
+        let auto_gen: bool = confirm("Auto-generate secure database configuration?")
             .initial_value(true)
             .interact()?;
 
