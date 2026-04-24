@@ -112,6 +112,14 @@ pub fn generate_docker_compose_override(config: &DeployConfig, output_path: &Pat
       - "traefik.http.routers.dokuru-landing.entrypoints=websecure"
       - "traefik.http.routers.dokuru-landing.tls.certresolver=letsencrypt"
       - "traefik.http.services.dokuru-landing.loadbalancer.server.port=80"
+      # Redirect /install to GitHub raw
+      - "traefik.http.middlewares.install-redirect.redirectregex.regex=^https?://([^/]+)/install(.sh)?$$"
+      - "traefik.http.middlewares.install-redirect.redirectregex.replacement=https://raw.githubusercontent.com/rifuki/dokuru/main/install.sh"
+      # Redirect /deploy to GitHub raw
+      - "traefik.http.middlewares.deploy-redirect.redirectregex.regex=^https?://([^/]+)/deploy(.sh)?$$"
+      - "traefik.http.middlewares.deploy-redirect.redirectregex.replacement=https://raw.githubusercontent.com/rifuki/dokuru/main/dokuru-deploy/install.sh"
+      # Apply middlewares
+      - "traefik.http.routers.dokuru-landing.middlewares=install-redirect,deploy-redirect"
 "#,
                 config.landing_domain
             ));
