@@ -197,6 +197,7 @@ fn run_init(
             "full-vps" => {
                 let base: String = input("Base domain")
                     .placeholder("dokuru.rifuki.dev")
+                    .default_input("dokuru.rifuki.dev")
                     .interact()?;
                 
                 let landing = base.clone();
