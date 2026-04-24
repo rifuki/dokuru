@@ -59,13 +59,26 @@ pub fn generate_docker_compose_override(
     output_path: &Path,
     strategy: &str,
 ) -> Result<()> {
-    let mut yaml = format!(
+    let mut yaml = base_compose_override(config);
+    append_www_override(&mut yaml, config, strategy)?;
+    append_landing_override(&mut yaml, config, strategy)?;
+
+    fs::write(output_path, yaml)?;
+    Ok(())
+}
+
+fn base_compose_override(config: &DeployConfig) -> String {
+    format!(
         r#"services:
   dokuru-db:
     environment:
       POSTGRES_DB: {}
       POSTGRES_USER: {}
       POSTGRES_PASSWORD: {}
+
+  dokuru-server-migrate:
+    environment:
+      DATABASE_URL: {}
 
   dokuru-server:
     labels:
@@ -75,10 +88,15 @@ pub fn generate_docker_compose_override(
       - "traefik.http.routers.dokuru-api.tls.certresolver=letsencrypt"
       - "traefik.http.services.dokuru-server.loadbalancer.server.port=9393"
 "#,
-        config.db_name, config.db_user, config.db_password, config.api_domain,
-    );
+        config.db_name,
+        config.db_user,
+        config.db_password,
+        config.database_url(),
+        config.api_domain,
+    )
+}
 
-    // Add www service config (only if on VPS)
+fn append_www_override(yaml: &mut String, config: &DeployConfig, strategy: &str) -> Result<()> {
     match strategy {
         "full-vps" | "landing-vercel" => {
             write!(
@@ -106,7 +124,10 @@ pub fn generate_docker_compose_override(
         _ => {}
     }
 
-    // Add landing service config (only if on VPS)
+    Ok(())
+}
+
+fn append_landing_override(yaml: &mut String, config: &DeployConfig, strategy: &str) -> Result<()> {
     match strategy {
         "full-vps" | "app-vercel" => {
             write!(
@@ -142,7 +163,6 @@ pub fn generate_docker_compose_override(
         _ => {}
     }
 
-    fs::write(output_path, yaml)?;
     Ok(())
 }
 
@@ -160,9 +180,11 @@ pub fn generate_secret(length: usize) -> String {
 
 pub fn generate_env_file(config: &DeployConfig, output_path: &Path) -> Result<()> {
     let env_content = format!(
-        "# Database connection string for local development (cargo run)\n\
-         # All other config lives in config/*.toml files\n\
-         DATABASE_URL=postgres://{}:{}@localhost:5432/{}\n",
+        "# Local development overrides for cargo run.\n\
+         # Docker Compose production reads config/*.toml and explicit compose environment instead.\n\
+         RUST_ENV=development\n\
+         DATABASE_URL=postgres://{}:{}@localhost:5432/{}\n\
+         REDIS_URL=redis://localhost:6379\n",
         config.db_user, config.db_password, config.db_name
     );
 

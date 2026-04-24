@@ -62,7 +62,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.95.0
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -70,6 +70,7 @@ jobs:
           workspaces: |
             dokuru-agent
             dokuru-server
+            dokuru-deploy
           cache-on-failure: true
 
       # Agent tests
@@ -94,11 +95,24 @@ jobs:
         working-directory: dokuru-server
         env:
           SQLX_OFFLINE: "true"
-        run: cargo clippy -- -D warnings
+        run: cargo clippy -- -D warnings -W clippy::pedantic -W clippy::nursery
 
       - name: Test (server)
         working-directory: dokuru-server
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/dokuru_test
           SQLX_OFFLINE: "true"
+        run: cargo test
+
+      # Deploy CLI checks
+      - name: Format check (deploy)
+        working-directory: dokuru-deploy
+        run: cargo fmt --check
+
+      - name: Clippy (deploy)
+        working-directory: dokuru-deploy
+        run: cargo clippy -- -D warnings -W clippy::pedantic -W clippy::nursery
+
+      - name: Test (deploy)
+        working-directory: dokuru-deploy
         run: cargo test

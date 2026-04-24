@@ -1,0 +1,117 @@
+name: Deploy Compose Service
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        description: Docker Compose service to deploy.
+        required: true
+        type: string
+      image-tag:
+        description: Image tag to expose as VERSION during deployment.
+        required: true
+        type: string
+      run-migrations:
+        description: Run database migrations before rolling out the service.
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      DOKURU_DEPLOY_HOST:
+        required: false
+      DOKURU_DEPLOY_USER:
+        required: false
+      DOKURU_DEPLOY_PORT:
+        required: false
+      DOKURU_DEPLOY_PATH:
+        required: false
+      DOKURU_DEPLOY_SSH_KEY:
+        required: false
+      DOKURU_GHCR_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.service }}
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      DEPLOY_HOST: ${{ vars.DOKURU_DEPLOY_HOST || secrets.DOKURU_DEPLOY_HOST }}
+      DEPLOY_USER: ${{ vars.DOKURU_DEPLOY_USER || secrets.DOKURU_DEPLOY_USER }}
+      DEPLOY_PORT: ${{ vars.DOKURU_DEPLOY_PORT || secrets.DOKURU_DEPLOY_PORT || '22' }}
+      DEPLOY_PATH: ${{ vars.DOKURU_DEPLOY_PATH || secrets.DOKURU_DEPLOY_PATH }}
+      DEPLOY_SSH_KEY: ${{ secrets.DOKURU_DEPLOY_SSH_KEY }}
+      GHCR_TOKEN: ${{ secrets.DOKURU_GHCR_TOKEN }}
+      GHCR_USER: ${{ github.actor }}
+      SERVICE: ${{ inputs.service }}
+      IMAGE_TAG: ${{ inputs.image-tag }}
+      RUN_MIGRATIONS: ${{ inputs.run-migrations }}
+    steps:
+      - name: Validate deployment configuration
+        run: |
+          missing=()
+          [ -n "${DEPLOY_HOST}" ] || missing+=("DOKURU_DEPLOY_HOST")
+          [ -n "${DEPLOY_USER}" ] || missing+=("DOKURU_DEPLOY_USER")
+          [ -n "${DEPLOY_PATH}" ] || missing+=("DOKURU_DEPLOY_PATH")
+          [ -n "${DEPLOY_SSH_KEY}" ] || missing+=("DOKURU_DEPLOY_SSH_KEY")
+
+          if [ "${#missing[@]}" -ne 0 ]; then
+            printf '::error::Missing deployment configuration: %s\n' "${missing[*]}"
+            exit 1
+          fi
+
+      - name: Configure SSH
+        run: |
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "${DEPLOY_SSH_KEY}" > ~/.ssh/dokuru_deploy_key
+          chmod 0600 ~/.ssh/dokuru_deploy_key
+          ssh-keyscan -p "${DEPLOY_PORT}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Log in to GHCR on host
+        if: env.GHCR_TOKEN != ''
+        run: |
+          printf '%s' "${GHCR_TOKEN}" \
+            | ssh -i ~/.ssh/dokuru_deploy_key -p "${DEPLOY_PORT}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+                "docker login ghcr.io -u '${GHCR_USER}' --password-stdin"
+
+      - name: Deploy via Docker Compose
+        run: |
+          remote_env=$(
+            printf 'DOKURU_DEPLOY_PATH=%q DOKURU_VERSION=%q DOKURU_SERVICE=%q DOKURU_RUN_MIGRATIONS=%q' \
+              "${DEPLOY_PATH}" "${IMAGE_TAG}" "${SERVICE}" "${RUN_MIGRATIONS}"
+          )
+
+          ssh -i ~/.ssh/dokuru_deploy_key -p "${DEPLOY_PORT}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "${remote_env} bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+
+          cd "${DOKURU_DEPLOY_PATH}"
+
+          if [ -d .git ]; then
+            git fetch origin main
+            git checkout main
+            git pull --ff-only origin main
+          fi
+
+          test -f docker-compose.yaml
+          export VERSION="${DOKURU_VERSION}"
+
+          docker compose config --quiet
+          docker compose pull "${DOKURU_SERVICE}"
+
+          if [ "${DOKURU_RUN_MIGRATIONS}" = "true" ]; then
+            docker compose pull dokuru-server-migrate
+            docker compose up -d dokuru-db dokuru-redis
+            docker compose --profile migrate run --rm dokuru-server-migrate
+          fi
+
+          docker compose up -d "${DOKURU_SERVICE}"
+          docker compose ps "${DOKURU_SERVICE}"
+          REMOTE

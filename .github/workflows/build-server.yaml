@@ -6,15 +6,22 @@ on:
       - main
     paths:
       - 'dokuru-server/**'
+      - 'docker-compose.yaml'
       - '.github/workflows/build-server.yaml'
+      - '.github/workflows/deploy-compose-service.yaml'
   pull_request:
     paths:
       - 'dokuru-server/**'
+      - 'docker-compose.yaml'
+      - '.github/workflows/build-server.yaml'
+      - '.github/workflows/deploy-compose-service.yaml'
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/dokuru-server
+  SERVER_IMAGE_NAME: ${{ github.repository_owner }}/dokuru-server
+  MIGRATE_IMAGE_NAME: ${{ github.repository_owner }}/dokuru-server-migrate
+  PLATFORMS: linux/amd64,linux/arm64
 
 permissions:
   contents: read
@@ -26,38 +33,80 @@ concurrency:
 
 jobs:
   docker:
-    name: Build & Push Docker Image
+    name: Build & Push Docker Images
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
+      - name: Extract server metadata
+        id: server-meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.SERVER_IMAGE_NAME }}
           tags: |
             type=raw,value=latest
-            type=sha,prefix=main-
+            type=raw,value=sha-${{ github.sha }}
 
-      - name: Build and push
+      - name: Extract migration metadata
+        id: migrate-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.MIGRATE_IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=raw,value=sha-${{ github.sha }}
+
+      - name: Build and push server image
         uses: docker/build-push-action@v6
         with:
           context: dokuru-server
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          file: dokuru-server/Dockerfile
+          platforms: ${{ env.PLATFORMS }}
+          push: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+          tags: ${{ steps.server-meta.outputs.tags }}
+          labels: ${{ steps.server-meta.outputs.labels }}
+          cache-from: type=gha,scope=dokuru-server
+          cache-to: type=gha,mode=max,scope=dokuru-server
+
+      - name: Build and push migration image
+        uses: docker/build-push-action@v6
+        with:
+          context: dokuru-server
+          file: dokuru-server/Dockerfile.migrate
+          platforms: ${{ env.PLATFORMS }}
+          push: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+          tags: ${{ steps.migrate-meta.outputs.tags }}
+          labels: ${{ steps.migrate-meta.outputs.labels }}
+          cache-from: type=gha,scope=dokuru-server-migrate
+          cache-to: type=gha,mode=max,scope=dokuru-server-migrate
+
+  deploy:
+    name: Migrate & Deploy Server
+    needs: docker
+    if: >-
+      github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/main' &&
+      vars.DOKURU_DEPLOY_HOST != '' &&
+      vars.DOKURU_DEPLOY_USER != '' &&
+      vars.DOKURU_DEPLOY_PATH != ''
+    uses: ./.github/workflows/deploy-compose-service.yaml
+    with:
+      service: dokuru-server
+      image-tag: sha-${{ github.sha }}
+      run-migrations: true
+    secrets: inherit

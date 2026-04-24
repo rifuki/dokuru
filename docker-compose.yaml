@@ -7,8 +7,8 @@ services:
     container_name: dokuru-db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: dokuru_db
-      POSTGRES_USER: dokuru
+      POSTGRES_DB: ${DOKURU_DB_NAME:-dokuru_db}
+      POSTGRES_USER: ${DOKURU_DB_USER:-dokuru}
       POSTGRES_PASSWORD: ${DOKURU_DB_PASSWORD:-secret}
     ports:
       - "5432:5432"
@@ -17,7 +17,7 @@ services:
     networks:
       - dokuru-internal
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dokuru -d dokuru_db"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -79,6 +79,23 @@ services:
   # ===========================================================================
   # App
   # ===========================================================================
+  dokuru-server-migrate:
+    image: ghcr.io/rifuki/dokuru-server-migrate:${VERSION:-latest}
+    profiles: ["migrate"]
+    restart: "no"
+    environment:
+      DATABASE_URL: postgres://${DOKURU_DB_USER:-dokuru}:${DOKURU_DB_PASSWORD:-secret}@dokuru-db:5432/${DOKURU_DB_NAME:-dokuru_db}
+    depends_on:
+      dokuru-db:
+        condition: service_healthy
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - dokuru-internal
+
   dokuru-server:
     image: ghcr.io/rifuki/dokuru-server:${VERSION:-latest}
     container_name: dokuru-server
@@ -89,13 +106,12 @@ services:
       - "traefik.http.routers.dokuru-api.entrypoints=websecure"
       - "traefik.http.routers.dokuru-api.tls.certresolver=letsencrypt"
       - "traefik.http.services.dokuru-server.loadbalancer.server.port=9393"
-    env_file: ./dokuru-server/.env
+    environment:
+      DOKURU__APP__RUST_ENV: production
+      DOKURU__APP__RUST_LOG: info
     volumes:
       - ./dokuru-server/config:/app/config
       - dokuru_uploads:/app/uploads
-    # environment:
-      # DATABASE_URL: postgres://dokuru:${DOKURU_DB_PASSWORD:-secret}@dokuru-db:5432/dokuru_db
-      # REDIS_URL: redis://dokuru-redis:6379
     depends_on:
       dokuru-db:
         condition: service_healthy
@@ -107,6 +123,13 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       - dokuru-internal
       - traefik-public

@@ -622,6 +622,12 @@ fn show_completion(
             println!("  2. Add repository variable:");
             println!("     Name:  API_DOMAIN");
             println!("     Value: https://{}", config.api_domain);
+            println!("  3. Add production deployment variables:");
+            println!("     DOKURU_DEPLOY_HOST, DOKURU_DEPLOY_USER, DOKURU_DEPLOY_PATH");
+            println!("     Optional: DOKURU_DEPLOY_PORT");
+            println!("  4. Add production deployment secret:");
+            println!("     DOKURU_DEPLOY_SSH_KEY");
+            println!("     Optional if GHCR images are private: DOKURU_GHCR_TOKEN");
             if !matches!(strategy, DeployStrategy::AppVercel) {
                 println!("\n  Note: This is needed for building dokuru-www Docker image");
             }
@@ -634,9 +640,9 @@ fn show_completion(
 
     println!("\n🚀 Next steps:");
     println!("  1. Review generated files");
-    println!("  2. Set up GitHub Actions variable (if needed)");
-    println!("  3. Run: docker-compose up -d");
-    println!("  4. Run migrations: docker-compose run --rm dokuru-server migrate");
+    println!("  2. Set up GitHub Actions variables/secrets for production");
+    println!("  3. Push to main or run the relevant Build & Deploy workflow manually");
+    println!("  4. CI/CD will pull images, run migrations, then roll out services");
 
     Ok(())
 }
