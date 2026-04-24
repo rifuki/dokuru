@@ -6,6 +6,8 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 
+use crate::project;
+
 const APP_SERVICES: &[&str] = &["dokuru-server", "dokuru-www", "dokuru-landing"];
 const INFRA_SERVICES: &[&str] = &["dokuru-db", "dokuru-redis"];
 const MIGRATION_SERVICE: &str = "dokuru-server-migrate";
@@ -28,9 +30,8 @@ pub struct Compose {
 }
 
 impl Compose {
-    pub fn new(project_dir: PathBuf, dry_run: bool, version: Option<String>) -> Result<Self> {
-        let project_dir = resolve_compose_project_dir(project_dir)?;
-        ensure_project_dir(&project_dir)?;
+    pub fn new(project_dir: &Path, dry_run: bool, version: Option<String>) -> Result<Self> {
+        let project_dir = project::resolve_existing_project_dir(project_dir)?;
         Ok(Self {
             project_dir,
             binary: detect_compose_binary()?,
@@ -174,7 +175,7 @@ struct Check {
 }
 
 pub fn doctor(project_dir: &Path) -> Result<()> {
-    let project_dir = resolve_compose_project_dir(project_dir.to_path_buf())?;
+    let project_dir = project::resolve_existing_project_dir(project_dir)?;
     let checks = collect_checks(&project_dir);
     for check in &checks {
         let status = if check.ok { "ok" } else { "fail" };
@@ -305,48 +306,6 @@ fn first_line(bytes: &[u8]) -> Option<String> {
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .map(str::to_string)
-}
-
-fn ensure_project_dir(project_dir: &Path) -> Result<()> {
-    if project_dir.join("docker-compose.yaml").is_file() {
-        Ok(())
-    } else {
-        bail!(
-            "{} is not a Dokuru deploy directory: docker-compose.yaml is missing",
-            project_dir.display()
-        );
-    }
-}
-
-fn resolve_compose_project_dir(project_dir: PathBuf) -> Result<PathBuf> {
-    let current_dir = std::env::current_dir()?;
-    let should_search_ancestors = project_dir == Path::new(".");
-    let candidate = if project_dir.is_absolute() {
-        project_dir
-    } else {
-        current_dir.join(project_dir)
-    };
-
-    if is_compose_project_dir(&candidate) {
-        return Ok(candidate);
-    }
-
-    if should_search_ancestors {
-        return find_ancestor_project_dir(&current_dir).map_or(Ok(candidate), Ok);
-    }
-
-    Ok(candidate)
-}
-
-fn find_ancestor_project_dir(start: &Path) -> Option<PathBuf> {
-    start
-        .ancestors()
-        .find(|path| is_compose_project_dir(path))
-        .map(Path::to_path_buf)
-}
-
-fn is_compose_project_dir(path: &Path) -> bool {
-    path.join("docker-compose.yaml").is_file()
 }
 
 fn with_migration_service(services: &[String]) -> Vec<String> {

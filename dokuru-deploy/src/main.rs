@@ -1,6 +1,7 @@
 mod compose;
 mod config;
 mod generator;
+mod project;
 
 use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
@@ -11,7 +12,7 @@ use generator::{
     generate_docker_compose_override, generate_env_file, generate_local_toml, generate_secret,
     generate_secrets_toml,
 };
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(name = "dokuru-deploy")]
@@ -43,6 +44,14 @@ struct Cli {
     /// Output directory
     #[arg(long)]
     output: Option<PathBuf>,
+
+    /// Clone the Dokuru repository when the project directory is missing
+    #[arg(long)]
+    clone_if_missing: bool,
+
+    /// Git repository URL used by --clone-if-missing
+    #[arg(long)]
+    repo_url: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -61,6 +70,10 @@ enum Commands {
         resend_key: Option<String>,
         #[arg(long)]
         output: Option<PathBuf>,
+        #[arg(long)]
+        clone_if_missing: bool,
+        #[arg(long)]
+        repo_url: Option<String>,
     },
     /// Validate local prerequisites and Dokuru config files
     Doctor(ProjectArgs),
@@ -87,6 +100,14 @@ struct ProjectArgs {
     /// Dokuru project directory containing docker-compose.yaml
     #[arg(long, value_name = "DIR", default_value = ".")]
     project_dir: PathBuf,
+
+    /// Clone the Dokuru repository when the project directory is missing
+    #[arg(long)]
+    clone_if_missing: bool,
+
+    /// Git repository URL used by --clone-if-missing
+    #[arg(long)]
+    repo_url: Option<String>,
 }
 
 #[derive(Args, Clone)]
@@ -141,18 +162,33 @@ struct DownArgs {
     volumes: bool,
 }
 
+struct InitOptions {
+    domain: Option<String>,
+    db_name: String,
+    db_user: String,
+    db_password: Option<String>,
+    resend_key: Option<String>,
+    output: PathBuf,
+    clone_if_missing: bool,
+    repo_url: String,
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let Some(command) = cli.command else {
-        return run_init(
-            cli.domain,
-            cli.db_name.unwrap_or_else(|| "dokuru_db".to_string()),
-            cli.db_user.unwrap_or_else(|| "dokuru".to_string()),
-            cli.db_password,
-            cli.resend_key,
-            cli.output.unwrap_or_else(|| PathBuf::from(".")),
-        );
+        return run_init(InitOptions {
+            domain: cli.domain,
+            db_name: cli.db_name.unwrap_or_else(|| "dokuru_db".to_string()),
+            db_user: cli.db_user.unwrap_or_else(|| "dokuru".to_string()),
+            db_password: cli.db_password,
+            resend_key: cli.resend_key,
+            output: cli.output.unwrap_or_else(|| PathBuf::from(".")),
+            clone_if_missing: cli.clone_if_missing,
+            repo_url: cli
+                .repo_url
+                .unwrap_or_else(|| project::DEFAULT_REPO_URL.to_string()),
+        });
     };
 
     match command {
@@ -163,22 +199,26 @@ fn main() -> Result<()> {
             db_password,
             resend_key,
             output,
-        } => run_init(
+            clone_if_missing,
+            repo_url,
+        } => run_init(InitOptions {
             domain,
-            db_name.unwrap_or_else(|| "dokuru_db".to_string()),
-            db_user.unwrap_or_else(|| "dokuru".to_string()),
+            db_name: db_name.unwrap_or_else(|| "dokuru_db".to_string()),
+            db_user: db_user.unwrap_or_else(|| "dokuru".to_string()),
             db_password,
             resend_key,
-            output.unwrap_or_else(|| PathBuf::from(".")),
-        ),
-        Commands::Doctor(args) => doctor(&args.project_dir),
+            output: output.unwrap_or_else(|| PathBuf::from(".")),
+            clone_if_missing,
+            repo_url: repo_url.unwrap_or_else(|| project::DEFAULT_REPO_URL.to_string()),
+        }),
+        Commands::Doctor(args) => run_doctor(&args),
         Commands::Status(args) => run_status(&args),
-        Commands::Health(args) => run_health(args),
+        Commands::Health(args) => run_health(&args),
         Commands::Deploy(args) => run_deploy(&args),
         Commands::Up(args) | Commands::Start(args) => run_up(&args),
         Commands::Pull(args) => run_pull(&args),
         Commands::Migrate(args) => run_migrate(&args),
-        Commands::Down(args) => run_down(args),
+        Commands::Down(args) => run_down(&args),
     }
 }
 
@@ -187,8 +227,14 @@ fn run_status(args: &ServiceArgs) -> Result<()> {
     compose.status(&services_or_default(&args.services, &[]))
 }
 
-fn run_health(args: ProjectArgs) -> Result<()> {
-    let compose = Compose::new(args.project_dir, false, None)?;
+fn run_doctor(args: &ProjectArgs) -> Result<()> {
+    let project_dir = resolve_project_arg(args)?;
+    doctor(&project_dir)
+}
+
+fn run_health(args: &ProjectArgs) -> Result<()> {
+    let project_dir = resolve_project_arg(args)?;
+    let compose = Compose::new(&project_dir, false, None)?;
     compose.health()
 }
 
@@ -212,35 +258,50 @@ fn run_migrate(args: &RunArgs) -> Result<()> {
     compose.migrate()
 }
 
-fn run_down(args: DownArgs) -> Result<()> {
-    let compose = Compose::new(args.project.project_dir, args.dry_run, None)?;
+fn run_down(args: &DownArgs) -> Result<()> {
+    let project_dir = resolve_project_arg(&args.project)?;
+    let compose = Compose::new(&project_dir, args.dry_run, None)?;
     compose.down(args.volumes)
 }
 
 fn compose_from_run_args(args: &RunArgs) -> Result<Compose> {
-    Compose::new(
-        args.project.project_dir.clone(),
-        args.dry_run,
-        args.version.clone(),
+    let project_dir = resolve_project_arg(&args.project)?;
+    Compose::new(&project_dir, args.dry_run, args.version.clone())
+}
+
+fn resolve_project_arg(args: &ProjectArgs) -> Result<PathBuf> {
+    project::prepare_project_dir(
+        &args.project_dir,
+        bootstrap_mode(args.clone_if_missing),
+        repo_url_arg(args),
     )
 }
 
-fn run_init(
-    domain: Option<String>,
-    db_name: String,
-    db_user: String,
-    db_password: Option<String>,
-    resend_key: Option<String>,
-    output: PathBuf,
-) -> Result<()> {
-    let is_interactive = domain.is_none() || resend_key.is_none();
+fn repo_url_arg(args: &ProjectArgs) -> &str {
+    args.repo_url
+        .as_deref()
+        .unwrap_or(project::DEFAULT_REPO_URL)
+}
+
+fn run_init(options: InitOptions) -> Result<()> {
+    let is_interactive = options.domain.is_none() || options.resend_key.is_none();
     show_intro(is_interactive)?;
 
-    let project_dir = resolve_project_dir(is_interactive, output)?;
-    let domains = resolve_domains(domain, is_interactive)?;
+    let project_dir = resolve_project_dir(
+        is_interactive,
+        &options.output,
+        options.clone_if_missing,
+        &options.repo_url,
+    )?;
+    let domains = resolve_domains(options.domain, is_interactive)?;
     let strategy = domains.strategy;
-    let database = resolve_database(db_name, db_user, db_password, is_interactive)?;
-    let resend_api = resolve_resend_key(resend_key, is_interactive)?;
+    let database = resolve_database(
+        options.db_name,
+        options.db_user,
+        options.db_password,
+        is_interactive,
+    )?;
+    let resend_api = resolve_resend_key(options.resend_key, is_interactive)?;
     let secrets = resolve_jwt_secrets(is_interactive)?;
     let config = build_deploy_config(domains, database, secrets, resend_api);
 
@@ -298,12 +359,18 @@ fn show_intro(is_interactive: bool) -> Result<()> {
     Ok(())
 }
 
-fn resolve_project_dir(is_interactive: bool, output: PathBuf) -> Result<PathBuf> {
+fn resolve_project_dir(
+    is_interactive: bool,
+    output: &Path,
+    clone_if_missing: bool,
+    repo_url: &str,
+) -> Result<PathBuf> {
     if !is_interactive {
-        return Ok(output);
+        let bootstrap = bootstrap_mode(clone_if_missing);
+        return project::prepare_project_dir(output, bootstrap, repo_url);
     }
 
-    if let Some(path) = detect_project_dir()? {
+    if let Some(path) = project::detect_project_dir()? {
         println!("✓ Found Dokuru project at: {}\n", path.display());
         if confirm("Use this project directory?")
             .initial_value(true)
@@ -315,58 +382,55 @@ fn resolve_project_dir(is_interactive: bool, output: PathBuf) -> Result<PathBuf>
         println!("📁 Project Directory\n");
     }
 
-    prompt_project_dir()
+    prompt_project_dir(repo_url, clone_if_missing)
 }
 
-fn detect_project_dir() -> Result<Option<PathBuf>> {
-    let current_dir = std::env::current_dir()?;
-    if is_project_dir(&current_dir) {
-        return Ok(Some(current_dir));
-    }
-
-    Ok(current_dir
-        .parent()
-        .filter(|path| is_project_dir(path))
-        .map(PathBuf::from))
-}
-
-fn is_project_dir(path: &std::path::Path) -> bool {
-    path.join("docker-compose.yaml").exists() && path.join("dokuru-server").exists()
-}
-
-fn prompt_project_dir() -> Result<PathBuf> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let default_path = format!("{home}/apps/dokuru");
+fn prompt_project_dir(repo_url: &str, clone_if_missing: bool) -> Result<PathBuf> {
+    let default_path = project::default_project_dir().display().to_string();
     let custom_path: String = input("Project directory")
         .placeholder(&default_path)
         .default_input(&default_path)
         .interact()?;
     let project_path = PathBuf::from(shellexpand::tilde(&custom_path).to_string());
 
-    ensure_project_dir_exists(&project_path)?;
+    ensure_prompted_project_dir(&project_path, repo_url, clone_if_missing)?;
     Ok(project_path)
 }
 
-fn ensure_project_dir_exists(project_path: &PathBuf) -> Result<()> {
-    if project_path.exists() {
+fn ensure_prompted_project_dir(
+    project_path: &Path,
+    repo_url: &str,
+    clone_if_missing: bool,
+) -> Result<()> {
+    if project::is_project_dir(project_path) {
         return Ok(());
     }
 
-    let create = confirm(format!(
-        "Directory {} doesn't exist. Create it?",
-        project_path.display()
-    ))
-    .initial_value(true)
-    .interact()?;
+    let should_clone = if clone_if_missing {
+        true
+    } else {
+        confirm(format!(
+            "{} is not a Dokuru checkout. Clone it from {repo_url}?",
+            project_path.display()
+        ))
+        .initial_value(true)
+        .interact()?
+    };
 
-    if !create {
+    if should_clone {
+        project::ensure_or_bootstrap(project_path, project::Bootstrap::Clone, repo_url)
+    } else {
         outro_cancel("Cancelled")?;
-        return Err(anyhow::anyhow!("cancelled"));
+        Err(anyhow::anyhow!("cancelled"))
     }
+}
 
-    std::fs::create_dir_all(project_path)?;
-    println!("  ✓ Created directory: {}\n", project_path.display());
-    Ok(())
+const fn bootstrap_mode(clone_if_missing: bool) -> project::Bootstrap {
+    if clone_if_missing {
+        project::Bootstrap::Clone
+    } else {
+        project::Bootstrap::Error
+    }
 }
 
 fn resolve_domains(domain: Option<String>, is_interactive: bool) -> Result<DomainConfig> {
