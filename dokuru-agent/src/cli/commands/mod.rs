@@ -8,6 +8,7 @@ mod status;
 pub mod token;
 mod uninstall;
 mod update;
+mod version;
 
 pub use config::run_config_show;
 pub use configure::run_configure;
@@ -19,3 +20,4 @@ pub use status::run_status;
 pub use token::{run_token_rotate, run_token_show};
 pub use uninstall::run_uninstall;
 pub use update::run_update;
+pub use version::run_version;

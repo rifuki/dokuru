@@ -27,6 +27,12 @@ enum Commands {
     Doctor(cli::DoctorArgs),
     /// Show Dokuru service and Docker status
     Status,
+    /// Show local build metadata and latest release metadata
+    Version {
+        /// Skip checking the public latest release
+        #[arg(long)]
+        offline: bool,
+    },
     /// Manage agent authentication token
     Token {
         #[command(subcommand)]
@@ -84,6 +90,7 @@ async fn main() -> eyre::Result<()> {
         }
         Commands::Doctor(args) => cli::run_doctor(args.clone())?,
         Commands::Status => cli::run_status()?,
+        Commands::Version { offline } => cli::run_version(*offline),
         Commands::Token { action } => match action {
             TokenAction::Show(shared) => cli::run_token_show(shared)?,
             TokenAction::Rotate(shared) => cli::run_token_rotate(shared)?,

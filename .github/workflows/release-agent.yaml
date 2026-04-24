@@ -58,6 +58,12 @@ jobs:
       - name: Install cargo-zigbuild
         run: cargo install cargo-zigbuild --locked
 
+      - name: Set build metadata
+        run: |
+          echo "DOKURU_AGENT_GIT_SHA=${GITHUB_SHA}" >> "$GITHUB_ENV"
+          echo "DOKURU_AGENT_GIT_REF=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          echo "DOKURU_AGENT_BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+
       - name: Build release binary
         working-directory: dokuru-agent
         run: cargo zigbuild --release --target ${{ matrix.target }}
@@ -129,6 +135,21 @@ jobs:
             echo "published_at=$PUBLISHED_AT" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Generate version manifest
+        run: |
+          VERSION=$(awk -F' = ' '/^version/ { gsub(/"/, "", $2); print $2; exit }' dokuru-agent/Cargo.toml)
+          BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          cat > version.json <<EOF
+          {
+            "version": "${VERSION}",
+            "git_sha": "${GITHUB_SHA}",
+            "git_ref": "${GITHUB_REF_NAME}",
+            "build_time": "${BUILD_TIME}",
+            "target": "x86_64-unknown-linux-musl,aarch64-unknown-linux-musl",
+            "release_tag": "${{ steps.release.outputs.tag }}"
+          }
+          EOF
+
       - name: Remove previous latest release
         if: steps.release.outputs.type == 'latest'
         env:
@@ -182,6 +203,7 @@ jobs:
           | `dokuru-linux-arm64-${{ steps.release.outputs.tag }}` | Linux | aarch64 |
           | `SHA256SUMS` | - | Checksums |
           | `install.sh` | - | Installer |
+          | `version.json` | - | Build manifest |
 
           ---
 
@@ -219,6 +241,7 @@ jobs:
           | `dokuru-linux-arm64` | Linux | aarch64 |
           | `SHA256SUMS` | - | Checksums |
           | `install.sh` | - | Installer |
+          | `version.json` | - | Build manifest |
 
           ---
 
@@ -237,6 +260,7 @@ jobs:
             dokuru-linux-*
             SHA256SUMS
             install.sh
+            version.json
           draft: false
           prerelease: ${{ steps.release.outputs.prerelease }}
           make_latest: true
