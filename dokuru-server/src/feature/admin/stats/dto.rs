@@ -60,7 +60,7 @@ pub struct ComponentHealth {
     pub response_time_ms: u64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum HealthStatus {
     Healthy,

@@ -5,7 +5,8 @@ use sqlx::PgPool;
 
 use crate::feature::{
     admin::stats::{
-        dto::{ComponentHealth, DashboardStatsResponse, HealthStatus, SystemHealth},
+        domain,
+        dto::{ComponentHealth, DashboardStatsResponse, SystemHealth},
         repository::{StatsRepository, StatsRepositoryError},
     },
     agent::relay::AgentRegistry,
@@ -63,8 +64,7 @@ impl StatsService {
         );
 
         // Get relay agents count from in-memory registry
-        #[allow(clippy::cast_possible_wrap)]
-        let relay_agents_count = agent_registry.len() as i64;
+        let relay_agents_count = domain::relay_agents_count(agent_registry.len());
 
         // Check Redis health if available
         let redis_health = if let Some(redis) = redis_pool {
@@ -122,22 +122,8 @@ impl StatsService {
         }
         .await;
 
-        #[allow(clippy::cast_possible_truncation)]
-        let response_time_ms = start.elapsed().as_millis() as u64;
+        let response_time_ms = domain::duration_millis_u64(start.elapsed());
 
-        let status = if result.is_ok() {
-            if response_time_ms < 50 {
-                HealthStatus::Healthy
-            } else {
-                HealthStatus::Degraded
-            }
-        } else {
-            HealthStatus::Down
-        };
-
-        Ok(ComponentHealth {
-            status,
-            response_time_ms,
-        })
+        Ok(domain::component_health(result.is_ok(), response_time_ms))
     }
 }
