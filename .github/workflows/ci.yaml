@@ -43,6 +43,20 @@ jobs:
   rust-check:
     name: Rust Check & Test
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: dokuru_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -84,4 +98,6 @@ jobs:
 
       - name: Test (server)
         working-directory: dokuru-server
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/dokuru_test
         run: cargo test
