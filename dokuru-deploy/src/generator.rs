@@ -140,12 +140,12 @@ fn append_landing_override(yaml: &mut String, config: &DeployConfig, strategy: &
       - "traefik.http.routers.dokuru-landing.entrypoints=websecure"
       - "traefik.http.routers.dokuru-landing.tls.certresolver=letsencrypt"
       - "traefik.http.services.dokuru-landing.loadbalancer.server.port=80"
-      # Redirect /install to GitHub raw
+      # Redirect /install to the Dokuru agent release installer
       - "traefik.http.middlewares.install-redirect.redirectregex.regex=^https?://([^/]+)/install(.sh)?$$"
-      - "traefik.http.middlewares.install-redirect.redirectregex.replacement=https://raw.githubusercontent.com/rifuki/dokuru/main/install.sh"
-      # Redirect /deploy to GitHub raw
+      - "traefik.http.middlewares.install-redirect.redirectregex.replacement=https://github.com/rifuki/dokuru/releases/download/latest/install.sh"
+      # Redirect /deploy to the Dokuru Deploy release installer
       - "traefik.http.middlewares.deploy-redirect.redirectregex.regex=^https?://([^/]+)/deploy(.sh)?$$"
-      - "traefik.http.middlewares.deploy-redirect.redirectregex.replacement=https://raw.githubusercontent.com/rifuki/dokuru/main/dokuru-deploy/install.sh"
+      - "traefik.http.middlewares.deploy-redirect.redirectregex.replacement=https://github.com/rifuki/dokuru/releases/download/latest-deploy/install.sh"
       # Apply middlewares
       - "traefik.http.routers.dokuru-landing.middlewares=install-redirect,deploy-redirect"
 "#,

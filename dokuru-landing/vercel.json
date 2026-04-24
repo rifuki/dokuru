@@ -2,22 +2,22 @@
   "redirects": [
     {
       "source": "/install",
-      "destination": "https://raw.githubusercontent.com/rifuki/dokuru/main/install.sh",
+      "destination": "https://github.com/rifuki/dokuru/releases/download/latest/install.sh",
       "permanent": false
     },
     {
       "source": "/install.sh",
-      "destination": "https://raw.githubusercontent.com/rifuki/dokuru/main/install.sh",
+      "destination": "https://github.com/rifuki/dokuru/releases/download/latest/install.sh",
       "permanent": false
     },
     {
       "source": "/deploy",
-      "destination": "https://raw.githubusercontent.com/rifuki/dokuru/main/dokuru-deploy/install.sh",
+      "destination": "https://github.com/rifuki/dokuru/releases/download/latest-deploy/install.sh",
       "permanent": false
     },
     {
       "source": "/deploy.sh",
-      "destination": "https://raw.githubusercontent.com/rifuki/dokuru/main/dokuru-deploy/install.sh",
+      "destination": "https://github.com/rifuki/dokuru/releases/download/latest-deploy/install.sh",
       "permanent": false
     }
   ]
