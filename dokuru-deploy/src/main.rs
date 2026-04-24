@@ -216,10 +216,12 @@ fn run_init(
                 
                 let www: String = input("App domain (VPS)")
                     .placeholder("app.dokuru.rifuki.dev")
+                    .default_input("app.dokuru.rifuki.dev")
                     .interact()?;
                 
                 let api: String = input("API domain (VPS)")
                     .placeholder("api.dokuru.rifuki.dev")
+                    .default_input("api.dokuru.rifuki.dev")
                     .interact()?;
                 
                 let landing = "landing.vercel.app".to_string(); // Placeholder, not used
@@ -235,10 +237,12 @@ fn run_init(
                 
                 let landing: String = input("Landing domain (VPS)")
                     .placeholder("dokuru.rifuki.dev")
+                    .default_input("dokuru.rifuki.dev")
                     .interact()?;
                 
                 let api: String = input("API domain (VPS)")
                     .placeholder("api.dokuru.rifuki.dev")
+                    .default_input("api.dokuru.rifuki.dev")
                     .interact()?;
                 
                 let www = "app.vercel.app".to_string(); // Placeholder, not used
@@ -254,6 +258,7 @@ fn run_init(
                 
                 let api: String = input("API domain (VPS)")
                     .placeholder("api.dokuru.rifuki.dev")
+                    .default_input("api.dokuru.rifuki.dev")
                     .interact()?;
                 
                 let landing = "landing.vercel.app".to_string(); // Placeholder
