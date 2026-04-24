@@ -2,13 +2,12 @@ pub mod fixtures;
 
 use axum::{
     body::Body,
-    http::{HeaderMap, Request, StatusCode, header},
+    http::{Request, StatusCode, header},
 };
 use serde_json::Value;
 use tower::ServiceExt;
 
-#[allow(dead_code)]
-pub fn build_test_app() -> (axum::Router, ()) {
+pub async fn build_test_app() -> (axum::Router, ()) {
     // Placeholder - implement actual test app setup
     (axum::Router::new(), ())
 }
@@ -36,78 +35,6 @@ pub async fn get_authed(app: axum::Router, uri: &str, token: &str) -> (StatusCod
         .uri(uri)
         .header(header::AUTHORIZATION, format!("Bearer {token}"))
         .body(Body::empty())
-        .unwrap();
-
-    let res = app.oneshot(req).await.unwrap();
-    let status = res.status();
-    let body_bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let body_json = serde_json::from_slice(&body_bytes).unwrap_or(Value::Null);
-    (status, body_json)
-}
-
-#[allow(dead_code)]
-pub async fn patch_authed(
-    app: axum::Router,
-    uri: &str,
-    token: &str,
-    body: &Value,
-) -> (StatusCode, Value) {
-    let req = Request::builder()
-        .method("PATCH")
-        .uri(uri)
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_string(body).unwrap()))
-        .unwrap();
-
-    let res = app.oneshot(req).await.unwrap();
-    let status = res.status();
-    let body_bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let body_json = serde_json::from_slice(&body_bytes).unwrap_or(Value::Null);
-    (status, body_json)
-}
-
-#[allow(dead_code)]
-pub async fn raw_request(app: axum::Router, req: Request<Body>) -> (StatusCode, HeaderMap, Value) {
-    let res = app.oneshot(req).await.unwrap();
-    let status = res.status();
-    let headers = res.headers().clone();
-    let body_bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let body_json = serde_json::from_slice(&body_bytes).unwrap_or(Value::Null);
-    (status, headers, body_json)
-}
-
-#[allow(dead_code)]
-pub fn extract_set_cookie(headers: &HeaderMap, cookie_name: &str) -> Option<String> {
-    headers.get_all(header::SET_COOKIE).iter().find_map(|v| {
-        let s = v.to_str().ok()?;
-        if s.starts_with(cookie_name) {
-            Some(s.split(';').next()?.to_string())
-        } else {
-            None
-        }
-    })
-}
-
-#[allow(dead_code)]
-pub async fn post_json_with_cookie(
-    app: axum::Router,
-    uri: &str,
-    body: &Value,
-    cookie: &str,
-) -> (StatusCode, Value) {
-    let req = Request::builder()
-        .method("POST")
-        .uri(uri)
-        .header(header::CONTENT_TYPE, "application/json")
-        .header(header::COOKIE, cookie)
-        .body(Body::from(serde_json::to_string(body).unwrap()))
         .unwrap();
 
     let res = app.oneshot(req).await.unwrap();

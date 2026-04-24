@@ -109,7 +109,7 @@ async fn test_agents_list_unauthorized() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-fn create_test_app() -> axum::Router {
+async fn create_test_app() -> axum::Router {
     // Mock app router for testing
     use axum::{Router, routing::get};
 

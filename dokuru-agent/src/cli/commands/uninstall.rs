@@ -15,7 +15,7 @@ pub fn run_uninstall(args: &UninstallArgs) -> Result<()> {
 
     intro("🐳 Dokuru  uninstall")?;
 
-    if !preflight.running_as_root {
+    if !preflight.running_as_root() {
         outro_cancel("Root privileges required. Re-run with: sudo dokuru uninstall")?;
         bail!("root privileges required");
     }
@@ -38,7 +38,7 @@ pub fn run_uninstall(args: &UninstallArgs) -> Result<()> {
         bail!("cancelled");
     }
 
-    if preflight.has_systemd && unit_path.exists() {
+    if preflight.has_systemd() && unit_path.exists() {
         run_step("Stopping Dokuru service", || {
             stop_service_if_present(&config.service_name)
         })?;
@@ -62,7 +62,7 @@ pub fn run_uninstall(args: &UninstallArgs) -> Result<()> {
         "Binary:  removed".to_string(),
         "Config:  removed".to_string(),
     ];
-    if preflight.has_systemd {
+    if preflight.has_systemd() {
         removed.push("Service: removed".to_string());
     }
     note("Uninstall complete", removed.join("\n"))?;

@@ -1,3 +1,5 @@
+#[path = "common/auth_flow.rs"]
+mod auth_flow_helpers;
 mod common;
 
 use axum::{
@@ -6,6 +8,7 @@ use axum::{
 };
 use serde_json::json;
 
+use auth_flow_helpers::*;
 use common::*;
 
 // Note: All tests in this file require database and full app infrastructure

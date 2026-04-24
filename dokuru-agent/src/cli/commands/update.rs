@@ -14,7 +14,7 @@ pub fn run_update(args: &UpdateArgs) -> Result<()> {
 
     intro("🐳 Dokuru  rolling latest updater")?;
 
-    if !preflight.running_as_root {
+    if !preflight.running_as_root() {
         outro_cancel("Root privileges required. Re-run with: sudo dokuru update")?;
         bail!("root privileges required");
     }
@@ -74,7 +74,7 @@ pub fn run_update(args: &UpdateArgs) -> Result<()> {
     })?;
     log::info(format!("→ {}", config.install_path.display()))?;
 
-    if service_unit_path(&config).exists() && preflight.has_systemd {
+    if service_unit_path(&config).exists() && preflight.has_systemd() {
         run_step("Restarting Dokuru service", || {
             restart_service(&config.service_name)
         })?;

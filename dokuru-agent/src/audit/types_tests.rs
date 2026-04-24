@@ -54,7 +54,7 @@ mod tests {
 
     #[test]
     fn test_rule_category_variants() {
-        let categories = vec![
+        let categories = [
             RuleCategory::Namespace,
             RuleCategory::Cgroup,
             RuleCategory::Files,
@@ -94,8 +94,10 @@ mod tests {
 
     #[test]
     fn test_check_result_with_affected_containers() {
-        let mut result = CheckResult::default();
-        result.affected = vec!["/nginx".to_string(), "/postgres".to_string()];
+        let result = CheckResult {
+            affected: vec!["/nginx".to_string(), "/postgres".to_string()],
+            ..Default::default()
+        };
 
         assert_eq!(result.affected.len(), 2);
         assert!(result.affected.contains(&"/nginx".to_string()));
@@ -163,7 +165,7 @@ mod tests {
 
     #[test]
     fn test_fix_status_variants() {
-        let statuses = vec![FixStatus::Applied, FixStatus::Guided, FixStatus::Blocked];
+        let statuses = [FixStatus::Applied, FixStatus::Guided, FixStatus::Blocked];
         assert_eq!(statuses.len(), 3);
     }
 
@@ -301,13 +303,15 @@ mod tests {
 
     #[test]
     fn test_multiple_tags() {
-        let mut result = CheckResult::default();
-        result.tags = Some(vec![
-            "security".to_string(),
-            "compliance".to_string(),
-            "cis".to_string(),
-            "docker".to_string(),
-        ]);
+        let result = CheckResult {
+            tags: Some(vec![
+                "security".to_string(),
+                "compliance".to_string(),
+                "cis".to_string(),
+                "docker".to_string(),
+            ]),
+            ..Default::default()
+        };
 
         assert_eq!(result.tags.as_ref().unwrap().len(), 4);
         assert!(result.tags.as_ref().unwrap().contains(&"cis".to_string()));

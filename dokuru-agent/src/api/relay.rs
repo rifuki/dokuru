@@ -207,6 +207,17 @@ fn handle_message(text: &str, tx: &mpsc::UnboundedSender<Message>) -> Result<()>
     Ok(())
 }
 
+fn execute_command(command: &str, _payload: serde_json::Value) -> Result<serde_json::Value> {
+    match command {
+        "health" => Ok(serde_json::json!({ "status": "healthy" })),
+        "audit" => {
+            // TODO: Run actual audit
+            Ok(serde_json::json!({ "status": "not_implemented" }))
+        }
+        _ => Err(eyre::eyre!("Unknown command: {}", command)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -225,16 +236,5 @@ mod tests {
             .to_string();
 
         assert!(error.contains("bad token"));
-    }
-}
-
-fn execute_command(command: &str, _payload: serde_json::Value) -> Result<serde_json::Value> {
-    match command {
-        "health" => Ok(serde_json::json!({ "status": "healthy" })),
-        "audit" => {
-            // TODO: Run actual audit
-            Ok(serde_json::json!({ "status": "not_implemented" }))
-        }
-        _ => Err(eyre::eyre!("Unknown command: {}", command)),
     }
 }

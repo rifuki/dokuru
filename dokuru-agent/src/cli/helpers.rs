@@ -28,17 +28,57 @@ pub struct InstallerConfig {
     pub install_docker: bool,
 }
 
-#[allow(clippy::struct_excessive_bools)]
+bitflags::bitflags! {
+    #[derive(Debug, Clone, Copy)]
+    pub struct PreflightChecks: u8 {
+        const RUNNING_AS_ROOT = 1 << 0;
+        const HAS_SYSTEMD = 1 << 1;
+        const DOCKER_INSTALLED = 1 << 2;
+        const DOCKER_GROUP_EXISTS = 1 << 3;
+        const DOCKER_SOCKET_EXISTS = 1 << 4;
+        const DOCKER_SERVICE_EXISTS = 1 << 5;
+    }
+}
+
 #[derive(Debug)]
 pub struct Preflight {
     pub distro: String,
     pub arch: &'static str,
-    pub running_as_root: bool,
-    pub has_systemd: bool,
-    pub docker_installed: bool,
-    pub docker_group_exists: bool,
-    pub docker_socket_exists: bool,
-    pub docker_service_exists: bool,
+    checks: PreflightChecks,
+}
+
+impl Preflight {
+    pub const fn new(distro: String, arch: &'static str, checks: PreflightChecks) -> Self {
+        Self {
+            distro,
+            arch,
+            checks,
+        }
+    }
+
+    pub const fn running_as_root(&self) -> bool {
+        self.checks.contains(PreflightChecks::RUNNING_AS_ROOT)
+    }
+
+    pub const fn has_systemd(&self) -> bool {
+        self.checks.contains(PreflightChecks::HAS_SYSTEMD)
+    }
+
+    pub const fn docker_installed(&self) -> bool {
+        self.checks.contains(PreflightChecks::DOCKER_INSTALLED)
+    }
+
+    pub const fn docker_group_exists(&self) -> bool {
+        self.checks.contains(PreflightChecks::DOCKER_GROUP_EXISTS)
+    }
+
+    pub const fn docker_socket_exists(&self) -> bool {
+        self.checks.contains(PreflightChecks::DOCKER_SOCKET_EXISTS)
+    }
+
+    pub const fn docker_service_exists(&self) -> bool {
+        self.checks.contains(PreflightChecks::DOCKER_SERVICE_EXISTS)
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -246,19 +286,28 @@ pub fn user_in_docker_group(username: &str) -> Result<bool> {
 }
 
 pub fn collect_preflight(config: &InstallerConfig) -> Preflight {
-    let docker_installed = command_exists("docker");
-    let docker_group_exists = command_success("getent", &["group", "docker"]);
+    let mut checks = PreflightChecks::empty();
 
-    Preflight {
-        distro: detect_distro(),
-        arch: std::env::consts::ARCH,
-        running_as_root: nix_like_is_root(),
-        has_systemd: command_exists("systemctl"),
-        docker_installed,
-        docker_group_exists,
-        docker_socket_exists: is_socket(Path::new(&config.docker_socket)),
-        docker_service_exists: command_exists("systemctl") && has_systemd_unit("docker.service"),
+    if nix_like_is_root() {
+        checks |= PreflightChecks::RUNNING_AS_ROOT;
     }
+    if command_exists("systemctl") {
+        checks |= PreflightChecks::HAS_SYSTEMD;
+    }
+    if command_exists("docker") {
+        checks |= PreflightChecks::DOCKER_INSTALLED;
+    }
+    if command_success("getent", &["group", "docker"]) {
+        checks |= PreflightChecks::DOCKER_GROUP_EXISTS;
+    }
+    if is_socket(Path::new(&config.docker_socket)) {
+        checks |= PreflightChecks::DOCKER_SOCKET_EXISTS;
+    }
+    if command_exists("systemctl") && has_systemd_unit("docker.service") {
+        checks |= PreflightChecks::DOCKER_SERVICE_EXISTS;
+    }
+
+    Preflight::new(detect_distro(), std::env::consts::ARCH, checks)
 }
 
 // ─── Interactive Prompts ──────────────────────────────────────────────────────
@@ -610,7 +659,7 @@ pub fn show_preflight(config: &InstallerConfig, preflight: &Preflight) -> Result
         format!("Architecture:   {}", preflight.arch),
         format!(
             "Privileges:     {}",
-            if preflight.running_as_root {
+            if preflight.running_as_root() {
                 "root ✓"
             } else {
                 "not root ✗"
@@ -618,7 +667,7 @@ pub fn show_preflight(config: &InstallerConfig, preflight: &Preflight) -> Result
         ),
         format!(
             "Init system:    {}",
-            if preflight.has_systemd {
+            if preflight.has_systemd() {
                 "systemd ✓"
             } else {
                 "systemd not found"
@@ -626,7 +675,7 @@ pub fn show_preflight(config: &InstallerConfig, preflight: &Preflight) -> Result
         ),
         format!(
             "Docker:         {}",
-            if preflight.docker_installed {
+            if preflight.docker_installed() {
                 "installed ✓"
             } else {
                 "not installed ✗"
@@ -634,7 +683,7 @@ pub fn show_preflight(config: &InstallerConfig, preflight: &Preflight) -> Result
         ),
         format!(
             "Docker group:   {}",
-            if preflight.docker_group_exists {
+            if preflight.docker_group_exists() {
                 "exists ✓"
             } else {
                 "not found ✗"
@@ -643,7 +692,7 @@ pub fn show_preflight(config: &InstallerConfig, preflight: &Preflight) -> Result
         format!(
             "Docker socket:  {} {}",
             config.docker_socket,
-            if preflight.docker_installed && preflight.docker_socket_exists {
+            if preflight.docker_installed() && preflight.docker_socket_exists() {
                 "✓"
             } else {
                 "(not found)"
@@ -651,7 +700,7 @@ pub fn show_preflight(config: &InstallerConfig, preflight: &Preflight) -> Result
         ),
         format!(
             "docker.service: {}",
-            if preflight.docker_service_exists {
+            if preflight.docker_service_exists() {
                 "detected ✓"
             } else {
                 "not detected"
@@ -810,13 +859,13 @@ pub fn write_systemd_unit(config: &InstallerConfig, preflight: &Preflight) -> Re
     fs::create_dir_all(&config.systemd_dir)
         .wrap_err_with(|| format!("Failed to create {}", config.systemd_dir.display()))?;
 
-    let after_targets = if preflight.docker_service_exists {
+    let after_targets = if preflight.docker_service_exists() {
         "network-online.target docker.service"
     } else {
         "network-online.target"
     };
 
-    let wants_targets = if preflight.docker_service_exists {
+    let wants_targets = if preflight.docker_service_exists() {
         "network-online.target docker.service"
     } else {
         "network-online.target"

@@ -216,6 +216,12 @@ const fn section_name(section: u8) -> &'static str {
     }
 }
 
+impl Default for RuleRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -233,11 +239,5 @@ mod tests {
         assert_eq!(section_name(1), "Host Configuration");
         assert_eq!(section_name(5), "Container Runtime");
         assert_eq!(section_name(99), "Unknown");
-    }
-}
-
-impl Default for RuleRegistry {
-    fn default() -> Self {
-        Self::new()
     }
 }

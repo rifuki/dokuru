@@ -10,7 +10,7 @@ mod tests {
             image: "nginx:latest".to_string(),
             state: "running".to_string(),
             status: "Up 2 hours".to_string(),
-            created: 1234567890,
+            created: 1_234_567_890,
         };
 
         assert_eq!(response.id, "abc123");
@@ -27,7 +27,7 @@ mod tests {
             image: "alpine:3.18".to_string(),
             state: "exited".to_string(),
             status: "Exited (0) 5 minutes ago".to_string(),
-            created: 1700000000,
+            created: 1_700_000_000,
         };
 
         let json = serde_json::to_string(&response).unwrap();
@@ -48,7 +48,7 @@ mod tests {
             image: "ubuntu:22.04".to_string(),
             state: "running".to_string(),
             status: "Up 1 day".to_string(),
-            created: 1600000000,
+            created: 1_600_000_000,
         };
 
         assert_eq!(response.names.len(), 3);
@@ -82,7 +82,7 @@ mod tests {
 
     #[test]
     fn test_list_query_deserialization_empty() {
-        let json = r#"{}"#;
+        let json = r"{}";
         let query: ListQuery = serde_json::from_str(json).unwrap();
         assert!(query.all.is_none());
     }
@@ -95,7 +95,7 @@ mod tests {
             image: "busybox".to_string(),
             state: "created".to_string(),
             status: "Created".to_string(),
-            created: 1500000000,
+            created: 1_500_000_000,
         };
 
         assert!(response.names.is_empty());
@@ -109,7 +109,7 @@ mod tests {
             image: "node:18-alpine".to_string(),
             state: "running".to_string(),
             status: "Up 3 weeks (healthy)".to_string(),
-            created: 1650000000,
+            created: 1_650_000_000,
         };
 
         assert!(response.status.contains("healthy"));
@@ -140,11 +140,11 @@ mod tests {
             image: "myapp:v1.2.3-beta".to_string(),
             state: "running".to_string(),
             status: "Up 2 hours".to_string(),
-            created: 1700000000,
+            created: 1_700_000_000,
         };
 
-        assert!(response.id.contains("-"));
-        assert!(response.id.contains("_"));
+        assert!(response.id.contains('-'));
+        assert!(response.id.contains('_'));
         assert!(response.image.contains("-beta"));
     }
 
@@ -170,21 +170,21 @@ mod tests {
             image: "test".to_string(),
             state: "running".to_string(),
             status: "Up".to_string(),
-            created: 9999999999,
+            created: 9_999_999_999,
         };
 
-        assert!(response.created > 1000000000);
+        assert!(response.created > 1_000_000_000);
     }
 
     #[test]
     fn test_list_query_unwrap_or_default() {
         let query = ListQuery { all: None };
         let all_value = query.all.unwrap_or(false);
-        assert_eq!(all_value, false);
+        assert!(!all_value);
 
         let query2 = ListQuery { all: Some(true) };
         let all_value2 = query2.all.unwrap_or(false);
-        assert_eq!(all_value2, true);
+        assert!(all_value2);
     }
 
     #[test]
@@ -201,12 +201,12 @@ mod tests {
 
         for state in states {
             let response = ContainerResponse {
-                id: format!("state-{}", state),
-                names: vec![format!("/{}", state)],
+                id: format!("state-{state}"),
+                names: vec![format!("/{state}")],
                 image: "test".to_string(),
                 state: state.to_string(),
-                status: format!("Status: {}", state),
-                created: 1234567890,
+                status: format!("Status: {state}"),
+                created: 1_234_567_890,
             };
 
             assert_eq!(response.state, state);
@@ -221,7 +221,7 @@ mod tests {
             image: "postgres:15".to_string(),
             state: "running".to_string(),
             status: "Up 5 minutes".to_string(),
-            created: 1700000000,
+            created: 1_700_000_000,
         };
 
         let json = serde_json::to_string(&original).unwrap();

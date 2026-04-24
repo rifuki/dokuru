@@ -50,7 +50,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_rule_registry_initialization() {
-        let _registry = RuleRegistry::new();
-        assert!(true);
+        let registry = RuleRegistry::new();
+        assert!(!registry.all().is_empty());
     }
 }

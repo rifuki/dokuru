@@ -1,3 +1,4 @@
+use std::pin::Pin;
 use std::sync::Arc;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
@@ -8,14 +9,16 @@ use axum::{
     response::{Json, Response},
     routing::{get, post},
 };
+use bollard::Docker;
 use bollard::container::{
-    ListContainersOptions, LogsOptions, RemoveContainerOptions, StartContainerOptions, StatsOptions,
+    ListContainersOptions, LogOutput, LogsOptions, RemoveContainerOptions, StartContainerOptions,
+    StatsOptions,
 };
 use bollard::exec::{CreateExecOptions, ResizeExecOptions, StartExecOptions, StartExecResults};
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 use super::get_docker_client;
 
@@ -193,14 +196,12 @@ struct ExecQuery {
 
 /// Shells tried in priority order when `shell` param is not provided.
 const SHELL_PRIORITY: &[&str] = &["/bin/bash", "/bin/sh"];
+type ExecOutput = futures::stream::BoxStream<'static, Result<LogOutput, bollard::errors::Error>>;
+type ExecInput = Pin<Box<dyn AsyncWrite + Send>>;
 
 /// Resolve which shell to use. Tries `shell` param first, then falls back
 /// to the priority list by checking if the binary exists in the container.
-async fn resolve_shell(
-    docker: &bollard::Docker,
-    container_id: &str,
-    preferred: Option<String>,
-) -> String {
+async fn resolve_shell(docker: &Docker, container_id: &str, preferred: Option<String>) -> String {
     if let Some(s) = preferred
         && !s.is_empty()
     {
@@ -267,7 +268,6 @@ async fn container_exec(
     ws.on_upgrade(move |socket| handle_exec(id, socket, rows, cols, shell))
 }
 
-#[allow(clippy::too_many_lines)]
 async fn handle_exec(
     container_id: String,
     ws: WebSocket,
@@ -280,11 +280,27 @@ async fn handle_exec(
     };
     let docker = Arc::new(docker);
 
-    let shell = resolve_shell(&docker, &container_id, preferred_shell).await;
+    let Some((exec_id, output, input)) =
+        setup_exec(&docker, &container_id, preferred_shell, rows, cols).await
+    else {
+        return;
+    };
 
-    let Ok(exec) = docker
+    run_exec_loop(ws, output, input, docker, exec_id).await;
+}
+
+async fn setup_exec(
+    docker: &Docker,
+    container_id: &str,
+    preferred_shell: Option<String>,
+    rows: u16,
+    cols: u16,
+) -> Option<(String, ExecOutput, ExecInput)> {
+    let shell = resolve_shell(docker, container_id, preferred_shell).await;
+
+    let exec = docker
         .create_exec(
-            &container_id,
+            container_id,
             CreateExecOptions::<String> {
                 attach_stdin: Some(true),
                 attach_stdout: Some(true),
@@ -295,13 +311,11 @@ async fn handle_exec(
             },
         )
         .await
-    else {
-        return;
-    };
+        .ok()?;
 
     let exec_id = exec.id;
 
-    let attached = match docker
+    let Ok(StartExecResults::Attached { output, input }) = docker
         .start_exec(
             &exec_id,
             Some(StartExecOptions {
@@ -311,13 +325,10 @@ async fn handle_exec(
             }),
         )
         .await
-    {
-        Ok(StartExecResults::Attached { output, input }) => (output, input),
-        _ => return,
+    else {
+        return None;
     };
-    let (mut output, mut input) = attached;
 
-    // Apply initial terminal dimensions
     let _ = docker
         .resize_exec(
             &exec_id,
@@ -328,63 +339,33 @@ async fn handle_exec(
         )
         .await;
 
+    Some((exec_id, output, input))
+}
+
+async fn run_exec_loop(
+    ws: WebSocket,
+    mut output: ExecOutput,
+    mut input: ExecInput,
+    docker: Arc<Docker>,
+    exec_id: String,
+) {
     let (mut ws_tx, mut ws_rx) = ws.split();
 
-    // Docker PTY output → WebSocket binary frames
     let send_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = output.next().await {
-            let bytes = msg.into_bytes();
-            if ws_tx.send(Message::Binary(bytes)).await.is_err() {
+            if ws_tx.send(Message::Binary(msg.into_bytes())).await.is_err() {
                 break;
             }
         }
     });
 
-    // WebSocket → Docker exec stdin; text JSON messages handle resize
-    let docker_resize = Arc::clone(&docker);
-    let exec_id_resize = exec_id.clone();
     let recv_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = ws_rx.next().await {
-            match msg {
-                Message::Binary(data) => {
-                    if input.write_all(&data).await.is_err() {
-                        break;
-                    }
-                    let _ = input.flush().await;
-                }
-                Message::Text(text) => {
-                    if let Ok(json) = serde_json::from_str::<Value>(&text) {
-                        if json.get("type").and_then(Value::as_str) == Some("resize") {
-                            if let (Some(c), Some(r)) =
-                                (json["cols"].as_u64(), json["rows"].as_u64())
-                            {
-                                let _ = docker_resize
-                                    .resize_exec(
-                                        &exec_id_resize,
-                                        ResizeExecOptions {
-                                            height: u16::try_from(r).unwrap_or(24),
-                                            width: u16::try_from(c).unwrap_or(80),
-                                        },
-                                    )
-                                    .await;
-                            }
-                        } else {
-                            // Plain text input
-                            if input.write_all(text.as_bytes()).await.is_err() {
-                                break;
-                            }
-                            let _ = input.flush().await;
-                        }
-                    } else {
-                        // Non-JSON text — forward as-is to stdin
-                        if input.write_all(text.as_bytes()).await.is_err() {
-                            break;
-                        }
-                        let _ = input.flush().await;
-                    }
-                }
-                Message::Close(_) => break,
-                _ => {}
+            if handle_ws_message(msg, &mut input, &docker, &exec_id)
+                .await
+                .is_err()
+            {
+                break;
             }
         }
     });
@@ -392,6 +373,56 @@ async fn handle_exec(
     tokio::select! {
         _ = send_task => {}
         _ = recv_task => {}
+    }
+}
+
+async fn handle_ws_message(
+    msg: Message,
+    input: &mut ExecInput,
+    docker: &Docker,
+    exec_id: &str,
+) -> Result<(), std::io::Error> {
+    match msg {
+        Message::Binary(data) => {
+            input.write_all(&data).await?;
+            input.flush().await
+        }
+        Message::Text(text) => handle_text_input(text.to_string(), input, docker, exec_id).await,
+        Message::Close(_) => Err(std::io::Error::new(
+            std::io::ErrorKind::ConnectionAborted,
+            "closed",
+        )),
+        _ => Ok(()),
+    }
+}
+
+async fn handle_text_input(
+    text: String,
+    input: &mut ExecInput,
+    docker: &Docker,
+    exec_id: &str,
+) -> Result<(), std::io::Error> {
+    if let Ok(json) = serde_json::from_str::<Value>(&text)
+        && json.get("type").and_then(Value::as_str) == Some("resize")
+    {
+        handle_resize(json, docker, exec_id).await;
+        return Ok(());
+    }
+    input.write_all(text.as_bytes()).await?;
+    input.flush().await
+}
+
+async fn handle_resize(json: Value, docker: &Docker, exec_id: &str) {
+    if let (Some(c), Some(r)) = (json["cols"].as_u64(), json["rows"].as_u64()) {
+        let _ = docker
+            .resize_exec(
+                exec_id,
+                ResizeExecOptions {
+                    height: u16::try_from(r).unwrap_or(24),
+                    width: u16::try_from(c).unwrap_or(80),
+                },
+            )
+            .await;
     }
 }
 
@@ -407,7 +438,7 @@ mod tests {
             image: "nginx:latest".to_string(),
             state: "running".to_string(),
             status: "Up 2 hours".to_string(),
-            created: 1234567890,
+            created: 1_234_567_890,
         };
         assert_eq!(response.id, "abc123");
         assert_eq!(response.state, "running");
@@ -433,7 +464,7 @@ mod tests {
             image: "alpine".to_string(),
             state: "exited".to_string(),
             status: "Exited".to_string(),
-            created: 1700000000,
+            created: 1_700_000_000,
         };
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("test123"));

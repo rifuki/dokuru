@@ -5,7 +5,10 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use cliclack::{confirm, input, intro, outro, outro_cancel, select};
 use config::DeployConfig;
-use generator::{generate_docker_compose_override, generate_local_toml, generate_secrets_toml, generate_env_file, generate_secret};
+use generator::{
+    generate_docker_compose_override, generate_env_file, generate_local_toml, generate_secret,
+    generate_secrets_toml,
+};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -14,7 +17,7 @@ use std::path::PathBuf;
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
-    
+
     /// Base domain (e.g., dokuru.rifuki.dev)
     #[arg(long)]
     domain: Option<String>,
@@ -62,10 +65,22 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let (domain, db_name, db_user, db_password, resend_key, output) = match cli.command {
-        Some(Commands::Init { domain, db_name, db_user, db_password, resend_key, output }) => {
-            (domain, db_name, db_user, db_password, resend_key, output)
-        }
-        None => (cli.domain, cli.db_name, cli.db_user, cli.db_password, cli.resend_key, cli.output),
+        Some(Commands::Init {
+            domain,
+            db_name,
+            db_user,
+            db_password,
+            resend_key,
+            output,
+        }) => (domain, db_name, db_user, db_password, resend_key, output),
+        None => (
+            cli.domain,
+            cli.db_name,
+            cli.db_user,
+            cli.db_password,
+            cli.resend_key,
+            cli.output,
+        ),
     };
 
     run_init(
@@ -87,402 +102,536 @@ fn run_init(
     output: PathBuf,
 ) -> Result<()> {
     let is_interactive = domain.is_none() || resend_key.is_none();
+    show_intro(is_interactive)?;
 
+    let project_dir = resolve_project_dir(is_interactive, output)?;
+    let domains = resolve_domains(domain, is_interactive)?;
+    let strategy = domains.strategy;
+    let database = resolve_database(db_name, db_user, db_password, is_interactive)?;
+    let resend_api = resolve_resend_key(resend_key, is_interactive)?;
+    let secrets = resolve_jwt_secrets(is_interactive)?;
+    let config = build_deploy_config(domains, database, secrets, resend_api);
+
+    confirm_configuration(&config, is_interactive)?;
+    generate_files(&config, &project_dir, strategy)?;
+    show_completion(&config, strategy, is_interactive)?;
+
+    Ok(())
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum DeployStrategy {
+    FullVps,
+    LandingVercel,
+    AppVercel,
+    BothVercel,
+    Custom,
+}
+
+impl DeployStrategy {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::FullVps => "full-vps",
+            Self::LandingVercel => "landing-vercel",
+            Self::AppVercel => "app-vercel",
+            Self::BothVercel => "both-vercel",
+            Self::Custom => "custom",
+        }
+    }
+}
+
+struct DomainConfig {
+    landing: String,
+    www: String,
+    api: String,
+    strategy: DeployStrategy,
+}
+
+struct DatabaseCredentials {
+    name: String,
+    user: String,
+    password: String,
+}
+
+struct JwtSecrets {
+    access: String,
+    refresh: String,
+}
+
+fn show_intro(is_interactive: bool) -> Result<()> {
     if is_interactive {
         intro("🚀 Dokuru Deployment Setup")?;
         println!("Let's configure your Dokuru deployment!\n");
     }
+    Ok(())
+}
 
-    // === STEP 0: Detect or ask for project directory ===
-    let project_dir = if is_interactive {
-        // Search for dokuru project in current and parent directories
-        let current_dir = std::env::current_dir()?;
-        let mut detected_path: Option<PathBuf> = None;
-        
-        // Check current directory
-        if current_dir.join("docker-compose.yaml").exists() 
-            && current_dir.join("dokuru-server").exists() {
-            detected_path = Some(current_dir.clone());
-        } else {
-            // Check parent directory
-            if let Some(parent) = current_dir.parent() {
-                if parent.join("docker-compose.yaml").exists() 
-                    && parent.join("dokuru-server").exists() {
-                    detected_path = Some(parent.to_path_buf());
-                }
-            }
-        }
-
-        if let Some(path) = detected_path {
-            println!("✓ Found Dokuru project at: {}\n", path.display());
-            
-            let use_detected: bool = confirm("Use this project directory?")
-                .initial_value(true)
-                .interact()?;
-            
-            if use_detected {
-                path
-            } else {
-                let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-                let default_path = format!("{}/apps/dokuru", home);
-                
-                let custom_path: String = input("Project directory")
-                    .placeholder(&default_path)
-                    .default_input(&default_path)
-                    .interact()?;
-                
-                let project_path = PathBuf::from(shellexpand::tilde(&custom_path).to_string());
-                
-                if !project_path.exists() {
-                    let create = confirm(format!("Directory {} doesn't exist. Create it?", project_path.display()))
-                        .initial_value(true)
-                        .interact()?;
-                    
-                    if !create {
-                        outro_cancel("Cancelled")?;
-                        return Ok(());
-                    }
-                    
-                    std::fs::create_dir_all(&project_path)?;
-                    println!("  ✓ Created directory: {}\n", project_path.display());
-                }
-                
-                project_path
-            }
-        } else {
-            println!("📁 Project Directory\n");
-            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-            let default_path = format!("{}/apps/dokuru", home);
-            
-            let path: String = input("Where should the configuration be generated?")
-                .placeholder(&default_path)
-                .default_input(&default_path)
-                .interact()?;
-            
-            let project_path = PathBuf::from(shellexpand::tilde(&path).to_string());
-            
-            if !project_path.exists() {
-                let create = confirm(format!("Directory {} doesn't exist. Create it?", project_path.display()))
-                    .initial_value(true)
-                    .interact()?;
-                
-                if !create {
-                    outro_cancel("Cancelled")?;
-                    return Ok(());
-                }
-                
-                std::fs::create_dir_all(&project_path)?;
-                println!("  ✓ Created directory: {}\n", project_path.display());
-            }
-            
-            project_path
-        }
-    } else {
-        output
-    };
-
-    // === STEP 1: Deployment Strategy ===
-    let (landing_domain, www_domain, api_domain, strategy) = if is_interactive {
-        println!("📦 Deployment Strategy\n");
-        
-        let strategy: &str = select("How will you deploy?")
-            .item("full-vps", "🏠  Full VPS", "Landing + App + API on VPS (Docker Compose)")
-            .item("landing-vercel", "🌐  Landing on Vercel", "Landing (Vercel) | App + API (VPS)")
-            .item("app-vercel", "⚛️  App on Vercel", "App (Vercel) | Landing + API (VPS)")
-            .item("both-vercel", "☁️  Both on Vercel", "Landing + App (Vercel) | API (VPS)")
-            .item("custom", "⚙️  Custom", "Specify each domain manually")
-            .interact()?;
-
-        match strategy {
-            "full-vps" => {
-                let base: String = input("Base domain")
-                    .placeholder("dokuru.rifuki.dev")
-                    .default_input("dokuru.rifuki.dev")
-                    .interact()?;
-                
-                let landing = base.clone();
-                let www = format!("app.{}", base);
-                let api = format!("api.{}", base);
-                
-                println!("\n✨ Auto-configured domains:");
-                println!("   Landing: https://{} (VPS)", landing);
-                println!("   App:     https://{} (VPS)", www);
-                println!("   API:     https://{} (VPS)", api);
-                
-                (landing, www, api, "full-vps")
-            }
-            "landing-vercel" => {
-                println!("\n💡 Landing on Vercel, App + API on VPS\n");
-                
-                let www: String = input("App domain (VPS)")
-                    .placeholder("app.dokuru.rifuki.dev")
-                    .default_input("app.dokuru.rifuki.dev")
-                    .interact()?;
-                
-                let api: String = input("API domain (VPS)")
-                    .placeholder("api.dokuru.rifuki.dev")
-                    .default_input("api.dokuru.rifuki.dev")
-                    .interact()?;
-                
-                let landing = "landing.vercel.app".to_string(); // Placeholder, not used
-                
-                println!("\n✨ Configuration:");
-                println!("   App: https://{} (VPS)", www);
-                println!("   API: https://{} (VPS)", api);
-                
-                (landing, www, api, "landing-vercel")
-            }
-            "app-vercel" => {
-                println!("\n💡 App on Vercel, Landing + API on VPS\n");
-                
-                let landing: String = input("Landing domain (VPS)")
-                    .placeholder("dokuru.rifuki.dev")
-                    .default_input("dokuru.rifuki.dev")
-                    .interact()?;
-                
-                let api: String = input("API domain (VPS)")
-                    .placeholder("api.dokuru.rifuki.dev")
-                    .default_input("api.dokuru.rifuki.dev")
-                    .interact()?;
-                
-                let www = "app.vercel.app".to_string(); // Placeholder, not used
-                
-                println!("\n✨ Configuration:");
-                println!("   Landing: https://{} (VPS)", landing);
-                println!("   API:     https://{} (VPS)", api);
-                
-                (landing, www, api, "app-vercel")
-            }
-            "both-vercel" => {
-                println!("\n💡 Landing + App on Vercel, API on VPS\n");
-                
-                let api: String = input("API domain (VPS)")
-                    .placeholder("api.dokuru.rifuki.dev")
-                    .default_input("api.dokuru.rifuki.dev")
-                    .interact()?;
-                
-                let landing = "landing.vercel.app".to_string(); // Placeholder
-                let www = "app.vercel.app".to_string(); // Placeholder
-                
-                println!("\n✨ Configuration:");
-                println!("   API: https://{} (VPS)", api);
-                
-                (landing, www, api, "both-vercel")
-            }
-            "custom" => {
-                println!("\n⚙️  Custom domain configuration\n");
-                
-                let landing: String = input("Landing domain")
-                    .placeholder("dokuru.com")
-                    .interact()?;
-                
-                let www: String = input("App domain")
-                    .placeholder("app.dokuru.com")
-                    .interact()?;
-                
-                let api: String = input("API domain")
-                    .placeholder("api.dokuru.com")
-                    .interact()?;
-                
-                (landing, www, api, "custom")
-            }
-            _ => unreachable!(),
-        }
-    } else {
-        let base = domain.unwrap();
-        (base.clone(), format!("app.{}", base), format!("api.{}", base), "full-vps")
-    };
-
-    // === STEP 2: Database Configuration ===
-    let (db_name_final, db_user_final, db_pass) = if let Some(p) = db_password {
-        (db_name, db_user, p)
-    } else if is_interactive {
-        println!("\n🗄️  Database Configuration\n");
-        
-        let auto_gen: bool = confirm("Auto-generate secure database configuration?")
-            .initial_value(true)
-            .interact()?;
-
-        if auto_gen {
-            let pass = generate_secret(32);
-            println!("  Generated: {}••••••••", &pass[..8]);
-            (db_name, db_user, pass)
-        } else {
-            let name: String = input("Database name")
-                .placeholder("dokuru_db")
-                .default_input("dokuru_db")
-                .interact()?;
-            
-            let user: String = input("Database user")
-                .placeholder("dokuru")
-                .default_input("dokuru")
-                .interact()?;
-            
-            let pass_choice: bool = confirm("Auto-generate database password?")
-                .initial_value(true)
-                .interact()?;
-            
-            let pass = if pass_choice {
-                let p = generate_secret(32);
-                println!("  Generated: {}••••••••", &p[..8]);
-                p
-            } else {
-                input("Database password")
-                    .placeholder("Enter secure password (min 16 chars)")
-                    .interact()?
-            };
-            
-            (name, user, pass)
-        }
-    } else {
-        (db_name, db_user, generate_secret(32))
-    };
-
-    // === STEP 3: Email Configuration ===
-    let resend_api = if let Some(k) = resend_key {
-        k
-    } else if is_interactive {
-        println!("\n📧 Email Configuration\n");
-        println!("  Dokuru uses Resend for transactional emails");
-        println!("  Get your API key at: https://resend.com/api-keys\n");
-        
-        input("Resend API key")
-            .placeholder("re_xxxxxxxxxxxxx")
-            .interact()?
-    } else {
-        return Err(anyhow::anyhow!("Resend API key is required"));
-    };
-
-    // === STEP 4: Security Secrets ===
-    let (jwt_access, jwt_refresh) = if is_interactive {
-        println!("\n🔐 Security Configuration\n");
-        
-        let auto_gen: bool = confirm("Auto-generate JWT secrets?")
-            .initial_value(true)
-            .interact()?;
-
-        if auto_gen {
-            let access = generate_secret(64);
-            let refresh = generate_secret(64);
-            println!("  ✓ Generated secure JWT secrets");
-            (access, refresh)
-        } else {
-            let access: String = input("JWT access secret (min 32 chars)")
-                .default_input(&generate_secret(64))
-                .interact()?;
-            
-            let refresh: String = input("JWT refresh secret (min 32 chars)")
-                .default_input(&generate_secret(64))
-                .interact()?;
-            
-            (access, refresh)
-        }
-    } else {
-        (generate_secret(64), generate_secret(64))
-    };
-
-    // Extract base domain from API domain
-    let base_domain = api_domain.replace("api.", "");
-
-    // Build config
-    let config = DeployConfig {
-        base_domain,
-        landing_domain,
-        www_domain,
-        api_domain,
-        db_name: db_name_final,
-        db_user: db_user_final,
-        db_password: db_pass,
-        jwt_access_secret: jwt_access,
-        jwt_refresh_secret: jwt_refresh,
-        resend_api_key: resend_api,
-    };
-
-    // === STEP 5: Review & Confirm ===
-    if is_interactive {
-        println!("\n📋 Configuration Summary\n");
-        println!("  🌐 Domains:");
-        println!("     Landing: https://{}", config.landing_domain);
-        println!("     App:     https://{}", config.www_domain);
-        println!("     API:     https://{}", config.api_domain);
-        println!("\n  🗄️  Database:");
-        println!("     Name:     {}", config.db_name);
-        println!("     User:     {}", config.db_user);
-        let pass_preview = if config.db_password.len() >= 8 {
-            format!("{}••••••••", &config.db_password[..8])
-        } else {
-            "••••••••".to_string()
-        };
-        println!("     Password: {}", pass_preview);
-        println!("\n  🔐 Security:");
-        let access_preview = if config.jwt_access_secret.len() >= 8 {
-            format!("{}••••", &config.jwt_access_secret[..8])
-        } else {
-            "••••••••".to_string()
-        };
-        let refresh_preview = if config.jwt_refresh_secret.len() >= 8 {
-            format!("{}••••", &config.jwt_refresh_secret[..8])
-        } else {
-            "••••••••".to_string()
-        };
-        println!("     JWT Access:  {}", access_preview);
-        println!("     JWT Refresh: {}", refresh_preview);
-        println!("\n  📧 Email:");
-        println!("     Provider: Resend");
-        println!("     From:     noreply@{}", config.base_domain);
-        println!();
-
-        let proceed: bool = confirm("Proceed and save configuration files?")
-            .initial_value(true)
-            .interact()?;
-
-        if !proceed {
-            outro_cancel("Cancelled")?;
-            return Ok(());
-        }
+fn resolve_project_dir(is_interactive: bool, output: PathBuf) -> Result<PathBuf> {
+    if !is_interactive {
+        return Ok(output);
     }
 
-    // Generate files
+    if let Some(path) = detect_project_dir()? {
+        println!("✓ Found Dokuru project at: {}\n", path.display());
+        if confirm("Use this project directory?")
+            .initial_value(true)
+            .interact()?
+        {
+            return Ok(path);
+        }
+    } else {
+        println!("📁 Project Directory\n");
+    }
+
+    prompt_project_dir()
+}
+
+fn detect_project_dir() -> Result<Option<PathBuf>> {
+    let current_dir = std::env::current_dir()?;
+    if is_project_dir(&current_dir) {
+        return Ok(Some(current_dir));
+    }
+
+    Ok(current_dir
+        .parent()
+        .filter(|path| is_project_dir(path))
+        .map(PathBuf::from))
+}
+
+fn is_project_dir(path: &std::path::Path) -> bool {
+    path.join("docker-compose.yaml").exists() && path.join("dokuru-server").exists()
+}
+
+fn prompt_project_dir() -> Result<PathBuf> {
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    let default_path = format!("{home}/apps/dokuru");
+    let custom_path: String = input("Project directory")
+        .placeholder(&default_path)
+        .default_input(&default_path)
+        .interact()?;
+    let project_path = PathBuf::from(shellexpand::tilde(&custom_path).to_string());
+
+    ensure_project_dir_exists(&project_path)?;
+    Ok(project_path)
+}
+
+fn ensure_project_dir_exists(project_path: &PathBuf) -> Result<()> {
+    if project_path.exists() {
+        return Ok(());
+    }
+
+    let create = confirm(format!(
+        "Directory {} doesn't exist. Create it?",
+        project_path.display()
+    ))
+    .initial_value(true)
+    .interact()?;
+
+    if !create {
+        outro_cancel("Cancelled")?;
+        return Err(anyhow::anyhow!("cancelled"));
+    }
+
+    std::fs::create_dir_all(project_path)?;
+    println!("  ✓ Created directory: {}\n", project_path.display());
+    Ok(())
+}
+
+fn resolve_domains(domain: Option<String>, is_interactive: bool) -> Result<DomainConfig> {
+    if !is_interactive {
+        let base = domain.expect("domain is required in non-interactive mode");
+        return Ok(DomainConfig {
+            landing: base.clone(),
+            www: format!("app.{base}"),
+            api: format!("api.{base}"),
+            strategy: DeployStrategy::FullVps,
+        });
+    }
+
+    println!("📦 Deployment Strategy\n");
+    match prompt_strategy()? {
+        DeployStrategy::FullVps => full_vps_domains(),
+        DeployStrategy::LandingVercel => landing_vercel_domains(),
+        DeployStrategy::AppVercel => app_vercel_domains(),
+        DeployStrategy::BothVercel => both_vercel_domains(),
+        DeployStrategy::Custom => custom_domains(),
+    }
+}
+
+fn prompt_strategy() -> Result<DeployStrategy> {
+    select("How will you deploy?")
+        .item(
+            DeployStrategy::FullVps,
+            "🏠  Full VPS",
+            "Landing + App + API on VPS (Docker Compose)",
+        )
+        .item(
+            DeployStrategy::LandingVercel,
+            "🌐  Landing on Vercel",
+            "Landing (Vercel) | App + API (VPS)",
+        )
+        .item(
+            DeployStrategy::AppVercel,
+            "⚛️  App on Vercel",
+            "App (Vercel) | Landing + API (VPS)",
+        )
+        .item(
+            DeployStrategy::BothVercel,
+            "☁️  Both on Vercel",
+            "Landing + App (Vercel) | API (VPS)",
+        )
+        .item(
+            DeployStrategy::Custom,
+            "⚙️  Custom",
+            "Specify each domain manually",
+        )
+        .interact()
+        .map_err(Into::into)
+}
+
+fn full_vps_domains() -> Result<DomainConfig> {
+    let base: String = input("Base domain")
+        .placeholder("dokuru.rifuki.dev")
+        .default_input("dokuru.rifuki.dev")
+        .interact()?;
+    let domains = DomainConfig {
+        landing: base.clone(),
+        www: format!("app.{base}"),
+        api: format!("api.{base}"),
+        strategy: DeployStrategy::FullVps,
+    };
+    print_domain_summary(&domains, true, true, true);
+    Ok(domains)
+}
+
+fn landing_vercel_domains() -> Result<DomainConfig> {
+    println!("\n💡 Landing on Vercel, App + API on VPS\n");
+    let www = prompt_domain("App domain (VPS)", "app.dokuru.rifuki.dev")?;
+    let api = prompt_domain("API domain (VPS)", "api.dokuru.rifuki.dev")?;
+    let domains = DomainConfig {
+        landing: "landing.vercel.app".to_string(),
+        www,
+        api,
+        strategy: DeployStrategy::LandingVercel,
+    };
+    print_domain_summary(&domains, false, true, true);
+    Ok(domains)
+}
+
+fn app_vercel_domains() -> Result<DomainConfig> {
+    println!("\n💡 App on Vercel, Landing + API on VPS\n");
+    let landing = prompt_domain("Landing domain (VPS)", "dokuru.rifuki.dev")?;
+    let api = prompt_domain("API domain (VPS)", "api.dokuru.rifuki.dev")?;
+    let domains = DomainConfig {
+        landing,
+        www: "app.vercel.app".to_string(),
+        api,
+        strategy: DeployStrategy::AppVercel,
+    };
+    print_domain_summary(&domains, true, false, true);
+    Ok(domains)
+}
+
+fn both_vercel_domains() -> Result<DomainConfig> {
+    println!("\n💡 Landing + App on Vercel, API on VPS\n");
+    let api = prompt_domain("API domain (VPS)", "api.dokuru.rifuki.dev")?;
+    let domains = DomainConfig {
+        landing: "landing.vercel.app".to_string(),
+        www: "app.vercel.app".to_string(),
+        api,
+        strategy: DeployStrategy::BothVercel,
+    };
+    print_domain_summary(&domains, false, false, true);
+    Ok(domains)
+}
+
+fn custom_domains() -> Result<DomainConfig> {
+    println!("\n⚙️  Custom domain configuration\n");
+    Ok(DomainConfig {
+        landing: input("Landing domain")
+            .placeholder("dokuru.com")
+            .interact()?,
+        www: input("App domain")
+            .placeholder("app.dokuru.com")
+            .interact()?,
+        api: input("API domain")
+            .placeholder("api.dokuru.com")
+            .interact()?,
+        strategy: DeployStrategy::Custom,
+    })
+}
+
+fn prompt_domain(label: &str, default: &str) -> Result<String> {
+    input(label)
+        .placeholder(default)
+        .default_input(default)
+        .interact()
+        .map_err(Into::into)
+}
+
+fn print_domain_summary(
+    domains: &DomainConfig,
+    show_landing: bool,
+    show_www: bool,
+    show_api: bool,
+) {
+    println!("\n✨ Configuration:");
+    if show_landing {
+        println!("   Landing: https://{} (VPS)", domains.landing);
+    }
+    if show_www {
+        println!("   App:     https://{} (VPS)", domains.www);
+    }
+    if show_api {
+        println!("   API:     https://{} (VPS)", domains.api);
+    }
+}
+
+fn resolve_database(
+    db_name: String,
+    db_user: String,
+    db_password: Option<String>,
+    is_interactive: bool,
+) -> Result<DatabaseCredentials> {
+    if let Some(password) = db_password {
+        return Ok(DatabaseCredentials {
+            name: db_name,
+            user: db_user,
+            password,
+        });
+    }
+
+    if is_interactive {
+        prompt_database(db_name, db_user)
+    } else {
+        Ok(DatabaseCredentials {
+            name: db_name,
+            user: db_user,
+            password: generate_secret(32),
+        })
+    }
+}
+
+fn prompt_database(db_name: String, db_user: String) -> Result<DatabaseCredentials> {
+    println!("\n🗄️  Database Configuration\n");
+    if confirm("Auto-generate secure database configuration?")
+        .initial_value(true)
+        .interact()?
+    {
+        let password = generate_secret(32);
+        println!("  Generated: {}••••••••", &password[..8]);
+        return Ok(DatabaseCredentials {
+            name: db_name,
+            user: db_user,
+            password,
+        });
+    }
+
+    let name = prompt_domain("Database name", "dokuru_db")?;
+    let user = prompt_domain("Database user", "dokuru")?;
+    Ok(DatabaseCredentials {
+        name,
+        user,
+        password: prompt_database_password()?,
+    })
+}
+
+fn prompt_database_password() -> Result<String> {
+    if confirm("Auto-generate database password?")
+        .initial_value(true)
+        .interact()?
+    {
+        let password = generate_secret(32);
+        println!("  Generated: {}••••••••", &password[..8]);
+        return Ok(password);
+    }
+
+    input("Database password")
+        .placeholder("Enter secure password (min 16 chars)")
+        .interact()
+        .map_err(Into::into)
+}
+
+fn resolve_resend_key(resend_key: Option<String>, is_interactive: bool) -> Result<String> {
+    if let Some(key) = resend_key {
+        return Ok(key);
+    }
+    if !is_interactive {
+        return Err(anyhow::anyhow!("Resend API key is required"));
+    }
+
+    println!("\n📧 Email Configuration\n");
+    println!("  Dokuru uses Resend for transactional emails");
+    println!("  Get your API key at: https://resend.com/api-keys\n");
+    input("Resend API key")
+        .placeholder("re_xxxxxxxxxxxxx")
+        .interact()
+        .map_err(Into::into)
+}
+
+fn resolve_jwt_secrets(is_interactive: bool) -> Result<JwtSecrets> {
+    if !is_interactive {
+        return Ok(generated_jwt_secrets());
+    }
+
+    println!("\n🔐 Security Configuration\n");
+    if confirm("Auto-generate JWT secrets?")
+        .initial_value(true)
+        .interact()?
+    {
+        println!("  ✓ Generated secure JWT secrets");
+        return Ok(generated_jwt_secrets());
+    }
+
+    Ok(JwtSecrets {
+        access: input("JWT access secret (min 32 chars)")
+            .default_input(&generate_secret(64))
+            .interact()?,
+        refresh: input("JWT refresh secret (min 32 chars)")
+            .default_input(&generate_secret(64))
+            .interact()?,
+    })
+}
+
+fn generated_jwt_secrets() -> JwtSecrets {
+    JwtSecrets {
+        access: generate_secret(64),
+        refresh: generate_secret(64),
+    }
+}
+
+fn build_deploy_config(
+    domains: DomainConfig,
+    database: DatabaseCredentials,
+    secrets: JwtSecrets,
+    resend_api_key: String,
+) -> DeployConfig {
+    let base_domain = domains.api.replace("api.", "");
+    DeployConfig {
+        base_domain,
+        landing_domain: domains.landing,
+        www_domain: domains.www,
+        api_domain: domains.api,
+        db_name: database.name,
+        db_user: database.user,
+        db_password: database.password,
+        jwt_access_secret: secrets.access,
+        jwt_refresh_secret: secrets.refresh,
+        resend_api_key,
+    }
+}
+
+fn confirm_configuration(config: &DeployConfig, is_interactive: bool) -> Result<()> {
+    if !is_interactive {
+        return Ok(());
+    }
+
+    print_config_summary(config);
+    if confirm("Proceed and save configuration files?")
+        .initial_value(true)
+        .interact()?
+    {
+        Ok(())
+    } else {
+        outro_cancel("Cancelled")?;
+        Err(anyhow::anyhow!("cancelled"))
+    }
+}
+
+fn print_config_summary(config: &DeployConfig) {
+    println!("\n📋 Configuration Summary\n");
+    println!("  🌐 Domains:");
+    println!("     Landing: https://{}", config.landing_domain);
+    println!("     App:     https://{}", config.www_domain);
+    println!("     API:     https://{}", config.api_domain);
+    println!("\n  🗄️  Database:");
+    println!("     Name:     {}", config.db_name);
+    println!("     User:     {}", config.db_user);
+    println!(
+        "     Password: {}",
+        secret_preview(&config.db_password, "••••••••")
+    );
+    println!("\n  🔐 Security:");
+    println!(
+        "     JWT Access:  {}",
+        secret_preview(&config.jwt_access_secret, "••••••••")
+    );
+    println!(
+        "     JWT Refresh: {}",
+        secret_preview(&config.jwt_refresh_secret, "••••••••")
+    );
+    println!("\n  📧 Email:");
+    println!("     Provider: Resend");
+    println!("     From:     noreply@{}", config.base_domain);
+    println!();
+}
+
+fn secret_preview(secret: &str, fallback: &str) -> String {
+    if secret.len() >= 8 {
+        format!("{}••••••••", &secret[..8])
+    } else {
+        fallback.to_string()
+    }
+}
+
+fn generate_files(
+    config: &DeployConfig,
+    project_dir: &std::path::Path,
+    strategy: DeployStrategy,
+) -> Result<()> {
     let server_config_dir = project_dir.join("dokuru-server/config");
     std::fs::create_dir_all(&server_config_dir)?;
 
-    generate_local_toml(&config, &server_config_dir.join("local.toml"))?;
-    generate_secrets_toml(&config, &server_config_dir.join("secrets.toml"))?;
-    generate_docker_compose_override(&config, &project_dir.join("docker-compose.override.yaml"), strategy)?;
-    generate_env_file(&config, &project_dir.join("dokuru-server/.env"))?;
-    generate_env_file(&config, &project_dir.join("dokuru-server/.env"))?;
+    generate_local_toml(config, &server_config_dir.join("local.toml"))?;
+    generate_secrets_toml(config, &server_config_dir.join("secrets.toml"))?;
+    generate_docker_compose_override(
+        config,
+        &project_dir.join("docker-compose.override.yaml"),
+        strategy.as_str(),
+    )?;
+    generate_env_file(config, &project_dir.join("dokuru-server/.env"))?;
+    Ok(())
+}
 
+fn show_completion(
+    config: &DeployConfig,
+    strategy: DeployStrategy,
+    is_interactive: bool,
+) -> Result<()> {
     if is_interactive {
         outro("✅ Configuration files generated successfully!")?;
     } else {
         println!("✅ Configuration files generated successfully!");
     }
-    
+
     println!("\n📁 Generated files:");
     println!("  • dokuru-server/config/local.toml");
     println!("  • dokuru-server/config/secrets.toml");
     println!("  • dokuru-server/.env");
     println!("  • docker-compose.override.yaml");
-    
+
     // Show deployment-specific instructions
     match strategy {
-        "full-vps" | "landing-vercel" | "app-vercel" => {
+        DeployStrategy::FullVps | DeployStrategy::LandingVercel | DeployStrategy::AppVercel => {
             println!("\n⚙️  GitHub Actions Setup (for VPS services):");
-            println!("  1. Go to: https://github.com/{}/settings/variables/actions", 
-                std::env::var("GITHUB_REPOSITORY").unwrap_or_else(|_| "your-username/dokuru".to_string()));
+            println!(
+                "  1. Go to: https://github.com/{}/settings/variables/actions",
+                std::env::var("GITHUB_REPOSITORY")
+                    .unwrap_or_else(|_| "your-username/dokuru".to_string())
+            );
             println!("  2. Add repository variable:");
             println!("     Name:  API_DOMAIN");
             println!("     Value: https://{}", config.api_domain);
-            if strategy != "app-vercel" {
+            if !matches!(strategy, DeployStrategy::AppVercel) {
                 println!("\n  Note: This is needed for building dokuru-www Docker image");
             }
         }
-        "both-vercel" => {
+        DeployStrategy::BothVercel => {
             println!("\n💡 All frontend services on Vercel - no GitHub Actions setup needed!");
         }
-        _ => {}
+        DeployStrategy::Custom => {}
     }
-    
+
     println!("\n🚀 Next steps:");
     println!("  1. Review generated files");
     println!("  2. Set up GitHub Actions variable (if needed)");

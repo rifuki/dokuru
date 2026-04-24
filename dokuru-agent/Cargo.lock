@@ -533,6 +533,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
+ "bitflags",
  "bollard",
  "chrono",
  "clap",

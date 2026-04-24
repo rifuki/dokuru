@@ -38,14 +38,14 @@ pub fn run_doctor(args: DoctorArgs) -> Result<()> {
     )?;
     log_item(config_exists, "Config", &config_path.display().to_string())?;
     log_item(
-        preflight.docker_socket_exists,
+        preflight.docker_socket_exists(),
         "Docker socket",
         &config.docker_socket,
     )?;
     log_item(
-        preflight.has_systemd,
+        preflight.has_systemd(),
         "Systemd",
-        if preflight.has_systemd {
+        if preflight.has_systemd() {
             "detected"
         } else {
             "not detected"
@@ -78,7 +78,7 @@ pub fn run_doctor(args: DoctorArgs) -> Result<()> {
         format!("CORS:           {}", config.cors_origins),
         format!(
             "docker.service: {}",
-            if preflight.docker_service_exists {
+            if preflight.docker_service_exists() {
                 "detected"
             } else {
                 "not detected"

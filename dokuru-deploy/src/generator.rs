@@ -1,5 +1,9 @@
-use crate::config::*;
+use crate::config::{
+    AppConfig, AuthConfig, BootstrapConfig, CookieConfig, DatabaseConfig, DeployConfig,
+    EmailConfig, LocalToml, RedisConfig, SecretsToml, ServerConfig, UploadConfig,
+};
 use anyhow::Result;
+use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 
@@ -50,7 +54,11 @@ pub fn generate_secrets_toml(config: &DeployConfig, output_path: &Path) -> Resul
     Ok(())
 }
 
-pub fn generate_docker_compose_override(config: &DeployConfig, output_path: &Path, strategy: &str) -> Result<()> {
+pub fn generate_docker_compose_override(
+    config: &DeployConfig,
+    output_path: &Path,
+    strategy: &str,
+) -> Result<()> {
     let mut yaml = format!(
         r#"services:
   dokuru-db:
@@ -67,16 +75,14 @@ pub fn generate_docker_compose_override(config: &DeployConfig, output_path: &Pat
       - "traefik.http.routers.dokuru-api.tls.certresolver=letsencrypt"
       - "traefik.http.services.dokuru-server.loadbalancer.server.port=9393"
 "#,
-        config.db_name,
-        config.db_user,
-        config.db_password,
-        config.api_domain,
+        config.db_name, config.db_user, config.db_password, config.api_domain,
     );
 
     // Add www service config (only if on VPS)
     match strategy {
         "full-vps" | "landing-vercel" => {
-            yaml.push_str(&format!(
+            write!(
+                yaml,
                 r#"
   dokuru-www:
     labels:
@@ -87,7 +93,7 @@ pub fn generate_docker_compose_override(config: &DeployConfig, output_path: &Pat
       - "traefik.http.services.dokuru-web.loadbalancer.server.port=80"
 "#,
                 config.www_domain
-            ));
+            )?;
         }
         "app-vercel" | "both-vercel" => {
             yaml.push_str(
@@ -103,7 +109,8 @@ pub fn generate_docker_compose_override(config: &DeployConfig, output_path: &Pat
     // Add landing service config (only if on VPS)
     match strategy {
         "full-vps" | "app-vercel" => {
-            yaml.push_str(&format!(
+            write!(
+                yaml,
                 r#"
   dokuru-landing:
     labels:
@@ -122,7 +129,7 @@ pub fn generate_docker_compose_override(config: &DeployConfig, output_path: &Pat
       - "traefik.http.routers.dokuru-landing.middlewares=install-redirect,deploy-redirect"
 "#,
                 config.landing_domain
-            ));
+            )?;
         }
         "landing-vercel" | "both-vercel" => {
             yaml.push_str(
@@ -158,7 +165,7 @@ pub fn generate_env_file(config: &DeployConfig, output_path: &Path) -> Result<()
          DATABASE_URL=postgres://{}:{}@localhost:5432/{}\n",
         config.db_user, config.db_password, config.db_name
     );
-    
+
     fs::write(output_path, env_content)?;
     Ok(())
 }
