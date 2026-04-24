@@ -52,13 +52,15 @@ jobs:
         run: |
           mkdir -p artifact
           cp dokuru-deploy/target/x86_64-unknown-linux-musl/release/dokuru-deploy artifact/
+          cp dokuru-deploy/install.sh artifact/install.sh
           chmod +x artifact/dokuru-deploy
+          chmod +x artifact/install.sh
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: dokuru-deploy-linux-amd64
-          path: artifact/dokuru-deploy
+          path: artifact/*
           if-no-files-found: error
 
   release:
@@ -90,7 +92,7 @@ jobs:
 
           **Installation:**
           \`\`\`bash
-          curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/dokuru-deploy/install.sh | bash
+          curl -fsSL https://github.com/${{ github.repository }}/releases/download/latest-deploy/install.sh | bash
           \`\`\`
 
           **Manual Installation:**
@@ -100,4 +102,5 @@ jobs:
           sudo mv dokuru-deploy /usr/local/bin/
           \`\`\`" \
             --prerelease \
-            dokuru-deploy
+            dokuru-deploy \
+            install.sh

@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'dokuru-agent/**'
+      - 'install.sh'
       - '.github/workflows/release-agent.yaml'
     tags:
       - 'v*.*.*'
@@ -151,7 +152,7 @@ jobs:
 
           **Quick install (latest):**
           ```bash
-          curl -fsSL https://dokuru.rifuki.dev/install | bash
+          curl -fsSL https://github.com/${{ github.repository }}/releases/download/latest/install.sh | bash
           ```
 
           **Install this specific version:**
@@ -180,6 +181,7 @@ jobs:
           | `dokuru-linux-amd64-${{ steps.release.outputs.tag }}` | Linux | x86_64 |
           | `dokuru-linux-arm64-${{ steps.release.outputs.tag }}` | Linux | aarch64 |
           | `SHA256SUMS` | - | Checksums |
+          | `install.sh` | - | Installer |
 
           ---
 
@@ -206,7 +208,7 @@ jobs:
           ### 📦 Installation
 
           ```bash
-          curl -fsSL https://dokuru.rifuki.dev/install | bash
+          curl -fsSL https://github.com/${{ github.repository }}/releases/download/latest/install.sh | bash
           ```
 
           ### 📋 Assets
@@ -216,6 +218,7 @@ jobs:
           | `dokuru-linux-amd64` | Linux | x86_64 |
           | `dokuru-linux-arm64` | Linux | aarch64 |
           | `SHA256SUMS` | - | Checksums |
+          | `install.sh` | - | Installer |
 
           ---
 
@@ -233,6 +236,7 @@ jobs:
           files: |
             dokuru-linux-*
             SHA256SUMS
+            install.sh
           draft: false
           prerelease: ${{ steps.release.outputs.prerelease }}
           make_latest: true
