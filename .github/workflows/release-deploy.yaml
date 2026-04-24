@@ -90,7 +90,7 @@ jobs:
 
           **Installation:**
           \`\`\`bash
-          curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/dokuru-deploy/install | bash
+          curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/dokuru-deploy/install.sh | bash
           \`\`\`
 
           **Manual Installation:**
