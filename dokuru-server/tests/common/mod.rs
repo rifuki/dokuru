@@ -8,7 +8,7 @@ use serde_json::Value;
 use tower::ServiceExt;
 
 #[allow(dead_code)]
-pub async fn build_test_app() -> (axum::Router, ()) {
+pub fn build_test_app() -> (axum::Router, ()) {
     // Placeholder - implement actual test app setup
     (axum::Router::new(), ())
 }

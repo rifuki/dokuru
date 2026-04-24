@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+mod websocket_tests {
     use crate::websocket::{WsEvent, WsManager};
     use serde_json::json;
     use uuid::Uuid;

@@ -1,5 +1,5 @@
 use super::super::helpers::{
-    collect_preflight, enable_service, generate_agent_token, hash_token, install_binary,
+    Preflight, collect_preflight, enable_service, generate_agent_token, hash_token, install_binary,
     install_docker, offer_docker_installation, prompt_for_config, reload_systemd, resolve_config,
     restart_service, run_command, run_step, runtime_config_path, service_unit_path,
     setup_log_directory, show_preflight, update_config_access_mode, user_in_docker_group,
@@ -10,6 +10,42 @@ use cliclack::{confirm, intro, note, outro, outro_cancel, select};
 use eyre::{Result, WrapErr, bail};
 use std::io::{IsTerminal, stderr};
 use std::path::PathBuf;
+
+fn current_non_root_user() -> Option<String> {
+    std::env::var("SUDO_USER")
+        .or_else(|_| std::env::var("USER"))
+        .ok()
+        .filter(|user| !user.is_empty() && user != "root")
+}
+
+fn offer_docker_group_membership(preflight: &Preflight, assume_yes: bool) -> Result<()> {
+    if !preflight.docker_group_exists || assume_yes {
+        return Ok(());
+    }
+
+    let Some(current_user) = current_non_root_user() else {
+        return Ok(());
+    };
+
+    let in_group = user_in_docker_group(&current_user)?;
+    if in_group
+        || !confirm(format!(
+            "Add user '{current_user}' to docker group? (recommended)"
+        ))
+        .initial_value(true)
+        .interact()?
+    {
+        return Ok(());
+    }
+
+    run_command("usermod", &["-aG", "docker", &current_user])?;
+    cliclack::log::success(format!("User '{current_user}' added to docker group"))?;
+    cliclack::log::warning(
+        "Log out and back in (or run 'newgrp docker') for group changes to take effect",
+    )?;
+
+    Ok(())
+}
 
 #[allow(clippy::cognitive_complexity, clippy::too_many_lines)]
 pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
@@ -94,27 +130,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
     }
 
     // Offer to add current user to docker group
-    #[allow(clippy::collapsible_if)]
-    if preflight.docker_group_exists && !config.yes {
-        if let Ok(current_user) = std::env::var("SUDO_USER").or_else(|_| std::env::var("USER")) {
-            if !current_user.is_empty() && current_user != "root" {
-                let in_group = user_in_docker_group(&current_user)?;
-                if !in_group
-                    && confirm(format!(
-                        "Add user '{current_user}' to docker group? (recommended)"
-                    ))
-                    .initial_value(true)
-                    .interact()?
-                {
-                    run_command("usermod", &["-aG", "docker", &current_user])?;
-                    cliclack::log::success(format!("User '{current_user}' added to docker group"))?;
-                    cliclack::log::warning(
-                        "Log out and back in (or run 'newgrp docker') for group changes to take effect",
-                    )?;
-                }
-            }
-        }
-    }
+    offer_docker_group_membership(&preflight, config.yes)?;
 
     let (mut config, _) = prompt_for_config(mode, config)?;
 

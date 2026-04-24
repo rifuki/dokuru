@@ -164,7 +164,6 @@ impl OAuthService {
 
 #[cfg(test)]
 mod tests {
-    
 
     // Tests will be added in next phase
 }

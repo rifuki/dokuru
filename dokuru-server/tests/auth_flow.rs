@@ -287,7 +287,7 @@ async fn test_full_auth_flow() {
     assert_eq!(upd_body["data"]["name"], "Grace Updated");
 
     // 4. POST /auth/refresh — rotate refresh token, get new access token
-    let (status, ref_body) = post_json_with_cookie(
+    let (status, refresh_body) = post_json_with_cookie(
         app.clone(),
         "/api/v1/auth/refresh",
         &json!({}),
@@ -295,7 +295,7 @@ async fn test_full_auth_flow() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let new_token = ref_body["data"]["access_token"]
+    let new_token = refresh_body["data"]["access_token"]
         .as_str()
         .expect("new access_token must be in refresh response")
         .to_string();

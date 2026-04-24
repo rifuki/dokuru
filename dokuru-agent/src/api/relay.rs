@@ -1,12 +1,20 @@
 use eyre::{Result, WrapErr};
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{
+    SinkExt, StreamExt,
+    stream::{SplitSink, SplitStream},
+};
 use serde::{Deserialize, Serialize};
-use tokio_tungstenite::{connect_async, tungstenite::Message};
+use tokio::{net::TcpStream, sync::mpsc, task::JoinHandle};
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async, tungstenite::Message};
 use tracing::{error, info, warn};
 
 use crate::api::Config;
 
 const RELAY_SERVER: &str = "wss://api.dokuru.rifuki.dev/ws/agent";
+
+type RelaySocket = WebSocketStream<MaybeTlsStream<TcpStream>>;
+type RelayWriter = SplitSink<RelaySocket, Message>;
+type RelayReader = SplitStream<RelaySocket>;
 
 /// WebSocket message types (must match server)
 #[derive(Debug, Serialize, Deserialize)]
@@ -36,19 +44,24 @@ enum WsMessage {
 }
 
 /// Start relay mode - connect to server via WebSocket
-#[allow(clippy::cognitive_complexity)]
 pub async fn start_relay_mode(config: Config) -> Result<()> {
     info!("Starting relay mode, connecting to {}", RELAY_SERVER);
+    let token = relay_token(config)?;
 
-    // Get agent token from config
-    let token = config.auth.relay_token.ok_or_else(|| {
+    reconnect_loop(&token).await
+}
+
+fn relay_token(config: Config) -> Result<String> {
+    config.auth.relay_token.ok_or_else(|| {
         eyre::eyre!(
             "No relay token configured. Please set relay_token in config or run onboarding."
         )
-    })?;
+    })
+}
 
+async fn reconnect_loop(token: &str) -> Result<()> {
     loop {
-        match connect_and_run(&token).await {
+        match connect_and_run(token).await {
             Ok(()) => {
                 info!("Relay connection closed normally");
                 break;
@@ -64,9 +77,7 @@ pub async fn start_relay_mode(config: Config) -> Result<()> {
     Ok(())
 }
 
-#[allow(clippy::cognitive_complexity)]
 async fn connect_and_run(token: &str) -> Result<()> {
-    // Connect to relay server
     let (ws_stream, _) = connect_async(RELAY_SERVER)
         .await
         .wrap_err("Failed to connect to relay server")?;
@@ -74,63 +85,77 @@ async fn connect_and_run(token: &str) -> Result<()> {
     info!("Connected to relay server");
 
     let (mut write, mut read) = ws_stream.split();
+    authenticate_relay(&mut write, &mut read, token).await?;
 
-    // Send auth message
+    let (tx, rx) = mpsc::unbounded_channel::<Message>();
+    let write_task = spawn_writer(write, rx);
+    let keepalive_task = spawn_keepalive(tx.clone());
+
+    relay_read_loop(&mut read, &tx).await;
+
+    keepalive_task.abort();
+    write_task.abort();
+    Ok(())
+}
+
+async fn authenticate_relay(
+    write: &mut RelayWriter,
+    read: &mut RelayReader,
+    token: &str,
+) -> Result<()> {
     let auth_msg = serde_json::to_string(&WsMessage::Auth {
         token: token.to_string(),
     })?;
     write.send(Message::Text(auth_msg)).await?;
 
-    // Wait for auth response
     match read.next().await {
         Some(Ok(Message::Text(text))) => {
-            let msg: WsMessage = serde_json::from_str(&text)?;
-            match msg {
-                WsMessage::AuthSuccess { agent_id } => {
-                    info!("Authenticated as agent {}", agent_id);
-                }
-                WsMessage::AuthFailed { reason } => {
-                    return Err(eyre::eyre!("Authentication failed: {}", reason));
-                }
-                _ => {
-                    return Err(eyre::eyre!("Unexpected auth response"));
-                }
-            }
+            let agent_id = parse_auth_response(&text)?;
+            info!("Authenticated as agent {}", agent_id);
+            Ok(())
         }
-        _ => {
-            return Err(eyre::eyre!("Connection closed during auth"));
-        }
+        _ => Err(eyre::eyre!("Connection closed during auth")),
     }
+}
 
-    // Create channel for sending messages
-    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Message>();
+fn parse_auth_response(text: &str) -> Result<String> {
+    match serde_json::from_str(text)? {
+        WsMessage::AuthSuccess { agent_id } => Ok(agent_id),
+        WsMessage::AuthFailed { reason } => Err(eyre::eyre!("Authentication failed: {reason}")),
+        _ => Err(eyre::eyre!("Unexpected auth response")),
+    }
+}
 
-    // Spawn write task
-    let write_task = tokio::spawn(async move {
+fn spawn_writer(
+    mut write: RelayWriter,
+    mut rx: mpsc::UnboundedReceiver<Message>,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
             if write.send(msg).await.is_err() {
                 break;
             }
         }
-    });
+    })
+}
 
-    // Spawn keepalive task
-    let tx_keepalive = tx.clone();
-    let keepalive_task = tokio::spawn(async move {
+fn spawn_keepalive(tx: mpsc::UnboundedSender<Message>) -> JoinHandle<()> {
+    tokio::spawn(async move {
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
         loop {
             interval.tick().await;
-            if tx_keepalive.send(Message::Ping(vec![])).is_err() {
+            if tx.send(Message::Ping(vec![])).is_err() {
                 break;
             }
         }
-    });
+    })
+}
 
-    // Handle messages
+async fn relay_read_loop(read: &mut RelayReader, tx: &mpsc::UnboundedSender<Message>) {
     while let Some(msg) = read.next().await {
         match msg {
             Ok(Message::Text(text)) => {
-                if let Err(e) = handle_message(&text, &tx) {
+                if let Err(e) = handle_message(&text, tx) {
                     error!("Error handling message: {}", e);
                 }
             }
@@ -148,13 +173,9 @@ async fn connect_and_run(token: &str) -> Result<()> {
             _ => {}
         }
     }
-
-    keepalive_task.abort();
-    write_task.abort();
-    Ok(())
 }
 
-fn handle_message(text: &str, tx: &tokio::sync::mpsc::UnboundedSender<Message>) -> Result<()> {
+fn handle_message(text: &str, tx: &mpsc::UnboundedSender<Message>) -> Result<()> {
     let msg: WsMessage = serde_json::from_str(text)?;
 
     match msg {
@@ -184,6 +205,27 @@ fn handle_message(text: &str, tx: &tokio::sync::mpsc::UnboundedSender<Message>) 
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_auth_response_accepts_success() {
+        let agent_id = parse_auth_response(r#"{"type":"auth_success","agent_id":"agent-1"}"#);
+
+        assert_eq!(agent_id.unwrap(), "agent-1");
+    }
+
+    #[test]
+    fn parse_auth_response_rejects_auth_failure() {
+        let error = parse_auth_response(r#"{"type":"auth_failed","reason":"bad token"}"#)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("bad token"));
+    }
 }
 
 fn execute_command(command: &str, _payload: serde_json::Value) -> Result<serde_json::Value> {

@@ -14,7 +14,7 @@ const WS_URL: &str = "ws://localhost:9393/ws";
 // ============================================================================
 
 #[tokio::test]
-#[ignore]
+#[ignore = "requires running server"]
 async fn test_websocket_connection() {
     let result = timeout(Duration::from_secs(5), connect_async(WS_URL)).await;
 
@@ -29,7 +29,7 @@ async fn test_websocket_connection() {
 }
 
 #[tokio::test]
-#[ignore]
+#[ignore = "requires running server"]
 async fn test_websocket_send_receive() {
     let (ws_stream, _) = connect_async(WS_URL).await.expect("Failed to connect");
     let (mut write, mut read) = ws_stream.split();
@@ -56,7 +56,7 @@ async fn test_websocket_send_receive() {
 }
 
 #[tokio::test]
-#[ignore]
+#[ignore = "requires running server"]
 async fn test_websocket_reconnection() {
     // First connection
     let (ws1, _) = connect_async(WS_URL)
@@ -74,7 +74,7 @@ async fn test_websocket_reconnection() {
 }
 
 #[tokio::test]
-#[ignore]
+#[ignore = "requires running server"]
 async fn test_websocket_multiple_clients() {
     let (ws1, _) = connect_async(WS_URL).await.expect("Client 1 failed");
     let (ws2, _) = connect_async(WS_URL).await.expect("Client 2 failed");
@@ -88,7 +88,7 @@ async fn test_websocket_multiple_clients() {
 }
 
 #[tokio::test]
-#[ignore]
+#[ignore = "requires running server"]
 async fn test_websocket_broadcast_to_multiple_clients() {
     let (ws1, _) = connect_async(WS_URL).await.expect("Client 1 failed");
     let (ws2, _) = connect_async(WS_URL).await.expect("Client 2 failed");
@@ -114,7 +114,7 @@ async fn test_websocket_broadcast_to_multiple_clients() {
 }
 
 #[tokio::test]
-#[ignore]
+#[ignore = "requires running server"]
 async fn test_websocket_close_gracefully() {
     let (ws_stream, _) = connect_async(WS_URL).await.expect("Failed to connect");
     let (mut write, _) = ws_stream.split();
@@ -130,7 +130,7 @@ async fn test_websocket_close_gracefully() {
 }
 
 #[tokio::test]
-#[ignore]
+#[ignore = "requires running server"]
 async fn test_websocket_json_message() {
     let (ws_stream, _) = connect_async(WS_URL).await.expect("Failed to connect");
     let (mut write, _) = ws_stream.split();
@@ -152,7 +152,7 @@ async fn test_websocket_json_message() {
 }
 
 #[tokio::test]
-#[ignore]
+#[ignore = "requires running server"]
 async fn test_websocket_rapid_reconnections() {
     for i in 0..10 {
         let (ws, _) = connect_async(WS_URL)
@@ -165,7 +165,7 @@ async fn test_websocket_rapid_reconnections() {
 }
 
 #[tokio::test]
-#[ignore]
+#[ignore = "requires running server"]
 async fn test_websocket_long_lived_connection() {
     let (ws_stream, _) = connect_async(WS_URL).await.expect("Failed to connect");
 
@@ -189,8 +189,8 @@ fn test_websocket_url_conversion() {
 
     // Test HTTPS to WSS conversion
     let https_url = "https://api.dokuru.rifuki.dev/ws";
-    let wss_url = https_url.replace("http", "ws");
-    assert_eq!(wss_url, "wss://api.dokuru.rifuki.dev/ws");
+    let websocket_url = https_url.replace("http", "ws");
+    assert_eq!(websocket_url, "wss://api.dokuru.rifuki.dev/ws");
 
     println!("✅ URL conversion tests passed");
 }

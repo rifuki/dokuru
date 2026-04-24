@@ -436,27 +436,17 @@ pub fn configure_token_section(config: &InstallerConfig) -> Result<()> {
     Ok(())
 }
 
-#[allow(clippy::too_many_lines)]
 pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
-    use crate::cli::CloudflareTunnel;
+    match prompt_access_mode(config)? {
+        "cloudflare" => configure_cloudflare_access(config),
+        "direct" => configure_direct_access(config),
+        "relay" => configure_relay_access(config),
+        _ => unreachable!(),
+    }
+}
 
-    // Read current config to detect access mode
-    let config_path = runtime_config_path(config);
-    let current_mode = std::fs::read_to_string(&config_path)
-        .ok()
-        .and_then(|content| toml::from_str::<crate::api::Config>(&content).ok())
-        .map(|runtime_config| runtime_config.access.mode);
-
-    let current_mode_str = current_mode
-        .as_ref()
-        .map_or("cloudflare", |mode| match mode {
-            crate::api::AccessMode::Cloudflare => "cloudflare",
-            crate::api::AccessMode::Direct => "direct",
-            crate::api::AccessMode::Relay => "relay",
-            crate::api::AccessMode::Domain => "domain",
-        });
-
-    let access_mode = select("How should this agent be accessible?")
+fn prompt_access_mode(config: &InstallerConfig) -> Result<&'static str> {
+    select("How should this agent be accessible?")
         .item(
             "cloudflare",
             "Cloudflare Tunnel",
@@ -468,83 +458,106 @@ pub fn configure_access_section(config: &InstallerConfig) -> Result<()> {
             "Use your own reverse proxy for HTTPS",
         )
         .item("relay", "Relay Mode", "Through dokuru-server via WebSocket")
-        .initial_value(current_mode_str)
-        .interact()?;
+        .initial_value(current_access_mode_value(config))
+        .interact()
+        .map_err(Into::into)
+}
 
-    match access_mode {
-        "cloudflare" => {
-            if !CloudflareTunnel::is_installed() {
-                let spinner = cliclack::spinner();
-                spinner.start("Installing cloudflared...");
-                CloudflareTunnel::install()?;
-                spinner.stop("✓ cloudflared installed");
+fn current_access_mode_value(config: &InstallerConfig) -> &'static str {
+    let config_path = runtime_config_path(config);
+    std::fs::read_to_string(&config_path)
+        .ok()
+        .and_then(|content| toml::from_str::<crate::api::Config>(&content).ok())
+        .map_or("cloudflare", |runtime_config| {
+            match runtime_config.access.mode {
+                crate::api::AccessMode::Cloudflare => "cloudflare",
+                crate::api::AccessMode::Direct => "direct",
+                crate::api::AccessMode::Relay => "relay",
+                crate::api::AccessMode::Domain => "domain",
             }
+        })
+}
 
-            let spinner = cliclack::spinner();
-            spinner.start("Restarting tunnel...");
-            CloudflareTunnel::create_systemd_service(config.port)?;
-            let _ = run_command("systemctl", &["stop", "dokuru-tunnel"]);
-            CloudflareTunnel::start_service()?;
+fn configure_cloudflare_access(config: &InstallerConfig) -> Result<()> {
+    use crate::cli::CloudflareTunnel;
 
-            // Wait for tunnel to start and get URL
-            match CloudflareTunnel::wait_for_url(30) {
-                Ok(url) => {
-                    spinner.stop(format!("✓ Tunnel restarted: {url}"));
-                    update_config_access_mode(config, crate::api::AccessMode::Cloudflare, &url)?;
-                    note(
-                        "Access Updated",
-                        format!(
-                            "Mode:    Cloudflare Tunnel\nURL:     {url}\n\n✓ Config saved & service restarted\n→ Update in dashboard"
-                        ),
-                    )?;
-                    // Restart service to apply changes
-                    run_command("systemctl", &["restart", &config.service_name])?;
-                }
-                Err(e) => {
-                    spinner.stop("✗ Tunnel started but URL not found");
-                    cliclack::log::warning(format!("Could not get URL: {e}"))?;
-                    cliclack::log::info(
-                        "Run: sudo journalctl -u dokuru-tunnel -n 50 | grep https://",
-                    )?;
-                }
-            }
-        }
-        "direct" => {
-            let host_ip = std::net::UdpSocket::bind("0.0.0.0:0")
-                .and_then(|s| {
-                    s.connect("8.8.8.8:80")?;
-                    s.local_addr()
-                })
-                .map_or_else(|_| "localhost".to_string(), |a| a.ip().to_string());
-            let url = format!("http://{}:{}", host_ip, config.port);
-            update_config_access_mode(config, crate::api::AccessMode::Direct, &url)?;
-            note(
-                "Access Updated",
-                format!(
-                    "Mode:    Direct HTTP\nURL:     {url}\n\n✓ Config saved & service restarted\nSetup reverse proxy for HTTPS"
-                ),
-            )?;
-            // Restart service to apply changes
-            run_command("systemctl", &["restart", &config.service_name])?;
-        }
-        "relay" => {
-            update_config_access_mode(config, crate::api::AccessMode::Relay, "relay")?;
-            note(
-                "Access Updated",
-                "Mode:    Relay Mode\n\
-                 \n\
-                 Agent will connect to: wss://api.dokuru.rifuki.dev/ws/agent\n\
-                 No public URL needed - works behind firewall/NAT\n\
-                 \n\
-                 ✓ Config saved & service restarted",
-            )?;
-            // Restart service to apply changes
-            run_command("systemctl", &["restart", &config.service_name])?;
-        }
-        _ => unreachable!(),
+    if !CloudflareTunnel::is_installed() {
+        let spinner = cliclack::spinner();
+        spinner.start("Installing cloudflared...");
+        CloudflareTunnel::install()?;
+        spinner.stop("✓ cloudflared installed");
     }
 
-    Ok(())
+    let spinner = cliclack::spinner();
+    spinner.start("Restarting tunnel...");
+    CloudflareTunnel::create_systemd_service(config.port)?;
+    let _ = run_command("systemctl", &["stop", "dokuru-tunnel"]);
+    CloudflareTunnel::start_service()?;
+
+    match CloudflareTunnel::wait_for_url(30) {
+        Ok(url) => save_cloudflare_url(config, &url, &spinner),
+        Err(e) => {
+            spinner.stop("✗ Tunnel started but URL not found");
+            cliclack::log::warning(format!("Could not get URL: {e}"))?;
+            cliclack::log::info("Run: sudo journalctl -u dokuru-tunnel -n 50 | grep https://")?;
+            Ok(())
+        }
+    }
+}
+
+fn save_cloudflare_url(
+    config: &InstallerConfig,
+    url: &str,
+    spinner: &cliclack::ProgressBar,
+) -> Result<()> {
+    spinner.stop(format!("✓ Tunnel restarted: {url}"));
+    update_config_access_mode(config, crate::api::AccessMode::Cloudflare, url)?;
+    note(
+        "Access Updated",
+        format!(
+            "Mode:    Cloudflare Tunnel\nURL:     {url}\n\n✓ Config saved & service restarted\n→ Update in dashboard"
+        ),
+    )?;
+    restart_agent_service(config)
+}
+
+fn configure_direct_access(config: &InstallerConfig) -> Result<()> {
+    let url = format!("http://{}:{}", host_ip(), config.port);
+    update_config_access_mode(config, crate::api::AccessMode::Direct, &url)?;
+    note(
+        "Access Updated",
+        format!(
+            "Mode:    Direct HTTP\nURL:     {url}\n\n✓ Config saved & service restarted\nSetup reverse proxy for HTTPS"
+        ),
+    )?;
+    restart_agent_service(config)
+}
+
+fn configure_relay_access(config: &InstallerConfig) -> Result<()> {
+    update_config_access_mode(config, crate::api::AccessMode::Relay, "relay")?;
+    note(
+        "Access Updated",
+        "Mode:    Relay Mode\n\
+         \n\
+         Agent will connect to: wss://api.dokuru.rifuki.dev/ws/agent\n\
+         No public URL needed - works behind firewall/NAT\n\
+         \n\
+         ✓ Config saved & service restarted",
+    )?;
+    restart_agent_service(config)
+}
+
+fn host_ip() -> String {
+    std::net::UdpSocket::bind("0.0.0.0:0")
+        .and_then(|socket| {
+            socket.connect("8.8.8.8:80")?;
+            socket.local_addr()
+        })
+        .map_or_else(|_| "localhost".to_string(), |addr| addr.ip().to_string())
+}
+
+fn restart_agent_service(config: &InstallerConfig) -> Result<()> {
+    run_command("systemctl", &["restart", &config.service_name])
 }
 
 pub fn confirm_action(yes: bool, prompt: &str) -> Result<bool> {
