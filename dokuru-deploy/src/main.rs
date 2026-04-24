@@ -95,14 +95,60 @@ fn run_init(
 
     // === STEP 0: Detect or ask for project directory ===
     let project_dir = if is_interactive {
-        // Check if we're in a dokuru project
+        // Search for dokuru project in current and parent directories
         let current_dir = std::env::current_dir()?;
-        let is_dokuru_project = current_dir.join("docker-compose.yaml").exists() 
-            && current_dir.join("dokuru-server").exists();
+        let mut detected_path: Option<PathBuf> = None;
+        
+        // Check current directory
+        if current_dir.join("docker-compose.yaml").exists() 
+            && current_dir.join("dokuru-server").exists() {
+            detected_path = Some(current_dir.clone());
+        } else {
+            // Check parent directory
+            if let Some(parent) = current_dir.parent() {
+                if parent.join("docker-compose.yaml").exists() 
+                    && parent.join("dokuru-server").exists() {
+                    detected_path = Some(parent.to_path_buf());
+                }
+            }
+        }
 
-        if is_dokuru_project {
-            println!("✓ Detected Dokuru project in current directory\n");
-            current_dir
+        if let Some(path) = detected_path {
+            println!("✓ Found Dokuru project at: {}\n", path.display());
+            
+            let use_detected: bool = confirm("Use this project directory?")
+                .initial_value(true)
+                .interact()?;
+            
+            if use_detected {
+                path
+            } else {
+                let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+                let default_path = format!("{}/apps/dokuru", home);
+                
+                let custom_path: String = input("Project directory")
+                    .placeholder(&default_path)
+                    .default_input(&default_path)
+                    .interact()?;
+                
+                let project_path = PathBuf::from(shellexpand::tilde(&custom_path).to_string());
+                
+                if !project_path.exists() {
+                    let create = confirm(format!("Directory {} doesn't exist. Create it?", project_path.display()))
+                        .initial_value(true)
+                        .interact()?;
+                    
+                    if !create {
+                        outro_cancel("Cancelled")?;
+                        return Ok(());
+                    }
+                    
+                    std::fs::create_dir_all(&project_path)?;
+                    println!("  ✓ Created directory: {}\n", project_path.display());
+                }
+                
+                project_path
+            }
         } else {
             println!("📁 Project Directory\n");
             let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
@@ -115,7 +161,6 @@ fn run_init(
             
             let project_path = PathBuf::from(shellexpand::tilde(&path).to_string());
             
-            // Check if directory exists
             if !project_path.exists() {
                 let create = confirm(format!("Directory {} doesn't exist. Create it?", project_path.display()))
                     .initial_value(true)
