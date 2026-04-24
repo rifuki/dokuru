@@ -1,0 +1,4 @@
+
+# Generated test files
+dokuru-server/
+docker-compose.override.yaml
