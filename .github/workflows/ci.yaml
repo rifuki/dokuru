@@ -95,7 +95,15 @@ jobs:
 
       - name: Clippy (server)
         working-directory: dokuru-server
+        env:
+          SQLX_OFFLINE: "true"
         run: cargo clippy -- -D warnings
+
+      - name: Run migrations (server)
+        working-directory: dokuru-server
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/dokuru_test
+        run: cargo sqlx migrate run
 
       - name: Test (server)
         working-directory: dokuru-server
@@ -106,4 +114,6 @@ jobs:
 
       - name: Check workspace (server)
         working-directory: dokuru-server
+        env:
+          SQLX_OFFLINE: "true"
         run: cargo check --all-targets
