@@ -289,8 +289,8 @@ fn run_init(
     };
 
     // === STEP 2: Database Configuration ===
-    let db_pass = if let Some(p) = db_password {
-        p
+    let (db_name_final, db_user_final, db_pass) = if let Some(p) = db_password {
+        (db_name, db_user, p)
     } else if is_interactive {
         println!("\n🗄️  Database Configuration\n");
         
@@ -301,14 +301,36 @@ fn run_init(
         if auto_gen {
             let pass = generate_secret(32);
             println!("  Generated: {}••••••••", &pass[..8]);
-            pass
+            (db_name, db_user, pass)
         } else {
-            input("Database password")
-                .placeholder("Enter secure password (min 16 chars)")
-                .interact()?
+            let name: String = input("Database name")
+                .placeholder("dokuru_db")
+                .default_input("dokuru_db")
+                .interact()?;
+            
+            let user: String = input("Database user")
+                .placeholder("dokuru")
+                .default_input("dokuru")
+                .interact()?;
+            
+            let pass_choice: bool = confirm("Auto-generate database password?")
+                .initial_value(true)
+                .interact()?;
+            
+            let pass = if pass_choice {
+                let p = generate_secret(32);
+                println!("  Generated: {}••••••••", &p[..8]);
+                p
+            } else {
+                input("Database password")
+                    .placeholder("Enter secure password (min 16 chars)")
+                    .interact()?
+            };
+            
+            (name, user, pass)
         }
     } else {
-        generate_secret(32)
+        (db_name, db_user, generate_secret(32))
     };
 
     // === STEP 3: Email Configuration ===
@@ -363,8 +385,8 @@ fn run_init(
         landing_domain,
         www_domain,
         api_domain,
-        db_name,
-        db_user,
+        db_name: db_name_final,
+        db_user: db_user_final,
         db_password: db_pass,
         jwt_access_secret: jwt_access,
         jwt_refresh_secret: jwt_refresh,
