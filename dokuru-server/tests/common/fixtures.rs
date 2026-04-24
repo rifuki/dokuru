@@ -14,8 +14,8 @@ impl TestUser {
         let id = Uuid::new_v4();
         Self {
             id,
-            email: format!("test-{}@example.com", id),
-            username: format!("testuser_{}", id),
+            email: format!("test-{id}@example.com"),
+            username: format!("testuser_{id}"),
             password: "TestPass123!".to_string(),
         }
     }
@@ -39,9 +39,9 @@ impl TestAgent {
         let id = Uuid::new_v4();
         Self {
             id,
-            name: format!("test-agent-{}", id),
+            name: format!("test-agent-{id}"),
             url: "http://localhost:8080".to_string(),
-            token: format!("token-{}", id),
+            token: format!("token-{id}"),
         }
     }
 }

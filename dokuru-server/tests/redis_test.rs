@@ -1,8 +1,8 @@
 //! Redis integration tests
 //!
 //! These tests require Redis to be running.
-//! Set REDIS_URL environment variable to run these tests.
-//! Example: REDIS_URL=redis://localhost:6379 cargo test --test redis_test
+//! Set `REDIS_URL` environment variable to run these tests.
+//! Example: `REDIS_URL=redis://localhost:6379` cargo test --test `redis_test`
 
 use std::env;
 

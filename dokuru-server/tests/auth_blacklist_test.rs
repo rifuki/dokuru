@@ -97,7 +97,7 @@ async fn test_revoke_session_invalidates_token() {
     let req = Request::builder()
         .method("DELETE")
         .uri("/api/v1/auth/sessions/test-session-id")
-        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
     let res: axum::http::Response<Body> = app.clone().oneshot(req).await.unwrap();

@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use super::{
-    auth_method::AuthMethodService, credentials::OAuthCredentials, repository::AuthError,
+    auth_method::{AuthMethodService, CreateOAuthAuthInput},
+    credentials::OAuthCredentials,
+    repository::AuthError,
 };
 use crate::{
     feature::user::{User, UserProfileRepository, repository::UserRepository},
@@ -89,15 +91,15 @@ impl OAuthService {
         credentials: &OAuthCredentials,
     ) -> Result<(), AuthError> {
         self.auth_method_service
-            .create_oauth_auth(
-                user.id,
-                credentials.provider,
-                &credentials.provider_id,
-                credentials.access_token.as_deref(),
-                credentials.refresh_token.as_deref(),
-                credentials.expires_at,
-                false,
-            )
+            .create_oauth_auth(CreateOAuthAuthInput {
+                user_id: user.id,
+                provider: credentials.provider,
+                provider_id: &credentials.provider_id,
+                access_token: credentials.access_token.as_deref(),
+                refresh_token: credentials.refresh_token.as_deref(),
+                expires_at: credentials.expires_at,
+                is_primary: false,
+            })
             .await
             .map_err(|_| AuthError::Database(sqlx::Error::RowNotFound))?;
         Ok(())
@@ -145,15 +147,15 @@ impl OAuthService {
         credentials: &OAuthCredentials,
     ) -> Result<(), AuthError> {
         self.auth_method_service
-            .create_oauth_auth(
-                user.id,
-                credentials.provider,
-                &credentials.provider_id,
-                credentials.access_token.as_deref(),
-                credentials.refresh_token.as_deref(),
-                credentials.expires_at,
-                true,
-            )
+            .create_oauth_auth(CreateOAuthAuthInput {
+                user_id: user.id,
+                provider: credentials.provider,
+                provider_id: &credentials.provider_id,
+                access_token: credentials.access_token.as_deref(),
+                refresh_token: credentials.refresh_token.as_deref(),
+                expires_at: credentials.expires_at,
+                is_primary: true,
+            })
             .await
             .map_err(|_| AuthError::Database(sqlx::Error::RowNotFound))?;
         Ok(())
@@ -162,7 +164,7 @@ impl OAuthService {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    
 
     // Tests will be added in next phase
 }

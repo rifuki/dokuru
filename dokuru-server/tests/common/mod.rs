@@ -34,7 +34,7 @@ pub async fn get_authed(app: axum::Router, uri: &str, token: &str) -> (StatusCod
     let req = Request::builder()
         .method("GET")
         .uri(uri)
-        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
@@ -57,7 +57,7 @@ pub async fn patch_authed(
     let req = Request::builder()
         .method("PATCH")
         .uri(uri)
-        .header(header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(serde_json::to_string(body).unwrap()))
         .unwrap();

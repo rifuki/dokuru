@@ -98,47 +98,6 @@ impl Default for CheckResult {
     }
 }
 
-impl CheckResult {
-    /// Create a new `CheckResult` with minimal required fields
-    /// Additional metadata will be enriched by `RuleDefinition.check()`
-    #[allow(dead_code, clippy::missing_const_for_fn)]
-    pub fn new(
-        rule: CisRule,
-        status: CheckStatus,
-        message: String,
-        affected: Vec<String>,
-        remediation_kind: RemediationKind,
-    ) -> Self {
-        Self {
-            rule,
-            status,
-            message,
-            affected,
-            remediation_kind,
-            audit_command: None,
-            raw_output: None,
-            references: None,
-            rationale: None,
-            impact: None,
-            tags: None,
-            remediation_guide: None,
-        }
-    }
-
-    /// Builder pattern for optional fields
-    #[allow(dead_code)]
-    pub fn with_audit_command(mut self, cmd: String) -> Self {
-        self.audit_command = Some(cmd);
-        self
-    }
-
-    #[allow(dead_code)]
-    pub fn with_raw_output(mut self, output: String) -> Self {
-        self.raw_output = Some(output);
-        self
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditReport {
     pub timestamp: String,

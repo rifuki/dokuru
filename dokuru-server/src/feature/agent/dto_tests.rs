@@ -28,7 +28,7 @@ mod tests {
     #[test]
     fn test_create_agent_dto_empty_name() {
         let dto = CreateAgentDto {
-            name: "".to_string(),
+            name: String::new(),
             url: "http://localhost:8080".to_string(),
             token: "test-token".to_string(),
             access_mode: "direct".to_string(),
@@ -63,7 +63,7 @@ mod tests {
         let dto = CreateAgentDto {
             name: "Test Agent".to_string(),
             url: "http://localhost:8080".to_string(),
-            token: "".to_string(),
+            token: String::new(),
             access_mode: "direct".to_string(),
         };
         assert!(dto.validate().is_err());
@@ -93,7 +93,7 @@ mod tests {
                 token: "test-token".to_string(),
                 access_mode: mode.to_string(),
             };
-            assert!(dto.validate().is_ok(), "Failed for mode: {}", mode);
+            assert!(dto.validate().is_ok(), "Failed for mode: {mode}");
         }
     }
 
@@ -120,7 +120,7 @@ mod tests {
     #[test]
     fn test_update_agent_dto_empty_name() {
         let dto = UpdateAgentDto {
-            name: "".to_string(),
+            name: String::new(),
             url: "http://localhost:9090".to_string(),
             token: None,
         };

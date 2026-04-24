@@ -23,7 +23,7 @@ async fn test_websocket_connection() {
             println!("✅ WebSocket connection successful");
             drop(ws_stream);
         }
-        Ok(Err(e)) => panic!("❌ WebSocket connection failed: {}", e),
+        Ok(Err(e)) => panic!("❌ WebSocket connection failed: {e}"),
         Err(_) => panic!("❌ Connection timeout"),
     }
 }
@@ -46,10 +46,10 @@ async fn test_websocket_send_receive() {
 
     match msg {
         Ok(Some(Ok(message))) => {
-            println!("✅ Received: {:?}", message);
+            println!("✅ Received: {message:?}");
             assert!(matches!(message, Message::Text(_)));
         }
-        Ok(Some(Err(e))) => println!("⚠️  Error receiving: {}", e),
+        Ok(Some(Err(e))) => println!("⚠️  Error receiving: {e}"),
         Ok(None) => println!("⚠️  Connection closed"),
         Err(_) => println!("⚠️  No message received (expected for broadcast-only)"),
     }
@@ -157,7 +157,7 @@ async fn test_websocket_rapid_reconnections() {
     for i in 0..10 {
         let (ws, _) = connect_async(WS_URL)
             .await
-            .unwrap_or_else(|_| panic!("Connection {} failed", i));
+            .unwrap_or_else(|_| panic!("Connection {i} failed"));
         drop(ws);
         tokio::time::sleep(Duration::from_millis(50)).await;
     }

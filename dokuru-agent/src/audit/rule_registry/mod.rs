@@ -25,7 +25,6 @@ pub type CheckFn = fn(
 pub type FixFn = fn(&Docker) -> Pin<Box<dyn Future<Output = Result<FixOutcome>> + Send>>;
 
 /// Self-contained rule definition with metadata + logic
-#[allow(dead_code)]
 pub struct RuleDefinition {
     // Identity
     pub id: String,
@@ -68,12 +67,20 @@ impl RuleDefinition {
         let mut result = (self.check_fn)(docker, containers).await?;
 
         // Enrich result with rule metadata
+        result.rule.id.clone_from(&self.id);
+        result.rule.title.clone_from(&self.title);
+        result.rule.category = self.category.clone();
+        result.rule.severity = self.severity.clone();
+        result.rule.section = section_name(self.section).to_string();
+        result.rule.description.clone_from(&self.description);
+        result.audit_command.clone_from(&self.audit_command);
         result.references = Some(self.references.clone());
         result.rationale = Some(self.rationale.clone());
         result.impact = Some(self.impact.clone());
         result.tags = Some(self.tags.clone());
         // Always use definition-level remediation_kind so FE knows if auto-fix is available
         result.remediation_kind = self.remediation_kind.clone();
+        result.remediation_guide = Some(self.remediation_guide.clone());
 
         Ok(result)
     }
@@ -132,22 +139,6 @@ impl RuleRegistry {
         self.rules.values().collect()
     }
 
-    #[allow(dead_code)]
-    pub fn by_section(&self, section: u8) -> Vec<&RuleDefinition> {
-        self.rules
-            .values()
-            .filter(|r| r.section == section)
-            .collect()
-    }
-
-    #[allow(dead_code)]
-    pub fn by_severity(&self, severity: &Severity) -> Vec<&RuleDefinition> {
-        self.rules
-            .values()
-            .filter(|r| &r.severity == severity)
-            .collect()
-    }
-
     /// Run full audit - check all rules
     pub async fn run_audit(&self, docker: &Docker) -> Result<AuditReport> {
         let info = docker.info().await?;
@@ -155,31 +146,22 @@ impl RuleRegistry {
         let containers = docker.list_containers::<String>(None).await?;
 
         let mut results = Vec::new();
+        let mut passed = 0;
+        let mut failed = 0;
+
         for rule_def in self.all() {
             let result = rule_def.check(docker, &containers).await?;
+            if rule_def.scored {
+                match result.status {
+                    CheckStatus::Pass => passed += 1,
+                    CheckStatus::Fail => failed += 1,
+                    CheckStatus::Error => {}
+                }
+            }
             results.push(result);
         }
 
-        let passed = results
-            .iter()
-            .filter(|r| r.status == CheckStatus::Pass)
-            .count();
-        let failed = results
-            .iter()
-            .filter(|r| r.status == CheckStatus::Fail)
-            .count();
-        let score = if results.is_empty() {
-            0
-        } else {
-            #[allow(
-                clippy::cast_possible_truncation,
-                clippy::cast_sign_loss,
-                clippy::cast_precision_loss
-            )]
-            {
-                ((passed as f64 / results.len() as f64) * 100.0) as u8
-            }
-        };
+        let score = score_percentage(passed, passed + failed);
 
         Ok(AuditReport {
             timestamp: Utc::now().to_rfc3339(),
@@ -211,6 +193,46 @@ impl RuleRegistry {
             .get(rule_id)
             .ok_or_else(|| eyre::eyre!("Rule {} not found", rule_id))?;
         rule_def.fix(docker).await
+    }
+}
+
+fn score_percentage(passed: usize, total: usize) -> u8 {
+    if total == 0 {
+        return 0;
+    }
+
+    let percent = passed.saturating_mul(100) / total;
+    u8::try_from(percent).unwrap_or(100)
+}
+
+const fn section_name(section: u8) -> &'static str {
+    match section {
+        1 => "Host Configuration",
+        2 => "Docker Daemon Configuration",
+        3 => "Docker Daemon Configuration Files",
+        4 => "Container Images and Build Files",
+        5 => "Container Runtime",
+        _ => "Unknown",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn score_percentage_is_integer_and_saturating() {
+        assert_eq!(score_percentage(0, 0), 0);
+        assert_eq!(score_percentage(1, 2), 50);
+        assert_eq!(score_percentage(2, 3), 66);
+        assert_eq!(score_percentage(usize::MAX, 1), 100);
+    }
+
+    #[test]
+    fn section_name_maps_known_cis_sections() {
+        assert_eq!(section_name(1), "Host Configuration");
+        assert_eq!(section_name(5), "Container Runtime");
+        assert_eq!(section_name(99), "Unknown");
     }
 }
 

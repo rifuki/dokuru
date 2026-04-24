@@ -4,4 +4,4 @@ pub mod service;
 
 pub use entity::{AuthMethod, AuthProvider};
 pub use repository::{AuthMethodRepository, AuthMethodRepositoryError, AuthMethodRepositoryImpl};
-pub use service::AuthMethodService;
+pub use service::{AuthMethodService, CreateOAuthAuthInput};

@@ -7,13 +7,37 @@ use crate::{
 };
 use std::sync::Arc;
 
+struct BootstrapAdmin {
+    email: String,
+    username: String,
+    password: String,
+    name: String,
+}
+
+impl BootstrapAdmin {
+    fn from_config(config: &Config) -> Self {
+        Self {
+            email: config.bootstrap.admin_email.clone(),
+            username: config.bootstrap.admin_username.clone(),
+            password: std::env::var("BOOTSTRAP_ADMIN_PASSWORD")
+                .unwrap_or_else(|_| generate_secure_password()),
+            name: config.bootstrap.admin_name.clone(),
+        }
+    }
+
+    fn register_data(&self) -> crate::feature::auth::RegisterData {
+        crate::feature::auth::RegisterData::new(self.email.clone(), self.password.clone())
+            .with_username(self.username.clone())
+            .with_full_name(self.name.clone())
+    }
+}
+
 /// Bootstrap the application
 /// - Create admin user from env if no admin exists
 ///
 /// # Errors
 ///
 /// Returns error if database operations fail or admin creation fails.
-#[allow(clippy::cognitive_complexity)]
 pub async fn bootstrap(db: &Database, config: &Config) -> eyre::Result<()> {
     tracing::info!("🚀 Running bootstrap checks...");
 
@@ -22,24 +46,21 @@ pub async fn bootstrap(db: &Database, config: &Config) -> eyre::Result<()> {
         return Ok(());
     }
 
-    // Check if admin already exists
-    let admin_exists = check_admin_exists(db).await?;
-
-    if admin_exists {
+    if check_admin_exists(db).await? {
         tracing::info!("✅ Admin user already exists, skipping bootstrap");
         return Ok(());
     }
 
-    // Create admin from layered config
-    let admin_email = config.bootstrap.admin_email.clone();
-    let admin_username = config.bootstrap.admin_username.clone();
-    let admin_password =
-        std::env::var("BOOTSTRAP_ADMIN_PASSWORD").unwrap_or_else(|_| generate_secure_password());
-    let admin_name = config.bootstrap.admin_name.clone();
+    let admin = BootstrapAdmin::from_config(config);
+    tracing::info!("👤 Creating bootstrap admin user: {}", admin.email);
 
-    tracing::info!("👤 Creating bootstrap admin user: {}", admin_email);
+    let auth_service = bootstrap_auth_service(db, config);
+    create_bootstrap_admin(db, &auth_service, &admin).await?;
 
-    // Create admin via auth service
+    Ok(())
+}
+
+fn bootstrap_auth_service(db: &Database, config: &Config) -> AuthService {
     let user_repo: Arc<dyn crate::feature::user::repository::UserRepository> =
         Arc::new(crate::feature::user::repository::UserRepositoryImpl::new());
     let user_profile_repo: Arc<dyn crate::feature::user::UserProfileRepository> =
@@ -53,7 +74,7 @@ pub async fn bootstrap(db: &Database, config: &Config) -> eyre::Result<()> {
     let session_service =
         crate::feature::auth::session::SessionService::new(db.clone(), session_repo);
 
-    let auth_service = AuthService::new(
+    AuthService::new(
         db.clone(),
         Arc::clone(&user_repo),
         Arc::clone(&user_profile_repo),
@@ -61,13 +82,15 @@ pub async fn bootstrap(db: &Database, config: &Config) -> eyre::Result<()> {
         Arc::new(config.clone()),
         None, // No Redis session blacklist during bootstrap
         session_service,
-    );
+    )
+}
 
-    let register_data = crate::feature::auth::RegisterData::new(admin_email.clone(), admin_password.clone())
-        .with_username(admin_username.clone())
-        .with_full_name(admin_name.clone());
-
-    match auth_service.register(register_data).await {
+async fn create_bootstrap_admin(
+    db: &Database,
+    auth_service: &AuthService,
+    admin: &BootstrapAdmin,
+) -> eyre::Result<()> {
+    match auth_service.register(admin.register_data()).await {
         Ok((auth_response, _)) => {
             // Promote to admin by updating role directly in DB
             sqlx::query("UPDATE users SET role = 'admin' WHERE id = $1")
@@ -75,18 +98,7 @@ pub async fn bootstrap(db: &Database, config: &Config) -> eyre::Result<()> {
                 .execute(db.pool())
                 .await?;
 
-            tracing::info!("✅ Bootstrap admin created successfully!");
-            tracing::info!("");
-            tracing::info!("┌────────────────────────────────────────────────────────────┐");
-            tracing::info!("│  ADMIN USER CREATED                                        │");
-            tracing::info!("├────────────────────────────────────────────────────────────┤");
-            tracing::info!("│  Email:    {:<47}│", admin_email);
-            tracing::info!("│  Username: {:<47}│", admin_username);
-            tracing::info!("│  Password: {:<47}│", admin_password);
-            tracing::info!("└────────────────────────────────────────────────────────────┘");
-            tracing::info!("");
-            tracing::warn!("⚠️  IMPORTANT: Change admin password after first login!");
-            tracing::info!("");
+            log_bootstrap_admin_created(admin);
         }
         Err(e) => {
             tracing::error!("❌ Failed to create bootstrap admin: {}", e);
@@ -94,6 +106,21 @@ pub async fn bootstrap(db: &Database, config: &Config) -> eyre::Result<()> {
     }
 
     Ok(())
+}
+
+fn log_bootstrap_admin_created(admin: &BootstrapAdmin) {
+    tracing::info!("✅ Bootstrap admin created successfully!");
+    tracing::info!("");
+    tracing::info!("┌────────────────────────────────────────────────────────────┐");
+    tracing::info!("│  ADMIN USER CREATED                                        │");
+    tracing::info!("├────────────────────────────────────────────────────────────┤");
+    tracing::info!("│  Email:    {:<47}│", admin.email);
+    tracing::info!("│  Username: {:<47}│", admin.username);
+    tracing::info!("│  Password: {:<47}│", admin.password);
+    tracing::info!("└────────────────────────────────────────────────────────────┘");
+    tracing::info!("");
+    tracing::warn!("⚠️  IMPORTANT: Change admin password after first login!");
+    tracing::info!("");
 }
 
 /// Check if any admin user exists
@@ -120,4 +147,20 @@ fn generate_secure_password() -> String {
             CHARSET[idx] as char
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generated_password_has_expected_length_and_charset() {
+        const CHARSET: &str =
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+
+        let password = generate_secure_password();
+
+        assert_eq!(password.len(), 16);
+        assert!(password.chars().all(|ch| CHARSET.contains(ch)));
+    }
 }

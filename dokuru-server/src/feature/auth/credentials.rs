@@ -12,7 +12,7 @@ pub struct LoginCredentials {
 
 impl LoginCredentials {
     #[must_use]
-    pub fn new(identifier: String, password: String) -> Self {
+    pub const fn new(identifier: String, password: String) -> Self {
         Self {
             identifier,
             password,
@@ -39,7 +39,7 @@ pub struct RegisterData {
 
 impl RegisterData {
     #[must_use]
-    pub fn new(email: String, password: String) -> Self {
+    pub const fn new(email: String, password: String) -> Self {
         Self {
             email,
             username: None,
@@ -82,7 +82,7 @@ pub struct OAuthCredentials {
 
 impl OAuthCredentials {
     #[must_use]
-    pub fn new(provider: AuthProvider, provider_id: String, email: String) -> Self {
+    pub const fn new(provider: AuthProvider, provider_id: String, email: String) -> Self {
         Self {
             provider,
             provider_id,

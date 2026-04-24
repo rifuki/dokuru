@@ -52,13 +52,13 @@ impl AuthService {
             db.clone(),
             Arc::clone(&user_repo),
             Arc::clone(&profile_repo),
-            auth_method_service.clone(),
+            auth_method_service,
         );
 
         let token_service = TokenService::new(
             db.clone(),
             Arc::clone(&user_repo),
-            Arc::clone(&config),
+            config,
             session_blacklist,
             session_service,
         );
@@ -78,21 +78,29 @@ impl AuthService {
     /// # Errors
     ///
     /// Returns `AuthError` if email/username exists, password hashing fails, or database error occurs.
-    pub async fn register(&self, data: RegisterData) -> Result<(AuthResponse, Cookie<'static>), AuthError> {
+    pub async fn register(
+        &self,
+        data: RegisterData,
+    ) -> Result<(AuthResponse, Cookie<'static>), AuthError> {
         let user = self.create_user(&data).await?;
-        self.create_profile(&user.id, data.full_name.as_deref()).await?;
+        self.create_profile(&user.id, data.full_name.as_deref())
+            .await?;
         self.create_password_auth(&user.id, &data.password).await?;
 
         let tokens = self.token_service.create_tokens(&user)?;
-        
+
         if let Some(device_info) = &data.device_info {
             self.token_service
                 .create_session(user.id, &tokens.session_id, device_info, &tokens)
                 .await?;
         }
 
-        let response = self.build_auth_response(&user, &tokens, data.full_name.as_deref()).await?;
-        let cookie = self.token_service.create_refresh_cookie(&tokens.refresh_token);
+        let response = self
+            .build_auth_response(&user, &tokens, data.full_name.as_deref())
+            .await?;
+        let cookie = self
+            .token_service
+            .create_refresh_cookie(&tokens.refresh_token);
 
         Ok((response, cookie))
     }
@@ -102,7 +110,10 @@ impl AuthService {
     /// # Errors
     ///
     /// Returns `AuthError` if credentials invalid or user inactive
-    pub async fn login(&self, credentials: LoginCredentials) -> Result<(AuthResponse, Cookie<'static>), AuthError> {
+    pub async fn login(
+        &self,
+        credentials: LoginCredentials,
+    ) -> Result<(AuthResponse, Cookie<'static>), AuthError> {
         let user = self.password_auth.authenticate(&credentials).await?;
         let tokens = self.token_service.create_tokens(&user)?;
 
@@ -113,7 +124,9 @@ impl AuthService {
         }
 
         let response = self.build_auth_response(&user, &tokens, None).await?;
-        let cookie = self.token_service.create_refresh_cookie(&tokens.refresh_token);
+        let cookie = self
+            .token_service
+            .create_refresh_cookie(&tokens.refresh_token);
 
         Ok((response, cookie))
     }
@@ -123,12 +136,22 @@ impl AuthService {
     /// # Errors
     ///
     /// Returns `AuthError` if OAuth flow fails
-    pub async fn oauth_login(&self, credentials: OAuthCredentials) -> Result<(AuthResponse, Cookie<'static>), AuthError> {
-        let user = self.oauth_auth.authenticate_or_register(&credentials).await?;
+    pub async fn oauth_login(
+        &self,
+        credentials: OAuthCredentials,
+    ) -> Result<(AuthResponse, Cookie<'static>), AuthError> {
+        let user = self
+            .oauth_auth
+            .authenticate_or_register(&credentials)
+            .await?;
         let tokens = self.token_service.create_tokens(&user)?;
 
-        let response = self.build_auth_response(&user, &tokens, credentials.name.as_deref()).await?;
-        let cookie = self.token_service.create_refresh_cookie(&tokens.refresh_token);
+        let response = self
+            .build_auth_response(&user, &tokens, credentials.name.as_deref())
+            .await?;
+        let cookie = self
+            .token_service
+            .create_refresh_cookie(&tokens.refresh_token);
 
         Ok((response, cookie))
     }
@@ -138,13 +161,20 @@ impl AuthService {
     /// # Errors
     ///
     /// Returns `AuthError` if token invalid or expired
-    pub async fn refresh_token(&self, refresh_token: &str) -> Result<(TokenResponse, Cookie<'static>), AuthError> {
+    pub async fn refresh_token(
+        &self,
+        refresh_token: &str,
+    ) -> Result<(TokenResponse, Cookie<'static>), AuthError> {
         self.token_service.refresh_token(refresh_token).await
     }
 
     /// Logout
     #[must_use]
-    pub async fn logout(&self, refresh_token: Option<&str>, access_token: Option<&str>) -> Cookie<'static> {
+    pub async fn logout(
+        &self,
+        refresh_token: Option<&str>,
+        access_token: Option<&str>,
+    ) -> Cookie<'static> {
         self.token_service.logout(refresh_token, access_token).await
     }
 
@@ -176,9 +206,12 @@ impl AuthService {
 
     // Private helper methods
 
-    async fn create_user(&self, data: &RegisterData) -> Result<crate::feature::user::User, AuthError> {
+    async fn create_user(
+        &self,
+        data: &RegisterData,
+    ) -> Result<crate::feature::user::User, AuthError> {
         use crate::feature::user::repository::UserRepositoryError;
-        
+
         self.user_repo
             .create(self.db.pool(), &data.email, data.username.as_deref())
             .await
@@ -189,7 +222,11 @@ impl AuthService {
             })
     }
 
-    async fn create_profile(&self, user_id: &uuid::Uuid, full_name: Option<&str>) -> Result<(), AuthError> {
+    async fn create_profile(
+        &self,
+        user_id: &uuid::Uuid,
+        full_name: Option<&str>,
+    ) -> Result<(), AuthError> {
         self.profile_repo
             .create(self.db.pool(), *user_id)
             .await
@@ -205,7 +242,11 @@ impl AuthService {
         Ok(())
     }
 
-    async fn create_password_auth(&self, user_id: &uuid::Uuid, password: &str) -> Result<(), AuthError> {
+    async fn create_password_auth(
+        &self,
+        user_id: &uuid::Uuid,
+        password: &str,
+    ) -> Result<(), AuthError> {
         self.password_auth
             .auth_method_service()
             .create_password_auth(*user_id, password, true)

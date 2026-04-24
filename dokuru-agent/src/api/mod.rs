@@ -16,7 +16,6 @@ pub use infrastructure::config::{
 };
 
 // Only expose serve function
-#[allow(clippy::cognitive_complexity)]
 pub async fn serve() -> eyre::Result<()> {
     let _ = color_eyre::install();
     let (subscriber, _reload_handle) = infrastructure::logging::setup();
@@ -30,7 +29,10 @@ pub async fn serve() -> eyre::Result<()> {
         return relay::start_relay_mode(config).await;
     }
 
-    // Normal local API mode
+    run_local_api(config).await
+}
+
+async fn run_local_api(config: Config) -> eyre::Result<()> {
     let docker = Docker::connect_with_unix(&config.docker.socket, 120, API_DEFAULT_VERSION)?;
 
     // Load persisted environments from disk

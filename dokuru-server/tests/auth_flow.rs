@@ -243,7 +243,7 @@ async fn test_refresh_without_cookie() {
 
 // ─── Full auth flow ───────────────────────────────────────────────────────────
 
-/// register → get_me → update_me → refresh → get_me with new token
+/// register → `get_me` → `update_me` → refresh → `get_me` with new token
 #[tokio::test]
 #[ignore = "Requires database and full app infrastructure"]
 async fn test_full_auth_flow() {

@@ -41,7 +41,7 @@ impl PasswordAuthService {
     /// Returns `AuthError` if user not found, password invalid, or user inactive
     pub async fn authenticate(&self, credentials: &LoginCredentials) -> Result<User, AuthError> {
         let user = self.find_user(&credentials.identifier).await?;
-        self.verify_user_active(&user)?;
+        Self::verify_user_active(&user)?;
         self.verify_password(&user, &credentials.password).await?;
         self.touch_auth_method(user.id).await;
         Ok(user)
@@ -64,7 +64,7 @@ impl PasswordAuthService {
             .ok_or(AuthError::InvalidCredentials)
     }
 
-    fn verify_user_active(&self, user: &User) -> Result<(), AuthError> {
+    const fn verify_user_active(user: &User) -> Result<(), AuthError> {
         if user.is_active {
             Ok(())
         } else {
@@ -109,7 +109,7 @@ impl PasswordAuthService {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    
 
     // Tests will be added in next phase
 }

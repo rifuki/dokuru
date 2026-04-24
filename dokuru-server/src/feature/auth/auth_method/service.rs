@@ -9,6 +9,16 @@ use crate::{
     infrastructure::persistence::Database,
 };
 
+pub struct CreateOAuthAuthInput<'a> {
+    pub user_id: uuid::Uuid,
+    pub provider: AuthProvider,
+    pub provider_id: &'a str,
+    pub access_token: Option<&'a str>,
+    pub refresh_token: Option<&'a str>,
+    pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub is_primary: bool,
+}
+
 #[derive(Clone)]
 pub struct AuthMethodService {
     db: Database,
@@ -41,28 +51,21 @@ impl AuthMethodService {
             .await
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub async fn create_oauth_auth(
         &self,
-        user_id: uuid::Uuid,
-        provider: AuthProvider,
-        provider_id: &str,
-        access_token: Option<&str>,
-        refresh_token: Option<&str>,
-        expires_at: Option<chrono::DateTime<chrono::Utc>>,
-        is_primary: bool,
+        input: CreateOAuthAuthInput<'_>,
     ) -> Result<AuthMethod, AuthMethodRepositoryError> {
         self.repo
             .create_oauth(
                 self.db.pool(),
                 CreateOAuthAuth {
-                    user_id,
-                    provider,
-                    provider_id: provider_id.to_string(),
-                    access_token: access_token.map(std::string::ToString::to_string),
-                    refresh_token: refresh_token.map(std::string::ToString::to_string),
-                    expires_at,
-                    is_primary,
+                    user_id: input.user_id,
+                    provider: input.provider,
+                    provider_id: input.provider_id.to_string(),
+                    access_token: input.access_token.map(std::string::ToString::to_string),
+                    refresh_token: input.refresh_token.map(std::string::ToString::to_string),
+                    expires_at: input.expires_at,
+                    is_primary: input.is_primary,
                 },
             )
             .await

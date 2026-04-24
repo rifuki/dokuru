@@ -14,9 +14,9 @@ use crate::{
         agent::{AgentRepository, AgentRepositoryImpl, AgentService, relay::AgentRegistry},
         audit_result::{AuditResultRepository, AuditResultRepositoryImpl, AuditResultService},
         auth::{
-            auth_method::{AuthMethodRepositoryImpl, AuthMethodService},
+            auth_method::{AuthMethodRepository, AuthMethodRepositoryImpl, AuthMethodService},
             service::AuthService,
-            session::{SessionRepositoryImpl, SessionService},
+            session::{SessionRepository, SessionRepositoryImpl, SessionService},
         },
         document::{DocumentRepository, DocumentService},
         user::{
@@ -32,10 +32,147 @@ use crate::{
             redis::create_redis_pool,
             redis_trait::{RedisSessionBlacklist, SessionBlacklist},
         },
-        storage::StorageProvider,
+        storage::{LocalStorage, StorageProvider},
     },
     websocket::WsManager,
 };
+
+type RedisPool = bb8::Pool<bb8_redis::RedisConnectionManager>;
+type SharedRedisPool = Arc<RedisPool>;
+
+struct RedisComponents {
+    session_blacklist: Option<Arc<dyn SessionBlacklist>>,
+    redis_pool: Option<SharedRedisPool>,
+}
+
+impl RedisComponents {
+    const fn disabled() -> Self {
+        Self {
+            session_blacklist: None,
+            redis_pool: None,
+        }
+    }
+
+    async fn from_config(config: &Config) -> Self {
+        if config.redis_url.is_none() {
+            tracing::info!("ℹ️  Redis not configured (session blacklist disabled)");
+            return Self::disabled();
+        }
+
+        match create_redis_pool(config).await {
+            Ok(pool) => {
+                tracing::info!("✅ Redis session blacklist enabled");
+                let pool = Arc::new(pool);
+                let blacklist = Arc::new(RedisSessionBlacklist::new((*pool).clone()));
+                Self {
+                    session_blacklist: Some(blacklist),
+                    redis_pool: Some(pool),
+                }
+            }
+            Err(e) => {
+                tracing::warn!("⚠️  Redis not available (session blacklist disabled): {e}");
+                Self::disabled()
+            }
+        }
+    }
+}
+
+struct AppRepositories {
+    user: Arc<dyn UserRepository>,
+    user_profile: Arc<dyn UserProfileRepository>,
+    admin_user: Arc<dyn AdminUserRepository>,
+    agent: Arc<dyn AgentRepository>,
+    audit_result: Arc<dyn AuditResultRepository>,
+    auth_method: Arc<dyn AuthMethodRepository>,
+    session: Arc<dyn SessionRepository>,
+    stats: Arc<dyn StatsRepository>,
+    document: Arc<DocumentRepository>,
+}
+
+impl AppRepositories {
+    fn new(db: &Database) -> Self {
+        Self {
+            user: Arc::new(UserRepositoryImpl::new()),
+            user_profile: Arc::new(UserProfileRepositoryImpl::new()),
+            admin_user: Arc::new(AdminUserRepositoryImpl::new()),
+            agent: Arc::new(AgentRepositoryImpl::new()),
+            audit_result: Arc::new(AuditResultRepositoryImpl::new()),
+            auth_method: Arc::new(AuthMethodRepositoryImpl::new()),
+            session: Arc::new(SessionRepositoryImpl::new()),
+            stats: Arc::new(StatsRepositoryImpl::new()),
+            document: Arc::new(DocumentRepository::new(db.pool().clone())),
+        }
+    }
+}
+
+struct AppServices {
+    auth: Arc<AuthService>,
+    agent: Arc<AgentService>,
+    audit: Arc<AuditResultService>,
+    stats: Arc<StatsService>,
+    document: Arc<DocumentService>,
+    storage: Arc<dyn StorageProvider>,
+    email: Arc<EmailService>,
+}
+
+impl AppServices {
+    fn new(
+        db: &Database,
+        config: &Config,
+        repositories: &AppRepositories,
+        session_blacklist: Option<Arc<dyn SessionBlacklist>>,
+    ) -> Self {
+        let auth_method = AuthMethodService::new(db.clone(), Arc::clone(&repositories.auth_method));
+        let session = SessionService::new(db.clone(), Arc::clone(&repositories.session));
+        let auth = Arc::new(AuthService::new(
+            db.clone(),
+            Arc::clone(&repositories.user),
+            Arc::clone(&repositories.user_profile),
+            auth_method,
+            Arc::new(config.clone()),
+            session_blacklist,
+            session,
+        ));
+
+        Self {
+            auth,
+            agent: Arc::new(AgentService::new(Arc::clone(&repositories.agent))),
+            audit: Arc::new(AuditResultService::new(Arc::clone(
+                &repositories.audit_result,
+            ))),
+            stats: Arc::new(StatsService::new(Arc::clone(&repositories.stats))),
+            document: Arc::new(DocumentService::new(
+                Arc::clone(&repositories.document),
+                config.upload.upload_dir.clone(),
+            )),
+            storage: Arc::new(LocalStorage::new(
+                &config.upload.upload_dir,
+                &config.upload.base_url,
+            )),
+            email: Arc::new(EmailService::new(config.email.clone())),
+        }
+    }
+}
+
+struct RuntimeComponents {
+    agent_registry: AgentRegistry,
+    log_reload_handle: Arc<ReloadFilterHandle>,
+    current_log_level: Arc<RwLock<String>>,
+    ws_manager: WsManager,
+    server_start_time: std::time::Instant,
+}
+
+impl RuntimeComponents {
+    fn new(config: &Config, log_reload_handle: ReloadFilterHandle) -> Self {
+        Self {
+            agent_registry: Arc::new(DashMap::new()),
+            log_reload_handle: Arc::new(log_reload_handle),
+            current_log_level: Arc::new(RwLock::new(config.logging.default_level.clone())),
+            ws_manager: WsManager::new(),
+            server_start_time: std::time::Instant::now(),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct AppState {
@@ -57,7 +194,7 @@ pub struct AppState {
     pub current_log_level: Arc<RwLock<String>>,
     pub ws_manager: WsManager,
     pub server_start_time: std::time::Instant,
-    pub redis_pool: Option<Arc<bb8::Pool<bb8_redis::RedisConnectionManager>>>,
+    pub redis_pool: Option<SharedRedisPool>,
 }
 
 impl std::fmt::Debug for AppState {
@@ -73,190 +210,70 @@ impl AppState {
         self.config.server.port
     }
 
-    #[allow(clippy::cognitive_complexity)]
     pub async fn new(config: Config, log_reload_handle: ReloadFilterHandle) -> eyre::Result<Self> {
-        use crate::infrastructure::storage::LocalStorage;
-
         let db = Database::new(&config)
             .await
             .wrap_err("Failed to connect to database")?;
+        let repositories = AppRepositories::new(&db);
+        let redis = RedisComponents::from_config(&config).await;
+        let services =
+            AppServices::new(&db, &config, &repositories, redis.session_blacklist.clone());
+        let runtime = RuntimeComponents::new(&config, log_reload_handle);
 
-        // Repositories
-        let user_repo: Arc<dyn UserRepository> = Arc::new(UserRepositoryImpl::new());
-        let user_profile_repo: Arc<dyn UserProfileRepository> =
-            Arc::new(UserProfileRepositoryImpl::new());
-        let admin_user_repo: Arc<dyn AdminUserRepository> =
-            Arc::new(AdminUserRepositoryImpl::new());
-        let agent_repo: Arc<dyn AgentRepository> = Arc::new(AgentRepositoryImpl::new());
-        let audit_result_repo: Arc<dyn AuditResultRepository> =
-            Arc::new(AuditResultRepositoryImpl::new());
-        let auth_method_repo = Arc::new(AuthMethodRepositoryImpl::new());
-        let session_repo = Arc::new(SessionRepositoryImpl::new());
-        let stats_repository: Arc<dyn StatsRepository> = Arc::new(StatsRepositoryImpl::new());
-        let document_repo = Arc::new(DocumentRepository::new(db.pool().clone()));
-        let document_service = Arc::new(DocumentService::new(
-            Arc::clone(&document_repo),
-            config.upload.upload_dir.clone(),
-        ));
-
-        // Services
-        let auth_method_service = AuthMethodService::new(db.clone(), auth_method_repo);
-        let session_service = SessionService::new(db.clone(), session_repo);
-
-        // Initialize Redis if configured
-        #[allow(clippy::type_complexity)]
-        let (session_blacklist, redis_pool): (
-            Option<Arc<dyn SessionBlacklist>>,
-            Option<Arc<bb8::Pool<bb8_redis::RedisConnectionManager>>>,
-        ) = if let Some(ref _redis_url) = config.redis_url {
-            match create_redis_pool(&config).await {
-                Ok(pool) => {
-                    tracing::info!("✅ Redis session blacklist enabled");
-                    let pool_arc = Arc::new(pool);
-                    (
-                        Some(Arc::new(RedisSessionBlacklist::new((*pool_arc).clone()))
-                            as Arc<dyn SessionBlacklist>),
-                        Some(pool_arc),
-                    )
-                }
-                Err(e) => {
-                    tracing::warn!("⚠️  Redis not available (session blacklist disabled): {e}");
-                    (None, None)
-                }
-            }
-        } else {
-            tracing::info!("ℹ️  Redis not configured (session blacklist disabled)");
-            (None, None)
-        };
-
-        let auth_service = Arc::new(AuthService::new(
-            db.clone(),
-            Arc::clone(&user_repo),
-            Arc::clone(&user_profile_repo),
-            auth_method_service,
-            Arc::new(config.clone()),
-            session_blacklist.clone(),
-            session_service,
-        ));
-
-        let stats_service = Arc::new(StatsService::new(stats_repository));
-        let agent_service = Arc::new(AgentService::new(agent_repo));
-        let audit_service = Arc::new(AuditResultService::new(audit_result_repo));
-
-        let storage: Arc<dyn StorageProvider> = Arc::new(LocalStorage::new(
-            &config.upload.upload_dir,
-            &config.upload.base_url,
-        ));
-
-        let email_service = Arc::new(EmailService::new(config.email.clone()));
-        let current_log_level = Arc::new(RwLock::new(config.logging.default_level.clone()));
-
-        let agent_registry = Arc::new(DashMap::new());
-        let ws_manager = WsManager::new();
-        let server_start_time = std::time::Instant::now();
-
-        Ok(Self {
-            config: Arc::new(config),
+        Ok(Self::from_components(
+            config,
             db,
-            auth_service,
-            user_repo,
-            user_profile_repo,
-            admin_user_repo,
-            agent_service,
-            agent_registry,
-            audit_service,
-            stats_service,
-            document_service,
-            storage,
-            email_service,
-            session_blacklist,
-            log_reload_handle: Arc::new(log_reload_handle),
-            current_log_level,
-            ws_manager,
-            server_start_time,
-            redis_pool,
-        })
+            repositories,
+            services,
+            redis,
+            runtime,
+        ))
     }
 
     /// Build AppState from an existing Database — used by integration tests
     pub fn new_for_test(config: Config, db: &Database) -> Self {
-        use crate::infrastructure::storage::LocalStorage;
         use tracing_subscriber::{EnvFilter, Registry, reload};
-
-        // Repositories
-        let user_repo: Arc<dyn UserRepository> = Arc::new(UserRepositoryImpl::new());
-        let user_profile_repo: Arc<dyn UserProfileRepository> =
-            Arc::new(UserProfileRepositoryImpl::new());
-        let admin_user_repo: Arc<dyn AdminUserRepository> =
-            Arc::new(AdminUserRepositoryImpl::new());
-        let agent_repo: Arc<dyn AgentRepository> = Arc::new(AgentRepositoryImpl::new());
-        let audit_result_repo: Arc<dyn AuditResultRepository> =
-            Arc::new(AuditResultRepositoryImpl::new());
-        let auth_method_repo = Arc::new(AuthMethodRepositoryImpl::new());
-        let session_repo = Arc::new(SessionRepositoryImpl::new());
-        let stats_repository: Arc<dyn StatsRepository> = Arc::new(StatsRepositoryImpl::new());
-
-        // Services
-        let auth_method_service = AuthMethodService::new(db.clone(), auth_method_repo);
-        let session_service = SessionService::new(db.clone(), session_repo);
-
-        // No Redis in tests
-        let session_blacklist: Option<Arc<dyn SessionBlacklist>> = None;
-
-        let auth_service = Arc::new(AuthService::new(
-            db.clone(),
-            Arc::clone(&user_repo),
-            Arc::clone(&user_profile_repo),
-            auth_method_service,
-            Arc::new(config.clone()),
-            session_blacklist.clone(),
-            session_service,
-        ));
-
-        let stats_service = Arc::new(StatsService::new(stats_repository));
-        let agent_service = Arc::new(AgentService::new(agent_repo));
-        let audit_service = Arc::new(AuditResultService::new(audit_result_repo));
 
         // Dummy reload handle — never called in tests
         let (_, handle): (reload::Layer<EnvFilter, Registry>, ReloadFilterHandle) =
             reload::Layer::new(EnvFilter::new("error"));
 
-        let storage: Arc<dyn StorageProvider> = Arc::new(LocalStorage::new(
-            &config.upload.upload_dir,
-            &config.upload.base_url,
-        ));
+        let repositories = AppRepositories::new(db);
+        let redis = RedisComponents::disabled();
+        let services = AppServices::new(db, &config, &repositories, None);
+        let runtime = RuntimeComponents::new(&config, handle);
 
-        let email_service = Arc::new(EmailService::new(config.email.clone()));
-        let current_log_level = Arc::new(RwLock::new(config.logging.default_level.clone()));
-        let document_service = Arc::new(DocumentService::new(
-            Arc::new(DocumentRepository::new(db.pool().clone())),
-            config.upload.upload_dir.clone(),
-        ));
+        Self::from_components(config, db.clone(), repositories, services, redis, runtime)
+    }
 
-        let agent_registry = Arc::new(DashMap::new());
-        let ws_manager = WsManager::new();
-        let server_start_time = std::time::Instant::now();
-
+    fn from_components(
+        config: Config,
+        db: Database,
+        repositories: AppRepositories,
+        services: AppServices,
+        redis: RedisComponents,
+        runtime: RuntimeComponents,
+    ) -> Self {
         Self {
             config: Arc::new(config),
-            db: db.clone(),
-            auth_service,
-            user_repo,
-            user_profile_repo,
-            admin_user_repo,
-            agent_service,
-            agent_registry,
-            audit_service,
-            stats_service,
-            document_service,
-            storage,
-            email_service,
-            session_blacklist: None,
-            log_reload_handle: Arc::new(handle),
-            current_log_level,
-            ws_manager,
-            server_start_time,
-            redis_pool: None,
+            db,
+            auth_service: services.auth,
+            user_repo: repositories.user,
+            user_profile_repo: repositories.user_profile,
+            admin_user_repo: repositories.admin_user,
+            agent_service: services.agent,
+            agent_registry: runtime.agent_registry,
+            audit_service: services.audit,
+            stats_service: services.stats,
+            document_service: services.document,
+            storage: services.storage,
+            email_service: services.email,
+            session_blacklist: redis.session_blacklist,
+            log_reload_handle: runtime.log_reload_handle,
+            current_log_level: runtime.current_log_level,
+            ws_manager: runtime.ws_manager,
+            server_start_time: runtime.server_start_time,
+            redis_pool: redis.redis_pool,
         }
     }
 }

@@ -45,8 +45,9 @@ pub async fn register(
 
     let device_info = DeviceInfo::from_user_agent(user_agent, ip_address);
 
-    let mut register_data = crate::feature::auth::RegisterData::new(req.email.clone(), req.password.clone());
-    
+    let mut register_data =
+        crate::feature::auth::RegisterData::new(req.email.clone(), req.password.clone());
+
     if let Some(username) = req.username {
         register_data = register_data.with_username(username);
     }
@@ -55,24 +56,25 @@ pub async fn register(
     }
     register_data = register_data.with_device_info(device_info);
 
-    let (response, refresh_cookie) = state
-        .auth_service
-        .register(register_data)
-        .await
-        .map_err(|e: AuthError| match e {
-            AuthError::EmailExists => ApiError::default()
-                .with_code(StatusCode::CONFLICT)
-                .with_error_code(auth_codes::EMAIL_EXISTS)
-                .with_message("Email already registered"),
-            AuthError::UsernameExists => ApiError::default()
-                .with_code(StatusCode::CONFLICT)
-                .with_error_code(auth_codes::EMAIL_EXISTS)
-                .with_message("Username already taken"),
-            _ => ApiError::default()
-                .with_code(StatusCode::INTERNAL_SERVER_ERROR)
-                .with_error_code(auth_codes::INTERNAL_ERROR)
-                .with_message("Registration failed"),
-        })?;
+    let (response, refresh_cookie) =
+        state
+            .auth_service
+            .register(register_data)
+            .await
+            .map_err(|e: AuthError| match e {
+                AuthError::EmailExists => ApiError::default()
+                    .with_code(StatusCode::CONFLICT)
+                    .with_error_code(auth_codes::EMAIL_EXISTS)
+                    .with_message("Email already registered"),
+                AuthError::UsernameExists => ApiError::default()
+                    .with_code(StatusCode::CONFLICT)
+                    .with_error_code(auth_codes::EMAIL_EXISTS)
+                    .with_message("Username already taken"),
+                _ => ApiError::default()
+                    .with_code(StatusCode::INTERNAL_SERVER_ERROR)
+                    .with_error_code(auth_codes::INTERNAL_ERROR)
+                    .with_message("Registration failed"),
+            })?;
 
     // Send verification email (async, don't block registration)
     let state_clone = state.clone();
@@ -140,23 +142,25 @@ pub async fn login(
 
     let device_info = DeviceInfo::from_user_agent(user_agent, ip_address);
 
-    let login_creds = crate::feature::auth::LoginCreds::new(creds.username.clone(), creds.password.clone())
-        .with_device_info(device_info);
+    let login_creds =
+        crate::feature::auth::LoginCreds::new(creds.username.clone(), creds.password.clone())
+            .with_device_info(device_info);
 
-    let (response, refresh_cookie) = state
-        .auth_service
-        .login(login_creds)
-        .await
-        .map_err(|e: AuthError| match e {
-            AuthError::InvalidCredentials => ApiError::default()
-                .with_code(StatusCode::UNAUTHORIZED)
-                .with_error_code(auth_codes::INVALID_CREDENTIALS)
-                .with_message("Invalid email or password"),
-            _ => ApiError::default()
-                .with_code(StatusCode::INTERNAL_SERVER_ERROR)
-                .with_error_code(auth_codes::INTERNAL_ERROR)
-                .with_message("Login failed"),
-        })?;
+    let (response, refresh_cookie) =
+        state
+            .auth_service
+            .login(login_creds)
+            .await
+            .map_err(|e: AuthError| match e {
+                AuthError::InvalidCredentials => ApiError::default()
+                    .with_code(StatusCode::UNAUTHORIZED)
+                    .with_error_code(auth_codes::INVALID_CREDENTIALS)
+                    .with_message("Invalid email or password"),
+                _ => ApiError::default()
+                    .with_code(StatusCode::INTERNAL_SERVER_ERROR)
+                    .with_error_code(auth_codes::INTERNAL_ERROR)
+                    .with_message("Login failed"),
+            })?;
 
     Ok(ApiSuccess::default()
         .with_data(response)

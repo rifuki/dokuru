@@ -34,7 +34,6 @@ fn handle_incoming(msg: Option<Result<Message, axum::Error>>) -> bool {
     }
 }
 
-#[allow(clippy::cognitive_complexity)]
 async fn handle_socket(socket: WebSocket) {
     info!("WebSocket client connected");
 
@@ -48,11 +47,7 @@ async fn handle_socket(socket: WebSocket) {
     loop {
         tokio::select! {
             _ = ticker.tick() => {
-                // Use a WS protocol Ping frame, not a text message.
-                // Browsers respond automatically with a Pong (opcode 0xA),
-                // which Cloudflare Tunnel treats as keepalive activity.
-                debug!("Sending protocol ping to WS client");
-                if sender.send(Message::Ping(vec![].into())).await.is_err() {
+                if send_keepalive_ping(&mut sender).await.is_err() {
                     break;
                 }
             }
@@ -65,4 +60,13 @@ async fn handle_socket(socket: WebSocket) {
     }
 
     info!("WebSocket client disconnected");
+}
+
+async fn send_keepalive_ping(
+    sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
+) -> Result<(), axum::Error> {
+    // Browsers respond automatically with a Pong (opcode 0xA), which Cloudflare
+    // Tunnel treats as keepalive activity.
+    debug!("Sending protocol ping to WS client");
+    sender.send(Message::Ping(vec![].into())).await
 }

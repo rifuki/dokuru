@@ -14,7 +14,10 @@ use super::{
 };
 use crate::{
     feature::user::{User, repository::UserRepository},
-    infrastructure::{config::Config, persistence::{Database, redis_trait::SessionBlacklist}},
+    infrastructure::{
+        config::Config,
+        persistence::{Database, redis_trait::SessionBlacklist},
+    },
 };
 
 /// Token pair with session metadata
@@ -112,7 +115,7 @@ impl TokenService {
         let user = self.fetch_user(user_id).await?;
         self.blacklist_old_token(&claims).await;
 
-        let tokens = self.generate_new_tokens(&user, &claims)?;
+        let tokens = Self::generate_new_tokens(&user, &claims)?;
         let refresh_cookie = create_refresh_cookie(&tokens.refresh_token, &self.config);
 
         Ok((
@@ -187,7 +190,6 @@ impl TokenService {
     }
 
     fn generate_new_tokens(
-        &self,
         user: &User,
         claims: &super::types::Claims,
     ) -> Result<TokenPair, AuthError> {
@@ -216,20 +218,20 @@ impl TokenService {
         refresh_token: Option<&str>,
         access_token: Option<&str>,
     ) -> Cookie<'static> {
-        if let (Some(token), Some(blacklist)) = (refresh_token, self.session_blacklist.as_ref()) {
-            if let Ok(claims) = validate_refresh_token(token) {
-                let _ = blacklist.blacklist_session(&claims.jti, claims.exp).await;
-                let _ = self
-                    .session_service
-                    .revoke_by_session_id(&claims.sid, "user_logout")
-                    .await;
-            }
+        if let (Some(token), Some(blacklist)) = (refresh_token, self.session_blacklist.as_ref())
+            && let Ok(claims) = validate_refresh_token(token)
+        {
+            let _ = blacklist.blacklist_session(&claims.jti, claims.exp).await;
+            let _ = self
+                .session_service
+                .revoke_by_session_id(&claims.sid, "user_logout")
+                .await;
         }
 
-        if let (Some(token), Some(blacklist)) = (access_token, self.session_blacklist.as_ref()) {
-            if let Ok(claims) = super::utils::validate_access_token(token) {
-                let _ = blacklist.blacklist_session(&claims.jti, claims.exp).await;
-            }
+        if let (Some(token), Some(blacklist)) = (access_token, self.session_blacklist.as_ref())
+            && let Ok(claims) = super::utils::validate_access_token(token)
+        {
+            let _ = blacklist.blacklist_session(&claims.jti, claims.exp).await;
         }
 
         create_cleared_cookie(&self.config)
@@ -250,7 +252,7 @@ impl TokenService {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    
 
     // Tests will be added in next phase
 }
