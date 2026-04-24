@@ -263,5 +263,5 @@ jobs:
             version.json
           draft: false
           prerelease: ${{ steps.release.outputs.prerelease }}
-          make_latest: true
+          make_latest: ${{ steps.release.outputs.type == 'version' }}
           generate_release_notes: ${{ steps.release.outputs.type == 'version' }}
