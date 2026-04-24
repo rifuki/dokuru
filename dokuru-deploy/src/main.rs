@@ -106,8 +106,6 @@ enum Commands {
     Deploy(DeployArgs),
     /// Start Compose services without running migrations
     Up(ServiceArgs),
-    /// Alias for up
-    Start(ServiceArgs),
     /// Pull Compose service images
     Pull(ServiceArgs),
     /// Run database migrations through the migration image
@@ -333,7 +331,7 @@ fn main() -> Result<()> {
         Commands::Status(args) => run_status(&args),
         Commands::Health(args) => run_health(&args),
         Commands::Deploy(args) => run_deploy(&args),
-        Commands::Up(args) | Commands::Start(args) => run_up(&args),
+        Commands::Up(args) => run_up(&args),
         Commands::Pull(args) => run_pull(&args),
         Commands::Migrate(args) => run_migrate(&args),
         Commands::Restart(args) => run_restart(&args),
