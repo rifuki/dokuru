@@ -111,7 +111,8 @@ check_path() {
     printf '  %bsource ~/.bashrc  # or ~/.zshrc%b\n' "${GREEN}" "${RESET}"
   else
     ok "Ready to use!"
-    printf '\n%bRun:%b %b%s%b\n' "${MUTED}" "${RESET}" "${GREEN}" "${BINARY_NAME}" "${RESET}"
+    printf '\n%bRun:%b %b%s init%b\n' "${MUTED}" "${RESET}" "${GREEN}" "${BINARY_NAME}" "${RESET}"
+    printf '%bHelp:%b %b%s --help%b\n' "${MUTED}" "${RESET}" "${GREEN}" "${BINARY_NAME}" "${RESET}"
   fi
 }
 

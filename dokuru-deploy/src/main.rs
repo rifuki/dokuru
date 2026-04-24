@@ -7,8 +7,8 @@ mod release;
 mod runtime;
 
 use anyhow::{Result, anyhow};
-use clap::{Args, Parser, Subcommand};
-use cliclack::{confirm, input, intro, outro, outro_cancel, select};
+use clap::{Args, CommandFactory, Parser, Subcommand};
+use cliclack::{confirm, input, intro, note, outro, outro_cancel, select};
 use compose::{Compose, doctor, services_or_default};
 use config::DeployConfig;
 use generator::{
@@ -275,9 +275,16 @@ struct InitOptions {
 }
 
 fn main() -> Result<()> {
+    let has_args = std::env::args_os().nth(1).is_some();
     let cli = Cli::parse();
 
     let Some(command) = cli.command else {
+        if !has_args {
+            Cli::command().print_help()?;
+            println!();
+            return Ok(());
+        }
+
         return run_init(InitOptions {
             domain: cli.domain,
             db_name: cli.db_name.unwrap_or_else(|| "dokuru_db".to_string()),
@@ -535,8 +542,8 @@ struct JwtSecrets {
 
 fn show_intro(is_interactive: bool) -> Result<()> {
     if is_interactive {
-        intro("🚀 Dokuru Deployment Setup")?;
-        println!("Let's configure your Dokuru deployment!\n");
+        intro("🚀 Dokuru deploy init")?;
+        note("Setup", "Generate deployment config for Dokuru services.")?;
     }
     Ok(())
 }
@@ -553,15 +560,16 @@ fn resolve_project_dir(
     }
 
     if let Some(path) = project::detect_project_dir()? {
-        println!("✓ Found Dokuru project at: {}\n", path.display());
+        note(
+            "Project",
+            format!("Found Dokuru project at {}", path.display()),
+        )?;
         if confirm("Use this project directory?")
             .initial_value(true)
             .interact()?
         {
             return Ok(path);
         }
-    } else {
-        println!("📁 Project Directory\n");
     }
 
     prompt_project_dir(repo_url, clone_if_missing)
@@ -626,7 +634,6 @@ fn resolve_domains(domain: Option<String>, is_interactive: bool) -> Result<Domai
         });
     }
 
-    println!("📦 Deployment Strategy\n");
     match prompt_strategy()? {
         DeployStrategy::FullVps => full_vps_domains(),
         DeployStrategy::LandingVercel => landing_vercel_domains(),
@@ -678,12 +685,12 @@ fn full_vps_domains() -> Result<DomainConfig> {
         api: format!("api.{base}"),
         strategy: DeployStrategy::FullVps,
     };
-    print_domain_summary(&domains, true, true, true);
+    print_domain_summary(&domains, true, true, true)?;
     Ok(domains)
 }
 
 fn landing_vercel_domains() -> Result<DomainConfig> {
-    println!("\n💡 Landing on Vercel, App + API on VPS\n");
+    note("Strategy", "Landing on Vercel\nApp + API on VPS")?;
     let www = prompt_domain("App domain (VPS)", "app.dokuru.rifuki.dev")?;
     let api = prompt_domain("API domain (VPS)", "api.dokuru.rifuki.dev")?;
     let domains = DomainConfig {
@@ -692,12 +699,12 @@ fn landing_vercel_domains() -> Result<DomainConfig> {
         api,
         strategy: DeployStrategy::LandingVercel,
     };
-    print_domain_summary(&domains, false, true, true);
+    print_domain_summary(&domains, false, true, true)?;
     Ok(domains)
 }
 
 fn app_vercel_domains() -> Result<DomainConfig> {
-    println!("\n💡 App on Vercel, Landing + API on VPS\n");
+    note("Strategy", "App on Vercel\nLanding + API on VPS")?;
     let landing = prompt_domain("Landing domain (VPS)", "dokuru.rifuki.dev")?;
     let api = prompt_domain("API domain (VPS)", "api.dokuru.rifuki.dev")?;
     let domains = DomainConfig {
@@ -706,12 +713,12 @@ fn app_vercel_domains() -> Result<DomainConfig> {
         api,
         strategy: DeployStrategy::AppVercel,
     };
-    print_domain_summary(&domains, true, false, true);
+    print_domain_summary(&domains, true, false, true)?;
     Ok(domains)
 }
 
 fn both_vercel_domains() -> Result<DomainConfig> {
-    println!("\n💡 Landing + App on Vercel, API on VPS\n");
+    note("Strategy", "Landing + App on Vercel\nAPI on VPS")?;
     let api = prompt_domain("API domain (VPS)", "api.dokuru.rifuki.dev")?;
     let domains = DomainConfig {
         landing: "landing.vercel.app".to_string(),
@@ -719,12 +726,12 @@ fn both_vercel_domains() -> Result<DomainConfig> {
         api,
         strategy: DeployStrategy::BothVercel,
     };
-    print_domain_summary(&domains, false, false, true);
+    print_domain_summary(&domains, false, false, true)?;
     Ok(domains)
 }
 
 fn custom_domains() -> Result<DomainConfig> {
-    println!("\n⚙️  Custom domain configuration\n");
+    note("Strategy", "Custom domain configuration")?;
     Ok(DomainConfig {
         landing: input("Landing domain")
             .placeholder("dokuru.com")
@@ -752,17 +759,20 @@ fn print_domain_summary(
     show_landing: bool,
     show_www: bool,
     show_api: bool,
-) {
-    println!("\n✨ Configuration:");
+) -> Result<()> {
+    let mut lines = Vec::new();
     if show_landing {
-        println!("   Landing: https://{} (VPS)", domains.landing);
+        lines.push(format!("Landing: https://{} (VPS)", domains.landing));
     }
     if show_www {
-        println!("   App:     https://{} (VPS)", domains.www);
+        lines.push(format!("App:     https://{} (VPS)", domains.www));
     }
     if show_api {
-        println!("   API:     https://{} (VPS)", domains.api);
+        lines.push(format!("API:     https://{} (VPS)", domains.api));
     }
+
+    note("Domains", lines.join("\n"))?;
+    Ok(())
 }
 
 fn resolve_database(
@@ -791,13 +801,13 @@ fn resolve_database(
 }
 
 fn prompt_database(db_name: String, db_user: String) -> Result<DatabaseCredentials> {
-    println!("\n🗄️  Database Configuration\n");
+    note("Database", "Configure PostgreSQL credentials.")?;
     if confirm("Auto-generate secure database configuration?")
         .initial_value(true)
         .interact()?
     {
         let password = generate_secret(32);
-        println!("  Generated: {}••••••••", &password[..8]);
+        note("Database password", secret_preview(&password, "generated"))?;
         return Ok(DatabaseCredentials {
             name: db_name,
             user: db_user,
@@ -820,7 +830,7 @@ fn prompt_database_password() -> Result<String> {
         .interact()?
     {
         let password = generate_secret(32);
-        println!("  Generated: {}••••••••", &password[..8]);
+        note("Database password", secret_preview(&password, "generated"))?;
         return Ok(password);
     }
 
@@ -838,9 +848,10 @@ fn resolve_resend_key(resend_key: Option<String>, is_interactive: bool) -> Resul
         return Err(anyhow::anyhow!("Resend API key is required"));
     }
 
-    println!("\n📧 Email Configuration\n");
-    println!("  Dokuru uses Resend for transactional emails");
-    println!("  Get your API key at: https://resend.com/api-keys\n");
+    note(
+        "Email",
+        "Dokuru uses Resend for transactional emails.\nGet your API key at: https://resend.com/api-keys",
+    )?;
     input("Resend API key")
         .placeholder("re_xxxxxxxxxxxxx")
         .interact()
@@ -852,12 +863,15 @@ fn resolve_jwt_secrets(is_interactive: bool) -> Result<JwtSecrets> {
         return Ok(generated_jwt_secrets());
     }
 
-    println!("\n🔐 Security Configuration\n");
+    note("Security", "Configure JWT signing secrets.")?;
     if confirm("Auto-generate JWT secrets?")
         .initial_value(true)
         .interact()?
     {
-        println!("  ✓ Generated secure JWT secrets");
+        note(
+            "JWT secrets",
+            "Generated secure access and refresh secrets.",
+        )?;
         return Ok(generated_jwt_secrets());
     }
 
@@ -904,7 +918,7 @@ fn confirm_configuration(config: &DeployConfig, is_interactive: bool) -> Result<
         return Ok(());
     }
 
-    print_config_summary(config);
+    print_config_summary(config)?;
     if confirm("Proceed and save configuration files?")
         .initial_value(true)
         .interact()?
@@ -916,32 +930,23 @@ fn confirm_configuration(config: &DeployConfig, is_interactive: bool) -> Result<
     }
 }
 
-fn print_config_summary(config: &DeployConfig) {
-    println!("\n📋 Configuration Summary\n");
-    println!("  🌐 Domains:");
-    println!("     Landing: https://{}", config.landing_domain);
-    println!("     App:     https://{}", config.www_domain);
-    println!("     API:     https://{}", config.api_domain);
-    println!("\n  🗄️  Database:");
-    println!("     Name:     {}", config.db_name);
-    println!("     User:     {}", config.db_user);
-    println!(
-        "     Password: {}",
-        secret_preview(&config.db_password, "••••••••")
-    );
-    println!("\n  🔐 Security:");
-    println!(
-        "     JWT Access:  {}",
-        secret_preview(&config.jwt_access_secret, "••••••••")
-    );
-    println!(
-        "     JWT Refresh: {}",
-        secret_preview(&config.jwt_refresh_secret, "••••••••")
-    );
-    println!("\n  📧 Email:");
-    println!("     Provider: Resend");
-    println!("     From:     noreply@{}", config.base_domain);
-    println!();
+fn print_config_summary(config: &DeployConfig) -> Result<()> {
+    note(
+        "Configuration summary",
+        format!(
+            "Domains\n  Landing: https://{}\n  App:     https://{}\n  API:     https://{}\n\nDatabase\n  Name:     {}\n  User:     {}\n  Password: {}\n\nSecurity\n  JWT Access:  {}\n  JWT Refresh: {}\n\nEmail\n  Provider: Resend\n  From:     noreply@{}",
+            config.landing_domain,
+            config.www_domain,
+            config.api_domain,
+            config.db_name,
+            config.db_user,
+            secret_preview(&config.db_password, "••••••••"),
+            secret_preview(&config.jwt_access_secret, "••••••••"),
+            secret_preview(&config.jwt_refresh_secret, "••••••••"),
+            config.base_domain,
+        ),
+    )?;
+    Ok(())
 }
 
 fn secret_preview(secret: &str, fallback: &str) -> String {
@@ -982,45 +987,42 @@ fn show_completion(
         println!("✅ Configuration files generated successfully!");
     }
 
-    println!("\n📁 Generated files:");
-    println!("  • dokuru-server/config/local.toml");
-    println!("  • dokuru-server/config/secrets.toml");
-    println!("  • dokuru-server/.env");
-    println!("  • docker-compose.override.yaml");
+    note(
+        "Generated files",
+        "dokuru-server/config/local.toml\ndokuru-server/config/secrets.toml\ndokuru-server/.env\ndocker-compose.override.yaml",
+    )?;
 
     // Show deployment-specific instructions
     match strategy {
         DeployStrategy::FullVps | DeployStrategy::LandingVercel | DeployStrategy::AppVercel => {
-            println!("\n⚙️  GitHub Actions Setup (for VPS services):");
-            println!(
-                "  1. Go to: https://github.com/{}/settings/variables/actions",
-                std::env::var("GITHUB_REPOSITORY")
-                    .unwrap_or_else(|_| "your-username/dokuru".to_string())
-            );
-            println!("  2. Add repository variable:");
-            println!("     Name:  API_DOMAIN");
-            println!("     Value: https://{}", config.api_domain);
-            println!("  3. Add production deployment variables:");
-            println!("     DOKURU_DEPLOY_HOST, DOKURU_DEPLOY_USER, DOKURU_DEPLOY_PATH");
-            println!("     Optional: DOKURU_DEPLOY_PORT");
-            println!("  4. Add production deployment secret:");
-            println!("     DOKURU_DEPLOY_SSH_KEY");
-            println!("     Optional if GHCR images are private: DOKURU_GHCR_TOKEN");
+            let repository = std::env::var("GITHUB_REPOSITORY")
+                .unwrap_or_else(|_| "your-username/dokuru".to_string());
+            let mut github_steps = vec![
+                format!("Open: https://github.com/{repository}/settings/variables/actions"),
+                format!("Variable: API_DOMAIN=https://{}", config.api_domain),
+                "Variables: DOKURU_DEPLOY_HOST, DOKURU_DEPLOY_USER, DOKURU_DEPLOY_PATH".to_string(),
+                "Optional variable: DOKURU_DEPLOY_PORT".to_string(),
+                "Secret: DOKURU_DEPLOY_SSH_KEY".to_string(),
+                "Optional secret: DOKURU_GHCR_TOKEN for private GHCR images".to_string(),
+            ];
             if !matches!(strategy, DeployStrategy::AppVercel) {
-                println!("\n  Note: This is needed for building dokuru-www Docker image");
+                github_steps.push("Needed for building the dokuru-www Docker image".to_string());
             }
+            note("GitHub Actions", github_steps.join("\n"))?;
         }
         DeployStrategy::BothVercel => {
-            println!("\n💡 All frontend services on Vercel - no GitHub Actions setup needed!");
+            note(
+                "GitHub Actions",
+                "All frontend services are on Vercel; no VPS frontend setup needed.",
+            )?;
         }
         DeployStrategy::Custom => {}
     }
 
-    println!("\n🚀 Next steps:");
-    println!("  1. Review generated files");
-    println!("  2. Set up GitHub Actions variables/secrets for production");
-    println!("  3. Push to main or run the relevant Build & Deploy workflow manually");
-    println!("  4. CI/CD will pull images, run migrations, then roll out services");
+    note(
+        "Next steps",
+        "Review generated files\nSet GitHub Actions variables/secrets for production\nPush to main or run the Build & Deploy workflow manually\nCI/CD will pull images, run migrations, then roll out services",
+    )?;
 
     Ok(())
 }
