@@ -150,3 +150,15 @@ pub fn generate_secret(length: usize) -> String {
         })
         .collect()
 }
+
+pub fn generate_env_file(config: &DeployConfig, output_path: &Path) -> Result<()> {
+    let env_content = format!(
+        "# Database connection string for local development (cargo run)\n\
+         # All other config lives in config/*.toml files\n\
+         DATABASE_URL=postgres://{}:{}@localhost:5432/{}\n",
+        config.db_user, config.db_password, config.db_name
+    );
+    
+    fs::write(output_path, env_content)?;
+    Ok(())
+}

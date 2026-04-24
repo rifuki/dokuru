@@ -5,7 +5,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use cliclack::{confirm, input, intro, outro, outro_cancel, select};
 use config::DeployConfig;
-use generator::{generate_docker_compose_override, generate_local_toml, generate_secrets_toml, generate_secret};
+use generator::{generate_docker_compose_override, generate_local_toml, generate_secrets_toml, generate_env_file, generate_secret};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -449,6 +449,8 @@ fn run_init(
     generate_local_toml(&config, &server_config_dir.join("local.toml"))?;
     generate_secrets_toml(&config, &server_config_dir.join("secrets.toml"))?;
     generate_docker_compose_override(&config, &project_dir.join("docker-compose.override.yaml"), strategy)?;
+    generate_env_file(&config, &project_dir.join("dokuru-server/.env"))?;
+    generate_env_file(&config, &project_dir.join("dokuru-server/.env"))?;
 
     if is_interactive {
         outro("✅ Configuration files generated successfully!")?;
@@ -459,6 +461,7 @@ fn run_init(
     println!("\n📁 Generated files:");
     println!("  • dokuru-server/config/local.toml");
     println!("  • dokuru-server/config/secrets.toml");
+    println!("  • dokuru-server/.env");
     println!("  • docker-compose.override.yaml");
     
     // Show deployment-specific instructions
