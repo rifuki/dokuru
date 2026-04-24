@@ -2,6 +2,7 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use super::{
+    domain::{self, Usability},
     dto::{ApiKeyResponse, ApiKeyWithPlain, UpdateApiKey},
     entity::ApiKey,
     repository::{ApiKeyError, ApiKeyRepository},
@@ -30,20 +31,9 @@ impl ApiKeyService {
         created_by: Option<Uuid>,
         expires_days: Option<i64>,
     ) -> Result<ApiKeyWithPlain, ApiKeyError> {
-        // Generate random API key: prefix + random string
-        let prefix = "ak_";
-        let mut random_part = String::with_capacity(64);
-        for _ in 0..32 {
-            use std::fmt::Write;
-            write!(&mut random_part, "{:x}", rand::random::<u8>()).unwrap();
-        }
-        let plain_key = format!("{prefix}{random_part}");
-
-        // Hash the key for storage (using simple hash for now, can use bcrypt/argon2)
-        let key_hash = format!("{:x}", md5::compute(&plain_key));
-
-        // Calculate expiration
-        let expires_at = expires_days.map(|days| Utc::now() + chrono::Duration::days(days));
+        let plain_key = domain::generate_plain_key();
+        let key_hash = domain::hash_key(&plain_key);
+        let expires_at = expires_days.map(|days| domain::expires_at_from_days(Utc::now(), days));
 
         // Save to database
         let key = self
@@ -70,8 +60,7 @@ impl ApiKeyService {
 
     /// Validate an API key
     pub async fn validate_key(&self, plain_key: &str) -> Result<ApiKey, ApiKeyError> {
-        // Hash the provided key
-        let key_hash = format!("{:x}", md5::compute(plain_key));
+        let key_hash = domain::hash_key(plain_key);
 
         // Find by hash
         let key = self
@@ -80,16 +69,10 @@ impl ApiKeyService {
             .await?
             .ok_or(ApiKeyError::InvalidKey)?;
 
-        // Check if active
-        if !key.is_active {
-            return Err(ApiKeyError::Revoked);
-        }
-
-        // Check expiration
-        if let Some(expires_at) = key.expires_at
-            && Utc::now() > expires_at
-        {
-            return Err(ApiKeyError::Expired);
+        match domain::usability(key.is_active, key.expires_at, Utc::now()) {
+            Usability::Active => {}
+            Usability::Revoked => return Err(ApiKeyError::Revoked),
+            Usability::Expired => return Err(ApiKeyError::Expired),
         }
 
         // Update last used
@@ -156,13 +139,12 @@ impl ApiKeyService {
         self.revoke_key(id).await?;
 
         // Create new key with same settings
-        let expires_days = old_key.expires_at.map(|exp| {
-            let duration = exp - old_key.created_at;
-            duration.num_days()
-        });
+        let expires_days = old_key
+            .expires_at
+            .map(|expires_at| domain::refreshed_expires_days(old_key.created_at, expires_at));
 
         self.generate_key(
-            &format!("{} (refreshed)", old_key.name),
+            &domain::refreshed_name(&old_key.name),
             old_key.scopes,
             created_by,
             expires_days,
