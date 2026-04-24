@@ -1,0 +1,14 @@
+[package]
+name = "dokuru-deploy"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+cliclack = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+serde_yaml = "0.9"
+rand = "0.8"
+anyhow = "1.0"
+shellexpand = "3.1"
