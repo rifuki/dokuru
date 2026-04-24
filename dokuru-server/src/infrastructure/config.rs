@@ -5,7 +5,7 @@ use eyre::{ContextCompat, Result, WrapErr};
 
 use crate::infrastructure::toml_config::TomlConfig;
 
-static AUTH_RUNTIME: OnceLock<AuthConfig> = OnceLock::new();
+pub(crate) static AUTH_RUNTIME: OnceLock<AuthConfig> = OnceLock::new();
 
 fn env_override(key: &str) -> Option<String> {
     env::var(key)

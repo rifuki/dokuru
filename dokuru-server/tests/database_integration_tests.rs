@@ -1,4 +1,4 @@
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 
 #[sqlx::test]
 async fn test_database_connection(pool: PgPool) {

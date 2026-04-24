@@ -23,6 +23,7 @@ async fn test_health_endpoint() {
 }
 
 #[tokio::test]
+#[ignore = "Requires database and full app infrastructure"]
 async fn test_register_endpoint() {
     let app = create_test_app().await;
 
@@ -48,6 +49,7 @@ async fn test_register_endpoint() {
 }
 
 #[tokio::test]
+#[ignore = "Requires database and full app infrastructure"]
 async fn test_login_endpoint() {
     let app = create_test_app().await;
 
@@ -72,6 +74,7 @@ async fn test_login_endpoint() {
 }
 
 #[tokio::test]
+#[ignore = "Requires database and full app infrastructure"]
 async fn test_me_endpoint_unauthorized() {
     let app = create_test_app().await;
 
@@ -89,6 +92,7 @@ async fn test_me_endpoint_unauthorized() {
 }
 
 #[tokio::test]
+#[ignore = "Requires database and full app infrastructure"]
 async fn test_agents_list_unauthorized() {
     let app = create_test_app().await;
 

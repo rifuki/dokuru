@@ -20,6 +20,7 @@ fn redis_available() -> bool {
 }
 
 #[tokio::test]
+#[ignore = "Requires Redis and full app infrastructure"]
 async fn test_logout_invalidates_token() {
     if !redis_available() {
         eprintln!("⚠️  Skipping test: REDIS_URL not set (blacklist not available)");
@@ -67,6 +68,7 @@ async fn test_logout_invalidates_token() {
 }
 
 #[tokio::test]
+#[ignore = "Requires Redis and full app infrastructure"]
 async fn test_revoke_session_invalidates_token() {
     if !redis_available() {
         eprintln!("⚠️  Skipping test: REDIS_URL not set (blacklist not available)");

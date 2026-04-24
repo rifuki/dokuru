@@ -228,18 +228,32 @@ mod tests {
     use uuid::Uuid;
 
     fn setup_test_env() {
-        unsafe {
-            env::set_var(
-                "JWT_ACCESS_SECRET",
-                "test-access-secret-key-at-least-32-chars",
-            );
-            env::set_var(
-                "JWT_REFRESH_SECRET",
-                "test-refresh-secret-key-at-least-32-chars",
-            );
-            env::set_var("JWT_ACCESS_EXPIRY_SECS", "3600");
-            env::set_var("JWT_REFRESH_EXPIRY_SECS", "86400");
-        }
+        use std::sync::Once;
+        static INIT: Once = Once::new();
+        
+        INIT.call_once(|| {
+            unsafe {
+                env::set_var(
+                    "JWT_ACCESS_SECRET",
+                    "test-access-secret-key-at-least-32-chars",
+                );
+                env::set_var(
+                    "JWT_REFRESH_SECRET",
+                    "test-refresh-secret-key-at-least-32-chars",
+                );
+                env::set_var("JWT_ACCESS_EXPIRY_SECS", "3600");
+                env::set_var("JWT_REFRESH_EXPIRY_SECS", "86400");
+            }
+            
+            let auth_config = crate::infrastructure::config::AuthConfig {
+                access_secret: "test-access-secret-key-at-least-32-chars".to_string(),
+                refresh_secret: "test-refresh-secret-key-at-least-32-chars".to_string(),
+                access_expiry_secs: 3600,
+                refresh_expiry_secs: 86400,
+            };
+            
+            let _ = crate::infrastructure::config::AUTH_RUNTIME.set(auth_config);
+        });
     }
 
     #[test]
@@ -315,15 +329,15 @@ mod tests {
 
         let token_pair = create_token_pair(user_id, "test@example.com", &roles).unwrap();
 
-        // Try to validate access token as refresh token
+        // Try to validate access token as refresh token (fails due to wrong secret)
         let result = validate_refresh_token(&token_pair.access_token);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), JwtError::WrongType));
+        assert!(matches!(result.unwrap_err(), JwtError::Invalid));
 
-        // Try to validate refresh token as access token
+        // Try to validate refresh token as access token (fails due to wrong secret)
         let result = validate_access_token(&token_pair.refresh_token);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), JwtError::WrongType));
+        assert!(matches!(result.unwrap_err(), JwtError::Invalid));
     }
 
     #[test]

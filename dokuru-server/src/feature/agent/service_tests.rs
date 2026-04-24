@@ -57,37 +57,37 @@ mod tests {
         assert!(!is_agent_online(&Some(old)));
         assert!(!is_agent_online(&None));
     }
-}
 
-fn is_valid_status(status: &str) -> bool {
-    matches!(status, "online" | "offline" | "unknown")
-}
+    fn is_valid_status(status: &str) -> bool {
+        matches!(status, "online" | "offline" | "unknown")
+    }
 
-fn is_valid_url(url: &str) -> bool {
-    url.starts_with("http://") || url.starts_with("https://")
-}
+    fn is_valid_url(url: &str) -> bool {
+        url.starts_with("http://") || url.starts_with("https://")
+    }
 
-fn is_valid_access_mode(mode: &str) -> bool {
-    matches!(mode, "direct" | "tunnel")
-}
+    fn is_valid_access_mode(mode: &str) -> bool {
+        matches!(mode, "direct" | "tunnel")
+    }
 
-fn hash_token(token: &str) -> String {
-    use sha2::{Digest, Sha256};
-    let mut hasher = Sha256::new();
-    hasher.update(token.as_bytes());
-    hex::encode(hasher.finalize())
-}
+    fn hash_token(token: &str) -> String {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(token.as_bytes());
+        hex::encode(hasher.finalize())
+    }
 
-fn is_valid_agent_name(name: &str) -> bool {
-    name.len() >= 2 && name.len() <= 255
-}
+    fn is_valid_agent_name(name: &str) -> bool {
+        name.len() >= 2 && name.len() <= 255
+    }
 
-fn is_agent_online(last_seen: &Option<chrono::DateTime<chrono::Utc>>) -> bool {
-    if let Some(last_seen) = last_seen {
-        let now = chrono::Utc::now();
-        let diff = now.signed_duration_since(*last_seen);
-        diff.num_minutes() < 10
-    } else {
-        false
+    fn is_agent_online(last_seen: &Option<chrono::DateTime<chrono::Utc>>) -> bool {
+        if let Some(last_seen) = last_seen {
+            let now = chrono::Utc::now();
+            let diff = now.signed_duration_since(*last_seen);
+            diff.num_minutes() < 10
+        } else {
+            false
+        }
     }
 }

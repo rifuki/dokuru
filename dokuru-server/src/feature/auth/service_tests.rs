@@ -58,57 +58,57 @@ mod tests {
         assert!(verify_password(password, &hash).unwrap());
         assert!(!verify_password("WrongPassword", &hash).unwrap());
     }
-}
 
-fn is_valid_email(email: &str) -> bool {
-    email.contains('@') && email.contains('.') && email.len() > 5
-}
+    fn is_valid_email(email: &str) -> bool {
+        email.contains('@') && email.contains('.') && email.len() > 5 && !email.starts_with('@')
+    }
 
-fn is_strong_password(password: &str) -> bool {
-    password.len() >= 8
-        && password.chars().any(|c| c.is_uppercase())
-        && password.chars().any(|c| c.is_lowercase())
-        && password.chars().any(|c| c.is_numeric())
-}
+    fn is_strong_password(password: &str) -> bool {
+        password.len() >= 8
+            && password.chars().any(|c| c.is_uppercase())
+            && password.chars().any(|c| c.is_lowercase())
+            && password.chars().any(|c| c.is_numeric())
+    }
 
-fn is_valid_username(username: &str) -> bool {
-    username.len() >= 3
-        && username.len() <= 50
-        && username
-            .chars()
-            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
-}
+    fn is_valid_username(username: &str) -> bool {
+        username.len() >= 3
+            && username.len() <= 50
+            && username
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+    }
 
-fn generate_token(length: usize) -> String {
-    let bytes: Vec<u8> = (0..length).map(|_| rand::random::<u8>()).collect();
-    hex::encode(bytes)
-}
+    fn generate_token(length: usize) -> String {
+        let bytes: Vec<u8> = (0..length).map(|_| rand::random::<u8>()).collect();
+        hex::encode(bytes)
+    }
 
-fn hash_password(password: &str) -> eyre::Result<String> {
-    use argon2::{
-        Argon2,
-        password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
-    };
+    fn hash_password(password: &str) -> eyre::Result<String> {
+        use argon2::{
+            Argon2,
+            password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
+        };
 
-    let salt = SaltString::generate(&mut OsRng);
-    let argon2 = Argon2::default();
-    let hash = argon2
-        .hash_password(password.as_bytes(), &salt)
-        .map_err(|e| eyre::eyre!("Failed to hash password: {}", e))?;
+        let salt = SaltString::generate(&mut OsRng);
+        let argon2 = Argon2::default();
+        let hash = argon2
+            .hash_password(password.as_bytes(), &salt)
+            .map_err(|e| eyre::eyre!("Failed to hash password: {}", e))?;
 
-    Ok(hash.to_string())
-}
+        Ok(hash.to_string())
+    }
 
-fn verify_password(password: &str, hash: &str) -> eyre::Result<bool> {
-    use argon2::{
-        Argon2,
-        password_hash::{PasswordHash, PasswordVerifier},
-    };
+    fn verify_password(password: &str, hash: &str) -> eyre::Result<bool> {
+        use argon2::{
+            Argon2,
+            password_hash::{PasswordHash, PasswordVerifier},
+        };
 
-    let parsed_hash =
-        PasswordHash::new(hash).map_err(|e| eyre::eyre!("Failed to parse hash: {}", e))?;
+        let parsed_hash =
+            PasswordHash::new(hash).map_err(|e| eyre::eyre!("Failed to parse hash: {}", e))?;
 
-    Ok(Argon2::default()
-        .verify_password(password.as_bytes(), &parsed_hash)
-        .is_ok())
+        Ok(Argon2::default()
+            .verify_password(password.as_bytes(), &parsed_hash)
+            .is_ok())
+    }
 }
