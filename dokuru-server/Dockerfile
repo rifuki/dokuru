@@ -17,7 +17,6 @@ RUN cargo chef prepare --recipe-path recipe.json
 # Builder — cook deps (cached layer), then build binary
 # =============================================================================
 FROM chef AS builder
-RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 
 # Restore deps from cache — only re-runs when Cargo.toml/Cargo.lock changes
 COPY --from=planner /app/recipe.json recipe.json
@@ -38,7 +37,7 @@ WORKDIR /app
 RUN mkdir -p /app/config
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates libssl3t64 curl \
+    && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/dokuru-server .
