@@ -35,7 +35,7 @@ mod tests {
     #[test]
     fn test_profile_completeness() {
         use chrono::Utc;
-        
+
         let complete_profile = entity::UserProfile {
             id: Uuid::new_v4(),
             user_id: Uuid::new_v4(),

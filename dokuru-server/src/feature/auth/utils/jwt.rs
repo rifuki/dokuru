@@ -230,7 +230,7 @@ mod tests {
     fn setup_test_env() {
         use std::sync::Once;
         static INIT: Once = Once::new();
-        
+
         INIT.call_once(|| {
             unsafe {
                 env::set_var(
@@ -244,14 +244,14 @@ mod tests {
                 env::set_var("JWT_ACCESS_EXPIRY_SECS", "3600");
                 env::set_var("JWT_REFRESH_EXPIRY_SECS", "86400");
             }
-            
+
             let auth_config = crate::infrastructure::config::AuthConfig {
                 access_secret: "test-access-secret-key-at-least-32-chars".to_string(),
                 refresh_secret: "test-refresh-secret-key-at-least-32-chars".to_string(),
                 access_expiry_secs: 3600,
                 refresh_expiry_secs: 86400,
             };
-            
+
             let _ = crate::infrastructure::config::AUTH_RUNTIME.set(auth_config);
         });
     }
