@@ -24,7 +24,7 @@ impl Database {
             .max_connections(config.database.max_connections)
             .min_connections(config.database.min_connections)
             .acquire_timeout(Duration::from_secs(30))
-            .idle_timeout(Duration::from_secs(600))
+            .idle_timeout(Duration::from_mins(10))
             .connect(database_url)
             .await?;
 

@@ -10,16 +10,16 @@ use crate::{
 
 pub fn app_routes(state: AppState) -> Router {
     // Global: 120 req/min per IP
-    let global_limiter = RateLimiter::new(120, Duration::from_secs(60));
+    let global_limiter = RateLimiter::new(120, Duration::from_mins(1));
     // Auth: 10 req/min per IP (anti brute-force)
-    let auth_limiter = RateLimiter::new(10, Duration::from_secs(60));
+    let auth_limiter = RateLimiter::new(10, Duration::from_mins(1));
 
     // Cleanup expired entries every minute
     let g = global_limiter.clone();
     let a = auth_limiter.clone();
     tokio::spawn(async move {
         loop {
-            tokio::time::sleep(Duration::from_secs(60)).await;
+            tokio::time::sleep(Duration::from_mins(1)).await;
             g.cleanup();
             a.cleanup();
         }
