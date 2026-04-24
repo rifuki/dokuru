@@ -9,6 +9,16 @@
       "source": "/install.sh",
       "destination": "https://raw.githubusercontent.com/rifuki/dokuru/main/install.sh",
       "permanent": false
+    },
+    {
+      "source": "/deploy",
+      "destination": "https://raw.githubusercontent.com/rifuki/dokuru/main/dokuru-deploy/install.sh",
+      "permanent": false
+    },
+    {
+      "source": "/deploy.sh",
+      "destination": "https://raw.githubusercontent.com/rifuki/dokuru/main/dokuru-deploy/install.sh",
+      "permanent": false
     }
   ]
 }
