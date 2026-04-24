@@ -52,8 +52,7 @@ pub async fn list_agents(State(state): State<AppState>) -> ApiResult<AdminAgentL
     .await
     .map_err(|error| ApiError::default().log_only(error))?;
 
-    #[allow(clippy::cast_possible_wrap)]
-    let total = agents.len() as i64;
+    let total = i64::try_from(agents.len()).unwrap_or(i64::MAX);
 
     Ok(ApiSuccess::default()
         .with_data(AdminAgentListResponse { agents, total })

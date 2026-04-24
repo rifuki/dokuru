@@ -45,15 +45,19 @@ pub async fn register(
 
     let device_info = DeviceInfo::from_user_agent(user_agent, ip_address);
 
+    let mut register_data = crate::feature::auth::RegisterData::new(req.email.clone(), req.password.clone());
+    
+    if let Some(username) = req.username {
+        register_data = register_data.with_username(username);
+    }
+    if let Some(name) = req.name {
+        register_data = register_data.with_full_name(name);
+    }
+    register_data = register_data.with_device_info(device_info);
+
     let (response, refresh_cookie) = state
         .auth_service
-        .register(
-            &req.email,
-            req.username.as_deref(),
-            &req.password,
-            req.name.as_deref(),
-            Some(&device_info),
-        )
+        .register(register_data)
         .await
         .map_err(|e: AuthError| match e {
             AuthError::EmailExists => ApiError::default()
@@ -136,9 +140,12 @@ pub async fn login(
 
     let device_info = DeviceInfo::from_user_agent(user_agent, ip_address);
 
+    let login_creds = crate::feature::auth::LoginCreds::new(creds.username.clone(), creds.password.clone())
+        .with_device_info(device_info);
+
     let (response, refresh_cookie) = state
         .auth_service
-        .login(&creds.username, &creds.password, Some(&device_info))
+        .login(login_creds)
         .await
         .map_err(|e: AuthError| match e {
             AuthError::InvalidCredentials => ApiError::default()

@@ -60,8 +60,7 @@ pub async fn upload_document(
     State(state): State<AppState>,
     mut multipart: Multipart,
 ) -> ApiResult<Document> {
-    #[allow(clippy::never_loop)]
-    while let Some(field) = multipart.next_field().await.map_err(|e| {
+    if let Some(field) = multipart.next_field().await.map_err(|e| {
         tracing::error!("Multipart error: {}", e);
         ApiError::default()
             .with_code(StatusCode::BAD_REQUEST)

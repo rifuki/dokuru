@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize)]
 pub struct ErrorCode(pub &'static str);
 
 impl std::fmt::Display for ErrorCode {

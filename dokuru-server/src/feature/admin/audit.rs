@@ -57,8 +57,7 @@ pub async fn list_audits(State(state): State<AppState>) -> ApiResult<AdminAuditL
     .await
     .map_err(|error| ApiError::default().log_only(error))?;
 
-    #[allow(clippy::cast_possible_wrap)]
-    let total = audits.len() as i64;
+    let total = i64::try_from(audits.len()).unwrap_or(i64::MAX);
 
     Ok(ApiSuccess::default()
         .with_data(AdminAuditListResponse { audits, total })

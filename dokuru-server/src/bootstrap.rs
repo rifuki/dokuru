@@ -63,16 +63,11 @@ pub async fn bootstrap(db: &Database, config: &Config) -> eyre::Result<()> {
         session_service,
     );
 
-    match auth_service
-        .register(
-            &admin_email,
-            Some(&admin_username),
-            &admin_password,
-            Some(&admin_name),
-            None, // No device info during bootstrap
-        )
-        .await
-    {
+    let register_data = crate::feature::auth::RegisterData::new(admin_email.clone(), admin_password.clone())
+        .with_username(admin_username.clone())
+        .with_full_name(admin_name.clone());
+
+    match auth_service.register(register_data).await {
         Ok((auth_response, _)) => {
             // Promote to admin by updating role directly in DB
             sqlx::query("UPDATE users SET role = 'admin' WHERE id = $1")

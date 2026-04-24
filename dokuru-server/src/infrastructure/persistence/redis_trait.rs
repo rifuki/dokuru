@@ -122,8 +122,7 @@ impl SessionBlacklist for RedisSessionBlacklist {
 
         let key = Self::blacklist_key(jti);
 
-        #[allow(clippy::cast_sign_loss)]
-        let ttl = remaining_ttl.max(0) as u64;
+        let ttl = u64::try_from(remaining_ttl).unwrap_or(0);
 
         redis::cmd("SETEX")
             .arg(&key)

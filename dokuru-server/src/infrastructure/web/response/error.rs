@@ -47,7 +47,6 @@ impl ApiError {
 
     /// Set structured error code (e.g. AUTH_001)
     #[must_use]
-    #[allow(clippy::needless_pass_by_value)]
     pub fn with_error_code(mut self, error_code: ErrorCode) -> Self {
         self.error_code = Some(error_code.to_string());
         self
@@ -78,8 +77,7 @@ impl ApiError {
 
     /// Add details in debug mode only (safe for production)
     #[must_use]
-    #[allow(clippy::needless_pass_by_value)]
-    pub fn with_debug(mut self, details: impl Into<String> + Display) -> Self {
+    pub fn with_debug(mut self, details: impl Display) -> Self {
         let details_str = details.to_string();
         error!(target: "api_error", details = %details_str, "Error occurred");
 

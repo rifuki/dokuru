@@ -1,16 +1,21 @@
 pub mod auth_method;
+pub mod credentials;
 pub mod domain;
 pub mod handlers;
+pub mod oauth_service;
+pub mod password_auth_service;
 mod repository;
 mod routes;
 pub mod service;
 pub mod session;
+pub mod token_service;
 pub mod types;
 pub mod utils;
 
 #[cfg(test)]
 mod service_tests;
 
+pub use credentials::{LoginCredentials as LoginCreds, OAuthCredentials, RegisterData};
 pub use handlers::{
     change_password, list_sessions, login, logout, logout_all_sessions, me, refresh, register,
     revoke_session,

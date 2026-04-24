@@ -229,8 +229,7 @@ impl StatsRepository for StatsRepositoryImpl {
 
         let result = sqlx::query("SELECT 1").fetch_one(pool).await;
 
-        #[allow(clippy::cast_possible_truncation)]
-        let response_time_ms = start.elapsed().as_millis() as u64;
+        let response_time_ms = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
 
         let status = if result.is_ok() {
             if response_time_ms < 100 {
