@@ -1,10 +1,11 @@
 use std::{
     fs,
+    io::{Read, Write},
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result, anyhow};
-use cliclack::{intro, note, outro};
+use anyhow::{Context, Result, anyhow, bail};
+use cliclack::{intro, note, outro, progress_bar, spinner};
 use serde::Deserialize;
 
 const RELEASE_BASE_URL: &str = "https://github.com/rifuki/dokuru/releases/download/latest-deploy";
@@ -69,21 +70,78 @@ pub fn update_binary() -> Result<()> {
     let install_dir = install_dir()?;
     let install_path = install_dir.join(BINARY_NAME);
     let download_path = install_dir.join(format!(".{BINARY_NAME}.download"));
+    let download_url = format!("{RELEASE_BASE_URL}/{BINARY_NAME}");
 
     fs::create_dir_all(&install_dir)
         .with_context(|| format!("failed to create {}", install_dir.display()))?;
 
-    note("Download", format!("{RELEASE_BASE_URL}/{BINARY_NAME}"))?;
-    let response =
-        reqwest::blocking::get(format!("{RELEASE_BASE_URL}/{BINARY_NAME}"))?.error_for_status()?;
-    let bytes = response.bytes()?;
-
-    fs::write(&download_path, bytes.as_ref())
-        .with_context(|| format!("failed to write {}", download_path.display()))?;
+    note("Download", &download_url)?;
+    download_binary(&download_url, &download_path)?;
     set_executable(&download_path)?;
     atomic_replace(&download_path, &install_path)?;
 
     outro(format!("Updated {}", install_path.display()))?;
+    Ok(())
+}
+
+fn download_binary(url: &str, download_path: &Path) -> Result<()> {
+    let response = reqwest::blocking::get(url)?.error_for_status()?;
+    let total_bytes = response.content_length();
+    let mut file = fs::File::create(download_path)
+        .with_context(|| format!("failed to create {}", download_path.display()))?;
+
+    match total_bytes {
+        Some(total_bytes) => download_with_progress(response, &mut file, total_bytes),
+        None => download_with_spinner(response, &mut file),
+    }
+}
+
+fn download_with_progress(
+    mut response: reqwest::blocking::Response,
+    file: &mut fs::File,
+    total_bytes: u64,
+) -> Result<()> {
+    let progress = progress_bar(total_bytes).with_download_template();
+    progress.start("Downloading binary");
+    copy_response(&mut response, file, |bytes_read| progress.inc(bytes_read))
+        .inspect_err(|_| progress.error("Download failed"))?;
+    progress.stop("Downloaded binary");
+    Ok(())
+}
+
+fn download_with_spinner(
+    mut response: reqwest::blocking::Response,
+    file: &mut fs::File,
+) -> Result<()> {
+    let progress = spinner();
+    progress.start("Downloading binary");
+    copy_response(&mut response, file, |_| {})
+        .inspect_err(|_| progress.error("Download failed"))?;
+    progress.stop("Downloaded binary");
+    Ok(())
+}
+
+fn copy_response(
+    response: &mut reqwest::blocking::Response,
+    file: &mut fs::File,
+    mut on_chunk: impl FnMut(u64),
+) -> Result<()> {
+    let mut buffer = [0_u8; 16 * 1024];
+    loop {
+        let bytes_read = response.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+        file.write_all(&buffer[..bytes_read])?;
+        on_chunk(u64::try_from(bytes_read).context("download chunk size overflowed u64")?);
+    }
+    file.flush()?;
+
+    let metadata = file.metadata()?;
+    if metadata.len() == 0 {
+        bail!("downloaded binary is empty");
+    }
+
     Ok(())
 }
 
