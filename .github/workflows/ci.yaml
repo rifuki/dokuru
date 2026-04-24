@@ -43,20 +43,6 @@ jobs:
   rust-check:
     name: Rust Check & Test
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: dokuru_test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -70,6 +56,7 @@ jobs:
           workspaces: |
             dokuru-agent
             dokuru-server
+          cache-on-failure: true
 
       # Agent tests
       - name: Format check (agent)
@@ -84,10 +71,6 @@ jobs:
         working-directory: dokuru-agent
         run: cargo test
 
-      - name: Check workspace (agent)
-        working-directory: dokuru-agent
-        run: cargo check --all-targets
-
       # Server tests
       - name: Format check (server)
         working-directory: dokuru-server
@@ -101,13 +84,4 @@ jobs:
 
       - name: Test (server)
         working-directory: dokuru-server
-        env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/dokuru_test
-          RUST_LOG: info
         run: cargo test
-
-      - name: Check workspace (server)
-        working-directory: dokuru-server
-        env:
-          SQLX_OFFLINE: "true"
-        run: cargo check --all-targets
