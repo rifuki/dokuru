@@ -1,9 +1,9 @@
 use eyre::Result;
-use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::sync::Arc;
 use uuid::Uuid;
 
+use super::domain::{AgentStatus, decode_token, encode_token, hash_token};
 use super::dto::{AgentResponse, CreateAgentDto, UpdateAgentDto};
 use super::entity::Agent;
 use super::repository::AgentRepository;
@@ -23,8 +23,8 @@ impl AgentService {
         user_id: Uuid,
         dto: CreateAgentDto,
     ) -> Result<AgentResponse> {
-        let token_hash = Self::hash_token(&dto.token);
-        let encrypted_token = Self::encrypt_token(&dto.token);
+        let token_hash = hash_token(&dto.token);
+        let encrypted_token = encode_token(&dto.token);
         let plain_token = dto.token.clone(); // Keep for response
 
         let agent = Agent {
@@ -35,7 +35,7 @@ impl AgentService {
             token_hash,
             encrypted_token,
             access_mode: dto.access_mode,
-            status: "unknown".to_string(),
+            status: AgentStatus::Unknown.as_str().to_string(),
             last_seen: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
@@ -75,10 +75,7 @@ impl AgentService {
         dto: UpdateAgentDto,
     ) -> Result<Option<AgentResponse>> {
         let (token_hash, encrypted_token) = dto.token.as_ref().map_or((None, None), |token| {
-            (
-                Some(Self::hash_token(token)),
-                Some(Self::encrypt_token(token)),
-            )
+            (Some(hash_token(token)), Some(encode_token(token)))
         });
 
         let params = crate::feature::agent::repository::UpdateAgentParams {
@@ -96,26 +93,8 @@ impl AgentService {
         self.agent_repo.delete(pool, id, user_id).await
     }
 
-    fn hash_token(token: &str) -> String {
-        let mut hasher = Sha256::new();
-        hasher.update(token.as_bytes());
-        let result = hasher.finalize();
-        hex::encode(result)
-    }
-
-    fn encrypt_token(token: &str) -> String {
-        // Simple base64 encoding (not real encryption, but sufficient for now)
-        // In production, use proper encryption like AES-256-GCM
-        use base64::{Engine as _, engine::general_purpose};
-        general_purpose::STANDARD.encode(token.as_bytes())
-    }
-
     fn decrypt_token(encrypted: &str) -> Result<String> {
-        use base64::{Engine as _, engine::general_purpose};
-        let decoded = general_purpose::STANDARD
-            .decode(encrypted)
-            .map_err(|e| eyre::eyre!("Failed to decode token: {}", e))?;
-        String::from_utf8(decoded).map_err(|e| eyre::eyre!("Invalid UTF-8: {}", e))
+        decode_token(encrypted).map_err(Into::into)
     }
 
     fn to_response(agent: Agent) -> AgentResponse {
@@ -150,8 +129,8 @@ mod tests {
     #[test]
     fn test_hash_token_consistency() {
         let token = "test-token-123";
-        let hash1 = AgentService::hash_token(token);
-        let hash2 = AgentService::hash_token(token);
+        let hash1 = hash_token(token);
+        let hash2 = hash_token(token);
 
         assert_eq!(hash1, hash2, "Same token should produce same hash");
         assert_ne!(hash1, token, "Hash should be different from original token");
@@ -163,8 +142,8 @@ mod tests {
         let token1 = "token-1";
         let token2 = "token-2";
 
-        let hash1 = AgentService::hash_token(token1);
-        let hash2 = AgentService::hash_token(token2);
+        let hash1 = hash_token(token1);
+        let hash2 = hash_token(token2);
 
         assert_ne!(
             hash1, hash2,
@@ -175,7 +154,7 @@ mod tests {
     #[test]
     fn test_hash_token_empty_string() {
         let token = "";
-        let hash = AgentService::hash_token(token);
+        let hash = hash_token(token);
 
         assert!(!hash.is_empty(), "Hash of empty string should not be empty");
         assert_eq!(hash.len(), 64);
@@ -184,7 +163,7 @@ mod tests {
     #[test]
     fn test_hash_token_known_value() {
         let token = "test";
-        let hash = AgentService::hash_token(token);
+        let hash = hash_token(token);
 
         // SHA256 of "test" should be this specific value
         let expected = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";

@@ -1,29 +1,47 @@
 #[cfg(test)]
 mod tests {
-    use super::super::*;
+    use crate::feature::agent::domain::{
+        AgentValidationError, hash_token, is_agent_online_at, validate_access_mode,
+        validate_agent_name, validate_agent_url, validate_status, validate_token,
+    };
 
     #[test]
     fn test_agent_status_validation() {
-        assert!(is_valid_status("online"));
-        assert!(is_valid_status("offline"));
-        assert!(is_valid_status("unknown"));
-        assert!(!is_valid_status("invalid"));
+        assert!(validate_status("online").is_ok());
+        assert!(validate_status("offline").is_ok());
+        assert!(validate_status("unknown").is_ok());
+        assert_eq!(
+            validate_status("invalid").unwrap_err(),
+            AgentValidationError::InvalidStatus
+        );
     }
 
     #[test]
     fn test_agent_url_validation() {
-        assert!(is_valid_url("http://localhost:8080"));
-        assert!(is_valid_url("https://agent.example.com"));
-        assert!(is_valid_url("http://192.168.1.100:9000"));
-        assert!(!is_valid_url("invalid-url"));
-        assert!(!is_valid_url(""));
+        assert!(validate_agent_url("http://localhost:8080").is_ok());
+        assert!(validate_agent_url("https://agent.example.com").is_ok());
+        assert!(validate_agent_url("http://192.168.1.100:9000").is_ok());
+        assert!(validate_agent_url("relay").is_ok());
+        assert_eq!(
+            validate_agent_url("invalid-url").unwrap_err(),
+            AgentValidationError::InvalidUrl
+        );
+        assert_eq!(
+            validate_agent_url("").unwrap_err(),
+            AgentValidationError::InvalidUrl
+        );
     }
 
     #[test]
     fn test_access_mode_validation() {
-        assert!(is_valid_access_mode("direct"));
-        assert!(is_valid_access_mode("tunnel"));
-        assert!(!is_valid_access_mode("invalid"));
+        assert!(validate_access_mode("direct").is_ok());
+        assert!(validate_access_mode("cloudflare").is_ok());
+        assert!(validate_access_mode("domain").is_ok());
+        assert!(validate_access_mode("relay").is_ok());
+        assert_eq!(
+            validate_access_mode("tunnel").unwrap_err(),
+            AgentValidationError::InvalidAccessMode
+        );
     }
 
     #[test]
@@ -37,12 +55,27 @@ mod tests {
     }
 
     #[test]
+    fn test_token_validation() {
+        assert!(validate_token("test-token-123").is_ok());
+        assert_eq!(
+            validate_token("").unwrap_err(),
+            AgentValidationError::EmptyToken
+        );
+    }
+
+    #[test]
     fn test_agent_name_validation() {
-        assert!(is_valid_agent_name("my-agent"));
-        assert!(is_valid_agent_name("agent_123"));
-        assert!(is_valid_agent_name("production-server"));
-        assert!(!is_valid_agent_name("")); // empty
-        assert!(!is_valid_agent_name("a")); // too short
+        assert!(validate_agent_name("my-agent").is_ok());
+        assert!(validate_agent_name("agent_123").is_ok());
+        assert!(validate_agent_name("production-server").is_ok());
+        assert_eq!(
+            validate_agent_name("").unwrap_err(),
+            AgentValidationError::InvalidName
+        );
+        assert_eq!(
+            validate_agent_name("   ").unwrap_err(),
+            AgentValidationError::InvalidName
+        );
     }
 
     #[test]
@@ -53,41 +86,8 @@ mod tests {
         let recent = now - Duration::minutes(5);
         let old = now - Duration::hours(2);
 
-        assert!(is_agent_online(&Some(recent)));
-        assert!(!is_agent_online(&Some(old)));
-        assert!(!is_agent_online(&None));
-    }
-
-    fn is_valid_status(status: &str) -> bool {
-        matches!(status, "online" | "offline" | "unknown")
-    }
-
-    fn is_valid_url(url: &str) -> bool {
-        url.starts_with("http://") || url.starts_with("https://")
-    }
-
-    fn is_valid_access_mode(mode: &str) -> bool {
-        matches!(mode, "direct" | "tunnel")
-    }
-
-    fn hash_token(token: &str) -> String {
-        use sha2::{Digest, Sha256};
-        let mut hasher = Sha256::new();
-        hasher.update(token.as_bytes());
-        hex::encode(hasher.finalize())
-    }
-
-    fn is_valid_agent_name(name: &str) -> bool {
-        name.len() >= 2 && name.len() <= 255
-    }
-
-    fn is_agent_online(last_seen: &Option<chrono::DateTime<chrono::Utc>>) -> bool {
-        if let Some(last_seen) = last_seen {
-            let now = chrono::Utc::now();
-            let diff = now.signed_duration_since(*last_seen);
-            diff.num_minutes() < 10
-        } else {
-            false
-        }
+        assert!(is_agent_online_at(Some(recent), now));
+        assert!(!is_agent_online_at(Some(old), now));
+        assert!(!is_agent_online_at(None, now));
     }
 }

@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - 'dokuru-server/**'
-      - '.github/workflows/build-server.yml'
+      - '.github/workflows/build-server.yaml'
   pull_request:
     paths:
       - 'dokuru-server/**'

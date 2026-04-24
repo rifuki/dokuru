@@ -18,7 +18,7 @@ use crate::{
             service::AuthService,
             session::{SessionRepositoryImpl, SessionService},
         },
-        document::DocumentRepository,
+        document::{DocumentRepository, DocumentService},
         user::{
             UserProfileRepository, UserProfileRepositoryImpl, UserRepository, UserRepositoryImpl,
         },
@@ -49,7 +49,7 @@ pub struct AppState {
     pub agent_registry: AgentRegistry,
     pub audit_service: Arc<AuditResultService>,
     pub stats_service: Arc<StatsService>,
-    pub document_repo: Arc<DocumentRepository>,
+    pub document_service: Arc<DocumentService>,
     pub storage: Arc<dyn StorageProvider>,
     pub email_service: Arc<EmailService>,
     pub session_blacklist: Option<Arc<dyn SessionBlacklist>>,
@@ -94,6 +94,10 @@ impl AppState {
         let session_repo = Arc::new(SessionRepositoryImpl::new());
         let stats_repository: Arc<dyn StatsRepository> = Arc::new(StatsRepositoryImpl::new());
         let document_repo = Arc::new(DocumentRepository::new(db.pool().clone()));
+        let document_service = Arc::new(DocumentService::new(
+            Arc::clone(&document_repo),
+            config.upload.upload_dir.clone(),
+        ));
 
         // Services
         let auth_method_service = AuthMethodService::new(db.clone(), auth_method_repo);
@@ -162,7 +166,7 @@ impl AppState {
             agent_registry,
             audit_service,
             stats_service,
-            document_repo,
+            document_service,
             storage,
             email_service,
             session_blacklist,
@@ -224,6 +228,10 @@ impl AppState {
 
         let email_service = Arc::new(EmailService::new(config.email.clone()));
         let current_log_level = Arc::new(RwLock::new(config.logging.default_level.clone()));
+        let document_service = Arc::new(DocumentService::new(
+            Arc::new(DocumentRepository::new(db.pool().clone())),
+            config.upload.upload_dir.clone(),
+        ));
 
         let agent_registry = Arc::new(DashMap::new());
         let ws_manager = WsManager::new();
@@ -240,7 +248,7 @@ impl AppState {
             agent_registry,
             audit_service,
             stats_service,
-            document_repo: Arc::new(DocumentRepository::new(db.pool().clone())),
+            document_service,
             storage,
             email_service,
             session_blacklist: None,

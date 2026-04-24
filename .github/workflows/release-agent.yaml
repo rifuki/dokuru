@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - 'dokuru-agent/**'
-      - '.github/workflows/release-agent.yml'
+      - '.github/workflows/release-agent.yaml'
     tags:
       - 'v*.*.*'
   workflow_dispatch:

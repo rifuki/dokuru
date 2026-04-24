@@ -15,7 +15,6 @@ use common::*;
 
 #[tokio::test]
 #[ignore = "Requires database and full app infrastructure"]
-#[ignore = "Requires database and full app infrastructure"]
 async fn test_register_success() {
     let (app, _c) = build_test_app().await;
 

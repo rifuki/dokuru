@@ -1,11 +1,14 @@
-use crate::{feature::document::handlers, state::AppState};
+use crate::{
+    feature::document::{domain::MAX_DOCUMENT_SIZE_BYTES, handlers},
+    infrastructure::web::middleware::{admin_middleware, auth_middleware},
+    state::AppState,
+};
 use axum::{
     Router,
     extract::DefaultBodyLimit,
+    middleware,
     routing::{delete, get, post},
 };
-
-const DOCUMENT_SIZE_LIMIT: usize = 50 * 1024 * 1024; // 50 MB
 
 pub fn document_routes() -> Router<AppState> {
     Router::new()
@@ -13,5 +16,7 @@ pub fn document_routes() -> Router<AppState> {
         .route("/", post(handlers::upload_document))
         .route("/file", get(handlers::serve_document_file))
         .route("/{id}", delete(handlers::delete_document))
-        .layer(DefaultBodyLimit::max(DOCUMENT_SIZE_LIMIT))
+        .layer(DefaultBodyLimit::max(MAX_DOCUMENT_SIZE_BYTES))
+        .route_layer(middleware::from_fn(admin_middleware))
+        .route_layer(middleware::from_fn(auth_middleware))
 }

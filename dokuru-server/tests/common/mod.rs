@@ -1,16 +1,13 @@
 pub mod fixtures;
 
-pub use fixtures::{
-    TestAgent, TestUser, generate_test_email, generate_test_password, generate_test_username,
-};
-
 use axum::{
     body::Body,
-    http::{HeaderMap, Request, Response, StatusCode, header},
+    http::{HeaderMap, Request, StatusCode, header},
 };
 use serde_json::Value;
 use tower::ServiceExt;
 
+#[allow(dead_code)]
 pub async fn build_test_app() -> (axum::Router, ()) {
     // Placeholder - implement actual test app setup
     (axum::Router::new(), ())
@@ -50,6 +47,7 @@ pub async fn get_authed(app: axum::Router, uri: &str, token: &str) -> (StatusCod
     (status, body_json)
 }
 
+#[allow(dead_code)]
 pub async fn patch_authed(
     app: axum::Router,
     uri: &str,
@@ -73,6 +71,7 @@ pub async fn patch_authed(
     (status, body_json)
 }
 
+#[allow(dead_code)]
 pub async fn raw_request(app: axum::Router, req: Request<Body>) -> (StatusCode, HeaderMap, Value) {
     let res = app.oneshot(req).await.unwrap();
     let status = res.status();
@@ -84,6 +83,7 @@ pub async fn raw_request(app: axum::Router, req: Request<Body>) -> (StatusCode, 
     (status, headers, body_json)
 }
 
+#[allow(dead_code)]
 pub fn extract_set_cookie(headers: &HeaderMap, cookie_name: &str) -> Option<String> {
     headers.get_all(header::SET_COOKIE).iter().find_map(|v| {
         let s = v.to_str().ok()?;
@@ -95,6 +95,7 @@ pub fn extract_set_cookie(headers: &HeaderMap, cookie_name: &str) -> Option<Stri
     })
 }
 
+#[allow(dead_code)]
 pub async fn post_json_with_cookie(
     app: axum::Router,
     uri: &str,

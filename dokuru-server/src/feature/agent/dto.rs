@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
 
+use super::domain;
+
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreateAgentDto {
     #[validate(length(
@@ -23,30 +25,21 @@ pub struct CreateAgentDto {
 }
 
 fn validate_agent_url(url: &str) -> Result<(), validator::ValidationError> {
-    // Allow "relay" for relay mode
-    if url == "relay" {
-        return Ok(());
-    }
-
-    // Otherwise validate as URL
-    if url::Url::parse(url).is_err() {
+    domain::validate_agent_url(url).map_err(|error| {
         let mut err = validator::ValidationError::new("invalid_url");
-        err.message = Some("Invalid URL format".into());
-        return Err(err);
-    }
-
-    Ok(())
+        err.message = Some(error.to_string().into());
+        err
+    })
 }
 
 fn validate_access_mode(mode: &str) -> Result<(), validator::ValidationError> {
-    match mode {
-        "direct" | "cloudflare" | "domain" | "relay" => Ok(()),
-        _ => {
+    domain::validate_access_mode(mode)
+        .map(|_| ())
+        .map_err(|error| {
             let mut err = validator::ValidationError::new("invalid_access_mode");
-            err.message = Some("Access mode must be: direct, cloudflare, domain, or relay".into());
-            Err(err)
-        }
-    }
+            err.message = Some(error.to_string().into());
+            err
+        })
 }
 
 #[derive(Debug, Deserialize, Validate)]

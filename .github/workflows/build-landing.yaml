@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - 'dokuru-landing/**'
-      - '.github/workflows/build-landing.yml'
+      - '.github/workflows/build-landing.yaml'
   pull_request:
     paths:
       - 'dokuru-landing/**'
