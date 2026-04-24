@@ -1,8 +1,11 @@
-FROM rust:alpine
+ARG RUST_IMAGE=rust:1.95.0-trixie
+FROM ${RUST_IMAGE}
 
-RUN apk add --no-cache musl-dev openssl-dev openssl-libs-static
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates libssl-dev pkg-config \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN cargo install sqlx-cli --no-default-features --features native-tls,postgres
+RUN cargo install sqlx-cli --version 0.8.6 --locked --no-default-features --features native-tls,postgres
 
 WORKDIR /migrations
 

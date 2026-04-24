@@ -1,7 +1,8 @@
 # =============================================================================
 # Chef — install cargo-chef for dependency layer caching
 # =============================================================================
-FROM rust:1-bookworm AS chef
+ARG RUST_IMAGE=rust:1.95.0-trixie
+FROM ${RUST_IMAGE} AS chef
 RUN cargo install cargo-chef --locked
 WORKDIR /app
 
@@ -30,14 +31,14 @@ RUN cargo build --release --bin dokuru-server
 # =============================================================================
 # Runtime — minimal image
 # =============================================================================
-FROM debian:bookworm-slim AS runtime
+FROM debian:trixie-slim AS runtime
 
 WORKDIR /app
 
 RUN mkdir -p /app/config
 
 RUN apt-get update \
-    && apt-get install -y ca-certificates libssl3 curl \
+    && apt-get install -y --no-install-recommends ca-certificates libssl3t64 curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/dokuru-server .
