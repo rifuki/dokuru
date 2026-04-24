@@ -4,12 +4,15 @@ use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},
 };
-use chrono::{Duration, Utc};
+use chrono::Utc;
 use uuid::Uuid;
 
 use crate::{
     feature::{
-        admin::user::dto::{AdminUserResponse, UpdateUserRoleRequest, UpdateUserStatusRequest},
+        admin::user::{
+            domain::{self, AdminUserAction},
+            dto::{AdminUserResponse, UpdateUserRoleRequest, UpdateUserStatusRequest},
+        },
         auth::AuthUser,
         auth::auth_method::AuthProvider,
         auth::handlers::password_reset::build_password_reset_url,
@@ -28,23 +31,7 @@ pub async fn list_users(State(state): State<AppState>) -> ApiResult<Vec<AdminUse
         .await
         .map_err(|e| ApiError::default().log_only(e))?;
 
-    let user_responses: Vec<AdminUserResponse> = users
-        .into_iter()
-        .map(|u| {
-            let name = u.username.clone().unwrap_or_else(|| u.email.clone());
-            AdminUserResponse {
-                id: u.id,
-                email: u.email,
-                username: u.username,
-                name,
-                role: u.role,
-                is_active: u.is_active,
-                email_verified: u.email_verified,
-                created_at: u.created_at,
-                updated_at: u.updated_at,
-            }
-        })
-        .collect();
+    let user_responses = users.into_iter().map(AdminUserResponse::from).collect();
 
     Ok(ApiSuccess::default()
         .with_data(user_responses)
@@ -62,20 +49,19 @@ pub async fn update_user_role(
     Json(req): Json<UpdateUserRoleRequest>,
 ) -> ApiResult<AdminUserResponse> {
     // Validate role
-    let role = req.role.to_lowercase();
-    if role != "admin" && role != "user" {
-        return Err(ApiError::default()
+    let role = domain::normalize_admin_role(&req.role).ok_or_else(|| {
+        ApiError::default()
             .with_code(StatusCode::BAD_REQUEST)
             .with_error_code(generic::INVALID_INPUT)
-            .with_message("Role must be either 'admin' or 'user'"));
-    }
+            .with_message("Role must be either 'admin' or 'user'")
+    })?;
 
     // Prevent changing own role
-    if user_id == auth_user.user_id {
+    if domain::is_self_action(user_id, auth_user.user_id) {
         return Err(ApiError::default()
             .with_code(StatusCode::FORBIDDEN)
             .with_error_code(generic::FORBIDDEN)
-            .with_message("Cannot change your own role"));
+            .with_message(domain::self_action_message(AdminUserAction::ChangeRole)));
     }
 
     // Update the user's role
@@ -91,19 +77,8 @@ pub async fn update_user_role(
                 .with_message("User not found")
         })?;
 
-    let name = user.username.clone().unwrap_or_else(|| user.email.clone());
     Ok(ApiSuccess::default()
-        .with_data(AdminUserResponse {
-            id: user.id,
-            email: user.email,
-            username: user.username,
-            name,
-            role: user.role,
-            is_active: user.is_active,
-            email_verified: user.email_verified,
-            created_at: user.created_at,
-            updated_at: user.updated_at,
-        })
+        .with_data(AdminUserResponse::from(user))
         .with_message(format!("User role updated to '{role}'")))
 }
 
@@ -115,11 +90,11 @@ pub async fn update_user_status(
     Path(user_id): Path<Uuid>,
     Json(req): Json<UpdateUserStatusRequest>,
 ) -> ApiResult<AdminUserResponse> {
-    if user_id == auth_user.user_id {
+    if domain::is_self_action(user_id, auth_user.user_id) {
         return Err(ApiError::default()
             .with_code(StatusCode::FORBIDDEN)
             .with_error_code(generic::FORBIDDEN)
-            .with_message("Cannot change your own account status"));
+            .with_message(domain::self_action_message(AdminUserAction::ChangeStatus)));
     }
 
     state
@@ -144,7 +119,7 @@ pub async fn update_user_status(
         let _ = state
             .auth_service
             .session_service()
-            .revoke_all_sessions(user_id, "admin_blocked")
+            .revoke_all_sessions(user_id, domain::ADMIN_BLOCKED_SESSION_REASON)
             .await;
     }
 
@@ -160,28 +135,9 @@ pub async fn update_user_status(
                 .with_message("User not found")
         })?;
 
-    let name = updated_user
-        .username
-        .clone()
-        .unwrap_or_else(|| updated_user.email.clone());
-
     Ok(ApiSuccess::default()
-        .with_data(AdminUserResponse {
-            id: updated_user.id,
-            email: updated_user.email,
-            username: updated_user.username,
-            name,
-            role: updated_user.role,
-            is_active: updated_user.is_active,
-            email_verified: updated_user.email_verified,
-            created_at: updated_user.created_at,
-            updated_at: updated_user.updated_at,
-        })
-        .with_message(if req.is_active {
-            "User account restored"
-        } else {
-            "User account blocked"
-        }))
+        .with_data(AdminUserResponse::from(updated_user))
+        .with_message(domain::status_update_message(req.is_active)))
 }
 
 /// POST /api/v1/admin/users/:id/reset-password
@@ -192,11 +148,11 @@ pub async fn send_password_reset(
     Extension(auth_user): Extension<AuthUser>,
     Path(user_id): Path<Uuid>,
 ) -> ApiResult<()> {
-    if user_id == auth_user.user_id {
+    if domain::is_self_action(user_id, auth_user.user_id) {
         return Err(ApiError::default()
             .with_code(StatusCode::FORBIDDEN)
             .with_error_code(generic::FORBIDDEN)
-            .with_message("Use the profile security page to reset your own password"));
+            .with_message(domain::self_action_message(AdminUserAction::ResetPassword)));
     }
 
     let user = state
@@ -226,7 +182,7 @@ pub async fn send_password_reset(
     }
 
     let token = Uuid::new_v4().to_string();
-    let expires_at = Utc::now() + Duration::hours(1);
+    let expires_at = domain::password_reset_expires_at(Utc::now());
 
     state
         .user_repo
@@ -252,11 +208,11 @@ pub async fn delete_user(
     Extension(auth_user): Extension<AuthUser>,
     Path(user_id): Path<Uuid>,
 ) -> ApiResult<()> {
-    if user_id == auth_user.user_id {
+    if domain::is_self_action(user_id, auth_user.user_id) {
         return Err(ApiError::default()
             .with_code(StatusCode::FORBIDDEN)
             .with_error_code(generic::FORBIDDEN)
-            .with_message("Cannot delete your own account"));
+            .with_message(domain::self_action_message(AdminUserAction::Delete)));
     }
 
     let exists = state
@@ -276,7 +232,7 @@ pub async fn delete_user(
     let _ = state
         .auth_service
         .session_service()
-        .revoke_all_sessions(user_id, "admin_deleted")
+        .revoke_all_sessions(user_id, domain::ADMIN_DELETED_SESSION_REASON)
         .await;
 
     let deleted = state
