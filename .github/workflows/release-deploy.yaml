@@ -41,6 +41,12 @@ jobs:
       - name: Install musl tools
         run: sudo apt-get update && sudo apt-get install -y musl-tools
 
+      - name: Set build metadata
+        run: |
+          echo "DOKURU_DEPLOY_GIT_SHA=${GITHUB_SHA}" >> "$GITHUB_ENV"
+          echo "DOKURU_DEPLOY_GIT_REF=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          echo "DOKURU_DEPLOY_BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+
       - name: Build release binary
         working-directory: dokuru-deploy
         run: cargo build --release --target x86_64-unknown-linux-musl
@@ -53,6 +59,17 @@ jobs:
           mkdir -p artifact
           cp dokuru-deploy/target/x86_64-unknown-linux-musl/release/dokuru-deploy artifact/
           cp dokuru-deploy/install.sh artifact/install.sh
+          VERSION=$(awk -F' = ' '/^version/ { gsub(/"/, "", $2); print $2; exit }' dokuru-deploy/Cargo.toml)
+          cat > artifact/version.json <<EOF
+          {
+            "version": "${VERSION}",
+            "git_sha": "${DOKURU_DEPLOY_GIT_SHA}",
+            "git_ref": "${DOKURU_DEPLOY_GIT_REF}",
+            "build_time": "${DOKURU_DEPLOY_BUILD_TIME}",
+            "target": "x86_64-unknown-linux-musl",
+            "release_tag": "latest-deploy"
+          }
+          EOF
           chmod +x artifact/dokuru-deploy
           chmod +x artifact/install.sh
 
@@ -103,4 +120,5 @@ jobs:
           \`\`\`" \
             --prerelease \
             dokuru-deploy \
-            install.sh
+            install.sh \
+            version.json

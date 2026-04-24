@@ -37,6 +37,7 @@ dist-ssr/
 docker-compose.override.yaml
 docker-compose.override.yml
 docker-compose.prod.yml
+dokuru-deploy-backup.json
 
 # Vite/Bun
 npm-debug.log*

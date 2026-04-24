@@ -5,8 +5,9 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
+use cliclack::{intro, outro};
 
-use crate::project;
+use crate::{ghcr, project};
 
 const APP_SERVICES: &[&str] = &["dokuru-server", "dokuru-www", "dokuru-landing"];
 const INFRA_SERVICES: &[&str] = &["dokuru-db", "dokuru-redis"];
@@ -59,12 +60,14 @@ impl Compose {
     }
 
     pub fn pull(&self, services: &[String]) -> Result<()> {
+        self.ensure_ghcr_access(services)?;
         let mut args = vec!["pull".to_string()];
         args.extend_from_slice(services);
         self.run(args)
     }
 
     pub fn up(&self, services: &[String]) -> Result<()> {
+        self.ensure_ghcr_access(services)?;
         let mut args = vec!["up".to_string(), "-d".to_string()];
         args.extend_from_slice(services);
         self.run(args)
@@ -79,6 +82,7 @@ impl Compose {
     }
 
     pub fn migrate(&self) -> Result<()> {
+        self.ensure_ghcr_access(&[MIGRATION_SERVICE.to_string()])?;
         self.run([
             "--profile".to_string(),
             "migrate".to_string(),
@@ -107,6 +111,28 @@ impl Compose {
 
     pub fn config_check(&self) -> Result<()> {
         self.run(["config".to_string(), "--quiet".to_string()])
+    }
+
+    pub fn restart(&self, services: &[String]) -> Result<()> {
+        let mut args = vec!["restart".to_string()];
+        args.extend_from_slice(services);
+        self.run(args)
+    }
+
+    pub fn logs(&self, service: &str, lines: usize, follow: bool) -> Result<()> {
+        let mut args = vec!["logs".to_string(), "--tail".to_string(), lines.to_string()];
+        if follow {
+            args.push("-f".to_string());
+        }
+        args.push(service.to_string());
+        self.run(args)
+    }
+
+    fn ensure_ghcr_access(&self, services: &[String]) -> Result<()> {
+        if self.dry_run || !services_require_ghcr(services) {
+            return Ok(());
+        }
+        ghcr::ensure_access(&self.project_dir, self.version.as_deref())
     }
 
     fn run<I>(&self, args: I) -> Result<()>
@@ -175,17 +201,21 @@ struct Check {
 }
 
 pub fn doctor(project_dir: &Path) -> Result<()> {
+    intro("Dokuru Deploy Doctor")?;
     let project_dir = project::resolve_existing_project_dir(project_dir)?;
     let checks = collect_checks(&project_dir);
+    println!("Project: {}\n", project_dir.display());
+
     for check in &checks {
-        let status = if check.ok { "ok" } else { "fail" };
-        println!("{status:>4}  {:<28} {}", check.name, check.detail);
+        let marker = if check.ok { "OK" } else { "FAIL" };
+        println!("  [{marker}] {:<28} {}", check.name, check.detail);
     }
 
     if checks.iter().any(|check| check.required && !check.ok) {
         bail!("doctor found failed required checks");
     }
 
+    outro("Doctor checks passed")?;
     Ok(())
 }
 
@@ -207,6 +237,7 @@ fn collect_checks(project_dir: &Path) -> Vec<Check> {
         check_command("docker", &["--version"], true),
         check_docker_daemon(),
         check_compose(project_dir),
+        check_ghcr(project_dir),
     ]
 }
 
@@ -274,6 +305,35 @@ fn check_compose(project_dir: &Path) -> Check {
     }
 }
 
+fn check_ghcr(project_dir: &Path) -> Check {
+    let images = match ghcr::compose_images(project_dir, None) {
+        Ok(images) => images,
+        Err(error) => {
+            return Check {
+                name: "ghcr images",
+                ok: false,
+                detail: error,
+                required: true,
+            };
+        }
+    };
+
+    match ghcr::check_images(&images) {
+        Ok(()) => Check {
+            name: "ghcr images",
+            ok: true,
+            detail: format!("{} image(s) accessible", images.len()),
+            required: true,
+        },
+        Err(error) => Check {
+            name: "ghcr images",
+            ok: false,
+            detail: ghcr::auth_failure_message(&error),
+            required: true,
+        },
+    }
+}
+
 fn detect_compose_binary() -> Result<ComposeBinary> {
     if command_success("docker", &["compose", "version"]) {
         return Ok(ComposeBinary::DockerPlugin);
@@ -314,6 +374,16 @@ fn with_migration_service(services: &[String]) -> Vec<String> {
     set.into_iter().collect()
 }
 
+fn services_require_ghcr(services: &[String]) -> bool {
+    services.is_empty()
+        || services.iter().any(|service| {
+            matches!(
+                service.as_str(),
+                "dokuru-server" | "dokuru-www" | "dokuru-landing" | "dokuru-server-migrate"
+            )
+        })
+}
+
 fn to_owned(services: &[&str]) -> Vec<String> {
     services.iter().map(ToString::to_string).collect()
 }
@@ -331,7 +401,10 @@ fn shell_quote(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{APP_SERVICES, services_or_default, shell_quote, with_migration_service};
+    use super::{
+        APP_SERVICES, services_or_default, services_require_ghcr, shell_quote,
+        with_migration_service,
+    };
 
     #[test]
     fn uses_default_services_when_none_are_given() {
@@ -367,5 +440,15 @@ mod tests {
     #[test]
     fn shell_quote_wraps_values_with_spaces() {
         assert_eq!(shell_quote("dokuru server"), "'dokuru server'");
+    }
+
+    #[test]
+    fn ghcr_preflight_is_skipped_for_infra_only_services() {
+        assert!(!services_require_ghcr(&[
+            "dokuru-db".to_string(),
+            "dokuru-redis".to_string(),
+        ]));
+        assert!(services_require_ghcr(&["dokuru-server".to_string()]));
+        assert!(services_require_ghcr(&[]));
     }
 }

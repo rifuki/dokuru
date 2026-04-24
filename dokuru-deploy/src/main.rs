@@ -1,9 +1,12 @@
 mod compose;
 mod config;
 mod generator;
+mod ghcr;
 mod project;
+mod release;
+mod runtime;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use clap::{Args, Parser, Subcommand};
 use cliclack::{confirm, input, intro, outro, outro_cancel, select};
 use compose::{Compose, doctor, services_or_default};
@@ -75,12 +78,30 @@ enum Commands {
         #[arg(long)]
         repo_url: Option<String>,
     },
+    /// Show local build metadata and latest release metadata
+    Version {
+        /// Skip checking the public latest release
+        #[arg(long)]
+        offline: bool,
+    },
+    /// Download and install the latest dokuru-deploy binary
+    Update,
+    /// Edit generated config, env, and secrets files
+    Configure(ProjectArgs),
+    /// Repair obviously invalid generated config values
+    Repair(ProjectArgs),
+    /// Export generated config, env, secrets, and compose override files
+    Export(ExportArgs),
+    /// Import generated config, env, secrets, and compose override files
+    Import(ImportArgs),
     /// Validate local prerequisites and Dokuru config files
     Doctor(ProjectArgs),
+    /// Print generated deployment config
+    Config(ConfigArgs),
     /// Show Docker Compose service status
     Status(ServiceArgs),
     /// Run the server container healthcheck
-    Health(ProjectArgs),
+    Health(HealthArgs),
     /// Pull images, start infrastructure, run migrations, and roll out apps
     Deploy(DeployArgs),
     /// Start Compose services without running migrations
@@ -91,6 +112,10 @@ enum Commands {
     Pull(ServiceArgs),
     /// Run database migrations through the migration image
     Migrate(RunArgs),
+    /// Restart Compose services
+    Restart(ServiceArgs),
+    /// Show Docker Compose service logs
+    Logs(LogsArgs),
     /// Stop Compose services
     Down(DownArgs),
 }
@@ -146,6 +171,82 @@ struct DeployArgs {
     /// Skip database migrations before app rollout
     #[arg(long)]
     skip_migrations: bool,
+}
+
+#[derive(Args, Clone)]
+struct ExportArgs {
+    #[command(flatten)]
+    project: ProjectArgs,
+
+    /// Backup JSON output path
+    #[arg(short, long)]
+    output: Option<PathBuf>,
+
+    /// Print raw backup JSON to stdout
+    #[arg(long)]
+    stdout: bool,
+}
+
+#[derive(Args, Clone)]
+struct ImportArgs {
+    /// Backup JSON file exported by `dokuru-deploy export`
+    input: Option<PathBuf>,
+
+    #[command(flatten)]
+    project: ProjectArgs,
+
+    /// Raw backup JSON string
+    #[arg(long)]
+    raw: Option<String>,
+
+    /// Read raw backup JSON from stdin
+    #[arg(long)]
+    stdin: bool,
+
+    /// Overwrite files without confirmation
+    #[arg(short, long)]
+    yes: bool,
+}
+
+#[derive(Args, Clone)]
+struct HealthArgs {
+    #[command(flatten)]
+    project: ProjectArgs,
+
+    /// Check production domains instead of local Compose healthcheck
+    #[arg(long)]
+    production: bool,
+
+    /// Base domain for production checks
+    #[arg(long)]
+    domain: Option<String>,
+}
+
+#[derive(Args, Clone)]
+struct LogsArgs {
+    #[command(flatten)]
+    run: RunArgs,
+
+    /// Service name
+    service: String,
+
+    /// Number of log lines
+    #[arg(short, long, default_value_t = 50)]
+    lines: usize,
+
+    /// Follow log output
+    #[arg(short, long)]
+    follow: bool,
+}
+
+#[derive(Args, Clone)]
+struct ConfigArgs {
+    #[command(flatten)]
+    project: ProjectArgs,
+
+    /// Show raw secrets
+    #[arg(long)]
+    show_secrets: bool,
 }
 
 #[derive(Args, Clone)]
@@ -211,13 +312,25 @@ fn main() -> Result<()> {
             clone_if_missing,
             repo_url: repo_url.unwrap_or_else(|| project::DEFAULT_REPO_URL.to_string()),
         }),
+        Commands::Version { offline } => {
+            release::print_version(offline);
+            Ok(())
+        }
+        Commands::Update => release::update_binary(),
+        Commands::Configure(args) => run_configure(&args),
+        Commands::Repair(args) => run_repair(&args),
+        Commands::Export(args) => run_export(&args),
+        Commands::Import(args) => run_import(&args),
         Commands::Doctor(args) => run_doctor(&args),
+        Commands::Config(args) => run_config_command(&args),
         Commands::Status(args) => run_status(&args),
         Commands::Health(args) => run_health(&args),
         Commands::Deploy(args) => run_deploy(&args),
         Commands::Up(args) | Commands::Start(args) => run_up(&args),
         Commands::Pull(args) => run_pull(&args),
         Commands::Migrate(args) => run_migrate(&args),
+        Commands::Restart(args) => run_restart(&args),
+        Commands::Logs(args) => run_logs(&args),
         Commands::Down(args) => run_down(&args),
     }
 }
@@ -232,8 +345,43 @@ fn run_doctor(args: &ProjectArgs) -> Result<()> {
     doctor(&project_dir)
 }
 
-fn run_health(args: &ProjectArgs) -> Result<()> {
+fn run_configure(args: &ProjectArgs) -> Result<()> {
     let project_dir = resolve_project_arg(args)?;
+    runtime::configure(&project_dir)
+}
+
+fn run_repair(args: &ProjectArgs) -> Result<()> {
+    let project_dir = resolve_project_arg(args)?;
+    runtime::repair(&project_dir)
+}
+
+fn run_export(args: &ExportArgs) -> Result<()> {
+    let project_dir = resolve_project_arg(&args.project)?;
+    runtime::export_config(&project_dir, args.output.clone(), args.stdout)
+}
+
+fn run_import(args: &ImportArgs) -> Result<()> {
+    let project_dir = resolve_project_arg(&args.project)?;
+    runtime::import_config(
+        &project_dir,
+        args.input.as_deref(),
+        args.raw.as_deref(),
+        args.stdin,
+        args.yes,
+    )
+}
+
+fn run_config_command(args: &ConfigArgs) -> Result<()> {
+    let project_dir = resolve_project_arg(&args.project)?;
+    runtime::print_config(&project_dir, args.show_secrets)
+}
+
+fn run_health(args: &HealthArgs) -> Result<()> {
+    if args.production {
+        return run_production_health(args.domain.as_deref());
+    }
+
+    let project_dir = resolve_project_arg(&args.project)?;
     let compose = Compose::new(&project_dir, false, None)?;
     compose.health()
 }
@@ -258,10 +406,44 @@ fn run_migrate(args: &RunArgs) -> Result<()> {
     compose.migrate()
 }
 
+fn run_restart(args: &ServiceArgs) -> Result<()> {
+    let compose = compose_from_run_args(&args.run)?;
+    compose.restart(&args.services)
+}
+
+fn run_logs(args: &LogsArgs) -> Result<()> {
+    let compose = compose_from_run_args(&args.run)?;
+    compose.logs(&args.service, args.lines, args.follow)
+}
+
 fn run_down(args: &DownArgs) -> Result<()> {
     let project_dir = resolve_project_arg(&args.project)?;
     let compose = Compose::new(&project_dir, args.dry_run, None)?;
     compose.down(args.volumes)
+}
+
+fn run_production_health(domain: Option<&str>) -> Result<()> {
+    let base_domain = domain.ok_or_else(|| anyhow!("--domain is required with --production"))?;
+    let endpoints = [
+        ("landing", format!("https://{base_domain}")),
+        ("app", format!("https://app.{base_domain}")),
+        ("api", format!("https://api.{base_domain}/health")),
+    ];
+
+    println!("Production health\n");
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()?;
+
+    for (name, url) in endpoints {
+        match client.get(&url).send() {
+            Ok(response) if response.status().is_success() => println!("  OK    {name:<8} {url}"),
+            Ok(response) => println!("  DOWN  {name:<8} {url} ({})", response.status()),
+            Err(error) => println!("  ERR   {name:<8} {error}"),
+        }
+    }
+
+    Ok(())
 }
 
 fn compose_from_run_args(args: &RunArgs) -> Result<Compose> {
