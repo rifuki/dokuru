@@ -100,4 +100,5 @@ jobs:
         working-directory: dokuru-server
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/dokuru_test
+          SQLX_OFFLINE: "true"
         run: cargo test
