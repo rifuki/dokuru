@@ -20,7 +20,7 @@ case "$(uname -m)" in
 esac
 
 case "$(uname -s)" in
-  Linux) trunk_target="unknown-linux-gnu" ;;
+  Linux) trunk_target="unknown-linux-musl" ;;
   Darwin) trunk_target="apple-darwin" ;;
   *)
     echo "unsupported build OS: $(uname -s)" >&2
