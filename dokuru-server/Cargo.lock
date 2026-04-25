@@ -805,6 +805,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "dokuru-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "dokuru-server"
 version = "0.1.0"
 dependencies = [
@@ -820,6 +827,7 @@ dependencies = [
  "config",
  "constant_time_eq",
  "dashmap",
+ "dokuru-core",
  "dotenvy",
  "eyre",
  "futures",

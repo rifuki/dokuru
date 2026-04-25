@@ -1,6 +1,11 @@
 import { apiClient } from "@/lib/api";
 import type { Agent, CreateAgentDto, UpdateAgentDto } from "@/types/agent";
-import type { AuditResponse } from "./agent-direct";
+import type { AuditReportResponse, AuditResponse, FixOutcome } from "./agent-direct";
+
+export interface RelayFixResponse {
+  outcome: FixOutcome;
+  audit: AuditResponse | null;
+}
 
 export const agentApi = {
   list: async (): Promise<Agent[]> => {
@@ -32,8 +37,23 @@ export const agentApi = {
     return response.data.data;
   },
 
+  runAudit: async (id: string): Promise<AuditResponse> => {
+    const response = await apiClient.post(`/agents/${id}/audit/run`);
+    return response.data.data;
+  },
+
+  applyFix: async (id: string, ruleId: string): Promise<RelayFixResponse> => {
+    const response = await apiClient.post(`/agents/${id}/fix`, { rule_id: ruleId });
+    return response.data.data;
+  },
+
   getAuditById: async (id: string, auditId: string): Promise<AuditResponse> => {
     const response = await apiClient.get(`/agents/${id}/audit/${auditId}`);
+    return response.data.data;
+  },
+
+  getAuditReport: async (id: string, auditId: string): Promise<AuditReportResponse> => {
+    const response = await apiClient.get(`/agents/${id}/audit/${auditId}/report`);
     return response.data.data;
   },
 

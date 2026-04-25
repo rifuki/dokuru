@@ -8,7 +8,7 @@ use tokio::{net::TcpStream, sync::mpsc, task::JoinHandle};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async, tungstenite::Message};
 use tracing::{error, info, warn};
 
-use crate::api::Config;
+use crate::{api::Config, audit::RuleRegistry};
 
 const RELAY_SERVER: &str = "wss://api.dokuru.rifuki.dev/ws/agent";
 
@@ -41,6 +41,11 @@ enum WsMessage {
     },
     Ping,
     Pong,
+}
+
+#[derive(Debug, Deserialize)]
+struct FixCommandPayload {
+    rule_id: String,
 }
 
 /// Start relay mode - connect to server via WebSocket
@@ -155,7 +160,7 @@ async fn relay_read_loop(read: &mut RelayReader, tx: &mpsc::UnboundedSender<Mess
     while let Some(msg) = read.next().await {
         match msg {
             Ok(Message::Text(text)) => {
-                if let Err(e) = handle_message(&text, tx) {
+                if let Err(e) = handle_message(&text, tx).await {
                     error!("Error handling message: {}", e);
                 }
             }
@@ -175,7 +180,7 @@ async fn relay_read_loop(read: &mut RelayReader, tx: &mpsc::UnboundedSender<Mess
     }
 }
 
-fn handle_message(text: &str, tx: &mpsc::UnboundedSender<Message>) -> Result<()> {
+async fn handle_message(text: &str, tx: &mpsc::UnboundedSender<Message>) -> Result<()> {
     let msg: WsMessage = serde_json::from_str(text)?;
 
     match msg {
@@ -186,14 +191,17 @@ fn handle_message(text: &str, tx: &mpsc::UnboundedSender<Message>) -> Result<()>
         } => {
             info!("Received command: {} (id: {})", command, id);
 
-            // Execute command
-            let result = execute_command(&command, payload);
-
-            // Send response
-            let response = WsMessage::Response {
-                id,
-                success: result.is_ok(),
-                data: result.unwrap_or_else(|e| serde_json::json!({ "error": e.to_string() })),
+            let response = match execute_command(&command, payload).await {
+                Ok(data) => WsMessage::Response {
+                    id,
+                    success: true,
+                    data,
+                },
+                Err(error) => WsMessage::Response {
+                    id,
+                    success: false,
+                    data: serde_json::json!({ "error": error.to_string() }),
+                },
             };
 
             tx.send(Message::Text(serde_json::to_string(&response)?))?;
@@ -207,12 +215,24 @@ fn handle_message(text: &str, tx: &mpsc::UnboundedSender<Message>) -> Result<()>
     Ok(())
 }
 
-fn execute_command(command: &str, _payload: serde_json::Value) -> Result<serde_json::Value> {
+async fn execute_command(command: &str, payload: serde_json::Value) -> Result<serde_json::Value> {
     match command {
         "health" => Ok(serde_json::json!({ "status": "healthy" })),
         "audit" => {
-            // TODO: Run actual audit
-            Ok(serde_json::json!({ "status": "not_implemented" }))
+            let docker = bollard::Docker::connect_with_local_defaults()
+                .wrap_err("Failed to connect to local Docker daemon")?;
+            let registry = RuleRegistry::new();
+            let report = registry.run_audit(&docker).await?;
+            serde_json::to_value(report).wrap_err("Failed to serialize audit report")
+        }
+        "fix" => {
+            let payload = serde_json::from_value::<FixCommandPayload>(payload)
+                .wrap_err("Invalid fix command payload")?;
+            let docker = bollard::Docker::connect_with_local_defaults()
+                .wrap_err("Failed to connect to local Docker daemon")?;
+            let registry = RuleRegistry::new();
+            let outcome = registry.fix_rule(&payload.rule_id, &docker).await?;
+            serde_json::to_value(outcome).wrap_err("Failed to serialize fix outcome")
         }
         _ => Err(eyre::eyre!("Unknown command: {}", command)),
     }

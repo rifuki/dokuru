@@ -181,13 +181,15 @@ function FixProgress({ steps, currentStep }: { steps: string[]; currentStep: num
 
 // ── Rule Card ────────────────────────────────────────────────────────────────
 
-function RuleCard({ result, agentId, agentUrl, token }: {
+function RuleCard({ result, agentId, agentUrl, agentAccessMode, token }: {
     result: AuditResult;
     agentId: string;
     agentUrl: string;
+    agentAccessMode?: string;
     token?: string;
 }) {
     const queryClient = useQueryClient();
+    const navigate = useNavigate();
     const { fixingRules, fixOutcomes, setFixing, setFixOutcome } = useAuditStore();
     const fixing = fixingRules[agentId]?.[result.rule.id] ?? false;
     const fixOutcome = fixOutcomes[agentId]?.[result.rule.id] ?? null;
@@ -233,19 +235,34 @@ function RuleCard({ result, agentId, agentUrl, token }: {
         }, 1200);
 
         try {
-            const outcome = await agentDirectApi.applyFix(agentUrl, rule.id, token);
+            let refreshedAudit: AuditResponse | null = null;
+            let outcome: FixOutcome;
+            if (agentAccessMode === "relay") {
+                const relayFix = await agentApi.applyFix(agentId, rule.id);
+                outcome = relayFix.outcome;
+                refreshedAudit = relayFix.audit;
+            } else {
+                outcome = await agentDirectApi.applyFix(agentUrl, rule.id, token);
+            }
             if (intervalRef.current) clearInterval(intervalRef.current);
             setFixOutcome(agentId, rule.id, outcome);
             if (outcome.status === "Applied") {
                 toast.success(`Fix applied for rule ${rule.id}`);
-                queryClient.invalidateQueries({ queryKey: ["agent-audit"] });
+                await queryClient.invalidateQueries({ queryKey: ["agent-audit"] });
+                if (refreshedAudit?.id) {
+                    navigate({
+                        to: "/agents/$id/audits/$auditId",
+                        params: { id: agentId, auditId: refreshedAudit.id },
+                    });
+                    return;
+                }
                 setTimeout(() => setFixOutcome(agentId, rule.id, null), 3000);
             } else if (outcome.status === "Blocked") {
                 toast.error(`Rule ${rule.id}: ${outcome.message.slice(0, 80)}`);
             }
         } catch {
             if (intervalRef.current) clearInterval(intervalRef.current);
-            toast.error("Failed to connect to agent");
+            toast.error(agentAccessMode === "relay" ? "Failed to apply relay fix" : "Failed to connect to agent");
         } finally {
             setFixing(agentId, rule.id, false);
         }
@@ -616,12 +633,13 @@ function AuditPage() {
 
     const handleRunAudit = async () => {
         if (!agent) return;
-        if (!token) return toast.error("Agent token not found");
+        if (agent.access_mode !== "relay" && !token) return toast.error("Agent token not found");
         setRunning(id, true);
         try {
-            const data = await agentDirectApi.runAudit(agent.url, token);
+            const savedAudit = agent.access_mode === "relay"
+                ? await agentApi.runAudit(agent.id)
+                : await agentApi.saveAudit(agent.id, await agentDirectApi.runAudit(agent.url, token));
             try {
-                const savedAudit = await agentApi.saveAudit(agent.id, data);
                 toast.success(`Audit complete — ${savedAudit.summary.score}/100`);
                 await queryClient.invalidateQueries({ queryKey: ["audits", id] });
                 if (savedAudit.id) {
@@ -631,7 +649,7 @@ function AuditPage() {
                     });
                 }
             } catch {
-                toast.error("Failed to save audit");
+                toast.error("Failed to open audit result");
             }
         } catch {
             toast.error("Audit failed");
@@ -866,6 +884,7 @@ function AuditPage() {
                                                         result={r}
                                                         agentId={id}
                                                         agentUrl={agent?.url ?? ""}
+                                                        agentAccessMode={agent?.access_mode}
                                                         token={token}
                                                     />
                                                 ))

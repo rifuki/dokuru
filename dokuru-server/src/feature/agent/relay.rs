@@ -10,8 +10,11 @@ use futures::{
     stream::{SplitSink, SplitStream},
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tokio::{sync::mpsc, task::JoinHandle};
+use std::{sync::Arc, time::Duration as StdDuration};
+use tokio::{
+    sync::{mpsc, oneshot},
+    task::JoinHandle,
+};
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -27,7 +30,32 @@ pub struct AgentConnection {
     pub agent_id: Uuid,
     pub token: String,
     pub tx: mpsc::UnboundedSender<String>,
+    pending: Arc<DashMap<String, oneshot::Sender<RelayResponse>>>,
 }
+
+#[derive(Debug)]
+struct RelayResponse {
+    success: bool,
+    data: serde_json::Value,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum RelayCommandError {
+    #[error("Agent is not connected via relay")]
+    AgentOffline,
+    #[error("Failed to serialize relay command: {0}")]
+    Serialize(#[from] serde_json::Error),
+    #[error("Relay connection closed before command could be sent")]
+    Send,
+    #[error("Relay command timed out")]
+    Timeout,
+    #[error("Relay command response channel closed")]
+    Dropped,
+    #[error("Relay command failed: {0}")]
+    Command(String),
+}
+
+const RELAY_COMMAND_TIMEOUT: StdDuration = StdDuration::from_secs(180);
 
 /// WebSocket message types
 #[derive(Debug, Serialize, Deserialize)]
@@ -56,6 +84,65 @@ pub enum WsMessage {
     Pong,
 }
 
+pub async fn send_command(
+    registry: &AgentRegistry,
+    agent_id: Uuid,
+    command: &str,
+    payload: serde_json::Value,
+) -> Result<serde_json::Value, RelayCommandError> {
+    send_command_with_timeout(registry, agent_id, command, payload, RELAY_COMMAND_TIMEOUT).await
+}
+
+async fn send_command_with_timeout(
+    registry: &AgentRegistry,
+    agent_id: Uuid,
+    command: &str,
+    payload: serde_json::Value,
+    timeout: StdDuration,
+) -> Result<serde_json::Value, RelayCommandError> {
+    let connection = registry
+        .iter()
+        .find_map(|entry| (entry.agent_id == agent_id).then(|| entry.clone()))
+        .ok_or(RelayCommandError::AgentOffline)?;
+
+    let id = Uuid::new_v4().to_string();
+    let (tx, rx) = oneshot::channel();
+    connection.pending.insert(id.clone(), tx);
+
+    let message = serde_json::to_string(&WsMessage::Command {
+        id: id.clone(),
+        command: command.to_string(),
+        payload,
+    })?;
+
+    if connection.tx.send(message).is_err() {
+        connection.pending.remove(&id);
+        return Err(RelayCommandError::Send);
+    }
+
+    let response = match tokio::time::timeout(timeout, rx).await {
+        Ok(Ok(response)) => response,
+        Ok(Err(_)) => return Err(RelayCommandError::Dropped),
+        Err(_) => {
+            connection.pending.remove(&id);
+            return Err(RelayCommandError::Timeout);
+        }
+    };
+
+    if response.success {
+        Ok(response.data)
+    } else {
+        Err(RelayCommandError::Command(
+            response
+                .data
+                .get("error")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("Agent command failed")
+                .to_string(),
+        ))
+    }
+}
+
 /// WebSocket upgrade handler
 pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
     ws.on_upgrade(|socket| handle_socket(socket, state))
@@ -72,11 +159,20 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     };
 
     let registry = state.agent_registry.clone();
-    register_agent_connection(&state, &registry, agent_id, &token, tx.clone()).await;
+    let pending = Arc::new(DashMap::new());
+    register_agent_connection(
+        &state,
+        &registry,
+        agent_id,
+        &token,
+        tx.clone(),
+        pending.clone(),
+    )
+    .await;
 
     let heartbeat_task = spawn_heartbeat(state.db.pool().clone(), agent_id);
     let mut send_task = spawn_agent_sender(sender, rx);
-    let mut recv_task = spawn_agent_receiver(receiver, tx);
+    let mut recv_task = spawn_agent_receiver(receiver, tx, pending);
 
     tokio::select! {
         _ = &mut send_task => {
@@ -161,6 +257,7 @@ async fn register_agent_connection(
     agent_id: Uuid,
     token: &str,
     tx: mpsc::UnboundedSender<String>,
+    pending: Arc<DashMap<String, oneshot::Sender<RelayResponse>>>,
 ) {
     let agent = sqlx::query_as::<_, Agent>("SELECT * FROM agents WHERE id = $1")
         .bind(agent_id)
@@ -185,6 +282,7 @@ async fn register_agent_connection(
             agent_id,
             token: token.to_string(),
             tx,
+            pending,
         },
     );
 
@@ -256,23 +354,31 @@ fn spawn_agent_sender(
 fn spawn_agent_receiver(
     mut receiver: SplitStream<WebSocket>,
     tx: mpsc::UnboundedSender<String>,
+    pending: Arc<DashMap<String, oneshot::Sender<RelayResponse>>>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         while let Some(Ok(Message::Text(text))) = receiver.next().await {
-            handle_agent_message(&tx, &text);
+            handle_agent_message(&tx, &pending, &text);
         }
     })
 }
 
-fn handle_agent_message(tx: &mpsc::UnboundedSender<String>, text: &str) {
+fn handle_agent_message(
+    tx: &mpsc::UnboundedSender<String>,
+    pending: &DashMap<String, oneshot::Sender<RelayResponse>>,
+    text: &str,
+) {
     let Ok(msg) = serde_json::from_str::<WsMessage>(text) else {
         return;
     };
 
     match msg {
-        WsMessage::Response { .. } => {
-            // TODO: Forward response to waiting request.
-            info!("Received response from agent: {:?}", msg);
+        WsMessage::Response { id, success, data } => {
+            if let Some((_, sender)) = pending.remove(&id) {
+                let _ = sender.send(RelayResponse { success, data });
+            } else {
+                info!("Received response for unknown relay command id: {}", id);
+            }
         }
         WsMessage::Ping => {
             if let Ok(pong) = serde_json::to_string(&WsMessage::Pong) {

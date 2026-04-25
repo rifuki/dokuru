@@ -1,8 +1,8 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { agentApi } from "@/lib/api/agent";
-import { agentDirectApi, type AuditResponse, type AuditResult, type FixOutcome } from "@/lib/api/agent-direct";
+import { agentDirectApi, type AuditReportResponse, type AuditResponse, type AuditResult, type FixOutcome } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
 import { getAgentToken } from "@/stores/use-agent-store";
 import { Button } from "@/components/ui/button";
@@ -30,8 +30,11 @@ export const Route = createFileRoute("/_authenticated/agents/$id/audits/$auditId
 
 const SECTION_META: Record<string, { label: string; num: string; color: string; bg: string; border: string }> = {
     "Host Configuration":     { label: "Host",    num: "S1", color: "text-blue-500",   bg: "bg-blue-500/10",   border: "border-blue-500/30" },
+    "Docker Daemon Configuration": { label: "Daemon", num: "S2", color: "text-violet-500", bg: "bg-violet-500/10", border: "border-violet-500/30" },
     "Daemon Configuration":   { label: "Daemon",  num: "S2", color: "text-violet-500", bg: "bg-violet-500/10", border: "border-violet-500/30" },
+    "Docker Daemon Configuration Files": { label: "Files", num: "S3", color: "text-orange-500", bg: "bg-orange-500/10", border: "border-orange-500/30" },
     "Config File Permissions":{ label: "Files",   num: "S3", color: "text-orange-500", bg: "bg-orange-500/10", border: "border-orange-500/30" },
+    "Container Images and Build Files": { label: "Images", num: "S4", color: "text-teal-500", bg: "bg-teal-500/10", border: "border-teal-500/30" },
     "Container Images":       { label: "Images",  num: "S4", color: "text-teal-500",   bg: "bg-teal-500/10",   border: "border-teal-500/30" },
     "Container Runtime":      { label: "Runtime", num: "S5", color: "text-indigo-500", bg: "bg-indigo-500/10", border: "border-indigo-500/30" },
 };
@@ -181,12 +184,15 @@ function FixProgress({ steps, currentStep }: { steps: string[]; currentStep: num
 
 // ── Rule Card ────────────────────────────────────────────────────────────────
 
-function RuleCard({ result, agentUrl, token }: {
+function RuleCard({ result, agentId, agentUrl, agentAccessMode, token }: {
     result: AuditResult;
+    agentId: string;
     agentUrl: string;
+    agentAccessMode?: string;
     token?: string;
 }) {
     const queryClient = useQueryClient();
+    const navigate = useNavigate();
     const [open, setOpen] = useState(false);
     const [fixing, setFixing] = useState(false);
     const [fixOutcome, setFixOutcome] = useState<FixOutcome | null>(null);
@@ -230,11 +236,35 @@ function RuleCard({ result, agentUrl, token }: {
         }, 1200);
 
         try {
-            const outcome = await agentDirectApi.applyFix(agentUrl, rule.id, token);
+            let refreshedAudit: AuditResponse | null = null;
+            let outcome: FixOutcome;
+            if (agentAccessMode === "relay") {
+                const relayFix = await agentApi.applyFix(agentId, rule.id);
+                outcome = relayFix.outcome;
+                refreshedAudit = relayFix.audit;
+            } else {
+                outcome = await agentDirectApi.applyFix(agentUrl, rule.id, token);
+            }
             if (intervalRef.current) clearInterval(intervalRef.current);
             setFixOutcome(outcome);
             
             if (outcome.status === "Applied") {
+                if (refreshedAudit?.id) {
+                    toast.success(`Fix applied for rule ${rule.id}. Audit refreshed.`);
+                    await queryClient.invalidateQueries({ queryKey: ["agent-audit"] });
+                    navigate({
+                        to: "/agents/$id/audits/$auditId",
+                        params: { id: agentId, auditId: refreshedAudit.id },
+                    });
+                    return;
+                }
+
+                if (agentAccessMode === "relay") {
+                    toast.success(`Fix applied for rule ${rule.id}`);
+                    toast.info("Audit refresh did not return a new result");
+                    return;
+                }
+
                 toast.success(`✅ Fix applied for rule ${rule.id}! Refreshing audit...`, {
                     duration: 4000,
                 });
@@ -269,8 +299,10 @@ function RuleCard({ result, agentUrl, token }: {
             }
         } catch {
             if (intervalRef.current) clearInterval(intervalRef.current);
-            toast.error("Failed to connect to agent", {
-                description: "Check if the agent is running and accessible",
+            toast.error(agentAccessMode === "relay" ? "Failed to apply relay fix" : "Failed to connect to agent", {
+                description: agentAccessMode === "relay"
+                    ? "Check if the relay agent is connected"
+                    : "Check if the agent is running and accessible",
                 duration: 4000,
             });
         } finally {
@@ -682,6 +714,7 @@ function AuditDetailPage() {
     const [agent, setAgent] = useState<Agent | null>(null);
     const [token, setToken] = useState<string | undefined>();
     const [auditData, setAuditData] = useState<AuditResponse | null>(null);
+    const [auditReport, setAuditReport] = useState<AuditReportResponse | null>(null);
     const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
     const [sectionFilter, setSectionFilter] = useState<string>("all");
     const [pillarFilter, setPillarFilter] = useState<SecurityPillar | "all">("all");
@@ -699,6 +732,13 @@ function AuditDetailPage() {
                 const audit = await agentApi.getAuditById(id, auditId);
                 console.log('Fetched audit:', audit);
                 setAuditData(audit);
+
+                try {
+                    const report = await agentApi.getAuditReport(id, auditId);
+                    setAuditReport(report);
+                } catch (reportError) {
+                    console.warn("Failed to load Rust audit report, using client fallback:", reportError);
+                }
             } catch (error) {
                 console.error('Failed to load audit:', error);
                 toast.error("Failed to load audit");
@@ -709,20 +749,38 @@ function AuditDetailPage() {
         void loadData();
     }, [id, auditId]);
 
+    const report = auditReport?.report;
+    const baseResults = report?.sorted_results ?? [...(auditData?.results ?? [])].sort((a, b) => {
+        if (a.status !== b.status) return a.status === "Fail" ? -1 : 1;
+        return a.rule.id.localeCompare(b.rule.id, undefined, { numeric: true });
+    });
+
     // Group sections
-    const sections = auditData
+    const sections: string[] = report
+        ? report.sections.map(section => section.key)
+        : auditData
         ? [...new Set(auditData.results.map(r => r.rule.section))]
         : [];
 
-    const sectionStats = auditData
+    const sectionStats: Record<string, { total: number; passed: number; percent: number }> = report
+        ? Object.fromEntries(report.sections.map(section => [
+            section.key,
+            { total: section.total, passed: section.passed, percent: section.percent },
+        ]))
+        : auditData
         ? Object.fromEntries(sections.map(s => {
             const sectionRules = auditData.results.filter(r => r.rule.section === s);
-            return [s, { total: sectionRules.length, passed: sectionRules.filter(r => r.status === "Pass").length }];
+            const passed = sectionRules.filter(r => r.status === "Pass").length;
+            return [s, {
+                total: sectionRules.length,
+                passed,
+                percent: sectionRules.length > 0 ? Math.round((passed / sectionRules.length) * 100) : 0,
+            }];
         }))
         : {};
 
     // Sort sections: worst pass% first, so problem areas appear at top
-    const sortedSections = [...sections].sort((a, b) => {
+    const sortedSections = report ? sections : [...sections].sort((a, b) => {
         const statA = sectionStats[a] ?? { total: 0, passed: 0 };
         const statB = sectionStats[b] ?? { total: 0, passed: 0 };
         const pctA = statA.total > 0 ? statA.passed / statA.total : 1;
@@ -730,7 +788,7 @@ function AuditDetailPage() {
         return pctA - pctB;
     });
 
-    const filteredResults = auditData?.results.filter(r => {
+    const filteredResults = baseResults.filter(r => {
         const statusOk = statusFilter === "all" || r.status === statusFilter;
         const sectionOk = sectionFilter === "all" || r.rule.section === sectionFilter;
         const pillarOk = pillarFilter === "all" || getRulePillar(r.rule.id) === pillarFilter;
@@ -740,6 +798,25 @@ function AuditDetailPage() {
             r.message.toLowerCase().includes(searchQuery.toLowerCase());
         return statusOk && sectionOk && pillarOk && searchOk;
     }) ?? [];
+
+    const pillarSummaries = report?.pillars ?? (Object.keys(PILLAR_META) as SecurityPillar[]).map(pillar => {
+        const pillarRules = baseResults.filter(r => getRulePillar(r.rule.id) === pillar);
+        const passed = pillarRules.filter(r => r.status === "Pass").length;
+        const failed = pillarRules.filter(r => r.status === "Fail").length;
+        const errors = pillarRules.filter(r => r.status === "Error").length;
+        const total = passed + failed;
+
+        return {
+            key: pillar,
+            label: PILLAR_META[pillar].name,
+            number: null,
+            total,
+            passed,
+            failed,
+            errors,
+            percent: total > 0 ? Math.round((passed / total) * 100) : 0,
+        };
+    });
 
     // Group filtered results by section OR pillar based on viewMode
     const groupedResults = viewMode === "section"
@@ -895,13 +972,14 @@ function AuditDetailPage() {
                                 
                                 {viewMode === "pillar" ? (
                                     // Pillar breakdown
-                                    (Object.keys(PILLAR_META) as SecurityPillar[]).map(pillar => {
+                                    pillarSummaries.map(pillarSummary => {
+                                        const pillar = pillarSummary.key as SecurityPillar;
                                         const meta = PILLAR_META[pillar];
+                                        if (!meta) return null;
                                         const Icon = meta.icon;
-                                        const pillarRules = auditData.results.filter(r => getRulePillar(r.rule.id) === pillar);
-                                        const total = pillarRules.length;
-                                        const passed = pillarRules.filter(r => r.status === "Pass").length;
-                                        const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
+                                        const total = pillarSummary.total;
+                                        const passed = pillarSummary.passed;
+                                        const pct = pillarSummary.percent;
                                         
                                         return (
                                             <div key={pillar} className="space-y-2">
@@ -935,16 +1013,96 @@ function AuditDetailPage() {
                                 <div className="pt-4 mt-4 border-t border-border grid grid-cols-2 gap-2">
                                     <div className="bg-muted/20 border border-white/5 rounded-lg px-3 py-2">
                                         <p className="text-[9px] text-muted-foreground/60 uppercase tracking-[0.15em]">Critical</p>
-                                        <p className="text-lg font-black text-rose-400">{auditData.results.filter(r => r.rule.severity === "High" && r.status === "Fail").length}</p>
+                                        <p className="text-lg font-black text-rose-400">{report?.severity_failures.high ?? auditData.results.filter(r => r.rule.severity === "High" && r.status === "Fail").length}</p>
                                     </div>
                                     <div className="bg-muted/20 border border-white/5 rounded-lg px-3 py-2">
                                         <p className="text-[9px] text-muted-foreground/60 uppercase tracking-[0.15em]">Medium</p>
-                                        <p className="text-lg font-black text-amber-400">{auditData.results.filter(r => r.rule.severity === "Medium" && r.status === "Fail").length}</p>
+                                        <p className="text-lg font-black text-amber-400">{report?.severity_failures.medium ?? auditData.results.filter(r => r.rule.severity === "Medium" && r.status === "Fail").length}</p>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
+
+                    {report?.remediation.total_failed ? (
+                        <div className="rounded-2xl border border-border bg-card dark:bg-gradient-to-br dark:from-[#0A0A0B] dark:to-[#111113] overflow-hidden">
+                            <div className="flex flex-col gap-4 border-b border-border px-5 py-4 md:flex-row md:items-center md:justify-between">
+                                <div>
+                                    <h3 className="text-base font-bold tracking-tight">Remediation Plan</h3>
+                                    <p className="text-sm text-muted-foreground">Highest-risk failed checks with suggested remediation order.</p>
+                                </div>
+                                <div className="grid grid-cols-4 gap-2 text-center">
+                                    <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2">
+                                        <p className="text-lg font-black text-rose-400">{report.remediation.high_impact}</p>
+                                        <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">High</p>
+                                    </div>
+                                    <div className="rounded-lg border border-[#2496ED]/20 bg-[#2496ED]/10 px-3 py-2">
+                                        <p className="text-lg font-black text-[#2496ED]">{report.remediation.auto_fixable}</p>
+                                        <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Auto</p>
+                                    </div>
+                                    <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+                                        <p className="text-lg font-black text-emerald-400">{report.remediation.quick_wins}</p>
+                                        <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Quick</p>
+                                    </div>
+                                    <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2">
+                                        <p className="text-lg font-black text-amber-400">{report.remediation.manual + report.remediation.guided}</p>
+                                        <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Manual</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="divide-y divide-border">
+                                {report.remediation.actions.slice(0, 5).map((action) => {
+                                    const pillar = action.pillar_key as SecurityPillar;
+                                    const meta = PILLAR_META[pillar];
+                                    const effortLabel = action.effort === "quick" ? "Quick" : action.effort === "moderate" ? "Moderate" : "Involved";
+                                    const kindLabel = action.remediation_kind === "auto" ? "Auto fix" : action.remediation_kind === "guided" ? "Guided" : "Manual";
+
+                                    return (
+                                        <div key={action.rule_id} className="grid gap-3 px-5 py-4 md:grid-cols-[auto_1fr_auto] md:items-start">
+                                            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-muted/30 font-mono text-xs font-black text-muted-foreground">
+                                                {action.rank}
+                                            </div>
+                                            <div className="min-w-0 space-y-2">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <span className="font-mono text-xs font-black text-muted-foreground bg-muted/40 px-2 py-1 rounded border border-border">
+                                                        {action.rule_id}
+                                                    </span>
+                                                    <SeverityBadge severity={action.severity} />
+                                                    {meta && (
+                                                        <span className={cn("inline-flex items-center gap-1.5 text-xs font-bold px-2 py-1 rounded border", meta.bg, meta.color, meta.border)}>
+                                                            {action.pillar_label}
+                                                        </span>
+                                                    )}
+                                                    <span className="inline-flex items-center gap-1.5 rounded border border-border bg-muted/30 px-2 py-1 text-xs font-bold text-muted-foreground">
+                                                        <Wrench className="h-3 w-3" />
+                                                        {kindLabel}
+                                                    </span>
+                                                    <span className="inline-flex items-center gap-1.5 rounded border border-border bg-muted/30 px-2 py-1 text-xs font-bold text-muted-foreground">
+                                                        <Clock className="h-3 w-3" />
+                                                        {effortLabel}
+                                                    </span>
+                                                </div>
+                                                <p className="font-semibold leading-snug">{action.title}</p>
+                                                <p className="line-clamp-2 text-sm text-muted-foreground">{action.summary}</p>
+                                            </div>
+                                            <div className="flex items-center gap-3 md:justify-end">
+                                                <div className="text-right">
+                                                    <p className="text-lg font-black text-foreground">{action.risk_score}</p>
+                                                    <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Risk</p>
+                                                </div>
+                                                {action.affected_count > 0 && (
+                                                    <div className="text-right">
+                                                        <p className="text-lg font-black text-amber-400">{action.affected_count}</p>
+                                                        <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Affected</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    ) : null}
 
                     {/* ── Search & Filters ────────────────────────────── */}
                     <div className="space-y-4">
@@ -1100,15 +1258,13 @@ function AuditDetailPage() {
                                             </div>
                                             <div className="space-y-3">
                                                 {results
-                                                    .sort((a, b) => {
-                                                        if (a.status !== b.status) return a.status === "Fail" ? -1 : 1;
-                                                        return a.rule.id.localeCompare(b.rule.id, undefined, { numeric: true });
-                                                    })
                                                     .map(r => (
                                                         <RuleCard
                                                             key={r.rule.id}
                                                             result={r}
+                                                            agentId={id}
                                                             agentUrl={agent?.url ?? ""}
+                                                            agentAccessMode={agent?.access_mode}
                                                             token={token}
                                                         />
                                                     ))
@@ -1132,15 +1288,13 @@ function AuditDetailPage() {
                                             </div>
                                             <div className="space-y-3">
                                                 {results
-                                                    .sort((a, b) => {
-                                                        if (a.status !== b.status) return a.status === "Fail" ? -1 : 1;
-                                                        return a.rule.id.localeCompare(b.rule.id, undefined, { numeric: true });
-                                                    })
                                                     .map(r => (
                                                         <RuleCard
                                                             key={r.rule.id}
                                                             result={r}
+                                                            agentId={id}
                                                             agentUrl={agent?.url ?? ""}
+                                                            agentAccessMode={agent?.access_mode}
                                                             token={token}
                                                         />
                                                     ))

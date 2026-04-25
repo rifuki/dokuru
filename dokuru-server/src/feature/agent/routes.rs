@@ -20,8 +20,14 @@ pub fn agent_routes() -> Router<AppState> {
                 .delete(handlers::delete_agent),
         )
         .route("/{id}/heartbeat", post(handlers::agent_heartbeat))
+        .route("/{id}/fix", post(audit_handlers::run_relay_fix))
         .route("/{id}/audit", post(audit_handlers::save_audit))
+        .route("/{id}/audit/run", post(audit_handlers::run_relay_audit))
         .route("/{id}/audit/latest", get(audit_handlers::get_latest_audit))
+        .route(
+            "/{id}/audit/{audit_id}/report",
+            get(audit_handlers::get_audit_report),
+        )
         .route(
             "/{id}/audit/{audit_id}",
             get(audit_handlers::get_audit_by_id),

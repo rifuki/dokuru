@@ -8,6 +8,7 @@ axum = { version = "0.8.8", features = ["macros", "multipart", "ws"] }
 axum-extra = { version = "0.12.5", features = ["cookie"] }
 bytes = "1.11.1"
 chrono = { version = "0.4.44", features = ["serde"] }
+dokuru-core = { path = "../dokuru-core" }
 tower-http = { version = "0.6.8", features = ["cors", "trace", "fs"] }
 dashmap = "6.1.0"
 

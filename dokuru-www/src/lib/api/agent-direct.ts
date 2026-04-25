@@ -66,6 +66,70 @@ export interface AuditSummary {
   score: number;
 }
 
+export interface AuditReportSummary extends AuditSummary {
+  errors: number;
+}
+
+export interface AuditGroupSummary {
+  key: string;
+  label: string;
+  number: string | null;
+  total: number;
+  passed: number;
+  failed: number;
+  errors: number;
+  percent: number;
+}
+
+export interface AuditSeverityFailureSummary {
+  high: number;
+  medium: number;
+  low: number;
+  unknown: number;
+  total: number;
+}
+
+export type AuditRemediationEffort = "quick" | "moderate" | "involved";
+
+export interface AuditRemediationAction {
+  rank: number;
+  rule_id: string;
+  title: string;
+  severity: "High" | "Medium" | "Low" | string;
+  section_key: string;
+  section_label: string;
+  pillar_key: string;
+  pillar_label: string;
+  remediation_kind: "auto" | "guided" | "manual" | string;
+  effort: AuditRemediationEffort;
+  risk_score: number;
+  affected_count: number;
+  command_available: boolean;
+  summary: string;
+}
+
+export interface AuditRemediationPlan {
+  total_failed: number;
+  auto_fixable: number;
+  guided: number;
+  manual: number;
+  high_impact: number;
+  medium_impact: number;
+  low_impact: number;
+  quick_wins: number;
+  actions: AuditRemediationAction[];
+}
+
+export interface AuditViewReport {
+  summary: AuditReportSummary;
+  score_band: "healthy" | "warning" | "critical";
+  sections: AuditGroupSummary[];
+  pillars: AuditGroupSummary[];
+  severity_failures: AuditSeverityFailureSummary;
+  remediation: AuditRemediationPlan;
+  sorted_results: AuditResult[];
+}
+
 export interface AuditResponse {
   id?: string;
   timestamp: string;
@@ -74,6 +138,16 @@ export interface AuditResponse {
   total_containers: number;
   results: AuditResult[];
   summary: AuditSummary;
+}
+
+export interface AuditReportResponse {
+  audit_id: string;
+  agent_id: string;
+  timestamp: string;
+  hostname: string;
+  docker_version: string;
+  total_containers: number;
+  report: AuditViewReport;
 }
 
 export const agentDirectApi = {

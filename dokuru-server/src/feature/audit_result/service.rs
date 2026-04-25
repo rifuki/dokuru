@@ -1,10 +1,11 @@
-use eyre::Result;
+use dokuru_core::audit::{CheckResult, build_audit_view_report};
+use eyre::{Result, WrapErr};
 use sqlx::PgPool;
 use std::sync::Arc;
 use uuid::Uuid;
 
 use super::domain::{AuditSummary, parse_ran_at_or_now, usize_to_i32_or_zero};
-use super::dto::{AuditResultResponse, AuditSummaryResponse, SaveAuditDto};
+use super::dto::{AuditReportResponse, AuditResultResponse, AuditSummaryResponse, SaveAuditDto};
 use super::entity::AuditResultRecord;
 use super::repository::AuditResultRepository;
 
@@ -86,6 +87,21 @@ impl AuditResultService {
         Ok(records.into_iter().map(Self::to_response).collect())
     }
 
+    pub async fn get_report(
+        &self,
+        pool: &PgPool,
+        audit_id: Uuid,
+        agent_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<Option<AuditReportResponse>> {
+        let record = self
+            .repo
+            .find_by_id(pool, audit_id, agent_id, user_id)
+            .await?;
+
+        record.map(Self::to_report_response).transpose()
+    }
+
     fn to_response(record: AuditResultRecord) -> AuditResultResponse {
         let summary = AuditSummary::from_record(
             record.total_rules,
@@ -111,5 +127,21 @@ impl AuditResultService {
             ran_at: record.ran_at,
             created_at: record.created_at,
         }
+    }
+
+    fn to_report_response(record: AuditResultRecord) -> Result<AuditReportResponse> {
+        let results = serde_json::from_value::<Vec<CheckResult>>(record.results)
+            .wrap_err("Stored audit results are not compatible with the audit report model")?;
+        let report = build_audit_view_report(results);
+
+        Ok(AuditReportResponse {
+            audit_id: record.id,
+            agent_id: record.agent_id,
+            timestamp: record.ran_at.to_rfc3339(),
+            hostname: record.hostname,
+            docker_version: record.docker_version,
+            total_containers: record.total_containers,
+            report,
+        })
     }
 }
