@@ -13,7 +13,7 @@ import {
   Copy,
   Check,
 } from "lucide-react";
-import { dockerApi, type Stack, type StackContainer } from "@/services/docker-api";
+import { canUseDockerAgent, dockerApi, dockerCredential, type Stack, type StackContainer } from "@/services/docker-api";
 import { Input } from "@/components/ui/input";
 import { agentApi } from "@/lib/api/agent";
 import { useState } from "react";
@@ -434,11 +434,12 @@ function StacksPage() {
   const { data: stacks, isLoading } = useQuery({
     queryKey: ["stacks", id],
     queryFn: async () => {
-      if (!agent?.token) throw new Error("Agent token not available");
-      const res = await dockerApi.listStacks(agent.url, agent.token);
+      const credential = dockerCredential(agent);
+      if (!agent || !credential) throw new Error("Agent token not available");
+      const res = await dockerApi.listStacks(agent.url, credential);
       return res.data;
     },
-    enabled: !!agent?.token,
+    enabled: canUseDockerAgent(agent),
     refetchInterval: 10000,
   });
 
@@ -510,7 +511,7 @@ function StacksPage() {
               stack={stack}
               agentId={id}
               agentUrl={agent?.url ?? ""}
-              token={agent?.token ?? ""}
+              token={dockerCredential(agent)}
             />
           ))}
         </>

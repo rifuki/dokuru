@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Network as NetworkIcon, Trash2, ExternalLink, Globe } from "lucide-react";
-import { dockerApi, type Network } from "@/services/docker-api";
+import { canUseDockerAgent, dockerApi, dockerCredential, type Network } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
@@ -40,17 +40,19 @@ function NetworksPage() {
   const { data: networks, isLoading } = useQuery({
     queryKey: ["networks", id],
     queryFn: async () => {
-      if (!agent?.token) throw new Error("Agent token not available");
-      const res = await dockerApi.listNetworks(agent.url, agent.token);
+      const credential = dockerCredential(agent);
+      if (!agent || !credential) throw new Error("Agent token not available");
+      const res = await dockerApi.listNetworks(agent.url, credential);
       return res.data;
     },
-    enabled: !!agent?.token,
+    enabled: canUseDockerAgent(agent),
   });
 
   const removeMutation = useMutation({
     mutationFn: (networkId: string) => {
-      if (!agent?.token) throw new Error("Agent token not available");
-      return dockerApi.removeNetwork(agent.url, agent.token, networkId);
+      const credential = dockerCredential(agent);
+      if (!agent || !credential) throw new Error("Agent token not available");
+      return dockerApi.removeNetwork(agent.url, credential, networkId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["networks", id] });

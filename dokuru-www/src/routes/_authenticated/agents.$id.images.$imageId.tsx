@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
-import { dockerApi, type ImageHistoryItem } from "@/services/docker-api";
+import { canUseDockerAgent, dockerApi, dockerCredential, type ImageHistoryItem } from "@/services/docker-api";
 import { agentApi } from "@/lib/api/agent";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
@@ -84,21 +84,23 @@ function ImageDetailPage() {
   const { data: image, isLoading: imageLoading } = useQuery({
     queryKey: ["image", id, decodedImageId],
     queryFn: async () => {
-      if (!agent?.token) throw new Error();
-      const res = await dockerApi.inspectImage(agent.url, agent.token, decodedImageId);
+      const credential = dockerCredential(agent);
+      if (!agent || !credential) throw new Error();
+      const res = await dockerApi.inspectImage(agent.url, credential, decodedImageId);
       return res.data as Record<string, unknown>;
     },
-    enabled: !!agent?.token,
+    enabled: canUseDockerAgent(agent),
   });
 
   const { data: history, isLoading: historyLoading } = useQuery({
     queryKey: ["image-history", id, decodedImageId],
     queryFn: async () => {
-      if (!agent?.token) throw new Error();
-      const res = await dockerApi.imageHistory(agent.url, agent.token, decodedImageId);
+      const credential = dockerCredential(agent);
+      if (!agent || !credential) throw new Error();
+      const res = await dockerApi.imageHistory(agent.url, credential, decodedImageId);
       return res.data as ImageHistoryItem[];
     },
-    enabled: !!agent?.token,
+    enabled: canUseDockerAgent(agent),
   });
 
   if (imageLoading) {

@@ -793,12 +793,13 @@ export function ContainerTabPanel({
 }) {
   const [tab, setTab] = useState<Tab>("overview");
   const isRunning = container.state.toLowerCase() === "running";
+  const isRelay = agentUrl === "relay";
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode; disabled?: boolean }[] = [
     { id: "overview", label: "Overview", icon: <Info className="h-4 w-4" /> },
     { id: "logs",     label: "Logs",     icon: <FileText className="h-4 w-4" /> },
     { id: "stats",    label: "Stats",    icon: <BarChart2 className="h-4 w-4" />, disabled: !isRunning },
-    { id: "terminal", label: "Terminal", icon: <TerminalIcon className="h-4 w-4" />, disabled: !isRunning },
+    { id: "terminal", label: "Terminal", icon: <TerminalIcon className="h-4 w-4" />, disabled: !isRunning || isRelay },
     { id: "inspect",  label: "Inspect",  icon: <Info className="h-4 w-4" /> },
   ];
 

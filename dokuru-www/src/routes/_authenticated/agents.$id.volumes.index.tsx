@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
 import { HardDrive, Trash2, Scissors, ExternalLink, FolderOpen } from "lucide-react";
-import { dockerApi, type Volume } from "@/services/docker-api";
+import { canUseDockerAgent, dockerApi, dockerCredential, type Volume } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
@@ -29,17 +29,19 @@ function VolumesPage() {
   const { data: volumes, isLoading } = useQuery({
     queryKey: ["volumes", id],
     queryFn: async () => {
-      if (!agent?.token) throw new Error("Agent token not available");
-      const res = await dockerApi.listVolumes(agent.url, agent.token);
+      const credential = dockerCredential(agent);
+      if (!agent || !credential) throw new Error("Agent token not available");
+      const res = await dockerApi.listVolumes(agent.url, credential);
       return res.data;
     },
-    enabled: !!agent?.token,
+    enabled: canUseDockerAgent(agent),
   });
 
   const removeMutation = useMutation({
     mutationFn: (volumeName: string) => {
-      if (!agent?.token) throw new Error("Agent token not available");
-      return dockerApi.removeVolume(agent.url, agent.token, volumeName);
+      const credential = dockerCredential(agent);
+      if (!agent || !credential) throw new Error("Agent token not available");
+      return dockerApi.removeVolume(agent.url, credential, volumeName);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["volumes", id] });
@@ -50,8 +52,9 @@ function VolumesPage() {
 
   const pruneMutation = useMutation({
     mutationFn: () => {
-      if (!agent?.token) throw new Error("Agent token not available");
-      return dockerApi.pruneVolumes(agent.url, agent.token);
+      const credential = dockerCredential(agent);
+      if (!agent || !credential) throw new Error("Agent token not available");
+      return dockerApi.pruneVolumes(agent.url, credential);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["volumes", id] });

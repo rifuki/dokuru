@@ -1,8 +1,11 @@
 use axum::{
     Extension, Json,
+    body::Body,
     extract::{Path, State},
-    http::StatusCode,
+    http::{Request, StatusCode},
+    response::{IntoResponse, Response},
 };
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::{
@@ -115,7 +118,7 @@ pub async fn run_relay_fix(
         ApiError::default()
             .with_code(StatusCode::BAD_GATEWAY)
             .with_message("Relay agent returned an invalid fix payload")
-            .with_debug(&error.to_string())
+            .with_debug(error.to_string())
     })?;
 
     let audit = if outcome.status == "Applied" {
@@ -131,6 +134,97 @@ pub async fn run_relay_fix(
     };
 
     Ok(ApiSuccess::default().with_data(RelayFixResponse { outcome, audit }))
+}
+
+pub async fn relay_docker_request(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path((agent_id, tail)): Path<(Uuid, String)>,
+    req: Request<Body>,
+) -> Response {
+    let agent = match state
+        .agent_service
+        .get_agent(state.db.pool(), agent_id, auth_user.user_id)
+        .await
+    {
+        Ok(Some(agent)) => agent,
+        Ok(None) => {
+            return ApiError::default()
+                .with_code(StatusCode::NOT_FOUND)
+                .with_message("Agent not found")
+                .into_response();
+        }
+        Err(error) => {
+            return ApiError::default()
+                .with_message(error.to_string())
+                .into_response();
+        }
+    };
+
+    if agent.access_mode != "relay" {
+        return ApiError::default()
+            .with_code(StatusCode::BAD_REQUEST)
+            .with_message("Docker relay proxy is only available for relay agents")
+            .into_response();
+    }
+
+    let method = req.method().as_str().to_string();
+    let query = parse_query(req.uri().query());
+
+    let response_value = match relay::send_command(
+        &state.agent_registry,
+        agent.id,
+        "docker",
+        serde_json::json!({
+            "method": method,
+            "path": format!("/docker/{tail}"),
+            "query": query,
+        }),
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(error) => return relay_error_to_api_error(error).into_response(),
+    };
+
+    let response = match serde_json::from_value::<RelayDockerResponse>(response_value) {
+        Ok(response) => response,
+        Err(error) => {
+            return ApiError::default()
+                .with_code(StatusCode::BAD_GATEWAY)
+                .with_message("Relay agent returned an invalid docker payload")
+                .with_debug(error.to_string())
+                .into_response();
+        }
+    };
+
+    raw_json_response(response.status, response.data)
+}
+
+#[derive(serde::Deserialize)]
+struct RelayDockerResponse {
+    status: u16,
+    data: Option<serde_json::Value>,
+}
+
+fn parse_query(query: Option<&str>) -> HashMap<String, String> {
+    query
+        .map(|query| {
+            url::form_urlencoded::parse(query.as_bytes())
+                .into_owned()
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn raw_json_response(status: u16, data: Option<serde_json::Value>) -> Response {
+    let status = StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+
+    match (status, data) {
+        (StatusCode::NO_CONTENT, _) => StatusCode::NO_CONTENT.into_response(),
+        (status, Some(data)) => (status, Json(data)).into_response(),
+        (status, None) => status.into_response(),
+    }
 }
 
 async fn run_relay_audit_command(
@@ -150,7 +244,7 @@ async fn run_relay_audit_command(
         ApiError::default()
             .with_code(StatusCode::BAD_GATEWAY)
             .with_message("Relay agent returned an invalid audit payload")
-            .with_debug(&error.to_string())
+            .with_debug(error.to_string())
     })
 }
 

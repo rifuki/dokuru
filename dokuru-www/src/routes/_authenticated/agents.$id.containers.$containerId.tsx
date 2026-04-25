@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { dockerApi, type Container } from "@/services/docker-api";
+import { canUseDockerAgent, dockerApi, dockerCredential, type Container } from "@/services/docker-api";
 import { agentApi } from "@/lib/api/agent";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,11 +38,12 @@ function ContainerDetailPage() {
   const { data: containers, isLoading } = useQuery({
     queryKey: ["containers", id, true],
     queryFn: async () => {
-      if (!agent?.token) throw new Error("Agent token not available");
-      const res = await dockerApi.listContainers(agent.url, agent.token, true);
+      const credential = dockerCredential(agent);
+      if (!agent || !credential) throw new Error("Agent token not available");
+      const res = await dockerApi.listContainers(agent.url, credential, true);
       return res.data;
     },
-    enabled: !!agent?.token,
+    enabled: canUseDockerAgent(agent),
     refetchInterval: 5000,
   });
 
@@ -53,22 +54,38 @@ function ContainerDetailPage() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["containers", id] });
 
   const startMutation = useMutation({
-    mutationFn: () => { if (!agent?.token) throw new Error(); return dockerApi.startContainer(agent.url, agent.token, containerId); },
+    mutationFn: () => {
+      const credential = dockerCredential(agent);
+      if (!agent || !credential) throw new Error();
+      return dockerApi.startContainer(agent.url, credential, containerId);
+    },
     onSuccess: () => { invalidate(); toast.success("Container started"); },
     onError: () => toast.error("Failed to start container"),
   });
   const stopMutation = useMutation({
-    mutationFn: () => { if (!agent?.token) throw new Error(); return dockerApi.stopContainer(agent.url, agent.token, containerId); },
+    mutationFn: () => {
+      const credential = dockerCredential(agent);
+      if (!agent || !credential) throw new Error();
+      return dockerApi.stopContainer(agent.url, credential, containerId);
+    },
     onSuccess: () => { invalidate(); toast.success("Container stopped"); },
     onError: () => toast.error("Failed to stop container"),
   });
   const restartMutation = useMutation({
-    mutationFn: () => { if (!agent?.token) throw new Error(); return dockerApi.restartContainer(agent.url, agent.token, containerId); },
+    mutationFn: () => {
+      const credential = dockerCredential(agent);
+      if (!agent || !credential) throw new Error();
+      return dockerApi.restartContainer(agent.url, credential, containerId);
+    },
     onSuccess: () => { invalidate(); toast.success("Container restarted"); },
     onError: () => toast.error("Failed to restart container"),
   });
   const removeMutation = useMutation({
-    mutationFn: () => { if (!agent?.token) throw new Error(); return dockerApi.removeContainer(agent.url, agent.token, containerId); },
+    mutationFn: () => {
+      const credential = dockerCredential(agent);
+      if (!agent || !credential) throw new Error();
+      return dockerApi.removeContainer(agent.url, credential, containerId);
+    },
     onSuccess: () => {
       invalidate();
       toast.success("Container removed");
@@ -167,7 +184,7 @@ function ContainerDetailPage() {
         <ContainerTabPanel
           container={container}
           agentUrl={agent?.url ?? ""}
-          token={agent?.token ?? ""}
+          token={dockerCredential(agent)}
           agentId={id}
         />
       </div>

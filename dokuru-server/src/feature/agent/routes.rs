@@ -1,6 +1,6 @@
 use axum::{
     Router, middleware,
-    routing::{get, post},
+    routing::{any, get, post},
 };
 
 use crate::{
@@ -20,6 +20,10 @@ pub fn agent_routes() -> Router<AppState> {
                 .delete(handlers::delete_agent),
         )
         .route("/{id}/heartbeat", post(handlers::agent_heartbeat))
+        .route(
+            "/{id}/docker/{*tail}",
+            any(audit_handlers::relay_docker_request),
+        )
         .route("/{id}/fix", post(audit_handlers::run_relay_fix))
         .route("/{id}/audit", post(audit_handlers::save_audit))
         .route("/{id}/audit/run", post(audit_handlers::run_relay_audit))

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { dockerApi } from "@/services/docker-api";
+import { canUseDockerAgent, dockerApi, dockerCredential } from "@/services/docker-api";
 import { agentApi } from "@/lib/api/agent";
 import { Badge } from "@/components/ui/badge";
 import { HardDrive } from "lucide-react";
@@ -8,6 +8,14 @@ import { HardDrive } from "lucide-react";
 export const Route = createFileRoute("/_authenticated/agents/$id/volumes/$volumeName")({
   component: VolumeDetailPage,
 });
+
+type VolumeInspect = {
+  Name?: string;
+  Driver?: string;
+  Mountpoint?: string;
+  Scope?: string;
+  Labels?: Record<string, string>;
+};
 
 function VolumeDetailPage() {
   const { id, volumeName } = Route.useParams();
@@ -20,11 +28,12 @@ function VolumeDetailPage() {
   const { data: volume, isLoading } = useQuery({
     queryKey: ["volume", id, volumeName],
     queryFn: async () => {
-      if (!agent?.token) throw new Error("Agent token not available");
-      const res = await dockerApi.inspectVolume(agent.url, agent.token, volumeName);
-      return res.data;
+      const credential = dockerCredential(agent);
+      if (!agent || !credential) throw new Error("Agent token not available");
+      const res = await dockerApi.inspectVolume(agent.url, credential, volumeName);
+      return res.data as VolumeInspect;
     },
-    enabled: !!agent?.token,
+    enabled: canUseDockerAgent(agent),
   });
 
   if (isLoading) {

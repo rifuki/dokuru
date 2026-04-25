@@ -1,4 +1,5 @@
-import axios from "axios";
+import axios, { type AxiosPromise } from "axios";
+import { apiClient } from "@/lib/api";
 
 export interface Container {
   id: string;
@@ -70,139 +71,124 @@ export interface Stack {
   total: number;
 }
 
+type DockerAgentLike = {
+  id: string;
+  token?: string | null;
+  access_mode?: string | null;
+};
+
+type DockerQuery = Record<string, string | number | boolean | undefined>;
+
+export function dockerCredential(agent: DockerAgentLike | null | undefined) {
+  if (!agent) return "";
+  return agent.access_mode === "relay" ? agent.id : agent.token ?? "";
+}
+
+export function canUseDockerAgent(agent: DockerAgentLike | null | undefined) {
+  return !!dockerCredential(agent);
+}
+
+function dockerRequest<T>(
+  agentUrl: string,
+  credential: string,
+  method: "GET" | "POST" | "DELETE",
+  path: string,
+  params?: DockerQuery,
+): AxiosPromise<T> {
+  if (agentUrl === "relay") {
+    return apiClient.request<T>({
+      method,
+      url: `/agents/${credential}${path}`,
+      params,
+    });
+  }
+
+  return axios.request<T>({
+    method,
+    url: `${agentUrl}${path}`,
+    params,
+    headers: { Authorization: `Bearer ${credential}` },
+  });
+}
+
 export const dockerApi = {
   // Containers
   listContainers: (agentUrl: string, token: string, all = true) =>
-    axios.get<Container[]>(`${agentUrl}/docker/containers?all=${all}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    dockerRequest<Container[]>(agentUrl, token, "GET", "/docker/containers", { all }),
 
   inspectContainer: (agentUrl: string, token: string, id: string) =>
-    axios.get(`${agentUrl}/docker/containers/${id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    dockerRequest(agentUrl, token, "GET", `/docker/containers/${encodeURIComponent(id)}`),
 
   startContainer: (agentUrl: string, token: string, id: string) =>
-    axios.post(`${agentUrl}/docker/containers/${id}/start`, null, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    dockerRequest(agentUrl, token, "POST", `/docker/containers/${encodeURIComponent(id)}/start`),
 
   stopContainer: (agentUrl: string, token: string, id: string) =>
-    axios.post(`${agentUrl}/docker/containers/${id}/stop`, null, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    dockerRequest(agentUrl, token, "POST", `/docker/containers/${encodeURIComponent(id)}/stop`),
 
   restartContainer: (agentUrl: string, token: string, id: string) =>
-    axios.post(`${agentUrl}/docker/containers/${id}/restart`, null, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    dockerRequest(agentUrl, token, "POST", `/docker/containers/${encodeURIComponent(id)}/restart`),
 
   removeContainer: (agentUrl: string, token: string, id: string) =>
-    axios.delete(`${agentUrl}/docker/containers/${id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    dockerRequest(agentUrl, token, "DELETE", `/docker/containers/${encodeURIComponent(id)}`),
 
   getContainerLogs: (agentUrl: string, token: string, id: string) =>
-    axios.get<string[]>(`${agentUrl}/docker/containers/${id}/logs`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    dockerRequest<string[]>(agentUrl, token, "GET", `/docker/containers/${encodeURIComponent(id)}/logs`),
 
   getContainerStats: (agentUrl: string, token: string, id: string) =>
-    axios.get<ContainerStats>(`${agentUrl}/docker/containers/${id}/stats`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    dockerRequest<ContainerStats>(agentUrl, token, "GET", `/docker/containers/${encodeURIComponent(id)}/stats`),
 
   detectContainerShell: (agentUrl: string, token: string, id: string) =>
-    axios.get<{ shell: string }>(`${agentUrl}/docker/containers/${id}/shell`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    dockerRequest<{ shell: string }>(agentUrl, token, "GET", `/docker/containers/${encodeURIComponent(id)}/shell`),
 
   // Images
   listImages: (agentUrl: string, token: string, all = true) =>
-    axios.get<Image[]>(`${agentUrl}/docker/images?all=${all}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    dockerRequest<Image[]>(agentUrl, token, "GET", "/docker/images", { all }),
 
   inspectImage: (agentUrl: string, token: string, id: string) =>
-    axios.get(`${agentUrl}/docker/images/${id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    dockerRequest(agentUrl, token, "GET", `/docker/images/${encodeURIComponent(id)}`),
 
   imageHistory: (agentUrl: string, token: string, id: string) =>
-    axios.get<ImageHistoryItem[]>(`${agentUrl}/docker/images/${encodeURIComponent(id)}/history`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    dockerRequest<ImageHistoryItem[]>(agentUrl, token, "GET", `/docker/images/${encodeURIComponent(id)}/history`),
 
   removeImage: (agentUrl: string, token: string, id: string) =>
-    axios.delete(`${agentUrl}/docker/images/${id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    dockerRequest(agentUrl, token, "DELETE", `/docker/images/${encodeURIComponent(id)}`),
 
   pullImage: (agentUrl: string, token: string, fromImage: string, tag = "latest") =>
-    axios.post(
-      `${agentUrl}/docker/images/pull?from_image=${fromImage}&tag=${tag}`,
-      null,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    ),
+    dockerRequest(agentUrl, token, "POST", "/docker/images/pull", { from_image: fromImage, tag }),
 
   pruneImages: (agentUrl: string, token: string) =>
-    axios.post(`${agentUrl}/docker/images/prune`, null, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    dockerRequest(agentUrl, token, "POST", "/docker/images/prune"),
 
   // Stacks
   listStacks: (agentUrl: string, token: string) =>
-    axios.get<Stack[]>(`${agentUrl}/docker/stacks`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    dockerRequest<Stack[]>(agentUrl, token, "GET", "/docker/stacks"),
 
   getStack: (agentUrl: string, token: string, name: string) =>
-    axios.get<Stack>(`${agentUrl}/docker/stacks/${encodeURIComponent(name)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    dockerRequest<Stack>(agentUrl, token, "GET", `/docker/stacks/${encodeURIComponent(name)}`),
 
   getStackCompose: (agentUrl: string, token: string, name: string) =>
-    axios.get<{ path: string; content: string }>(
-      `${agentUrl}/docker/stacks/${encodeURIComponent(name)}/compose`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    ),
+    dockerRequest<{ path: string; content: string }>(agentUrl, token, "GET", `/docker/stacks/${encodeURIComponent(name)}/compose`),
 
   // Networks
   listNetworks: (agentUrl: string, token: string) =>
-    axios.get<Network[]>(`${agentUrl}/docker/networks`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    dockerRequest<Network[]>(agentUrl, token, "GET", "/docker/networks"),
 
   inspectNetwork: (agentUrl: string, token: string, id: string) =>
-    axios.get(`${agentUrl}/docker/networks/${id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    dockerRequest(agentUrl, token, "GET", `/docker/networks/${encodeURIComponent(id)}`),
 
   removeNetwork: (agentUrl: string, token: string, id: string) =>
-    axios.delete(`${agentUrl}/docker/networks/${id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    dockerRequest(agentUrl, token, "DELETE", `/docker/networks/${encodeURIComponent(id)}`),
 
   // Volumes
   listVolumes: (agentUrl: string, token: string) =>
-    axios.get<Volume[]>(`${agentUrl}/docker/volumes`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    dockerRequest<Volume[]>(agentUrl, token, "GET", "/docker/volumes"),
 
   inspectVolume: (agentUrl: string, token: string, name: string) =>
-    axios.get(`${agentUrl}/docker/volumes/${name}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    dockerRequest(agentUrl, token, "GET", `/docker/volumes/${encodeURIComponent(name)}`),
 
   removeVolume: (agentUrl: string, token: string, name: string) =>
-    axios.delete(`${agentUrl}/docker/volumes/${name}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    dockerRequest(agentUrl, token, "DELETE", `/docker/volumes/${encodeURIComponent(name)}`),
 
   pruneVolumes: (agentUrl: string, token: string) =>
-    axios.post(`${agentUrl}/docker/volumes/prune`, null, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+    dockerRequest(agentUrl, token, "POST", "/docker/volumes/prune"),
 };

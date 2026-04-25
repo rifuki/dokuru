@@ -7,6 +7,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 mod feature;
 mod infrastructure;
 pub mod relay;
+mod relay_docker;
 mod routes;
 mod state;
 

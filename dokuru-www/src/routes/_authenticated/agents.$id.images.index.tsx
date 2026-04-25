@@ -9,7 +9,7 @@ import {
   Clock,
   ExternalLink,
 } from "lucide-react";
-import { dockerApi, type Image } from "@/services/docker-api";
+import { canUseDockerAgent, dockerApi, dockerCredential, type Image } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
@@ -58,18 +58,20 @@ function ImagesPage() {
   const { data: images, isLoading } = useQuery({
     queryKey: ["images", id],
     queryFn: async () => {
-      if (!agent?.token) throw new Error("Agent token not available");
-      const res = await dockerApi.listImages(agent.url, agent.token, true);
+      const credential = dockerCredential(agent);
+      if (!agent || !credential) throw new Error("Agent token not available");
+      const res = await dockerApi.listImages(agent.url, credential, true);
       return res.data;
     },
-    enabled: !!agent?.token,
+    enabled: canUseDockerAgent(agent),
     refetchInterval: 10000,
   });
 
   const removeMutation = useMutation({
     mutationFn: (imageId: string) => {
-      if (!agent?.token) throw new Error("Agent token not available");
-      return dockerApi.removeImage(agent.url, agent.token, imageId);
+      const credential = dockerCredential(agent);
+      if (!agent || !credential) throw new Error("Agent token not available");
+      return dockerApi.removeImage(agent.url, credential, imageId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["images", id] });
@@ -80,8 +82,9 @@ function ImagesPage() {
 
   const pruneMutation = useMutation({
     mutationFn: () => {
-      if (!agent?.token) throw new Error("Agent token not available");
-      return dockerApi.pruneImages(agent.url, agent.token);
+      const credential = dockerCredential(agent);
+      if (!agent || !credential) throw new Error("Agent token not available");
+      return dockerApi.pruneImages(agent.url, credential);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["images", id] });

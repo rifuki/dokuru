@@ -8,7 +8,7 @@ use tokio::{net::TcpStream, sync::mpsc, task::JoinHandle};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async, tungstenite::Message};
 use tracing::{error, info, warn};
 
-use crate::{api::Config, audit::RuleRegistry};
+use crate::{api::Config, api::relay_docker, audit::RuleRegistry};
 
 const RELAY_SERVER: &str = "wss://api.dokuru.rifuki.dev/ws/agent";
 
@@ -234,6 +234,7 @@ async fn execute_command(command: &str, payload: serde_json::Value) -> Result<se
             let outcome = registry.fix_rule(&payload.rule_id, &docker).await?;
             serde_json::to_value(outcome).wrap_err("Failed to serialize fix outcome")
         }
+        "docker" => relay_docker::execute(payload).await,
         _ => Err(eyre::eyre!("Unknown command: {}", command)),
     }
 }
