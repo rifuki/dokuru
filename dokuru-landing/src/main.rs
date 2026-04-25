@@ -6,8 +6,8 @@ fn main() {
     _ = console_log::init_with_level(log::Level::Debug);
     console_error_panic_hook::set_once();
 
-    enable_reveal_motion();
     mount_app();
+    utils::reveal::setup_reveals();
     utils::page_motion::setup_page_motion();
 }
 
@@ -37,17 +37,7 @@ fn has_prerendered_app() -> bool {
         .is_some()
 }
 
-fn enable_reveal_motion() {
-    let Some(document) = document() else {
-        return;
-    };
-    let Ok(Some(body)) = document.query_selector("body") else {
-        return;
-    };
-
-    _ = body.class_list().add_1("dokuru-motion-ready");
-}
-
+#[cfg(feature = "hydrate")]
 fn document() -> Option<web_sys::Document> {
     web_sys::window().and_then(|window| window.document())
 }
