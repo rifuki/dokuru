@@ -115,7 +115,7 @@ pub(crate) const AUDIT_SECTIONS: &[AuditSection] = &[
         rules: &[AuditRule {
             rule: "5.5 Privileged containers",
             sev: SeverityKind::Fail,
-            rem: RemediationKind::Auto,
+            rem: RemediationKind::Guided,
             detail: "2 containers with --privileged",
         }],
     },

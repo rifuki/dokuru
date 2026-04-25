@@ -246,7 +246,7 @@ If specific kernel capabilities are required, grant only the minimum capability 
                 })
             },
 
-            remediation_kind: RemediationKind::Manual,
+            remediation_kind: RemediationKind::Guided,
             fix_fn: None,
             remediation_guide: r#"Do not pass --network=host when starting containers.
 Use the default bridge network or a custom user-defined network instead.
@@ -256,7 +256,7 @@ Example (correct):
 
 Example (incorrect — avoid):
   docker run --network=host nginx"#.into(),
-            requires_restart: false,
+            requires_restart: true,
             requires_elevation: false,
 
             references: vec![
@@ -613,7 +613,7 @@ Or in docker-compose.yml:
                 })
             },
 
-            remediation_kind: RemediationKind::Manual,
+            remediation_kind: RemediationKind::Guided,
             fix_fn: None,
             remediation_guide: r#"Do not pass --pid=host when starting containers.
 By default containers get their own isolated PID namespace.
@@ -623,7 +623,7 @@ Example (incorrect — avoid):
 
 To inspect processes in a container, use docker exec instead:
   docker exec -it <container> ps aux"#.into(),
-            requires_restart: false,
+            requires_restart: true,
             requires_elevation: false,
 
             references: vec![
@@ -728,7 +728,7 @@ To inspect processes in a container, use docker exec instead:
                 })
             },
 
-            remediation_kind: RemediationKind::Manual,
+            remediation_kind: RemediationKind::Guided,
             fix_fn: None,
             remediation_guide: r#"Do not pass --ipc=host when starting containers.
 Use private IPC namespace (default) or shareable between specific containers.
@@ -739,7 +739,7 @@ Example (incorrect — avoid):
 Example (acceptable for inter-container sharing):
   docker run --ipc=shareable app1
   docker run --ipc=container:app1 app2"#.into(),
-            requires_restart: false,
+            requires_restart: true,
             requires_elevation: false,
 
             references: vec![
@@ -844,7 +844,7 @@ Example (acceptable for inter-container sharing):
                 })
             },
 
-            remediation_kind: RemediationKind::Manual,
+            remediation_kind: RemediationKind::Guided,
             fix_fn: None,
             remediation_guide: r#"Do not pass --uts=host when starting containers.
 
@@ -852,7 +852,7 @@ Example (incorrect — avoid):
   docker run --uts=host nginx
 
 By default, each container gets its own UTS namespace with an isolated hostname."#.into(),
-            requires_restart: false,
+            requires_restart: true,
             requires_elevation: false,
 
             references: vec![
@@ -1207,7 +1207,7 @@ A reasonable value for most workloads is 50-200."#.into(),
                 })
             },
 
-            remediation_kind: RemediationKind::Manual,
+            remediation_kind: RemediationKind::Guided,
             fix_fn: None,
             remediation_guide: r#"Do not pass --userns=host when starting containers.
 This flag disables user namespace remapping and gives the container root = host root.
@@ -1221,7 +1221,7 @@ To enable user namespace remapping globally (recommended), configure the Docker 
     "userns-remap": "default"
   }
 Then restart Docker: sudo systemctl restart docker"#.into(),
-            requires_restart: false,
+            requires_restart: true,
             requires_elevation: false,
 
             references: vec![
