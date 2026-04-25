@@ -113,6 +113,9 @@ export function RegisterForm() {
   const showEmailStatus =
     email.includes('@') && !emailCheck.isLoading && emailCheck.data;
 
+  const passwordToggleClass =
+    "absolute right-2.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center text-muted-foreground transition-colors hover:text-foreground";
+
   return (
     <div className="w-full max-w-100">
       <div className="flex items-center justify-center gap-2 mb-10">
@@ -210,27 +213,28 @@ export function RegisterForm() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={8}
-                className="h-11 pr-10 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"
+                className="h-11 pr-20 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"
               />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+              <div className="absolute right-12 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center">
                 {password.length > 0 && password.length < 8 && (
                   <XCircle className="h-4 w-4 text-red-500" />
                 )}
                 {password.length >= 8 && (
                   <CheckCircle2 className="h-4 w-4 text-green-500" />
                 )}
-                <button
-                  type="button"
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
               </div>
+              <button
+                type="button"
+                className={passwordToggleClass}
+                onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </button>
             </div>
           </div>
 
@@ -247,27 +251,28 @@ export function RegisterForm() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
                 minLength={8}
-                className="h-11 pr-10 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"
+                className="h-11 pr-20 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"
               />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+              <div className="absolute right-12 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center">
                 {confirmPassword.length > 0 && confirmPassword !== password && (
                   <XCircle className="h-4 w-4 text-red-500" />
                 )}
                 {confirmPassword.length > 0 && confirmPassword === password && password.length >= 8 && (
                   <CheckCircle2 className="h-4 w-4 text-green-500" />
                 )}
-                <button
-                  type="button"
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                >
-                  {showConfirmPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
               </div>
+              <button
+                type="button"
+                className={passwordToggleClass}
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+              >
+                {showConfirmPassword ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </button>
             </div>
             {confirmPassword.length > 0 && confirmPassword !== password && (
               <p className="text-xs text-red-500">Passwords do not match</p>
