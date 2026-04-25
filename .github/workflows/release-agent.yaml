@@ -211,41 +211,41 @@ jobs:
           EOF
           else
             cat > body.md <<'EOF'
-          ## 🚀 Dokuru Latest (Rolling Release)
+          ## Dokuru Latest - Agent Relay Build
 
-          ![Latest](https://img.shields.io/badge/release-latest-orange?style=flat-square)
-          ![Status](https://img.shields.io/badge/status-prerelease-yellow?style=flat-square)
-          ![Platform](https://img.shields.io/badge/platform-linux-lightgrey?style=flat-square)
+          Rolling agent release built automatically from `main`.
 
-          Rolling release built automatically from `main` branch.
+          ### What's New
 
-          **⚠️ This is a pre-release build** - Use versioned releases for production.
+          - Relay terminal support for container exec sessions from the dashboard.
+          - Relay Docker events streaming for the Events page.
+          - Relay Docker info and health proxying for dashboard status cards.
+          - Existing relay Docker operations continue to work for containers, images, networks, volumes, stacks, logs, stats, and inspect.
 
-          ### 📊 Build Info
-
-          - **Commit**: `${{ github.sha }}`
-          - **Short SHA**: `${{ steps.release.outputs.short_sha }}`
-          - **Published**: `${{ steps.release.outputs.published_at }}`
-
-          ### 📦 Installation
+          ### Install Agent
 
           ```bash
           curl -fsSL https://github.com/${{ github.repository }}/releases/download/latest/install.sh | bash
           ```
 
-          ### 📋 Assets
+          ### Direct Downloads
 
-          | File | Platform | Architecture |
-          |------|----------|--------------|
-          | `dokuru-linux-amd64` | Linux | x86_64 |
-          | `dokuru-linux-arm64` | Linux | aarch64 |
-          | `SHA256SUMS` | - | Checksums |
-          | `install.sh` | - | Installer |
-          | `version.json` | - | Build manifest |
+          | Asset | Target |
+          | --- | --- |
+          | `dokuru-linux-amd64` | Linux x86_64 |
+          | `dokuru-linux-arm64` | Linux aarch64 |
+          | `install.sh` | Agent installer |
+          | `SHA256SUMS` | Checksums |
+          | `version.json` | Build metadata |
 
-          ---
+          ### Build Info
 
-          💡 **Tip**: For stable releases, use versioned tags like `v0.1.0`
+          - Commit: `${{ github.sha }}`
+          - Short SHA: `${{ steps.release.outputs.short_sha }}`
+          - Published: `${{ steps.release.outputs.published_at }}`
+          - Channel: `latest` rolling pre-release
+
+          For stable production installs, use a versioned release tag when available.
           EOF
           fi
 
@@ -265,3 +265,9 @@ jobs:
           prerelease: ${{ steps.release.outputs.prerelease }}
           make_latest: ${{ steps.release.outputs.type == 'version' }}
           generate_release_notes: ${{ steps.release.outputs.type == 'version' }}
+
+      - name: Ensure latest release is published
+        if: steps.release.outputs.type == 'latest'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit latest --draft=false --prerelease
