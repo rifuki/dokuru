@@ -15,6 +15,10 @@ export const API_ENDPOINTS = {
   NOTIFICATIONS: {
     LIST: "/notifications",
     UNREAD_COUNT: "/notifications/unread-count",
+    SUMMARY: "/notifications/summary",
+    PREFERENCES: "/notifications/preferences",
+    PREFERENCE: (kind: string) => `/notifications/preferences/${kind}`,
+    RESET_PREFERENCES: "/notifications/preferences/reset",
     MARK_READ: (id: string) => `/notifications/${id}/read`,
     MARK_ALL_READ: "/notifications/read-all",
   },

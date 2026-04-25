@@ -17,6 +17,32 @@ export interface NotificationListParams {
   unreadOnly?: boolean;
 }
 
+export interface NotificationKindSummary {
+  kind: string;
+  total: number;
+  unread: number;
+  latest_at?: string | null;
+  known: boolean;
+  audience?: "user" | "admin" | null;
+  severity?: "info" | "success" | "warning" | null;
+  target_hint?: string | null;
+}
+
+export interface NotificationSummary {
+  total: number;
+  unread: number;
+  kinds: NotificationKindSummary[];
+}
+
+export interface NotificationPreference {
+  kind: string;
+  enabled: boolean;
+  configurable: boolean;
+  audience: "user" | "admin";
+  severity: "info" | "success" | "warning";
+  target_hint: string;
+}
+
 export const notificationService = {
   list: async (params: NotificationListParams = {}): Promise<Notification[]> => {
     const response = await apiClient.get(API_ENDPOINTS.NOTIFICATIONS.LIST, {
@@ -32,6 +58,34 @@ export const notificationService = {
   unreadCount: async (): Promise<number> => {
     const response = await apiClient.get(API_ENDPOINTS.NOTIFICATIONS.UNREAD_COUNT);
     return response.data.data.count;
+  },
+
+  summary: async (): Promise<NotificationSummary> => {
+    const response = await apiClient.get(API_ENDPOINTS.NOTIFICATIONS.SUMMARY);
+    return response.data.data;
+  },
+
+  preferences: async (): Promise<NotificationPreference[]> => {
+    const response = await apiClient.get(API_ENDPOINTS.NOTIFICATIONS.PREFERENCES);
+    return response.data.data;
+  },
+
+  setPreference: async ({
+    kind,
+    enabled,
+  }: {
+    kind: string;
+    enabled: boolean;
+  }): Promise<NotificationPreference> => {
+    const response = await apiClient.put(API_ENDPOINTS.NOTIFICATIONS.PREFERENCE(kind), {
+      enabled,
+    });
+    return response.data.data;
+  },
+
+  resetPreferences: async (): Promise<number> => {
+    const response = await apiClient.post(API_ENDPOINTS.NOTIFICATIONS.RESET_PREFERENCES);
+    return response.data.data.deleted;
   },
 
   markRead: async (id: string): Promise<Notification> => {
