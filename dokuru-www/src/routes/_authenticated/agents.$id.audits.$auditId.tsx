@@ -21,7 +21,9 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { PILLAR_META, getRulePillar, type SecurityPillar } from "@/lib/audit-pillars";
 import { FixWizard } from "@/features/audit/components/FixWizard";
+import { FixAllWizard } from "@/features/audit/components/FixAllWizard";
 import { useFix } from "@/features/audit/hooks/useFix";
+import { useFixAll } from "@/features/audit/hooks/useFixAll";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/audits/$auditId")({
     component: AuditDetailPage,
@@ -442,6 +444,13 @@ function AuditDetailPage() {
         token,
     });
 
+    const { open: fixAllOpen, step: fixAllStep, currentIndex: fixAllIndex, ruleStatuses, openFixAll, closeFixAll, applyAll } = useFixAll({
+        agentId: id,
+        agentUrl: agent?.url ?? "",
+        agentAccessMode: agent?.access_mode,
+        token,
+    });
+
     useEffect(() => {
         const loadData = async () => {
             try {
@@ -744,6 +753,31 @@ function AuditDetailPage() {
                         </div>
                     </div>
 
+                    {/* ── Fix All banner ───────────────────────────────── */}
+                    {(() => {
+                        const autoFixable = baseResults.filter(r => r.status === "Fail" && r.remediation_kind === "auto");
+                        if (autoFixable.length === 0) return null;
+                        return (
+                            <div className="flex items-center justify-between gap-4 rounded-xl border border-[#2496ED]/25 bg-[#2496ED]/5 px-5 py-4">
+                                <div className="min-w-0">
+                                    <p className="text-sm font-bold text-[#2496ED]">
+                                        {autoFixable.length} rule{autoFixable.length > 1 ? "s" : ""} can be auto-fixed
+                                    </p>
+                                    <p className="text-xs text-[#2496ED]/60 mt-0.5">
+                                        Namespace isolation, cgroup limits, and privileged containers — one click.
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => openFixAll(autoFixable)}
+                                    className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-[#2496ED] hover:bg-[#1e80cc] px-4 py-2.5 text-sm font-bold text-white shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] transition-all hover:shadow-[0_0_24px_-4px_rgba(36,150,237,0.7)] active:scale-[0.98]"
+                                >
+                                    <Zap className="h-4 w-4" />
+                                    Fix All ({autoFixable.length})
+                                </button>
+                            </div>
+                        );
+                    })()}
+
                     {report?.remediation.total_failed ? (
                         <div className="rounded-2xl border border-border bg-card dark:bg-gradient-to-br dark:from-[#0A0A0B] dark:to-[#111113] overflow-hidden">
                             <div className="flex flex-col gap-4 border-b border-border px-5 py-4 md:flex-row md:items-center md:justify-between">
@@ -1045,6 +1079,18 @@ function AuditDetailPage() {
                 onClose={closeWizard}
                 onRerunAudit={() => {
                     closeWizard();
+                    void navigate({ to: "/agents/$id/audit", params: { id } });
+                }}
+            />
+            <FixAllWizard
+                open={fixAllOpen}
+                step={fixAllStep}
+                currentIndex={fixAllIndex}
+                ruleStatuses={ruleStatuses}
+                onConfirm={() => void applyAll()}
+                onClose={closeFixAll}
+                onRerunAudit={() => {
+                    closeFixAll();
                     void navigate({ to: "/agents/$id/audit", params: { id } });
                 }}
             />
