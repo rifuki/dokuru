@@ -56,8 +56,8 @@ const LEVEL_STYLES: Record<string, string> = {
 const ANSI_ESCAPE_REGEX = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, "g");
 
 const LOCAL_TOML_PLACEHOLDER = `# Example
-[logging]
-default_level = "info"
+[app]
+rust_log = "info"
 `;
 
 type ParsedLogLine = {
@@ -693,7 +693,7 @@ function AdminSettingsPage() {
                     <div className="h-4 w-px bg-border" />
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">ENV</span>
-                      <span className="font-mono text-xs font-medium text-foreground/90">{config.rust_env}</span>
+                      <span className="font-mono text-xs font-medium text-foreground/90">{config.app.rust_env}</span>
                     </div>
                   </div>
 
@@ -713,7 +713,7 @@ function AdminSettingsPage() {
                   >
                     <ConfigRow icon={Server} label="API Port" value={String(config.server.port)} sources={effectiveSources["server.port"]} mono tomlPath={["server","port"]} onSave={makeFieldSaver("API Port",["server","port"])} />
                     <ConfigRow icon={Cable} label="CORS Origins" value={config.server.cors_allowed_origins.join(", ")} sources={effectiveSources["server.cors_allowed_origins"]} mono tomlPath={["server","cors_allowed_origins"]} onSave={makeFieldSaver("CORS Origins",["server","cors_allowed_origins"])} />
-                    <ConfigRow icon={Activity} label="Default Log Level" value={config.logging.default_level} sources={effectiveSources["logging.default_level"]} tomlPath={["logging","default_level"]} onSave={makeFieldSaver("Default Log Level",["logging","default_level"])} />
+                    <ConfigRow icon={Activity} label="Default Log Level" value={config.app.rust_log} sources={effectiveSources["app.rust_log"]} tomlPath={["app","rust_log"]} onSave={makeFieldSaver("Default Log Level",["app","rust_log"])} />
                   </ConfigSection>
 
                   <ConfigSection

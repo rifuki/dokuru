@@ -54,9 +54,12 @@ export interface ConfigSourceDetail {
 export interface EffectiveConfigResponse {
   source: string;
   local_config_path: string;
-  rust_env: string;
   is_production: boolean;
   field_sources: Record<string, ConfigSourceDetail[]>;
+  app: {
+    rust_env: string;
+    rust_log: string;
+  };
   bootstrap: {
     enabled: boolean;
     admin_email: string;
@@ -66,9 +69,6 @@ export interface EffectiveConfigResponse {
   server: {
     port: number;
     cors_allowed_origins: string[];
-  };
-  logging: {
-    default_level: string;
   };
   cookie: {
     same_site: string;
