@@ -98,7 +98,7 @@ pub async fn start_relay_mode(config: Config) -> Result<()> {
     info!("Starting relay mode, connecting to {}", RELAY_SERVER);
     let token = relay_token(config)?;
 
-    reconnect_loop(&token).await
+    Box::pin(reconnect_loop(&token)).await
 }
 
 fn relay_token(config: Config) -> Result<String> {
@@ -111,7 +111,7 @@ fn relay_token(config: Config) -> Result<String> {
 
 async fn reconnect_loop(token: &str) -> Result<()> {
     loop {
-        match connect_and_run(token).await {
+        match Box::pin(connect_and_run(token)).await {
             Ok(()) => {
                 info!("Relay connection closed normally");
                 break;
@@ -142,7 +142,7 @@ async fn connect_and_run(token: &str) -> Result<()> {
     let keepalive_task = spawn_keepalive(tx.clone());
     let streams = Arc::new(Mutex::new(HashMap::new()));
 
-    relay_read_loop(&mut read, &tx, streams.clone()).await;
+    Box::pin(relay_read_loop(&mut read, &tx, streams.clone())).await;
 
     close_active_streams(streams).await;
     keepalive_task.abort();
@@ -211,7 +211,7 @@ async fn relay_read_loop(
     while let Some(msg) = read.next().await {
         match msg {
             Ok(Message::Text(text)) => {
-                if let Err(e) = handle_message(&text, tx, streams.clone()).await {
+                if let Err(e) = Box::pin(handle_message(&text, tx, streams.clone())).await {
                     error!("Error handling message: {}", e);
                 }
             }
@@ -259,7 +259,7 @@ async fn handle_message(
         } => {
             info!("Received command: {} (id: {})", command, id);
 
-            let response = match execute_command(&command, payload).await {
+            let response = match Box::pin(execute_command(&command, payload)).await {
                 Ok(data) => WsMessage::Response {
                     id,
                     success: true,
@@ -603,7 +603,7 @@ async fn execute_command(command: &str, payload: serde_json::Value) -> Result<se
             let docker = bollard::Docker::connect_with_local_defaults()
                 .wrap_err("Failed to connect to local Docker daemon")?;
             let registry = RuleRegistry::new();
-            let outcome = registry.fix_request(&payload, &docker).await?;
+            let outcome = Box::pin(registry.fix_request(&payload, &docker)).await?;
             serde_json::to_value(outcome).wrap_err("Failed to serialize fix outcome")
         }
         "docker" => relay_docker::execute(payload).await,

@@ -102,7 +102,7 @@ async fn main() -> eyre::Result<()> {
         Commands::Update(args) => cli::run_update(args)?,
         Commands::Uninstall(args) => cli::run_uninstall(args)?,
         Commands::Serve => {
-            cli::run_serve().await?;
+            Box::pin(cli::run_serve()).await?;
         }
     }
 

@@ -9,7 +9,7 @@ pub async fn apply_fix(
 ) -> ApiResult<FixOutcome> {
     let registry = RuleRegistry::new();
 
-    match registry.fix_request(&payload, &state.docker).await {
+    match Box::pin(registry.fix_request(&payload, &state.docker)).await {
         Ok(outcome) => Ok(ApiSuccess::default()
             .with_message("Remediation handled")
             .with_data(outcome)),

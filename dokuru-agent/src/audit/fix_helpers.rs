@@ -1,6 +1,13 @@
 /// Shared helpers for `fix_fn` implementations
 use crate::audit::types::{FixOutcome, FixStatus, FixTarget};
-use bollard::{Docker, container::UpdateContainerOptions, models::ContainerSummary};
+use bollard::{
+    Docker,
+    container::{
+        Config, CreateContainerOptions, RemoveContainerOptions, StartContainerOptions,
+        StopContainerOptions, UpdateContainerOptions,
+    },
+    models::ContainerSummary,
+};
 use std::fmt::Write as _;
 use tokio::process::Command;
 
@@ -265,6 +272,170 @@ async fn container_label(docker: &Docker, id: &str) -> String {
 
 fn short_id(id: &str) -> String {
     id.chars().take(12).collect()
+}
+
+pub fn supports_namespace_fix(rule_id: &str) -> bool {
+    matches!(rule_id, "5.10" | "5.16" | "5.17" | "5.21" | "5.31")
+}
+
+/// Stop → remove → recreate (with namespace isolation fixed) → start all violating containers.
+pub async fn apply_namespace_fix(docker: &Docker, rule_id: &str) -> eyre::Result<FixOutcome> {
+    if !supports_namespace_fix(rule_id) {
+        return Ok(blocked(
+            rule_id,
+            "Namespace fix only supports rules 5.10, 5.16, 5.17, 5.21, 5.31",
+        ));
+    }
+
+    let containers = docker.list_containers::<String>(None).await?;
+    let mut updated: Vec<String> = Vec::new();
+    let mut failed: Vec<String> = Vec::new();
+
+    for c in &containers {
+        let id = c.id.as_deref().unwrap_or("");
+        let inspect = match docker.inspect_container(id, None).await {
+            Ok(i) => i,
+            Err(e) => {
+                failed.push(format!("{}: inspect failed: {e}", short_id(id)));
+                continue;
+            }
+        };
+
+        let hc = inspect.host_config.as_ref();
+        let violates = match rule_id {
+            "5.10" => hc.and_then(|h| h.network_mode.as_deref()) == Some("host"),
+            "5.16" => hc.and_then(|h| h.pid_mode.as_deref()) == Some("host"),
+            "5.17" => hc.and_then(|h| h.ipc_mode.as_deref()) == Some("host"),
+            "5.21" => hc.and_then(|h| h.uts_mode.as_deref()) == Some("host"),
+            "5.31" => hc.and_then(|h| h.userns_mode.as_deref()) == Some("host"),
+            _ => false,
+        };
+
+        if !violates {
+            continue;
+        }
+
+        let label = inspect
+            .name
+            .as_deref()
+            .unwrap_or("")
+            .trim_start_matches('/')
+            .to_string();
+        let label = if label.is_empty() {
+            short_id(id)
+        } else {
+            label
+        };
+
+        match recreate_without_namespace(docker, id, inspect, rule_id).await {
+            Ok(()) => updated.push(label),
+            Err(e) => failed.push(format!("{label}: {e}")),
+        }
+    }
+
+    if updated.is_empty() && failed.is_empty() {
+        return Ok(FixOutcome {
+            rule_id: rule_id.to_string(),
+            status: FixStatus::Applied,
+            message: "No containers needed namespace isolation fix".to_string(),
+            requires_restart: false,
+            restart_command: None,
+            requires_elevation: false,
+        });
+    }
+
+    let mut message = format!(
+        "Recreated {} container(s) with isolated namespace",
+        updated.len()
+    );
+    if !updated.is_empty() {
+        let _ = write!(message, ": {}", updated.join(", "));
+    }
+    if !failed.is_empty() {
+        let _ = write!(message, ". Failed {}: {}", failed.len(), failed.join("; "));
+    }
+
+    Ok(FixOutcome {
+        rule_id: rule_id.to_string(),
+        status: if updated.is_empty() && !failed.is_empty() {
+            FixStatus::Blocked
+        } else {
+            FixStatus::Applied
+        },
+        message,
+        requires_restart: false,
+        restart_command: None,
+        requires_elevation: false,
+    })
+}
+
+async fn recreate_without_namespace(
+    docker: &Docker,
+    id: &str,
+    inspect: bollard::models::ContainerInspectResponse,
+    rule_id: &str,
+) -> eyre::Result<()> {
+    let name = inspect
+        .name
+        .as_deref()
+        .unwrap_or("")
+        .trim_start_matches('/')
+        .to_string();
+
+    let container_config = inspect
+        .config
+        .ok_or_else(|| eyre::eyre!("missing container config"))?;
+
+    let mut host_config = inspect.host_config.unwrap_or_default();
+
+    // Apply the specific namespace isolation fix
+    match rule_id {
+        "5.10" => host_config.network_mode = Some("bridge".to_string()),
+        "5.16" => host_config.pid_mode = Some(String::new()),
+        "5.17" => host_config.ipc_mode = Some("private".to_string()),
+        "5.21" => host_config.uts_mode = Some(String::new()),
+        "5.31" => host_config.userns_mode = Some(String::new()),
+        _ => {}
+    }
+
+    // Stop with 10s grace period
+    docker
+        .stop_container(id, Some(StopContainerOptions { t: 10 }))
+        .await?;
+
+    // Remove (keep volumes)
+    docker
+        .remove_container(
+            id,
+            Some(RemoveContainerOptions {
+                v: false,
+                force: false,
+                link: false,
+            }),
+        )
+        .await?;
+
+    // Reconstruct Config<String> from the inspect result
+    let mut create_config: Config<String> = container_config.into();
+    create_config.host_config = Some(host_config);
+
+    let opts = if name.is_empty() {
+        None
+    } else {
+        Some(CreateContainerOptions {
+            name: name.clone(),
+            platform: None,
+        })
+    };
+
+    let created = docker.create_container(opts, create_config).await?;
+
+    let start_target = if name.is_empty() { created.id } else { name };
+    docker
+        .start_container(&start_target, None::<StartContainerOptions<String>>)
+        .await?;
+
+    Ok(())
 }
 
 /// Merge a key into /etc/docker/daemon.json, creating the file if needed.

@@ -27,7 +27,7 @@ pub async fn serve() -> eyre::Result<()> {
     // Check if relay mode
     if config.access.mode == AccessMode::Relay {
         info!("Starting in relay mode");
-        return relay::start_relay_mode(config).await;
+        return Box::pin(relay::start_relay_mode(config)).await;
     }
 
     run_local_api(config).await

@@ -213,6 +213,14 @@ impl RuleRegistry {
             .await;
         }
 
+        if super::fix_helpers::supports_namespace_fix(&request.rule_id) {
+            return Box::pin(super::fix_helpers::apply_namespace_fix(
+                docker,
+                &request.rule_id,
+            ))
+            .await;
+        }
+
         if !request.targets.is_empty() {
             return Ok(FixOutcome {
                 rule_id: request.rule_id.clone(),

@@ -246,10 +246,16 @@ If specific kernel capabilities are required, grant only the minimum capability 
                 })
             },
 
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|docker| {
+                let docker = docker.clone();
+                Box::pin(async move {
+                    Box::pin(fix_helpers::apply_namespace_fix(&docker, "5.10")).await
+                })
+            }),
             remediation_guide: r#"Do not pass --network=host when starting containers.
 Use the default bridge network or a custom user-defined network instead.
+Dokuru will stop, recreate and restart the container without --network=host.
 
 Example (correct):
   docker run -p 8080:80 nginx
@@ -613,10 +619,16 @@ Or in docker-compose.yml:
                 })
             },
 
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|docker| {
+                let docker = docker.clone();
+                Box::pin(async move {
+                    Box::pin(fix_helpers::apply_namespace_fix(&docker, "5.16")).await
+                })
+            }),
             remediation_guide: r#"Do not pass --pid=host when starting containers.
 By default containers get their own isolated PID namespace.
+Dokuru will stop, recreate and restart the container without --pid=host.
 
 Example (incorrect — avoid):
   docker run --pid=host nginx
@@ -728,10 +740,16 @@ To inspect processes in a container, use docker exec instead:
                 })
             },
 
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|docker| {
+                let docker = docker.clone();
+                Box::pin(async move {
+                    Box::pin(fix_helpers::apply_namespace_fix(&docker, "5.17")).await
+                })
+            }),
             remediation_guide: r#"Do not pass --ipc=host when starting containers.
 Use private IPC namespace (default) or shareable between specific containers.
+Dokuru will stop, recreate and restart the container with --ipc=private.
 
 Example (incorrect — avoid):
   docker run --ipc=host nginx
@@ -844,9 +862,15 @@ Example (acceptable for inter-container sharing):
                 })
             },
 
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|docker| {
+                let docker = docker.clone();
+                Box::pin(async move {
+                    Box::pin(fix_helpers::apply_namespace_fix(&docker, "5.21")).await
+                })
+            }),
             remediation_guide: r#"Do not pass --uts=host when starting containers.
+Dokuru will stop, recreate and restart the container without --uts=host.
 
 Example (incorrect — avoid):
   docker run --uts=host nginx
@@ -1207,10 +1231,16 @@ A reasonable value for most workloads is 50-200."#.into(),
                 })
             },
 
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|docker| {
+                let docker = docker.clone();
+                Box::pin(async move {
+                    Box::pin(fix_helpers::apply_namespace_fix(&docker, "5.31")).await
+                })
+            }),
             remediation_guide: r#"Do not pass --userns=host when starting containers.
 This flag disables user namespace remapping and gives the container root = host root.
+Dokuru will stop, recreate and restart the container without --userns=host.
 
 Example (incorrect — avoid):
   docker run --userns=host nginx
