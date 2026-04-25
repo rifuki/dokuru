@@ -1,13 +1,16 @@
-use eyre::Result;
+use eyre::{Result, eyre};
 use sqlx::PgPool;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::feature::{agent::AgentResponse, user::User};
+use crate::feature::{agent::AgentResponse, auth::Role, user::User};
 
 use super::{
     catalog::NotificationKind,
-    dto::{ListNotificationsQuery, NotificationResponse},
+    dto::{
+        ListNotificationsQuery, NotificationKindSummaryResponse, NotificationPreferenceResponse,
+        NotificationResponse, NotificationSummaryResponse,
+    },
     repository::{CreateNotification, NotificationRepository},
 };
 
@@ -56,6 +59,84 @@ impl NotificationService {
         self.repo.unread_count(pool, user_id).await
     }
 
+    pub async fn summary_for_user(
+        &self,
+        pool: &PgPool,
+        user_id: Uuid,
+    ) -> Result<NotificationSummaryResponse> {
+        let kinds = self
+            .repo
+            .summary_for_user(pool, user_id)
+            .await?
+            .into_iter()
+            .map(NotificationKindSummaryResponse::from)
+            .collect::<Vec<_>>();
+        let total = kinds.iter().map(|kind| kind.total).sum();
+        let unread = kinds.iter().map(|kind| kind.unread).sum();
+
+        Ok(NotificationSummaryResponse {
+            total,
+            unread,
+            kinds,
+        })
+    }
+
+    pub async fn list_preferences(
+        &self,
+        pool: &PgPool,
+        user_id: Uuid,
+        roles: &[Role],
+    ) -> Result<Vec<NotificationPreferenceResponse>> {
+        let include_admin = roles.contains(&Role::Admin);
+        let explicit_preferences = self.repo.list_preferences(pool, user_id).await?;
+
+        Ok(NotificationKind::all()
+            .iter()
+            .copied()
+            .filter(|kind| include_admin || !kind.is_admin())
+            .map(|kind| {
+                let enabled = if kind.is_configurable() {
+                    explicit_preferences
+                        .iter()
+                        .find(|preference| preference.kind == kind.as_str())
+                        .is_none_or(|preference| preference.enabled)
+                } else {
+                    true
+                };
+
+                NotificationPreferenceResponse::new(kind, enabled)
+            })
+            .collect())
+    }
+
+    pub async fn set_preference(
+        &self,
+        pool: &PgPool,
+        user_id: Uuid,
+        roles: &[Role],
+        kind: NotificationKind,
+        enabled: bool,
+    ) -> Result<NotificationPreferenceResponse> {
+        Self::ensure_kind_visible_to_user(kind, roles)?;
+        if !kind.is_configurable() {
+            return Err(eyre!("This notification preference cannot be changed"));
+        }
+
+        let preference = self
+            .repo
+            .set_preference(pool, user_id, kind.as_str(), enabled)
+            .await?;
+
+        Ok(NotificationPreferenceResponse::new(
+            kind,
+            preference.enabled,
+        ))
+    }
+
+    pub async fn reset_preferences(&self, pool: &PgPool, user_id: Uuid) -> Result<u64> {
+        self.repo.reset_preferences(pool, user_id).await
+    }
+
     pub async fn mark_read(
         &self,
         pool: &PgPool,
@@ -79,6 +160,13 @@ impl NotificationService {
         user_id: Uuid,
         payload: NotificationPayload<'_>,
     ) -> Result<()> {
+        if !self
+            .should_deliver_to_user(pool, user_id, payload.kind)
+            .await?
+        {
+            return Ok(());
+        }
+
         self.repo
             .create(
                 pool,
@@ -92,6 +180,29 @@ impl NotificationService {
                 },
             )
             .await?;
+        Ok(())
+    }
+
+    async fn should_deliver_to_user(
+        &self,
+        pool: &PgPool,
+        user_id: Uuid,
+        kind: &str,
+    ) -> Result<bool> {
+        if NotificationKind::from_str(kind).is_some_and(|kind| !kind.is_configurable()) {
+            return Ok(true);
+        }
+
+        self.repo.is_preference_enabled(pool, user_id, kind).await
+    }
+
+    fn ensure_kind_visible_to_user(kind: NotificationKind, roles: &[Role]) -> Result<()> {
+        if kind.is_admin() && !roles.contains(&Role::Admin) {
+            return Err(eyre!(
+                "Admin notification preferences require an admin account"
+            ));
+        }
+
         Ok(())
     }
 
@@ -338,9 +449,12 @@ mod tests {
     use async_trait::async_trait;
     use chrono::Utc;
     use sqlx::PgPool;
+    use std::collections::HashMap;
     use std::sync::Mutex;
 
-    use crate::feature::notification::entity::Notification;
+    use crate::feature::notification::entity::{
+        Notification, NotificationPreference, NotificationSummaryRow,
+    };
 
     #[derive(Clone, Debug, Eq, PartialEq)]
     struct ListCall {
@@ -356,9 +470,11 @@ mod tests {
         created: Mutex<Vec<Notification>>,
         list_calls: Mutex<Vec<ListCall>>,
         list_result: Mutex<Vec<Notification>>,
+        summary_result: Mutex<Vec<NotificationSummaryRow>>,
         mark_read_result: Mutex<Option<Notification>>,
         mark_all_result: Mutex<u64>,
         unread_count_result: Mutex<i64>,
+        preferences: Mutex<HashMap<(Uuid, String), bool>>,
     }
 
     impl FakeNotificationRepository {
@@ -390,6 +506,13 @@ mod tests {
                 .expect("list result lock should not be poisoned") = notifications;
         }
 
+        fn set_summary_result(&self, rows: Vec<NotificationSummaryRow>) {
+            *self
+                .summary_result
+                .lock()
+                .expect("summary result lock should not be poisoned") = rows;
+        }
+
         fn set_mark_read_result(&self, notification: Option<Notification>) {
             *self
                 .mark_read_result
@@ -409,6 +532,22 @@ mod tests {
                 .unread_count_result
                 .lock()
                 .expect("unread count result lock should not be poisoned") = count;
+        }
+
+        fn seed_preference(&self, user_id: Uuid, kind: NotificationKind, enabled: bool) {
+            self.preferences
+                .lock()
+                .expect("preference lock should not be poisoned")
+                .insert((user_id, kind.as_str().to_owned()), enabled);
+        }
+
+        fn preference_enabled_for(&self, user_id: Uuid, kind: &str) -> bool {
+            self.preferences
+                .lock()
+                .expect("preference lock should not be poisoned")
+                .get(&(user_id, kind.to_owned()))
+                .copied()
+                .unwrap_or(true)
         }
     }
 
@@ -451,6 +590,7 @@ mod tests {
             let notifications = self
                 .admin_ids
                 .iter()
+                .filter(|user_id| self.preference_enabled_for(**user_id, kind))
                 .map(|user_id| Notification {
                     id: Uuid::new_v4(),
                     user_id: *user_id,
@@ -502,6 +642,79 @@ mod tests {
                 .unread_count_result
                 .lock()
                 .expect("unread count result lock should not be poisoned"))
+        }
+
+        async fn summary_for_user(
+            &self,
+            _pool: &PgPool,
+            _user_id: Uuid,
+        ) -> Result<Vec<NotificationSummaryRow>> {
+            Ok(self
+                .summary_result
+                .lock()
+                .expect("summary result lock should not be poisoned")
+                .clone())
+        }
+
+        async fn list_preferences(
+            &self,
+            _pool: &PgPool,
+            user_id: Uuid,
+        ) -> Result<Vec<NotificationPreference>> {
+            Ok(self
+                .preferences
+                .lock()
+                .expect("preference lock should not be poisoned")
+                .iter()
+                .filter(|((preference_user_id, _), _)| *preference_user_id == user_id)
+                .map(
+                    |((preference_user_id, kind), enabled)| NotificationPreference {
+                        user_id: *preference_user_id,
+                        kind: kind.clone(),
+                        enabled: *enabled,
+                        updated_at: Utc::now(),
+                    },
+                )
+                .collect())
+        }
+
+        async fn set_preference(
+            &self,
+            _pool: &PgPool,
+            user_id: Uuid,
+            kind: &str,
+            enabled: bool,
+        ) -> Result<NotificationPreference> {
+            self.preferences
+                .lock()
+                .expect("preference lock should not be poisoned")
+                .insert((user_id, kind.to_owned()), enabled);
+
+            Ok(NotificationPreference {
+                user_id,
+                kind: kind.to_owned(),
+                enabled,
+                updated_at: Utc::now(),
+            })
+        }
+
+        async fn reset_preferences(&self, _pool: &PgPool, user_id: Uuid) -> Result<u64> {
+            let mut preferences = self
+                .preferences
+                .lock()
+                .expect("preference lock should not be poisoned");
+            let before = preferences.len();
+            preferences.retain(|(key_user_id, _), _| *key_user_id != user_id);
+            Ok((before - preferences.len()) as u64)
+        }
+
+        async fn is_preference_enabled(
+            &self,
+            _pool: &PgPool,
+            user_id: Uuid,
+            kind: &str,
+        ) -> Result<bool> {
+            Ok(self.preference_enabled_for(user_id, kind))
         }
 
         async fn mark_read(
@@ -732,6 +945,199 @@ mod tests {
             .expect("fake repository should return the marked notification");
         assert_eq!(marked.id, notification_id);
         assert_eq!(marked.kind, "security.password_changed");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn summary_rolls_up_totals_and_catalog_metadata() -> Result<()> {
+        let pool = lazy_pool();
+        let user_id = Uuid::new_v4();
+        let repo = Arc::new(FakeNotificationRepository::default());
+        repo.set_summary_result(vec![
+            NotificationSummaryRow {
+                kind: NotificationKind::AuditCompleted.as_str().to_owned(),
+                total: 4,
+                unread: 1,
+                latest_at: Some(Utc::now()),
+            },
+            NotificationSummaryRow {
+                kind: "legacy.custom_event".to_owned(),
+                total: 2,
+                unread: 2,
+                latest_at: None,
+            },
+        ]);
+        let service = NotificationService::new(repo);
+
+        let summary = service.summary_for_user(&pool, user_id).await?;
+
+        assert_eq!(summary.total, 6);
+        assert_eq!(summary.unread, 3);
+        assert_eq!(summary.kinds.len(), 2);
+
+        let audit = summary
+            .kinds
+            .iter()
+            .find(|kind| kind.kind == "audit.completed")
+            .expect("known audit kind should be present");
+        assert!(audit.known);
+        assert_eq!(audit.audience, Some("user"));
+        assert_eq!(audit.severity, Some("success"));
+        assert_eq!(audit.target_hint, Some("agent/audits"));
+
+        let legacy = summary
+            .kinds
+            .iter()
+            .find(|kind| kind.kind == "legacy.custom_event")
+            .expect("unknown legacy kind should still be summarized");
+        assert!(!legacy.known);
+        assert_eq!(legacy.audience, None);
+        assert_eq!(legacy.severity, None);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn preferences_list_defaults_and_role_visible_kinds() -> Result<()> {
+        let pool = lazy_pool();
+        let user_id = Uuid::new_v4();
+        let repo = Arc::new(FakeNotificationRepository::default());
+        repo.seed_preference(user_id, NotificationKind::AuditCompleted, false);
+        repo.seed_preference(user_id, NotificationKind::SystemBootstrap, false);
+        let service = NotificationService::new(repo);
+
+        let user_preferences = service
+            .list_preferences(&pool, user_id, &[Role::User])
+            .await?;
+        assert!(user_preferences.iter().all(|preference| {
+            NotificationKind::from_str(&preference.kind).is_some_and(|kind| !kind.is_admin())
+        }));
+        assert!(
+            user_preferences
+                .iter()
+                .any(|preference| preference.kind == "audit.completed"
+                    && !preference.enabled
+                    && preference.configurable)
+        );
+        assert!(
+            user_preferences
+                .iter()
+                .any(|preference| preference.kind == "system.bootstrap"
+                    && preference.enabled
+                    && !preference.configurable)
+        );
+
+        let admin_preferences = service
+            .list_preferences(&pool, user_id, &[Role::Admin])
+            .await?;
+        assert!(admin_preferences.len() > user_preferences.len());
+        assert!(
+            admin_preferences
+                .iter()
+                .any(|preference| preference.kind == "admin.audit_completed")
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn preference_updates_validate_role_and_critical_kinds() -> Result<()> {
+        let pool = lazy_pool();
+        let user_id = Uuid::new_v4();
+        let repo = Arc::new(FakeNotificationRepository::default());
+        let service = NotificationService::new(repo);
+
+        let preference = service
+            .set_preference(
+                &pool,
+                user_id,
+                &[Role::User],
+                NotificationKind::AuditCompleted,
+                false,
+            )
+            .await?;
+        assert_eq!(preference.kind, "audit.completed");
+        assert!(!preference.enabled);
+
+        let admin_result = service
+            .set_preference(
+                &pool,
+                user_id,
+                &[Role::User],
+                NotificationKind::AdminAuditCompleted,
+                false,
+            )
+            .await;
+        assert!(admin_result.is_err());
+
+        let critical_result = service
+            .set_preference(
+                &pool,
+                user_id,
+                &[Role::User],
+                NotificationKind::SecurityPasswordChanged,
+                false,
+            )
+            .await;
+        assert!(critical_result.is_err());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn muted_user_notifications_are_not_persisted() -> Result<()> {
+        let pool = lazy_pool();
+        let user_id = Uuid::new_v4();
+        let agent = agent_response(Uuid::new_v4(), "muted-agent");
+        let repo = Arc::new(FakeNotificationRepository::default());
+        repo.seed_preference(user_id, NotificationKind::AgentCreated, false);
+        let service = NotificationService::new(repo.clone());
+
+        service.notify_agent_created(&pool, user_id, &agent).await?;
+
+        assert!(
+            repo.created()
+                .iter()
+                .all(|notification| notification.kind != "agent.created")
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn critical_notifications_ignore_muted_preferences() -> Result<()> {
+        let pool = lazy_pool();
+        let user_id = Uuid::new_v4();
+        let repo = Arc::new(FakeNotificationRepository::default());
+        repo.seed_preference(user_id, NotificationKind::SecurityPasswordChanged, false);
+        let service = NotificationService::new(repo.clone());
+
+        service.notify_password_changed(&pool, user_id).await?;
+
+        assert!(repo.created().iter().any(|notification| {
+            notification.user_id == user_id && notification.kind == "security.password_changed"
+        }));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn reset_preferences_deletes_user_overrides() -> Result<()> {
+        let pool = lazy_pool();
+        let user_id = Uuid::new_v4();
+        let other_user_id = Uuid::new_v4();
+        let repo = Arc::new(FakeNotificationRepository::default());
+        repo.seed_preference(user_id, NotificationKind::AuditCompleted, false);
+        repo.seed_preference(user_id, NotificationKind::AgentCreated, false);
+        repo.seed_preference(other_user_id, NotificationKind::AuditCompleted, false);
+        let service = NotificationService::new(repo.clone());
+
+        assert_eq!(service.reset_preferences(&pool, user_id).await?, 2);
+        assert!(repo.preference_enabled_for(user_id, NotificationKind::AuditCompleted.as_str()));
+        assert!(
+            !repo.preference_enabled_for(other_user_id, NotificationKind::AuditCompleted.as_str())
+        );
 
         Ok(())
     }

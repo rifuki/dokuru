@@ -4,11 +4,30 @@ pub enum NotificationAudience {
     Admin,
 }
 
+impl NotificationAudience {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::Admin => "admin",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NotificationSeverity {
     Info,
     Success,
     Warning,
+}
+
+impl NotificationSeverity {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Info => "info",
+            Self::Success => "success",
+            Self::Warning => "warning",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -88,6 +107,13 @@ impl NotificationKind {
 
     pub const fn is_admin(self) -> bool {
         matches!(self.audience(), NotificationAudience::Admin)
+    }
+
+    pub const fn is_configurable(self) -> bool {
+        !matches!(
+            self,
+            Self::SecurityPasswordChanged | Self::AdminPasswordChanged | Self::SystemBootstrap
+        )
     }
 
     pub const fn audience(self) -> NotificationAudience {
@@ -209,6 +235,24 @@ mod tests {
             NotificationKind::AdminPasswordChanged.severity(),
             NotificationSeverity::Warning
         );
+    }
+
+    #[test]
+    fn critical_security_and_bootstrap_events_cannot_be_disabled() {
+        assert!(!NotificationKind::SecurityPasswordChanged.is_configurable());
+        assert!(!NotificationKind::AdminPasswordChanged.is_configurable());
+        assert!(!NotificationKind::SystemBootstrap.is_configurable());
+        assert!(NotificationKind::AuditCompleted.is_configurable());
+        assert!(NotificationKind::AdminAuditCompleted.is_configurable());
+    }
+
+    #[test]
+    fn audience_and_severity_labels_are_api_stable() {
+        assert_eq!(NotificationAudience::User.as_str(), "user");
+        assert_eq!(NotificationAudience::Admin.as_str(), "admin");
+        assert_eq!(NotificationSeverity::Info.as_str(), "info");
+        assert_eq!(NotificationSeverity::Success.as_str(), "success");
+        assert_eq!(NotificationSeverity::Warning.as_str(), "warning");
     }
 
     #[test]

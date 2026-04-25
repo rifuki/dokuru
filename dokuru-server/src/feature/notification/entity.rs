@@ -15,3 +15,19 @@ pub struct Notification {
     pub read_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
 }
+
+#[derive(Debug, Clone, FromRow, Serialize)]
+pub struct NotificationPreference {
+    pub user_id: Uuid,
+    pub kind: String,
+    pub enabled: bool,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize)]
+pub struct NotificationSummaryRow {
+    pub kind: String,
+    pub total: i64,
+    pub unread: i64,
+    pub latest_at: Option<DateTime<Utc>>,
+}
