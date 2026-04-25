@@ -23,7 +23,7 @@ env:
   REGISTRY: ghcr.io
   SERVER_IMAGE_NAME: ${{ github.repository_owner }}/dokuru-server
   MIGRATE_IMAGE_NAME: ${{ github.repository_owner }}/dokuru-server-migrate
-  PLATFORMS: linux/amd64,linux/arm64
+  PLATFORMS: linux/amd64
 
 permissions:
   contents: read
