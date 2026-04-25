@@ -6,12 +6,14 @@ on:
       - main
     paths:
       - 'dokuru-server/**'
+      - 'dokuru-core/**'
       - 'docker-compose.yaml'
       - '.github/workflows/build-server.yaml'
       - '.github/workflows/deploy-compose-service.yaml'
   pull_request:
     paths:
       - 'dokuru-server/**'
+      - 'dokuru-core/**'
       - 'docker-compose.yaml'
       - '.github/workflows/build-server.yaml'
       - '.github/workflows/deploy-compose-service.yaml'
@@ -74,7 +76,7 @@ jobs:
       - name: Build and push server image
         uses: docker/build-push-action@v6
         with:
-          context: dokuru-server
+          context: .
           file: dokuru-server/Dockerfile
           platforms: ${{ env.PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}

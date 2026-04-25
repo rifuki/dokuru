@@ -11,7 +11,9 @@ WORKDIR /app
 # Planner — generate recipe.json from Cargo manifests
 # =============================================================================
 FROM chef AS planner
-COPY . .
+COPY dokuru-server ./dokuru-server
+COPY dokuru-core ./dokuru-core
+WORKDIR /app/dokuru-server
 RUN cargo chef prepare --recipe-path recipe.json
 
 # =============================================================================
@@ -20,11 +22,14 @@ RUN cargo chef prepare --recipe-path recipe.json
 FROM chef AS builder
 
 # Restore deps from cache — only re-runs when Cargo.toml/Cargo.lock changes
-COPY --from=planner /app/recipe.json recipe.json
+COPY --from=planner /app/dokuru-server/recipe.json /app/dokuru-server/recipe.json
+COPY dokuru-core /app/dokuru-core
+WORKDIR /app/dokuru-server
 RUN cargo chef cook --release --recipe-path recipe.json
 
 # Build the actual binary
-COPY . .
+COPY dokuru-server /app/dokuru-server
+COPY dokuru-core /app/dokuru-core
 ENV SQLX_OFFLINE=true
 RUN cargo build --release --bin dokuru-server
 
@@ -35,7 +40,7 @@ FROM scratch AS runtime
 
 WORKDIR /app
 
-COPY --from=builder /app/target/release/dokuru-server /app/dokuru-server
+COPY --from=builder /app/dokuru-server/target/release/dokuru-server /app/dokuru-server
 
 EXPOSE 9393
 
