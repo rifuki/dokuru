@@ -4,38 +4,6 @@ use leptos::{prelude::NodeRef, tachys::html::element::ElementType};
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 
 #[cfg(target_arch = "wasm32")]
-pub fn setup_reveals() {
-    let Some(window) = web_sys::window() else {
-        return;
-    };
-    let Some(document) = window.document() else {
-        return;
-    };
-    let Ok(Some(body)) = document.query_selector("body") else {
-        return;
-    };
-    let Ok(nodes) = document.query_selector_all(".reveal") else {
-        return;
-    };
-
-    let _ = body.class_list().add_1("dokuru-motion-ready");
-
-    for index in 0..nodes.length() {
-        let Some(node) = nodes.item(index) else {
-            continue;
-        };
-        let Ok(element) = node.dyn_into::<web_sys::Element>() else {
-            continue;
-        };
-
-        observe_reveal(element);
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-pub const fn setup_reveals() {}
-
-#[cfg(target_arch = "wasm32")]
 pub(crate) fn reveal_ref<E>() -> NodeRef<E>
 where
     E: ElementType,

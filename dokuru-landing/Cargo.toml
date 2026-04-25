@@ -3,16 +3,10 @@ name = "dokuru-landing"
 version = "0.1.0"
 edition = "2021"
 
-[features]
-default = ["csr"]
-csr = ["leptos/csr"]
-hydrate = ["leptos/hydrate"]
-ssr = ["leptos/ssr"]
-
 [dependencies]
 console_error_panic_hook = "0.1.7"
 console_log = "1.0.0"
-leptos = { version = "0.8.5", default-features = false }
+leptos = { version = "0.8.5", features = ["csr"] }
 log = "0.4.27"
 wasm-bindgen = "=0.2.100"
 js-sys = "=0.3.77"

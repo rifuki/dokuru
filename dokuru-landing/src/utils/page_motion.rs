@@ -2,13 +2,13 @@
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 
 #[cfg(target_arch = "wasm32")]
-pub fn setup_page_motion() {
+pub(crate) fn setup_page_motion() {
     schedule_hash_scroll();
     setup_active_hash_on_scroll();
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub const fn setup_page_motion() {}
+pub(crate) const fn setup_page_motion() {}
 
 #[cfg(target_arch = "wasm32")]
 fn schedule_hash_scroll() {
