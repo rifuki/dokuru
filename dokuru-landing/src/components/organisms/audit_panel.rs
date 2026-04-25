@@ -78,7 +78,7 @@ pub(crate) fn AuditPanel() -> impl IntoView {
 
                 <div class="flex items-center justify-between border-t border-white/5 pt-3 -mb-1">
                     <div class="font-mono text-[9px] uppercase tracking-[0.2em] text-zinc-600">"run · 2s ago"</div>
-                    <div class="inline-flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.2em] text-[#2496ED]">"apply auto-fixes (8)" <span>"→"</span></div>
+                    <div class="inline-flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.2em] text-[#2496ED]">"apply auto-fixes (9)" <span>"→"</span></div>
                 </div>
             </div>
         </div>

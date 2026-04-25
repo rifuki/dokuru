@@ -96,6 +96,38 @@ export function isNamespaceRecreateRule(ruleId: string): boolean {
     return ["5.5", "5.10", "5.16", "5.17", "5.21", "5.31"].includes(ruleId);
 }
 
+export function isCgroupRule(ruleId: string): boolean {
+    return ["5.11", "5.12", "5.29"].includes(ruleId);
+}
+
+export type ResourceSuggestion = {
+    memoryMb: number;
+    cpuShares: number;
+    pidsLimit: number;
+};
+
+export function getSuggestedLimits(name: string): ResourceSuggestion {
+    const n = name.toLowerCase();
+    if (n.includes("postgres") || n.includes("mysql") || n.includes("mariadb") || n.includes("pg"))
+        return { memoryMb: 512, cpuShares: 1024, pidsLimit: 200 };
+    if (n.includes("mongo"))
+        return { memoryMb: 512, cpuShares: 1024, pidsLimit: 200 };
+    if (n.includes("redis") || n.includes("memcached") || n.includes("cache"))
+        return { memoryMb: 128, cpuShares: 512, pidsLimit: 100 };
+    if (n.includes("node") || n.includes("next") || n.includes("nuxt") || n.includes("app"))
+        return { memoryMb: 512, cpuShares: 1024, pidsLimit: 200 };
+    if (n.includes("nginx") || n.includes("caddy") || n.includes("traefik") || n.includes("haproxy"))
+        return { memoryMb: 256, cpuShares: 512, pidsLimit: 100 };
+    return { memoryMb: 256, cpuShares: 512, pidsLimit: 100 };
+}
+
+export function formatCgroupSuggestion(ruleId: string, limits: ResourceSuggestion): string {
+    if (ruleId === "5.11") return `${limits.memoryMb} MB`;
+    if (ruleId === "5.12") return `${limits.cpuShares} shares`;
+    if (ruleId === "5.29") return `${limits.pidsLimit} PIDs`;
+    return "";
+}
+
 interface UseFixArgs {
     agentId: string;
     agentUrl: string;

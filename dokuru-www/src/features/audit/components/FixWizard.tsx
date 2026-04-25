@@ -9,7 +9,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AuditResult, FixOutcome } from "@/lib/api/agent-direct";
-import { getFixSteps, isNamespaceRecreateRule, type WizardStep } from "@/features/audit/hooks/useFix";
+import {
+    getFixSteps, isNamespaceRecreateRule, isCgroupRule,
+    getSuggestedLimits, formatCgroupSuggestion, type WizardStep,
+} from "@/features/audit/hooks/useFix";
 
 // ── Step indicator ────────────────────────────────────────────────────────────
 
@@ -90,6 +93,7 @@ function ConfirmStep({
     const steps = getFixSteps(rule.id);
     const isRecreate = isNamespaceRecreateRule(rule.id);
     const needsDaemonRestart = rule.id === "2.10";
+    const isCgroup = isCgroupRule(rule.id);
 
     return (
         <div className="flex flex-col gap-5">
@@ -114,23 +118,46 @@ function ConfirmStep({
             {/* Affected containers */}
             {affected.length > 0 && (
                 <div>
-                    <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/40 mb-2">
-                        Affected containers ({affected.length})
-                    </p>
-                    <div className="rounded-lg border border-white/8 bg-white/[0.02] overflow-hidden">
-                        {affected.map((name, i) => (
-                            <div
-                                key={i}
-                                className={cn(
-                                    "flex items-center gap-2.5 px-3 py-2 text-xs font-mono",
-                                    i < affected.length - 1 && "border-b border-white/5"
-                                )}
-                            >
-                                <Server className="h-3 w-3 text-white/30 shrink-0" />
-                                <span className="text-white/70">{name}</span>
-                            </div>
-                        ))}
+                    <div className="flex items-center justify-between mb-2">
+                        <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/40">
+                            Affected containers ({affected.length})
+                        </p>
+                        {isCgroup && (
+                            <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-[#2496ED]/60">
+                                suggested limit
+                            </p>
+                        )}
                     </div>
+                    <div className="rounded-lg border border-white/8 bg-white/[0.02] overflow-hidden">
+                        {affected.map((name, i) => {
+                            const suggestion = isCgroup ? getSuggestedLimits(name) : null;
+                            const label = suggestion ? formatCgroupSuggestion(rule.id, suggestion) : null;
+                            return (
+                                <div
+                                    key={i}
+                                    className={cn(
+                                        "flex items-center justify-between gap-2.5 px-3 py-2 text-xs font-mono",
+                                        i < affected.length - 1 && "border-b border-white/5"
+                                    )}
+                                >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                        <Server className="h-3 w-3 text-white/30 shrink-0" />
+                                        <span className="text-white/70 truncate">{name}</span>
+                                    </div>
+                                    {label && (
+                                        <span className="text-[#2496ED] text-[11px] shrink-0 ml-2">
+                                            → {label}
+                                        </span>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                    {isCgroup && (
+                        <p className="text-[10px] text-white/25 font-mono mt-1.5 pl-1">
+                            Values are estimates based on image name — agent applies safe defaults.
+                        </p>
+                    )}
                 </div>
             )}
 
