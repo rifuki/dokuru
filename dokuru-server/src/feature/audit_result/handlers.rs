@@ -112,7 +112,7 @@ pub async fn run_relay_fix(
         serde_json::json!({ "rule_id": dto.rule_id }),
     )
     .await
-    .map_err(relay_error_to_api_error)?;
+    .map_err(|error| relay_error_to_api_error(&error))?;
 
     let outcome = serde_json::from_value::<FixOutcomeResponse>(outcome_value).map_err(|error| {
         ApiError::default()
@@ -184,7 +184,7 @@ pub async fn relay_docker_request(
     .await
     {
         Ok(value) => value,
-        Err(error) => return relay_error_to_api_error(error).into_response(),
+        Err(error) => return relay_error_to_api_error(&error).into_response(),
     };
 
     let response = match serde_json::from_value::<RelayDockerResponse>(response_value) {
@@ -238,7 +238,7 @@ async fn run_relay_audit_command(
         serde_json::json!({}),
     )
     .await
-    .map_err(relay_error_to_api_error)?;
+    .map_err(|error| relay_error_to_api_error(&error))?;
 
     serde_json::from_value::<SaveAuditDto>(audit_value).map_err(|error| {
         ApiError::default()
@@ -284,7 +284,7 @@ async fn save_and_notify_audit(
     Ok(result)
 }
 
-fn relay_error_to_api_error(error: RelayCommandError) -> ApiError {
+fn relay_error_to_api_error(error: &RelayCommandError) -> ApiError {
     let status = match error {
         RelayCommandError::AgentOffline | RelayCommandError::Send | RelayCommandError::Dropped => {
             StatusCode::SERVICE_UNAVAILABLE

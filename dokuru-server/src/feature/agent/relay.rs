@@ -55,7 +55,7 @@ pub enum RelayCommandError {
     Command(String),
 }
 
-const RELAY_COMMAND_TIMEOUT: StdDuration = StdDuration::from_secs(180);
+const RELAY_COMMAND_TIMEOUT: StdDuration = StdDuration::from_mins(3);
 
 /// WebSocket message types
 #[derive(Debug, Serialize, Deserialize)]
