@@ -6,14 +6,23 @@ use bollard::{
         Config, CreateContainerOptions, RemoveContainerOptions, StartContainerOptions,
         StopContainerOptions, UpdateContainerOptions,
     },
-    models::ContainerSummary,
+    models::{ContainerInspectResponse, ContainerSummary},
 };
+use serde_yaml::{Mapping, Value};
+use std::collections::HashSet;
 use std::fmt::Write as _;
+use std::path::{Path, PathBuf};
 use tokio::process::Command;
 
 const DEFAULT_MEMORY_BYTES: i64 = 256 * 1024 * 1024;
 const DEFAULT_CPU_SHARES: i64 = 512;
 const DEFAULT_PIDS_LIMIT: i64 = 100;
+const COMPOSE_FILENAMES: &[&str] = &[
+    "compose.yaml",
+    "docker-compose.yaml",
+    "docker-compose.yml",
+    "compose.yml",
+];
 
 /// Run a shell command and return (stdout, stderr, success)
 pub async fn run_cmd(cmd: &str, args: &[&str]) -> std::io::Result<(String, String, bool)> {
@@ -291,6 +300,7 @@ pub async fn apply_privileged_fix(docker: &Docker, rule_id: &str) -> eyre::Resul
     let containers = docker.list_containers::<String>(None).await?;
     let mut updated: Vec<String> = Vec::new();
     let mut failed: Vec<String> = Vec::new();
+    let mut compose_services: HashSet<String> = HashSet::new();
 
     for c in &containers {
         let id = c.id.as_deref().unwrap_or("");
@@ -323,6 +333,17 @@ pub async fn apply_privileged_fix(docker: &Docker, rule_id: &str) -> eyre::Resul
         } else {
             label
         };
+
+        if let Some(ctx) = compose_context_from_inspect(&inspect) {
+            let key = ctx.key();
+            if compose_services.insert(key) {
+                match apply_compose_service_fix(docker, rule_id, &ctx).await {
+                    Ok(()) => updated.push(format!("{}:{} (compose)", ctx.project, ctx.service)),
+                    Err(e) => failed.push(format!("{label}: compose fix failed: {e}")),
+                }
+            }
+            continue;
+        }
 
         match recreate_without_privileged(docker, id, inspect).await {
             Ok(()) => updated.push(label),
@@ -434,6 +455,7 @@ pub async fn apply_namespace_fix(docker: &Docker, rule_id: &str) -> eyre::Result
     let containers = docker.list_containers::<String>(None).await?;
     let mut updated: Vec<String> = Vec::new();
     let mut failed: Vec<String> = Vec::new();
+    let mut compose_services: HashSet<String> = HashSet::new();
 
     for c in &containers {
         let id = c.id.as_deref().unwrap_or("");
@@ -470,6 +492,17 @@ pub async fn apply_namespace_fix(docker: &Docker, rule_id: &str) -> eyre::Result
         } else {
             label
         };
+
+        if let Some(ctx) = compose_context_from_inspect(&inspect) {
+            let key = ctx.key();
+            if compose_services.insert(key) {
+                match apply_compose_service_fix(docker, rule_id, &ctx).await {
+                    Ok(()) => updated.push(format!("{}:{} (compose)", ctx.project, ctx.service)),
+                    Err(e) => failed.push(format!("{label}: compose fix failed: {e}")),
+                }
+            }
+            continue;
+        }
 
         match recreate_without_namespace(docker, id, inspect, rule_id).await {
             Ok(()) => updated.push(label),
@@ -516,7 +549,7 @@ pub async fn apply_namespace_fix(docker: &Docker, rule_id: &str) -> eyre::Result
 async fn recreate_without_namespace(
     docker: &Docker,
     id: &str,
-    inspect: bollard::models::ContainerInspectResponse,
+    inspect: ContainerInspectResponse,
     rule_id: &str,
 ) -> eyre::Result<()> {
     let name = inspect
@@ -582,6 +615,293 @@ async fn recreate_without_namespace(
     Ok(())
 }
 
+#[derive(Clone, Debug)]
+struct ComposeContext {
+    project: String,
+    service: String,
+    working_dir: Option<PathBuf>,
+    config_files: Option<String>,
+}
+
+impl ComposeContext {
+    fn key(&self) -> String {
+        format!("{}:{}", self.project, self.service)
+    }
+}
+
+fn compose_context_from_inspect(inspect: &ContainerInspectResponse) -> Option<ComposeContext> {
+    let labels = inspect.config.as_ref()?.labels.as_ref()?;
+    Some(ComposeContext {
+        project: labels.get("com.docker.compose.project")?.clone(),
+        service: labels.get("com.docker.compose.service")?.clone(),
+        working_dir: labels
+            .get("com.docker.compose.project.working_dir")
+            .map(PathBuf::from),
+        config_files: labels
+            .get("com.docker.compose.project.config_files")
+            .cloned(),
+    })
+}
+
+async fn apply_compose_service_fix(
+    docker: &Docker,
+    rule_id: &str,
+    ctx: &ComposeContext,
+) -> eyre::Result<()> {
+    let compose_paths = resolve_compose_files(ctx).await?;
+    let mut update: Option<(PathBuf, Value)> = None;
+    let mut skipped = Vec::new();
+
+    for compose_path in &compose_paths {
+        let content = tokio::fs::read_to_string(compose_path).await?;
+        let mut document: Value = serde_yaml::from_str(&content)?;
+
+        match update_compose_document(&mut document, &ctx.service, rule_id) {
+            Ok(true) => {
+                update = Some((compose_path.clone(), document));
+                break;
+            }
+            Ok(false) => skipped.push(format!(
+                "{}: service setting not present",
+                compose_path.display()
+            )),
+            Err(error) => skipped.push(format!("{}: {error}", compose_path.display())),
+        }
+    }
+
+    let Some((compose_path, document)) = update else {
+        return Err(eyre::eyre!(
+            "compose service '{}' does not declare the setting required for rule {} ({})",
+            ctx.service,
+            rule_id,
+            skipped.join("; ")
+        ));
+    };
+
+    let backup_path = compose_backup_path(&compose_path);
+    tokio::fs::copy(&compose_path, &backup_path).await?;
+    tokio::fs::write(&compose_path, serde_yaml::to_string(&document)?).await?;
+
+    if let Err(error) = run_compose_up(ctx, &compose_paths).await {
+        let _ = tokio::fs::copy(&backup_path, &compose_path).await;
+        return Err(eyre::eyre!(
+            "{error}; compose file was restored from {}",
+            backup_path.display()
+        ));
+    }
+
+    verify_compose_service(docker, rule_id, ctx).await
+}
+
+async fn resolve_compose_files(ctx: &ComposeContext) -> eyre::Result<Vec<PathBuf>> {
+    let mut candidates = Vec::new();
+
+    if let Some(config_files) = &ctx.config_files {
+        for raw in config_files.split(',') {
+            let raw = raw.trim();
+            if raw.is_empty() {
+                continue;
+            }
+            let path = PathBuf::from(raw);
+            let candidate = if path.is_absolute() {
+                path
+            } else if let Some(working_dir) = &ctx.working_dir {
+                working_dir.join(path)
+            } else {
+                path
+            };
+            push_unique_path(&mut candidates, candidate);
+        }
+    }
+
+    if let Some(working_dir) = &ctx.working_dir {
+        for filename in COMPOSE_FILENAMES {
+            push_unique_path(&mut candidates, working_dir.join(filename));
+        }
+    }
+
+    let mut files = Vec::new();
+    let mut tried = Vec::new();
+    for path in candidates {
+        match tokio::fs::metadata(&path).await {
+            Ok(metadata) if metadata.is_file() => files.push(path),
+            Ok(_) => tried.push(format!("{} is not a file", path.display())),
+            Err(error) => tried.push(format!("{}: {error}", path.display())),
+        }
+    }
+
+    if !files.is_empty() {
+        return Ok(files);
+    }
+
+    Err(eyre::eyre!(
+        "could not locate compose file for {}:{}{}",
+        ctx.project,
+        ctx.service,
+        if tried.is_empty() {
+            String::new()
+        } else {
+            format!(" ({})", tried.join("; "))
+        }
+    ))
+}
+
+fn push_unique_path(paths: &mut Vec<PathBuf>, path: PathBuf) {
+    if !paths.iter().any(|existing| existing == &path) {
+        paths.push(path);
+    }
+}
+
+fn compose_backup_path(path: &Path) -> PathBuf {
+    let timestamp = chrono::Utc::now().format("%Y%m%d%H%M%S");
+    let filename = path.file_name().map_or_else(
+        || "compose.yaml".to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    path.with_file_name(format!("{filename}.dokuru.bak.{timestamp}"))
+}
+
+fn update_compose_document(
+    document: &mut Value,
+    service: &str,
+    rule_id: &str,
+) -> eyre::Result<bool> {
+    let Value::Mapping(root) = document else {
+        return Err(eyre::eyre!("compose document root must be a mapping"));
+    };
+    let services = mapping_get_mut(root, "services")
+        .ok_or_else(|| eyre::eyre!("compose file has no services section"))?;
+    let Value::Mapping(services) = services else {
+        return Err(eyre::eyre!("compose services section must be a mapping"));
+    };
+    let service_config = mapping_get_mut(services, service)
+        .ok_or_else(|| eyre::eyre!("compose service '{service}' not found"))?;
+    let Value::Mapping(service_config) = service_config else {
+        return Err(eyre::eyre!("compose service '{service}' must be a mapping"));
+    };
+
+    let changed = match rule_id {
+        "5.5" => set_service_bool(service_config, "privileged", false),
+        "5.10" => remove_service_key(service_config, "network_mode"),
+        "5.16" => remove_service_key(service_config, "pid"),
+        "5.17" => remove_service_key(service_config, "ipc"),
+        "5.21" => remove_service_key(service_config, "uts"),
+        "5.31" => {
+            remove_service_key(service_config, "userns_mode")
+                | remove_service_key(service_config, "userns")
+        }
+        _ => false,
+    };
+
+    Ok(changed)
+}
+
+fn mapping_get_mut<'a>(mapping: &'a mut Mapping, key: &str) -> Option<&'a mut Value> {
+    mapping.get_mut(Value::String(key.to_string()))
+}
+
+fn remove_service_key(mapping: &mut Mapping, key: &str) -> bool {
+    mapping.remove(Value::String(key.to_string())).is_some()
+}
+
+fn set_service_bool(mapping: &mut Mapping, key: &str, value: bool) -> bool {
+    let yaml_key = Value::String(key.to_string());
+    if mapping.get(&yaml_key) == Some(&Value::Bool(value)) {
+        return false;
+    }
+    if mapping.contains_key(&yaml_key) {
+        mapping.insert(yaml_key, Value::Bool(value));
+        return true;
+    }
+    false
+}
+
+async fn run_compose_up(ctx: &ComposeContext, compose_paths: &[PathBuf]) -> eyre::Result<()> {
+    let mut command = Command::new("docker");
+    command.arg("compose");
+    for compose_path in compose_paths {
+        command.arg("-f").arg(compose_path);
+    }
+    command.arg("up").arg("-d").arg(&ctx.service);
+
+    if let Some(working_dir) = &ctx.working_dir {
+        command.current_dir(working_dir);
+    }
+
+    let output = command.output().await?;
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Err(eyre::eyre!(
+        "docker compose up failed: {}",
+        if stderr.is_empty() { stdout } else { stderr }
+    ))
+}
+
+async fn verify_compose_service(
+    docker: &Docker,
+    rule_id: &str,
+    ctx: &ComposeContext,
+) -> eyre::Result<()> {
+    let containers = docker.list_containers::<String>(None).await?;
+    let mut found = false;
+    let mut still_violating = Vec::new();
+
+    for container in &containers {
+        let Some(labels) = container.labels.as_ref() else {
+            continue;
+        };
+        if labels.get("com.docker.compose.project") != Some(&ctx.project)
+            || labels.get("com.docker.compose.service") != Some(&ctx.service)
+        {
+            continue;
+        }
+
+        found = true;
+        let Some(id) = container.id.as_deref() else {
+            continue;
+        };
+        let inspect = docker.inspect_container(id, None).await?;
+        if container_violates_rule(&inspect, rule_id) {
+            still_violating.push(container_label(docker, id).await);
+        }
+    }
+
+    if !found {
+        return Err(eyre::eyre!(
+            "compose service '{}:{}' was not running after compose up",
+            ctx.project,
+            ctx.service
+        ));
+    }
+
+    if !still_violating.is_empty() {
+        return Err(eyre::eyre!(
+            "compose service still violates rule {}: {}",
+            rule_id,
+            still_violating.join(", ")
+        ));
+    }
+
+    Ok(())
+}
+
+fn container_violates_rule(inspect: &ContainerInspectResponse, rule_id: &str) -> bool {
+    let host_config = inspect.host_config.as_ref();
+    match rule_id {
+        "5.5" => host_config.and_then(|h| h.privileged).unwrap_or(false),
+        "5.10" => host_config.and_then(|h| h.network_mode.as_deref()) == Some("host"),
+        "5.16" => host_config.and_then(|h| h.pid_mode.as_deref()) == Some("host"),
+        "5.17" => host_config.and_then(|h| h.ipc_mode.as_deref()) == Some("host"),
+        "5.21" => host_config.and_then(|h| h.uts_mode.as_deref()) == Some("host"),
+        "5.31" => host_config.and_then(|h| h.userns_mode.as_deref()) == Some("host"),
+        _ => false,
+    }
+}
+
 /// Merge a key into /etc/docker/daemon.json, creating the file if needed.
 /// value must be a valid JSON value string, e.g. `"\"default\""` or `"true"`.
 pub fn merge_daemon_json(key: &str, value: serde_json::Value) -> eyre::Result<()> {
@@ -620,4 +940,46 @@ pub fn ensure_audit_rule(rule_line: &str) -> eyre::Result<bool> {
     content.push('\n');
     std::fs::write(path, content)?;
     Ok(true) // newly added
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn update_compose_document_removes_namespace_setting() {
+        let mut doc: Value = serde_yaml::from_str(
+            r#"
+services:
+  web:
+    image: nginx
+    network_mode: host
+"#,
+        )
+        .unwrap();
+
+        assert!(update_compose_document(&mut doc, "web", "5.10").unwrap());
+
+        let rendered = serde_yaml::to_string(&doc).unwrap();
+        assert!(!rendered.contains("network_mode"));
+        assert!(rendered.contains("image: nginx"));
+    }
+
+    #[test]
+    fn update_compose_document_disables_privileged_service() {
+        let mut doc: Value = serde_yaml::from_str(
+            r#"
+services:
+  worker:
+    image: alpine
+    privileged: true
+"#,
+        )
+        .unwrap();
+
+        assert!(update_compose_document(&mut doc, "worker", "5.5").unwrap());
+
+        let rendered = serde_yaml::to_string(&doc).unwrap();
+        assert!(rendered.contains("privileged: false"));
+    }
 }

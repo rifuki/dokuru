@@ -417,6 +417,152 @@ function SectionHeader({ section, total, passed }: { section: string; total: num
     );
 }
 
+// ── Before/after comparison ──────────────────────────────────────────────────
+
+function scoreTone(score: number) {
+    return score >= 80 ? "text-emerald-400" : score >= 60 ? "text-amber-400" : "text-rose-400";
+}
+
+function BeforeAfterComparison({
+    before,
+    after,
+    fmtDate,
+}: {
+    before: AuditResponse;
+    after: AuditResponse;
+    fmtDate: (ts: string) => string;
+}) {
+    const scoreDelta = after.summary.score - before.summary.score;
+    const passDelta = after.summary.passed - before.summary.passed;
+    const failDelta = after.summary.failed - before.summary.failed;
+    const beforeByRule = new Map(before.results.map(result => [result.rule.id, result]));
+    const fixedRules = after.results.filter(result => result.status === "Pass" && beforeByRule.get(result.rule.id)?.status === "Fail");
+    const regressedRules = after.results.filter(result => result.status === "Fail" && beforeByRule.get(result.rule.id)?.status === "Pass");
+    const signed = (value: number) => `${value > 0 ? "+" : ""}${value}`;
+
+    return (
+        <div className="rounded-2xl border border-[#2496ED]/20 bg-card dark:bg-gradient-to-br dark:from-[#07111A] dark:via-[#0A0A0B] dark:to-[#111113] overflow-hidden shadow-xl">
+            <div className="flex flex-col gap-3 border-b border-border px-5 py-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                    <h3 className="text-base font-bold tracking-tight">Before / After Comparison</h3>
+                    <p className="text-sm text-muted-foreground">Compare the previous audit against the current one to track hardening progress.</p>
+                </div>
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#2496ED]/25 bg-[#2496ED]/10 px-3 py-1.5 text-xs font-bold text-[#2496ED]">
+                    <ArrowLeftRight className="h-3.5 w-3.5" />
+                    score delta {signed(scoreDelta)}
+                </span>
+            </div>
+
+            <div className="grid grid-cols-1 gap-0 md:grid-cols-[1fr_auto_1fr] md:items-stretch">
+                <div className="p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">Before</p>
+                        <span className="text-xs font-mono text-muted-foreground/60">{fmtDate(before.timestamp)}</span>
+                    </div>
+                    <div className="flex items-end gap-3">
+                        <span className={cn("text-5xl font-black tabular-nums leading-none", scoreTone(before.summary.score))}>
+                            {before.summary.score}
+                        </span>
+                        <span className="pb-1 text-sm font-mono text-muted-foreground">/ 100</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+                            <p className="text-lg font-black text-emerald-400">{before.summary.passed}</p>
+                            <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Pass</p>
+                        </div>
+                        <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2">
+                            <p className="text-lg font-black text-rose-400">{before.summary.failed}</p>
+                            <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fail</p>
+                        </div>
+                        <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+                            <p className="text-lg font-black text-muted-foreground">{before.summary.total}</p>
+                            <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Total</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="hidden w-px bg-border md:block" />
+
+                <div className="border-t border-border p-5 space-y-4 md:border-t-0">
+                    <div className="flex items-center justify-between">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">After</p>
+                        <span className="text-xs font-mono text-muted-foreground/60">{fmtDate(after.timestamp)}</span>
+                    </div>
+                    <div className="flex items-end gap-3">
+                        <span className={cn("text-5xl font-black tabular-nums leading-none", scoreTone(after.summary.score))}>
+                            {after.summary.score}
+                        </span>
+                        <span className="pb-1 text-sm font-mono text-muted-foreground">/ 100</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+                            <p className="text-lg font-black text-emerald-400">{after.summary.passed}</p>
+                            <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Pass {signed(passDelta)}</p>
+                        </div>
+                        <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2">
+                            <p className="text-lg font-black text-rose-400">{after.summary.failed}</p>
+                            <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fail {signed(failDelta)}</p>
+                        </div>
+                        <div className="rounded-lg border border-[#2496ED]/20 bg-[#2496ED]/10 px-3 py-2">
+                            <p className="text-lg font-black text-[#2496ED]">{fixedRules.length}</p>
+                            <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fixed</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="border-t border-border px-5 py-4">
+                {fixedRules.length === 0 && regressedRules.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No rule status changes from the previous audit.</p>
+                ) : (
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-2 text-sm font-bold text-emerald-400">
+                                <ShieldCheck className="h-4 w-4" />
+                                Fixed rules ({fixedRules.length})
+                            </div>
+                            {fixedRules.length > 0 ? (
+                                <div className="space-y-2">
+                                    {fixedRules.slice(0, 5).map(result => (
+                                        <div key={result.rule.id} className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">
+                                            <span className="font-mono text-xs font-black text-emerald-400">{result.rule.id}</span>
+                                            <span className="min-w-0 truncate text-sm text-muted-foreground">{result.rule.title}</span>
+                                        </div>
+                                    ))}
+                                    {fixedRules.length > 5 && (
+                                        <p className="text-xs text-muted-foreground">+{fixedRules.length - 5} fixed rules lainnya.</p>
+                                    )}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-muted-foreground">Belum ada rule yang berubah dari fail ke pass.</p>
+                            )}
+                        </div>
+
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-2 text-sm font-bold text-rose-400">
+                                <ShieldX className="h-4 w-4" />
+                                Regressed rules ({regressedRules.length})
+                            </div>
+                            {regressedRules.length > 0 ? (
+                                <div className="space-y-2">
+                                    {regressedRules.slice(0, 5).map(result => (
+                                        <div key={result.rule.id} className="flex items-center gap-2 rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 py-2">
+                                            <span className="font-mono text-xs font-black text-rose-400">{result.rule.id}</span>
+                                            <span className="min-w-0 truncate text-sm text-muted-foreground">{result.rule.title}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-muted-foreground">No rules regressed from pass to fail.</p>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 // ── Main Page ────────────────────────────────────────────────────────────────
 
 type StatusFilter = "all" | "Pass" | "Fail";
@@ -430,6 +576,7 @@ function AuditDetailPage() {
     const [token, setToken] = useState<string | undefined>();
     const [auditData, setAuditData] = useState<AuditResponse | null>(null);
     const [auditReport, setAuditReport] = useState<AuditReportResponse | null>(null);
+    const [auditHistory, setAuditHistory] = useState<AuditResponse[]>([]);
     const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
     const [sectionFilter, setSectionFilter] = useState<string>("all");
     const [pillarFilter, setPillarFilter] = useState<SecurityPillar | "all">("all");
@@ -453,6 +600,7 @@ function AuditDetailPage() {
 
     useEffect(() => {
         const loadData = async () => {
+            setLoading(true);
             try {
                 const a = await agentApi.getById(id);
                 setAgent(a);
@@ -468,6 +616,14 @@ function AuditDetailPage() {
                 } catch (reportError) {
                     console.warn("Failed to load Rust audit report, using client fallback:", reportError);
                 }
+
+                try {
+                    const history = await agentApi.listAudits(id);
+                    setAuditHistory(history);
+                } catch (historyError) {
+                    console.warn("Failed to load audit history for comparison:", historyError);
+                    setAuditHistory([]);
+                }
             } catch (error) {
                 console.error('Failed to load audit:', error);
                 toast.error("Failed to load audit");
@@ -477,6 +633,15 @@ function AuditDetailPage() {
         };
         void loadData();
     }, [id, auditId]);
+
+    const previousAudit = auditData ? (() => {
+        const sortedHistory = [...auditHistory].sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
+        const currentIndex = sortedHistory.findIndex(audit => audit.id && audit.id === auditData.id);
+        if (currentIndex >= 0) return sortedHistory[currentIndex + 1] ?? null;
+
+        const currentTime = Date.parse(auditData.timestamp);
+        return sortedHistory.find(audit => audit.id !== auditData.id && Date.parse(audit.timestamp) < currentTime) ?? null;
+    })() : null;
 
     const report = auditReport?.report;
     const baseResults = report?.sorted_results ?? [...(auditData?.results ?? [])].sort((a, b) => {
@@ -752,6 +917,14 @@ function AuditDetailPage() {
                             </div>
                         </div>
                     </div>
+
+                    {previousAudit && (
+                        <BeforeAfterComparison
+                            before={previousAudit}
+                            after={auditData}
+                            fmtDate={fmtDate}
+                        />
+                    )}
 
                     {/* ── Fix All banner ───────────────────────────────── */}
                     {(() => {
