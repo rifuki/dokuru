@@ -366,8 +366,8 @@ pre,
   }
 
   .reveal {
-    opacity: 0;
-    transform: translate3d(0, 50px, 0);
+    opacity: 1;
+    transform: none;
     transition:
       opacity var(--motion-duration, 600ms) cubic-bezier(0.16, 1, 0.3, 1),
       transform var(--motion-duration, 600ms) cubic-bezier(0.16, 1, 0.3, 1);
@@ -376,15 +376,15 @@ pre,
   }
 
   .reveal[data-reveal="down"] {
-    transform: translate3d(0, -50px, 0);
+    transform: none;
   }
 
   .reveal[data-reveal="left"] {
-    transform: translate3d(30px, 0, 0);
+    transform: none;
   }
 
   .reveal[data-reveal="right"] {
-    transform: translate3d(-50px, 0, 0);
+    transform: none;
   }
 
   .reveal[data-reveal="fade"] {
