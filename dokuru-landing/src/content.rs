@@ -86,7 +86,7 @@ pub(crate) const AUDIT_SECTIONS: &[AuditSection] = &[
             AuditRule {
                 rule: "5.10 Host network namespace",
                 sev: SeverityKind::Fail,
-                rem: RemediationKind::Guided,
+                rem: RemediationKind::Auto,
                 detail: "1 container using --net=host",
             },
         ],

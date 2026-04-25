@@ -1,26 +1,27 @@
 import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { agentApi } from "@/lib/api/agent";
-import { agentDirectApi, type AuditReportResponse, type AuditResponse, type AuditResult, type FixOutcome } from "@/lib/api/agent-direct";
+import { type AuditReportResponse, type AuditResponse, type AuditResult } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
 import { getAgentToken } from "@/stores/use-agent-store";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
-    AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+    AlertDialog, AlertDialogAction, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
     Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
     Terminal, Wrench, AlertTriangle, Info, Server,
-    ArrowLeft, Clock, Cpu, Container, Zap, BookOpen, CheckCircle2,
-    RotateCcw, ShieldAlert, XCircle, ListChecks, Search, X, Layers, ArrowLeftRight, Link, FileText,
+    ArrowLeft, Clock, Cpu, Container, Zap, BookOpen,
+    Search, X, Layers, ArrowLeftRight, Link, FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { PILLAR_META, getRulePillar, type SecurityPillar } from "@/lib/audit-pillars";
+import { FixWizard } from "@/features/audit/components/FixWizard";
+import { useFix } from "@/features/audit/hooks/useFix";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/audits/$auditId")({
     component: AuditDetailPage,
@@ -67,158 +68,20 @@ function StatusIcon({ status }: { status: "Pass" | "Fail" | "Error" }) {
     return <Shield className="h-5 w-5 text-orange-500 shrink-0" />;
 }
 
-// ── Fix Panel ────────────────────────────────────────────────────────────────
-
-function FixPanel({ outcome, onDismiss }: { outcome: FixOutcome; onDismiss: () => void }) {
-    const isApplied = outcome.status === "Applied";
-    const isBlocked = outcome.status === "Blocked";
-
-    return (
-        <div className={cn(
-            "rounded-lg border p-4 space-y-3 text-sm",
-            isApplied ? "bg-green-500/10 border-green-500/30"
-            : isBlocked ? "bg-red-500/10 border-red-500/30"
-            : "bg-amber-500/10 border-amber-500/30"
-        )}>
-            <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-2">
-                    {isApplied
-                        ? <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-                        : isBlocked
-                        ? <XCircle className="h-4 w-4 text-red-500 shrink-0" />
-                        : <BookOpen className="h-4 w-4 text-amber-500 shrink-0" />
-                    }
-                    <span className="font-semibold text-sm">
-                        {isApplied ? "Fix Applied" : isBlocked ? "Fix Blocked" : "Remediation Guide"}
-                    </span>
-                </div>
-                <button onClick={onDismiss} className="text-muted-foreground hover:text-foreground">
-                    <XCircle className="h-4 w-4" />
-                </button>
-            </div>
-
-            <p className="text-muted-foreground text-xs">{outcome.message}</p>
-
-            {(outcome.requires_restart || outcome.requires_elevation) && (
-                <div className="flex flex-wrap gap-2">
-                    {outcome.requires_elevation && (
-                        <span className="inline-flex items-center gap-1 text-[10px] bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/30 px-2 py-0.5 rounded font-semibold">
-                            <ShieldAlert className="h-2.5 w-2.5" /> Requires sudo/elevation
-                        </span>
-                    )}
-                    {outcome.requires_restart && (
-                        <span className="inline-flex items-center gap-1 text-[10px] bg-blue-500/10 text-blue-500 border border-blue-500/30 px-2 py-0.5 rounded font-semibold">
-                            <RotateCcw className="h-2.5 w-2.5" /> Docker restart required
-                        </span>
-                    )}
-                    {outcome.restart_command && (
-                        <code className="block w-full text-xs bg-zinc-900 dark:bg-zinc-950 text-green-400 px-3 py-2 rounded-lg font-mono mt-1">
-                            $ {outcome.restart_command}
-                        </code>
-                    )}
-                </div>
-            )}
-        </div>
-    );
-}
-
-// ── Fix step definitions ──────────────────────────────────────────────────────
-
-function getFixSteps(ruleId: string): string[] {
-    if (ruleId === "2.10") return [
-        "Creating dockremap system user…",
-        "Creating /etc/subuid and /etc/subgid…",
-        "Mapping subuid/subgid ranges for dockremap…",
-        "Writing userns-remap to daemon.json…",
-        "Restarting Docker daemon…",
-    ];
-    if (ruleId === "5.11") return [
-        "Finding containers without memory limits…",
-        "Applying docker update --memory=256m…",
-        "Verifying memory cgroup limits…",
-    ];
-    if (ruleId === "5.12") return [
-        "Finding containers without CPU shares…",
-        "Applying docker update --cpu-shares=512…",
-        "Verifying CPU cgroup shares…",
-    ];
-    if (ruleId === "5.29") return [
-        "Finding containers without PIDs limits…",
-        "Applying docker update --pids-limit=100…",
-        "Verifying PIDs cgroup limits…",
-    ];
-    if (ruleId.startsWith("1.1")) return [
-        "Writing audit rule to /etc/audit/rules.d/docker.rules…",
-        "Reloading auditd service…",
-    ];
-    if (["3.1", "3.3", "3.5", "3.17"].includes(ruleId)) return [
-        `Running chown root:root on target path…`,
-    ];
-    if (["3.2", "3.4", "3.6", "3.18"].includes(ruleId)) return [
-        `Running chmod on target path…`,
-    ];
-    return ["Applying fix…"];
-}
-
-function requiresDockerRestart(ruleId: string) {
-    return ruleId === "2.10";
-}
-
-// ── Live progress panel ───────────────────────────────────────────────────────
-
-function FixProgress({ steps, currentStep }: { steps: string[]; currentStep: number }) {
-    return (
-        <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4 space-y-3">
-            <div className="flex items-center gap-2">
-                <Loader2 className="h-4 w-4 text-blue-500 animate-spin shrink-0" />
-                <span className="text-sm font-semibold text-blue-500">Executing fix…</span>
-            </div>
-            <div className="space-y-1.5">
-                {steps.map((step, i) => (
-                    <div key={i} className={cn(
-                        "flex items-center gap-2 text-xs transition-all",
-                        i < currentStep
-                            ? "text-green-500"
-                            : i === currentStep
-                            ? "text-foreground font-medium"
-                            : "text-muted-foreground/40"
-                    )}>
-                        {i < currentStep
-                            ? <CheckCircle2 className="h-3 w-3 shrink-0" />
-                            : i === currentStep
-                            ? <Loader2 className="h-3 w-3 animate-spin shrink-0" />
-                            : <div className="h-3 w-3 rounded-full border border-muted-foreground/20 shrink-0" />
-                        }
-                        {step}
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-}
-
 // ── Rule Card ────────────────────────────────────────────────────────────────
 
-function RuleCard({ result, agentId, agentUrl, agentAccessMode, token }: {
+function RuleCard({ result, onOpenWizard }: {
     result: AuditResult;
     agentId: string;
     agentUrl: string;
     agentAccessMode?: string;
     token?: string;
+    onOpenWizard: (result: AuditResult) => void;
 }) {
-    const queryClient = useQueryClient();
-    const navigate = useNavigate();
     const [open, setOpen] = useState(false);
-    const [fixing, setFixing] = useState(false);
-    const [fixOutcome, setFixOutcome] = useState<FixOutcome | null>(null);
-    const [confirmOpen, setConfirmOpen] = useState(false);
     const [guideOpen, setGuideOpen] = useState(false);
-    const [fixStepIndex, setFixStepIndex] = useState(0);
-    const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const { rule, status, message, affected, audit_command, raw_output, references, rationale, impact, remediation_kind, remediation_guide } = result;
-    const steps = getFixSteps(rule.id);
-    const needsRestart = requiresDockerRestart(rule.id);
 
     const borderLeft = status === "Pass"
         ? "border-l-green-500/60"
@@ -226,151 +89,8 @@ function RuleCard({ result, agentId, agentUrl, agentAccessMode, token }: {
         ? "border-l-red-500/60"
         : "border-l-orange-500/60";
 
-    const openConfirm = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (remediation_kind === "auto") {
-            setConfirmOpen(true);
-        } else {
-            void executeFix();
-        }
-    };
-
-    const executeFix = async () => {
-        setConfirmOpen(false);
-        setFixing(true);
-        setFixOutcome(null);
-        setFixStepIndex(0);
-        setOpen(true);
-
-        // Animate steps at ~1.2s per step
-        let idx = 0;
-        intervalRef.current = setInterval(() => {
-            idx++;
-            if (idx < steps.length) setFixStepIndex(idx);
-            else if (intervalRef.current) clearInterval(intervalRef.current);
-        }, 1200);
-
-        try {
-            let refreshedAudit: AuditResponse | null = null;
-            let outcome: FixOutcome;
-            if (agentAccessMode === "relay") {
-                const relayFix = await agentApi.applyFix(agentId, rule.id);
-                outcome = relayFix.outcome;
-                refreshedAudit = relayFix.audit;
-            } else {
-                outcome = await agentDirectApi.applyFix(agentUrl, rule.id, token);
-            }
-            if (intervalRef.current) clearInterval(intervalRef.current);
-            setFixOutcome(outcome);
-            
-            if (outcome.status === "Applied") {
-                if (refreshedAudit?.id) {
-                    toast.success(`Fix applied for rule ${rule.id}. Audit refreshed.`);
-                    await queryClient.invalidateQueries({ queryKey: ["agent-audit"] });
-                    navigate({
-                        to: "/agents/$id/audits/$auditId",
-                        params: { id: agentId, auditId: refreshedAudit.id },
-                    });
-                    return;
-                }
-
-                if (agentAccessMode === "relay") {
-                    toast.success(`Fix applied for rule ${rule.id}`);
-                    toast.info("Audit refresh did not return a new result");
-                    return;
-                }
-
-                toast.success(`✅ Fix applied for rule ${rule.id}! Refreshing audit...`, {
-                    duration: 4000,
-                });
-                
-                // Force immediate refetch of audit data
-                await queryClient.invalidateQueries({ queryKey: ["agent-audit"] });
-                await queryClient.refetchQueries({ queryKey: ["agent-audit"] });
-                
-                // Show success message after refresh
-                setTimeout(() => {
-                    toast.info("Audit data refreshed with latest status", {
-                        duration: 3000,
-                    });
-                    setFixOutcome(null);
-                }, 2000);
-                
-            } else if (outcome.status === "Blocked") {
-                const needsSudo = outcome.message.toLowerCase().includes("permission") || 
-                                 outcome.message.toLowerCase().includes("sudo") ||
-                                 outcome.message.toLowerCase().includes("elevated");
-                
-                if (needsSudo) {
-                    toast.error(`⚠️ Rule ${rule.id}: Requires sudo/root access`, {
-                        description: "Please run the agent with elevated privileges",
-                        duration: 5000,
-                    });
-                } else {
-                    toast.error(`❌ Rule ${rule.id}: ${outcome.message.slice(0, 80)}`, {
-                        duration: 5000,
-                    });
-                }
-            }
-        } catch {
-            if (intervalRef.current) clearInterval(intervalRef.current);
-            toast.error(agentAccessMode === "relay" ? "Failed to apply relay fix" : "Failed to connect to agent", {
-                description: agentAccessMode === "relay"
-                    ? "Check if the relay agent is connected"
-                    : "Check if the agent is running and accessible",
-                duration: 4000,
-            });
-        } finally {
-            setFixing(false);
-        }
-    };
-
     return (
         <>
-        {/* Confirmation dialog */}
-        <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle className="flex items-center gap-2">
-                        <Zap className="h-4 w-4 text-blue-500" />
-                        Apply Auto Fix — Rule {rule.id}
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                        The following system-level changes will be applied automatically:
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-
-                {/* Steps list — outside <p> to avoid nesting error */}
-                <ul className="space-y-1.5">
-                    {steps.map((s, i) => (
-                        <li key={i} className="flex items-start gap-2 text-xs text-foreground/80">
-                            <ListChecks className="h-3.5 w-3.5 shrink-0 mt-0.5 text-blue-500" />
-                            {s.replace("…", "")}
-                        </li>
-                    ))}
-                </ul>
-                {needsRestart && (
-                    <div className="flex items-start gap-2 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-600 dark:text-yellow-400">
-                        <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                        <span>
-                            <strong>Docker daemon will be restarted.</strong> Running containers
-                            may be briefly interrupted.
-                        </span>
-                    </div>
-                )}
-
-                <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                        onClick={() => void executeFix()}
-                        className="bg-blue-500 hover:bg-blue-600 text-white"
-                    >
-                        <Zap className="h-3.5 w-3.5 mr-1.5" /> Apply Fix
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
-
         {/* Manual Guide dialog */}
         <AlertDialog open={guideOpen} onOpenChange={setGuideOpen}>
             <AlertDialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -490,20 +210,11 @@ function RuleCard({ result, agentId, agentUrl, agentAccessMode, token }: {
                         <>
                             {remediation_kind === "auto" && (
                                 <button
-                                    onClick={openConfirm}
-                                    disabled={fixing}
-                                    className={cn(
-                                        "inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg border transition-all shadow-sm",
-                                        "bg-[#2496ED] hover:bg-[#1d7ac7] text-white border-[#2496ED]/50 hover:shadow-[0_0_12px_rgba(36,150,237,0.4)]",
-                                        fixing && "opacity-60 cursor-not-allowed"
-                                    )}
+                                    onClick={(e) => { e.stopPropagation(); onOpenWizard(result); }}
+                                    className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg border transition-all shadow-sm bg-[#2496ED] hover:bg-[#1d7ac7] text-white border-[#2496ED]/50 hover:shadow-[0_0_12px_rgba(36,150,237,0.4)]"
                                 >
-                                    {fixing ? (
-                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    ) : (
-                                        <Zap className="h-3.5 w-3.5" />
-                                    )}
-                                    {fixing ? "Fixing…" : "Auto Fix"}
+                                    <Zap className="h-3.5 w-3.5" />
+                                    Auto Fix
                                 </button>
                             )}
                             <button
@@ -528,23 +239,9 @@ function RuleCard({ result, agentId, agentUrl, agentAccessMode, token }: {
             {/* Expanded detail */}
             {open && (
                 <div className="px-4 pb-4 pt-0 border-t border-border/50 space-y-4 text-sm">
-                    {/* Live progress */}
-                    {fixing && (
-                        <div className="pt-3">
-                            <FixProgress steps={steps} currentStep={fixStepIndex} />
-                        </div>
-                    )}
-
-                    {/* Fix outcome panel */}
-                    {!fixing && fixOutcome && (
-                        <div className="pt-3">
-                            <FixPanel outcome={fixOutcome} onDismiss={() => setFixOutcome(null)} />
-                        </div>
-                    )}
-
                     {/* Description */}
                     {rule.description && (
-                        <div className={cn("bg-blue-500/5 border border-blue-500/20 rounded-lg p-4", fixing || fixOutcome ? "" : "mt-3")}>
+                        <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4 mt-3">
                             <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-blue-400 mb-2">
                                 <Info className="h-4 w-4" /> About
                             </h5>
@@ -726,6 +423,7 @@ type ViewMode = "pillar" | "section";
 function AuditDetailPage() {
     const { id, auditId } = Route.useParams();
     const router = useRouter();
+    const navigate = useNavigate();
     const [agent, setAgent] = useState<Agent | null>(null);
     const [token, setToken] = useState<string | undefined>();
     const [auditData, setAuditData] = useState<AuditResponse | null>(null);
@@ -736,6 +434,13 @@ function AuditDetailPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [viewMode, setViewMode] = useState<ViewMode>("pillar");
     const [loading, setLoading] = useState(true);
+
+    const { open: wizardOpen, step: wizardStep, outcome: wizardOutcome, stepIndex: wizardStepIndex, activeResult: wizardResult, openWizard, closeWizard, applyFix } = useFix({
+        agentId: id,
+        agentUrl: agent?.url ?? "",
+        agentAccessMode: agent?.access_mode,
+        token,
+    });
 
     useEffect(() => {
         const loadData = async () => {
@@ -1281,6 +986,7 @@ function AuditDetailPage() {
                                                             agentUrl={agent?.url ?? ""}
                                                             agentAccessMode={agent?.access_mode}
                                                             token={token}
+                                                            onOpenWizard={openWizard}
                                                         />
                                                     ))
                                                 }
@@ -1311,6 +1017,7 @@ function AuditDetailPage() {
                                                             agentUrl={agent?.url ?? ""}
                                                             agentAccessMode={agent?.access_mode}
                                                             token={token}
+                                                            onOpenWizard={openWizard}
                                                         />
                                                     ))
                                                 }
@@ -1327,6 +1034,20 @@ function AuditDetailPage() {
                     Audit not found
                 </div>
             )}
+
+            <FixWizard
+                open={wizardOpen}
+                step={wizardStep}
+                result={wizardResult}
+                outcome={wizardOutcome}
+                stepIndex={wizardStepIndex}
+                onConfirm={() => void applyFix()}
+                onClose={closeWizard}
+                onRerunAudit={() => {
+                    closeWizard();
+                    void navigate({ to: "/agents/$id/audit", params: { id } });
+                }}
+            />
         </div>
     );
 }
