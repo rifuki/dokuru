@@ -129,6 +129,21 @@ function getFixSteps(ruleId: string): string[] {
         "Writing userns-remap to daemon.json…",
         "Restarting Docker daemon…",
     ];
+    if (ruleId === "5.11") return [
+        "Finding containers without memory limits…",
+        "Applying docker update --memory=256m…",
+        "Verifying memory cgroup limits…",
+    ];
+    if (ruleId === "5.12") return [
+        "Finding containers without CPU shares…",
+        "Applying docker update --cpu-shares=512…",
+        "Verifying CPU cgroup shares…",
+    ];
+    if (ruleId === "5.29") return [
+        "Finding containers without PIDs limits…",
+        "Applying docker update --pids-limit=100…",
+        "Verifying PIDs cgroup limits…",
+    ];
     if (ruleId.startsWith("1.1")) return [
         "Writing audit rule to /etc/audit/rules.d/docker.rules…",
         "Reloading auditd service…",

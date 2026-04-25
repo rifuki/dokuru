@@ -126,6 +126,39 @@ pub struct FixOutcome {
     pub requires_elevation: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixRequest {
+    pub rule_id: String,
+    #[serde(default)]
+    pub targets: Vec<FixTarget>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixTarget {
+    pub container_id: String,
+    #[serde(default)]
+    pub memory: Option<i64>,
+    #[serde(default)]
+    pub cpu_shares: Option<i64>,
+    #[serde(default)]
+    pub pids_limit: Option<i64>,
+    #[serde(default)]
+    pub strategy: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
+pub struct FixProgress {
+    pub rule_id: String,
+    pub container_name: String,
+    pub step: u8,
+    pub total_steps: u8,
+    pub action: String,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

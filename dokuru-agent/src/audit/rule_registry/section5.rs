@@ -2,8 +2,9 @@
 // Namespace & Cgroup rules — CIS Docker Benchmark v1.8.0
 #![allow(clippy::needless_raw_string_hashes, clippy::too_many_lines)]
 use super::RuleDefinition;
-use crate::audit::types::{
-    CheckResult, CheckStatus, CisRule, RemediationKind, RuleCategory, Severity,
+use crate::audit::{
+    fix_helpers,
+    types::{CheckResult, CheckStatus, CisRule, RemediationKind, RuleCategory, Severity},
 };
 
 pub struct Section5;
@@ -11,6 +12,7 @@ pub struct Section5;
 impl Section5 {
     pub fn rules() -> Vec<RuleDefinition> {
         vec![
+            Self::rule_5_5(),
             Self::rule_5_10(),
             Self::rule_5_11(),
             Self::rule_5_12(),
@@ -30,6 +32,126 @@ impl Section5 {
             || id.chars().take(12).collect(),
             |s| s.trim_start_matches('/').to_string(),
         )
+    }
+
+    // ── 5.5 — Privileged Containers ───────────────────────────────────────────
+
+    /// 5.5 - Ensure that privileged containers are not used
+    fn rule_5_5() -> RuleDefinition {
+        RuleDefinition {
+            id: "5.5".into(),
+            section: 5,
+            title: "Ensure that privileged containers are not used".into(),
+            description: "Privileged mode gives a container extended Linux capabilities and broad host device access, weakening the isolation boundary between the container and the host.".into(),
+
+            category: RuleCategory::Runtime,
+            severity: Severity::High,
+            scored: true,
+
+            audit_command: Some("docker ps --quiet | xargs docker inspect --format '{{ .Id }}: Privileged={{ .HostConfig.Privileged }}'".into()),
+            check_fn: |docker, containers| {
+                let docker = docker.clone();
+                let containers = containers.to_vec();
+                Box::pin(async move {
+                    if containers.is_empty() {
+                        return Ok(CheckResult {
+                            rule: CisRule {
+                                id: "5.5".into(),
+                                title: "Ensure that privileged containers are not used".into(),
+                                category: RuleCategory::Runtime,
+                                severity: Severity::High,
+                                section: "Container Runtime".into(),
+                                description: "Privileged container runtime flag".into(),
+                                remediation: "Recreate containers without --privileged".into(),
+                            },
+                            status: CheckStatus::Pass,
+                            message: "No running containers to check".into(),
+                            affected: vec![],
+                            remediation_kind: RemediationKind::Guided,
+                            audit_command: None,
+                            raw_output: None,
+                            references: None,
+                            rationale: None,
+                            impact: None,
+                            tags: None,
+                            ..Default::default()
+                        });
+                    }
+
+                    let mut failing = Vec::new();
+                    let mut raw_lines = Vec::new();
+
+                    for c in &containers {
+                        let id = c.id.as_deref().unwrap_or("");
+                        if let Ok(inspect) = docker.inspect_container(id, None).await {
+                            let privileged = inspect
+                                .host_config
+                                .as_ref()
+                                .and_then(|h| h.privileged)
+                                .unwrap_or(false);
+                            let name = Self::container_name(c.names.as_ref(), id);
+                            raw_lines.push(format!("{name}: Privileged={privileged}"));
+                            if privileged {
+                                failing.push(name);
+                            }
+                        }
+                    }
+
+                    Ok(CheckResult {
+                        rule: CisRule {
+                            id: "5.5".into(),
+                            title: "Ensure that privileged containers are not used".into(),
+                            category: RuleCategory::Runtime,
+                            severity: Severity::High,
+                            section: "Container Runtime".into(),
+                            description: "Privileged container runtime flag".into(),
+                            remediation: "Recreate containers without --privileged".into(),
+                        },
+                        status: if failing.is_empty() {
+                            CheckStatus::Pass
+                        } else {
+                            CheckStatus::Fail
+                        },
+                        message: if failing.is_empty() {
+                            "No containers run in privileged mode".into()
+                        } else {
+                            format!("{} container(s) run in privileged mode", failing.len())
+                        },
+                        affected: failing,
+                        remediation_kind: RemediationKind::Guided,
+                        audit_command: Some("docker inspect --format '{{ .HostConfig.Privileged }}' <container>".into()),
+                        raw_output: Some(raw_lines.join("\n")),
+                        references: None,
+                        rationale: None,
+                        impact: None,
+                        tags: None,
+                        ..Default::default()
+                    })
+                })
+            },
+
+            remediation_kind: RemediationKind::Guided,
+            fix_fn: None,
+            remediation_guide: r#"Recreate the container without --privileged.
+
+Example (incorrect — avoid):
+  docker run --privileged nginx
+
+Example (correct):
+  docker run nginx
+
+If specific kernel capabilities are required, grant only the minimum capability with --cap-add instead of enabling full privileged mode."#.into(),
+            requires_restart: true,
+            requires_elevation: false,
+
+            references: vec![
+                "https://docs.docker.com/engine/containers/run/#runtime-privilege-and-linux-capabilities".into(),
+                "CIS Docker Benchmark v1.8.0, Section 5.5".into(),
+            ],
+            rationale: "Privileged containers can access host devices and bypass several default Docker isolation controls, increasing the blast radius of a container compromise.".into(),
+            impact: "Workloads that rely on broad host device access must be redesigned to use narrower capabilities or device mappings.".into(),
+            tags: vec!["runtime".into(), "privileged".into(), "isolation".into()],
+        }
     }
 
     // ── 5.10 — Network Namespace ──────────────────────────────────────────────
@@ -239,18 +361,26 @@ Example (incorrect — avoid):
                 })
             },
 
-            remediation_kind: RemediationKind::Manual,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|docker| {
+                let docker = docker.clone();
+                Box::pin(async move {
+                    fix_helpers::apply_default_cgroup_resource_fix(&docker, "5.11").await
+                })
+            }),
             remediation_guide: r#"Set a memory limit when starting containers using --memory flag.
 
+Dokuru can apply this live with Docker update using a default 256 MiB limit.
+
 Example:
+  docker update --memory=256m <container>
   docker run --memory=512m nginx
 
 Or in docker-compose.yml:
   services:
     app:
       mem_limit: 512m"#.into(),
-            requires_restart: true,
+            requires_restart: false,
             requires_elevation: false,
 
             references: vec![
@@ -356,12 +486,20 @@ Or in docker-compose.yml:
                 })
             },
 
-            remediation_kind: RemediationKind::Manual,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|docker| {
+                let docker = docker.clone();
+                Box::pin(async move {
+                    fix_helpers::apply_default_cgroup_resource_fix(&docker, "5.12").await
+                })
+            }),
             remediation_guide: r#"Set CPU shares when starting containers using --cpu-shares flag.
+Dokuru can apply this live with Docker update using a default value of 512.
+
 Default value is 1024. Higher values = higher priority.
 
 Example:
+  docker update --cpu-shares=512 <container>
   docker run --cpu-shares=512 nginx    # half priority
   docker run --cpu-shares=1024 nginx   # normal priority
   docker run --cpu-shares=2048 app     # double priority
@@ -370,7 +508,7 @@ Or in docker-compose.yml:
   services:
     app:
       cpu_shares: 512"#.into(),
-            requires_restart: true,
+            requires_restart: false,
             requires_elevation: false,
 
             references: vec![
@@ -944,11 +1082,18 @@ Example:
                 })
             },
 
-            remediation_kind: RemediationKind::Manual,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|docker| {
+                let docker = docker.clone();
+                Box::pin(async move {
+                    fix_helpers::apply_default_cgroup_resource_fix(&docker, "5.29").await
+                })
+            }),
             remediation_guide: r#"Set a PIDs limit when starting containers using --pids-limit flag.
+Dokuru can apply this live with Docker update using a default limit of 100.
 
 Example:
+  docker update --pids-limit=100 <container>
   docker run --pids-limit=100 nginx
 
 Or in docker-compose.yml:
@@ -957,7 +1102,7 @@ Or in docker-compose.yml:
       pids_limit: 100
 
 A reasonable value for most workloads is 50-200."#.into(),
-            requires_restart: true,
+            requires_restart: false,
             requires_elevation: false,
 
             references: vec![

@@ -60,6 +60,14 @@ export interface FixOutcome {
   requires_elevation: boolean;
 }
 
+export interface FixTarget {
+  container_id: string;
+  memory?: number;
+  cpu_shares?: number;
+  pids_limit?: number;
+  strategy?: string;
+}
+
 export interface AuditSummary {
   total: number;
   passed: number;
@@ -170,9 +178,10 @@ export const agentDirectApi = {
     return response.data.data;
   },
 
-  applyFix: async (agentUrl: string, ruleId: string, token?: string): Promise<FixOutcome> => {
+  applyFix: async (agentUrl: string, ruleId: string, token?: string, targets?: FixTarget[]): Promise<FixOutcome> => {
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    const response = await axios.post(`${agentUrl}/fix`, { rule_id: ruleId }, { headers });
+    const payload = targets ? { rule_id: ruleId, targets } : { rule_id: ruleId };
+    const response = await axios.post(`${agentUrl}/fix`, payload, { headers });
     return response.data.data;
   },
 

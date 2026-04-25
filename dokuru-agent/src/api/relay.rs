@@ -22,7 +22,11 @@ use tokio::{
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async, tungstenite::Message};
 use tracing::{error, info, warn};
 
-use crate::{api::Config, api::relay_docker, audit::RuleRegistry};
+use crate::{
+    api::Config,
+    api::relay_docker,
+    audit::{FixRequest, RuleRegistry},
+};
 
 const RELAY_SERVER: &str = "wss://api.dokuru.rifuki.dev/ws/agent";
 
@@ -79,11 +83,6 @@ enum WsMessage {
     },
     Ping,
     Pong,
-}
-
-#[derive(Debug, Deserialize)]
-struct FixCommandPayload {
-    rule_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -599,12 +598,12 @@ async fn execute_command(command: &str, payload: serde_json::Value) -> Result<se
             serde_json::to_value(report).wrap_err("Failed to serialize audit report")
         }
         "fix" => {
-            let payload = serde_json::from_value::<FixCommandPayload>(payload)
+            let payload = serde_json::from_value::<FixRequest>(payload)
                 .wrap_err("Invalid fix command payload")?;
             let docker = bollard::Docker::connect_with_local_defaults()
                 .wrap_err("Failed to connect to local Docker daemon")?;
             let registry = RuleRegistry::new();
-            let outcome = registry.fix_rule(&payload.rule_id, &docker).await?;
+            let outcome = registry.fix_request(&payload, &docker).await?;
             serde_json::to_value(outcome).wrap_err("Failed to serialize fix outcome")
         }
         "docker" => relay_docker::execute(payload).await,

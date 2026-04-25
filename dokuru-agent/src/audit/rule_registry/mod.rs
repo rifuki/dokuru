@@ -1,7 +1,7 @@
 // Registry for all CIS Docker Benchmark rules
 use super::types::{
-    AuditReport, AuditSummary, CheckResult, CheckStatus, FixOutcome, FixStatus, RemediationKind,
-    RuleCategory, Severity,
+    AuditReport, AuditSummary, CheckResult, CheckStatus, FixOutcome, FixRequest, FixStatus,
+    RemediationKind, RuleCategory, Severity,
 };
 use bollard::Docker;
 use chrono::Utc;
@@ -193,6 +193,38 @@ impl RuleRegistry {
             .get(rule_id)
             .ok_or_else(|| eyre::eyre!("Rule {} not found", rule_id))?;
         rule_def.fix(docker).await
+    }
+
+    /// Fix a rule using the request payload from API/relay callers.
+    pub async fn fix_request(&self, request: &FixRequest, docker: &Docker) -> Result<FixOutcome> {
+        if super::fix_helpers::supports_cgroup_resource_fix(&request.rule_id) {
+            if request.targets.is_empty() {
+                return super::fix_helpers::apply_default_cgroup_resource_fix(
+                    docker,
+                    &request.rule_id,
+                )
+                .await;
+            }
+            return super::fix_helpers::apply_cgroup_resource_fix(
+                docker,
+                &request.rule_id,
+                &request.targets,
+            )
+            .await;
+        }
+
+        if !request.targets.is_empty() {
+            return Ok(FixOutcome {
+                rule_id: request.rule_id.clone(),
+                status: FixStatus::Blocked,
+                message: "Parameterized targets are only supported for cgroup fixes".to_string(),
+                requires_restart: false,
+                restart_command: None,
+                requires_elevation: false,
+            });
+        }
+
+        self.fix_rule(&request.rule_id, docker).await
     }
 }
 

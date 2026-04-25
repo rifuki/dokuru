@@ -16,6 +16,17 @@ pub struct SaveAuditDto {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FixRuleDto {
     pub rule_id: String,
+    #[serde(default)]
+    pub targets: Vec<FixTargetDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixTargetDto {
+    pub container_id: String,
+    pub memory: Option<i64>,
+    pub cpu_shares: Option<i64>,
+    pub pids_limit: Option<i64>,
+    pub strategy: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -108,14 +108,14 @@ pub async fn run_relay_fix(
             .with_message("Server-side fix is only available for relay agents"));
     }
 
-    let outcome_value = relay::send_command(
-        &state.agent_registry,
-        agent.id,
-        "fix",
-        serde_json::json!({ "rule_id": dto.rule_id }),
-    )
-    .await
-    .map_err(|error| relay_error_to_api_error(&error))?;
+    let fix_payload = serde_json::json!({
+        "rule_id": dto.rule_id,
+        "targets": dto.targets,
+    });
+
+    let outcome_value = relay::send_command(&state.agent_registry, agent.id, "fix", fix_payload)
+        .await
+        .map_err(|error| relay_error_to_api_error(&error))?;
 
     let outcome = serde_json::from_value::<FixOutcomeResponse>(outcome_value).map_err(|error| {
         ApiError::default()

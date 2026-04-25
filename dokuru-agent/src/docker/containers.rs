@@ -12,7 +12,7 @@ use axum::{
 use bollard::Docker;
 use bollard::container::{
     ListContainersOptions, LogOutput, LogsOptions, RemoveContainerOptions, StartContainerOptions,
-    StatsOptions,
+    StatsOptions, UpdateContainerOptions,
 };
 use bollard::exec::{CreateExecOptions, ResizeExecOptions, StartExecOptions, StartExecResults};
 use futures::{SinkExt, StreamExt};
@@ -50,6 +50,7 @@ where
         .route("/docker/containers/{id}/start", post(start_container))
         .route("/docker/containers/{id}/stop", post(stop_container))
         .route("/docker/containers/{id}/restart", post(restart_container))
+        .route("/docker/containers/{id}/update", post(update_container))
         .route("/docker/containers/{id}/logs", get(container_logs))
         .route("/docker/containers/{id}/stats", get(container_stats))
         .route("/docker/containers/{id}/exec", get(container_exec))
@@ -140,6 +141,46 @@ async fn remove_container(Path(id): Path<String>) -> Result<StatusCode, StatusCo
                 force: true,
                 ..Default::default()
             }),
+        )
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct UpdateContainerRequest {
+    memory: Option<i64>,
+    cpu_shares: Option<isize>,
+    pids_limit: Option<i64>,
+}
+
+async fn update_container(
+    Path(id): Path<String>,
+    Json(payload): Json<UpdateContainerRequest>,
+) -> Result<StatusCode, StatusCode> {
+    let docker = get_docker_client().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if payload.memory.is_none() && payload.cpu_shares.is_none() && payload.pids_limit.is_none() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    if payload.memory.is_some_and(|memory| memory <= 0)
+        || payload.cpu_shares.is_some_and(|cpu_shares| cpu_shares <= 0)
+        || payload.pids_limit.is_some_and(|pids_limit| pids_limit <= 0)
+    {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    docker
+        .update_container(
+            &id,
+            UpdateContainerOptions::<String> {
+                memory: payload.memory,
+                cpu_shares: payload.cpu_shares,
+                pids_limit: payload.pids_limit,
+                ..Default::default()
+            },
         )
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

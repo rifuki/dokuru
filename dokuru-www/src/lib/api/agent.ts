@@ -1,6 +1,6 @@
 import { apiClient } from "@/lib/api";
 import type { Agent, CreateAgentDto, UpdateAgentDto } from "@/types/agent";
-import type { AuditReportResponse, AuditResponse, FixOutcome } from "./agent-direct";
+import type { AuditReportResponse, AuditResponse, FixOutcome, FixTarget } from "./agent-direct";
 
 export interface RelayFixResponse {
   outcome: FixOutcome;
@@ -42,8 +42,9 @@ export const agentApi = {
     return response.data.data;
   },
 
-  applyFix: async (id: string, ruleId: string): Promise<RelayFixResponse> => {
-    const response = await apiClient.post(`/agents/${id}/fix`, { rule_id: ruleId });
+  applyFix: async (id: string, ruleId: string, targets?: FixTarget[]): Promise<RelayFixResponse> => {
+    const payload = targets ? { rule_id: ruleId, targets } : { rule_id: ruleId };
+    const response = await apiClient.post(`/agents/${id}/fix`, payload);
     return response.data.data;
   },
 
