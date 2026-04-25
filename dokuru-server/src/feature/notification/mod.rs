@@ -1,3 +1,4 @@
+pub mod catalog;
 pub mod dto;
 pub mod entity;
 mod handlers;

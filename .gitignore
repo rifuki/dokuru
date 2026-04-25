@@ -49,6 +49,7 @@ bun.lockb
 *.tsbuildinfo
 .turbo/
 .cache/
+dokuru-www/src/routeTree.gen.ts
 
 # OS/Editor
 .DS_Store

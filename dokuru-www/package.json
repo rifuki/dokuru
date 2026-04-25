@@ -4,9 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
+    "routes:generate": "node scripts/generate-route-tree.mjs",
+    "dev": "bun run routes:generate && vite",
+    "build": "bun run routes:generate && tsc -b && vite build",
+    "lint": "bun run routes:generate && eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
