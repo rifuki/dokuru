@@ -21,9 +21,18 @@ pub fn agent_routes() -> Router<AppState> {
         )
         .route("/{id}/heartbeat", post(handlers::agent_heartbeat))
         .route(
+            "/{id}/docker/events/stream",
+            get(audit_handlers::relay_docker_events_ws),
+        )
+        .route(
+            "/{id}/docker/containers/{container_id}/exec",
+            get(audit_handlers::relay_docker_exec_ws),
+        )
+        .route(
             "/{id}/docker/{*tail}",
             any(audit_handlers::relay_docker_request),
         )
+        .route("/{id}/health", get(audit_handlers::relay_health))
         .route("/{id}/fix", post(audit_handlers::run_relay_fix))
         .route("/{id}/audit", post(audit_handlers::save_audit))
         .route("/{id}/audit/run", post(audit_handlers::run_relay_audit))

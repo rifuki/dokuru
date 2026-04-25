@@ -1,4 +1,10 @@
-use axum::{Extension, extract::Request, http::StatusCode, middleware::Next, response::Response};
+use axum::{
+    Extension,
+    extract::Request,
+    http::{StatusCode, header},
+    middleware::Next,
+    response::Response,
+};
 use std::sync::Arc;
 
 use crate::{
@@ -13,17 +19,9 @@ pub async fn auth_middleware(
     mut request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    let auth_header = request
-        .headers()
-        .get("Authorization")
-        .and_then(|v| v.to_str().ok())
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+    let token = auth_token(&request).ok_or(StatusCode::UNAUTHORIZED)?;
 
-    let token = auth_header
-        .strip_prefix("Bearer ")
-        .ok_or(StatusCode::UNAUTHORIZED)?;
-
-    let claims = validate_access_token(token).map_err(|_| StatusCode::UNAUTHORIZED)?;
+    let claims = validate_access_token(&token).map_err(|_| StatusCode::UNAUTHORIZED)?;
 
     // Check if session is blacklisted (if Redis is configured)
     if let Some(ref blacklist) = blacklist {
@@ -47,6 +45,34 @@ pub async fn auth_middleware(
     });
 
     Ok(next.run(request).await)
+}
+
+fn auth_token(request: &Request) -> Option<String> {
+    if let Some(token) = request
+        .headers()
+        .get("Authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+    {
+        return Some(token.to_string());
+    }
+
+    if !is_websocket_upgrade(request) {
+        return None;
+    }
+
+    request.uri().query().and_then(|query| {
+        url::form_urlencoded::parse(query.as_bytes())
+            .find_map(|(key, value)| (key == "access_token").then(|| value.into_owned()))
+    })
+}
+
+fn is_websocket_upgrade(request: &Request) -> bool {
+    request
+        .headers()
+        .get(header::UPGRADE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.eq_ignore_ascii_case("websocket"))
 }
 
 /// Optional JWT extraction — does not reject unauthenticated requests.

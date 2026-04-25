@@ -1,10 +1,24 @@
+use std::{collections::HashMap, pin::Pin, sync::Arc};
+
+use base64::{Engine as _, engine::general_purpose};
+use bollard::{
+    Docker,
+    container::LogOutput,
+    exec::{CreateExecOptions, ResizeExecOptions, StartExecOptions, StartExecResults},
+    system::EventsOptions,
+};
 use eyre::{Result, WrapErr};
 use futures_util::{
     SinkExt, StreamExt,
     stream::{SplitSink, SplitStream},
 };
 use serde::{Deserialize, Serialize};
-use tokio::{net::TcpStream, sync::mpsc, task::JoinHandle};
+use tokio::{
+    io::{AsyncWrite, AsyncWriteExt},
+    net::TcpStream,
+    sync::{Mutex, mpsc},
+    task::JoinHandle,
+};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async, tungstenite::Message};
 use tracing::{error, info, warn};
 
@@ -15,6 +29,17 @@ const RELAY_SERVER: &str = "wss://api.dokuru.rifuki.dev/ws/agent";
 type RelaySocket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 type RelayWriter = SplitSink<RelaySocket, Message>;
 type RelayReader = SplitStream<RelaySocket>;
+type ActiveStreams = Arc<Mutex<HashMap<String, mpsc::UnboundedSender<StreamInput>>>>;
+type ExecOutput = futures_util::stream::BoxStream<
+    'static,
+    std::result::Result<LogOutput, bollard::errors::Error>,
+>;
+type ExecInput = Pin<Box<dyn AsyncWrite + Send>>;
+
+enum StreamInput {
+    Data(Vec<u8>),
+    Close,
+}
 
 /// WebSocket message types (must match server)
 #[derive(Debug, Serialize, Deserialize)]
@@ -39,6 +64,19 @@ enum WsMessage {
         success: bool,
         data: serde_json::Value,
     },
+    StreamOpen {
+        id: String,
+        stream: String,
+        payload: serde_json::Value,
+    },
+    StreamData {
+        id: String,
+        data: String,
+    },
+    StreamClose {
+        id: String,
+        reason: Option<String>,
+    },
     Ping,
     Pong,
 }
@@ -46,6 +84,14 @@ enum WsMessage {
 #[derive(Debug, Deserialize)]
 struct FixCommandPayload {
     rule_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ExecStreamPayload {
+    container_id: String,
+    rows: Option<u16>,
+    cols: Option<u16>,
+    shell: Option<String>,
 }
 
 /// Start relay mode - connect to server via WebSocket
@@ -95,9 +141,11 @@ async fn connect_and_run(token: &str) -> Result<()> {
     let (tx, rx) = mpsc::unbounded_channel::<Message>();
     let write_task = spawn_writer(write, rx);
     let keepalive_task = spawn_keepalive(tx.clone());
+    let streams = Arc::new(Mutex::new(HashMap::new()));
 
-    relay_read_loop(&mut read, &tx).await;
+    relay_read_loop(&mut read, &tx, streams.clone()).await;
 
+    close_active_streams(streams).await;
     keepalive_task.abort();
     write_task.abort();
     Ok(())
@@ -156,11 +204,15 @@ fn spawn_keepalive(tx: mpsc::UnboundedSender<Message>) -> JoinHandle<()> {
     })
 }
 
-async fn relay_read_loop(read: &mut RelayReader, tx: &mpsc::UnboundedSender<Message>) {
+async fn relay_read_loop(
+    read: &mut RelayReader,
+    tx: &mpsc::UnboundedSender<Message>,
+    streams: ActiveStreams,
+) {
     while let Some(msg) = read.next().await {
         match msg {
             Ok(Message::Text(text)) => {
-                if let Err(e) = handle_message(&text, tx).await {
+                if let Err(e) = handle_message(&text, tx, streams.clone()).await {
                     error!("Error handling message: {}", e);
                 }
             }
@@ -180,7 +232,24 @@ async fn relay_read_loop(read: &mut RelayReader, tx: &mpsc::UnboundedSender<Mess
     }
 }
 
-async fn handle_message(text: &str, tx: &mpsc::UnboundedSender<Message>) -> Result<()> {
+async fn close_active_streams(streams: ActiveStreams) {
+    let active = streams
+        .lock()
+        .await
+        .drain()
+        .map(|(_, sender)| sender)
+        .collect::<Vec<_>>();
+
+    for sender in active {
+        let _ = sender.send(StreamInput::Close);
+    }
+}
+
+async fn handle_message(
+    text: &str,
+    tx: &mpsc::UnboundedSender<Message>,
+    streams: ActiveStreams,
+) -> Result<()> {
     let msg: WsMessage = serde_json::from_str(text)?;
 
     match msg {
@@ -204,15 +273,319 @@ async fn handle_message(text: &str, tx: &mpsc::UnboundedSender<Message>) -> Resu
                 },
             };
 
-            tx.send(Message::Text(serde_json::to_string(&response)?))?;
+            queue_ws_message(tx, &response)?;
+        }
+        WsMessage::StreamOpen {
+            id,
+            stream,
+            payload,
+        } => {
+            start_stream(id, stream, payload, tx.clone(), streams).await?;
+        }
+        WsMessage::StreamData { id, data } => {
+            let data = general_purpose::STANDARD
+                .decode(data)
+                .wrap_err("Invalid relay stream data")?;
+            let sender = streams.lock().await.get(&id).cloned();
+            if let Some(sender) = sender {
+                let _ = sender.send(StreamInput::Data(data));
+            }
+        }
+        WsMessage::StreamClose { id, .. } => {
+            let sender = streams.lock().await.remove(&id);
+            if let Some(sender) = sender {
+                let _ = sender.send(StreamInput::Close);
+            }
         }
         WsMessage::Ping => {
-            tx.send(Message::Text(serde_json::to_string(&WsMessage::Pong)?))?;
+            queue_ws_message(tx, &WsMessage::Pong)?;
         }
         _ => {}
     }
 
     Ok(())
+}
+
+fn queue_ws_message(tx: &mpsc::UnboundedSender<Message>, message: &WsMessage) -> Result<()> {
+    tx.send(Message::Text(serde_json::to_string(message)?))
+        .map_err(|_| eyre::eyre!("Relay writer closed"))
+}
+
+async fn start_stream(
+    id: String,
+    stream: String,
+    payload: serde_json::Value,
+    tx: mpsc::UnboundedSender<Message>,
+    streams: ActiveStreams,
+) -> Result<()> {
+    let (input_tx, input_rx) = mpsc::unbounded_channel();
+    streams.lock().await.insert(id.clone(), input_tx);
+
+    tokio::spawn(async move {
+        let result = execute_stream(&stream, payload, input_rx, &tx, &id).await;
+        streams.lock().await.remove(&id);
+        let reason = result.err().map(|error| error.to_string());
+        let _ = queue_ws_message(&tx, &WsMessage::StreamClose { id, reason });
+    });
+
+    Ok(())
+}
+
+async fn execute_stream(
+    stream: &str,
+    payload: serde_json::Value,
+    input_rx: mpsc::UnboundedReceiver<StreamInput>,
+    tx: &mpsc::UnboundedSender<Message>,
+    id: &str,
+) -> Result<()> {
+    match stream {
+        "docker_exec" => docker_exec_stream(payload, input_rx, tx, id).await,
+        "docker_events" => docker_events_stream(input_rx, tx, id).await,
+        _ => Err(eyre::eyre!("Unknown stream: {stream}")),
+    }
+}
+
+fn send_stream_data(tx: &mpsc::UnboundedSender<Message>, id: &str, data: Vec<u8>) -> Result<()> {
+    queue_ws_message(
+        tx,
+        &WsMessage::StreamData {
+            id: id.to_string(),
+            data: general_purpose::STANDARD.encode(data),
+        },
+    )
+}
+
+async fn docker_events_stream(
+    mut input_rx: mpsc::UnboundedReceiver<StreamInput>,
+    tx: &mpsc::UnboundedSender<Message>,
+    id: &str,
+) -> Result<()> {
+    let docker = crate::docker::get_docker_client()?;
+    let mut events = docker.events(None::<EventsOptions<String>>);
+
+    loop {
+        tokio::select! {
+            input = input_rx.recv() => {
+                match input {
+                    Some(StreamInput::Close) | None => break,
+                    Some(StreamInput::Data(_)) => {}
+                }
+            }
+            event = events.next() => {
+                let Some(event) = event else { break };
+                let event = event.wrap_err("Failed to read Docker event")?;
+                let event_type = event.typ.map(|typ| format!("{typ:?}")).unwrap_or_default();
+                let actor_id = event
+                    .actor
+                    .as_ref()
+                    .and_then(|actor| actor.id.clone())
+                    .unwrap_or_default();
+                let attributes = event
+                    .actor
+                    .as_ref()
+                    .and_then(|actor| actor.attributes.clone())
+                    .unwrap_or_else(HashMap::new);
+
+                let payload = serde_json::to_vec(&serde_json::json!({
+                    "type": event_type,
+                    "action": event.action.unwrap_or_default(),
+                    "actor": {
+                        "id": actor_id,
+                        "attributes": attributes,
+                    },
+                    "time": event.time.unwrap_or_default(),
+                }))?;
+                send_stream_data(tx, id, payload)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn docker_exec_stream(
+    payload: serde_json::Value,
+    mut input_rx: mpsc::UnboundedReceiver<StreamInput>,
+    tx: &mpsc::UnboundedSender<Message>,
+    id: &str,
+) -> Result<()> {
+    let payload = serde_json::from_value::<ExecStreamPayload>(payload)
+        .wrap_err("Invalid docker exec stream payload")?;
+    let docker = Arc::new(crate::docker::get_docker_client()?);
+    let (exec_id, mut output, mut input) = setup_exec(
+        &docker,
+        &payload.container_id,
+        payload.shell,
+        payload.rows.unwrap_or(24),
+        payload.cols.unwrap_or(80),
+    )
+    .await?;
+
+    loop {
+        tokio::select! {
+            output = output.next() => {
+                match output {
+                    Some(Ok(output)) => send_stream_data(tx, id, output.into_bytes().to_vec())?,
+                    Some(Err(error)) => return Err(error).wrap_err("Failed to read exec output"),
+                    None => break,
+                }
+            }
+            input_event = input_rx.recv() => {
+                match input_event {
+                    Some(StreamInput::Data(data)) => {
+                        handle_exec_input(data, &mut input, &docker, &exec_id).await?;
+                    }
+                    Some(StreamInput::Close) | None => break,
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn setup_exec(
+    docker: &Docker,
+    container_id: &str,
+    preferred_shell: Option<String>,
+    rows: u16,
+    cols: u16,
+) -> Result<(String, ExecOutput, ExecInput)> {
+    let shell = resolve_shell(docker, container_id, preferred_shell).await;
+    let exec = docker
+        .create_exec(
+            container_id,
+            CreateExecOptions::<String> {
+                attach_stdin: Some(true),
+                attach_stdout: Some(true),
+                attach_stderr: Some(true),
+                tty: Some(true),
+                cmd: Some(vec![shell]),
+                ..Default::default()
+            },
+        )
+        .await
+        .wrap_err("Failed to create Docker exec")?;
+    let exec_id = exec.id;
+
+    let StartExecResults::Attached { output, input } = docker
+        .start_exec(
+            &exec_id,
+            Some(StartExecOptions {
+                detach: false,
+                tty: true,
+                output_capacity: None,
+            }),
+        )
+        .await
+        .wrap_err("Failed to start Docker exec")?
+    else {
+        return Err(eyre::eyre!("Docker exec did not attach"));
+    };
+
+    let _ = docker
+        .resize_exec(
+            &exec_id,
+            ResizeExecOptions {
+                height: rows,
+                width: cols,
+            },
+        )
+        .await;
+
+    Ok((exec_id, output, input))
+}
+
+async fn resolve_shell(
+    docker: &Docker,
+    container_id: &str,
+    preferred_shell: Option<String>,
+) -> String {
+    if let Some(shell) = preferred_shell
+        && !shell.is_empty()
+    {
+        return shell;
+    }
+
+    for candidate in ["/bin/bash", "/bin/sh"] {
+        let probe = docker
+            .create_exec(
+                container_id,
+                CreateExecOptions::<String> {
+                    attach_stdout: Some(true),
+                    attach_stderr: Some(true),
+                    tty: Some(false),
+                    cmd: Some(vec![
+                        "test".to_owned(),
+                        "-f".to_owned(),
+                        candidate.to_owned(),
+                    ]),
+                    ..Default::default()
+                },
+            )
+            .await;
+
+        if let Ok(exec) = probe
+            && let Ok(StartExecResults::Attached { mut output, .. }) = docker
+                .start_exec(
+                    &exec.id,
+                    Some(StartExecOptions {
+                        detach: false,
+                        tty: false,
+                        output_capacity: None,
+                    }),
+                )
+                .await
+        {
+            while output.next().await.is_some() {}
+            if docker
+                .inspect_exec(&exec.id)
+                .await
+                .ok()
+                .and_then(|info| info.exit_code)
+                == Some(0)
+            {
+                return candidate.to_string();
+            }
+        }
+    }
+
+    "/bin/sh".to_string()
+}
+
+async fn handle_exec_input(
+    data: Vec<u8>,
+    input: &mut ExecInput,
+    docker: &Docker,
+    exec_id: &str,
+) -> Result<()> {
+    if let Ok(text) = std::str::from_utf8(&data)
+        && let Ok(json) = serde_json::from_str::<serde_json::Value>(text)
+        && json.get("type").and_then(serde_json::Value::as_str) == Some("resize")
+    {
+        handle_exec_resize(json, docker, exec_id).await;
+        return Ok(());
+    }
+
+    input
+        .write_all(&data)
+        .await
+        .wrap_err("Failed to write exec input")?;
+    input.flush().await.wrap_err("Failed to flush exec input")
+}
+
+async fn handle_exec_resize(json: serde_json::Value, docker: &Docker, exec_id: &str) {
+    if let (Some(cols), Some(rows)) = (json["cols"].as_u64(), json["rows"].as_u64()) {
+        let _ = docker
+            .resize_exec(
+                exec_id,
+                ResizeExecOptions {
+                    height: u16::try_from(rows).unwrap_or(24),
+                    width: u16::try_from(cols).unwrap_or(80),
+                },
+            )
+            .await;
+    }
 }
 
 async fn execute_command(command: &str, payload: serde_json::Value) -> Result<serde_json::Value> {

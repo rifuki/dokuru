@@ -3,6 +3,7 @@ import { Activity, Download, Pause, Play, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { useDockerEvents } from "@/hooks/useDockerEvents";
 import { useAgentStore, getAgentToken } from "@/stores/use-agent-store";
+import { dockerCredential } from "@/services/docker-api";
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,7 +52,11 @@ function EventsPage() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState<number>(10);
 
-  const agentToken = agent ? (agent.token ?? getAgentToken(agent.id) ?? "") : "";
+  const agentToken = agent
+    ? agent.access_mode === "relay"
+      ? dockerCredential(agent)
+      : agent.token ?? getAgentToken(agent.id) ?? ""
+    : "";
 
   const { events, clearEvents, isConnected, isConnecting } = useDockerEvents(
     agent?.url ?? "",

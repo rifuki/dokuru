@@ -22,6 +22,8 @@ import { Button } from "@/components/ui/button";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import useWebSocket, { ReadyState } from "react-use-websocket";
+import { wsApiUrl } from "@/lib/api/api-config";
+import { useAuthStore } from "@/stores/use-auth-store";
 
 // ─── Overview tab ─────────────────────────────────────────────────────────────
 
@@ -397,14 +399,27 @@ export function ContainerTerminal({
   const [selectedShell, setSelectedShell] = useState<string>("/bin/sh");
   const [detectedShell, setDetectedShell] = useState<string | null>(null);
   const [shellMenuOpen, setShellMenuOpen] = useState(false);
+  const accessToken = useAuthStore((s) => s.accessToken);
+  const isRelay = agentUrl === "relay";
 
   // Build WebSocket URL
   const wsUrl = useMemo(() => {
     if (!shouldConnect) return null;
-    const shell = `&shell=${encodeURIComponent(selectedShell)}`;
-    return agentUrl.replace(/^http/, "ws") +
-      `/docker/containers/${containerId}/exec?token=${encodeURIComponent(token)}&cols=${termDimensions.cols}&rows=${termDimensions.rows}${shell}`;
-  }, [shouldConnect, agentUrl, containerId, token, selectedShell, termDimensions]);
+    const params = new URLSearchParams({
+      cols: String(termDimensions.cols),
+      rows: String(termDimensions.rows),
+      shell: selectedShell,
+    });
+
+    if (isRelay) {
+      if (!accessToken) return null;
+      params.set("access_token", accessToken);
+      return `${wsApiUrl}/agents/${token}/docker/containers/${encodeURIComponent(containerId)}/exec?${params.toString()}`;
+    }
+
+    params.set("token", token);
+    return `${agentUrl.replace(/^http/, "ws")}/docker/containers/${encodeURIComponent(containerId)}/exec?${params.toString()}`;
+  }, [accessToken, agentUrl, containerId, isRelay, selectedShell, shouldConnect, termDimensions, token]);
 
   const { sendMessage, lastMessage, readyState, getWebSocket } = useWebSocket(wsUrl, {
     shouldReconnect: () => false,
@@ -426,9 +441,10 @@ export function ContainerTerminal({
     },
   }, wsUrl !== null);
 
-  const status: TermStatus = 
+  const status: TermStatus =
     readyState === ReadyState.OPEN ? "connected" :
     readyState === ReadyState.CONNECTING ? "connecting" :
+    readyState === ReadyState.UNINSTANTIATED ? "idle" :
     readyState === ReadyState.CLOSED ? "disconnected" : "error";
 
   // Detect available shell when tab becomes active (once)
@@ -793,13 +809,12 @@ export function ContainerTabPanel({
 }) {
   const [tab, setTab] = useState<Tab>("overview");
   const isRunning = container.state.toLowerCase() === "running";
-  const isRelay = agentUrl === "relay";
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode; disabled?: boolean }[] = [
     { id: "overview", label: "Overview", icon: <Info className="h-4 w-4" /> },
     { id: "logs",     label: "Logs",     icon: <FileText className="h-4 w-4" /> },
     { id: "stats",    label: "Stats",    icon: <BarChart2 className="h-4 w-4" />, disabled: !isRunning },
-    { id: "terminal", label: "Terminal", icon: <TerminalIcon className="h-4 w-4" />, disabled: !isRunning || isRelay },
+    { id: "terminal", label: "Terminal", icon: <TerminalIcon className="h-4 w-4" />, disabled: !isRunning },
     { id: "inspect",  label: "Inspect",  icon: <Info className="h-4 w-4" /> },
   ];
 

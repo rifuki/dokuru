@@ -1,4 +1,5 @@
 import axios from "axios";
+import apiClient from "./axios-instance";
 
 export interface DockerInfo {
   docker_version: string;
@@ -152,6 +153,12 @@ export interface AuditReportResponse {
 
 export const agentDirectApi = {
   getInfo: async (agentUrl: string, token?: string): Promise<DockerInfo> => {
+    if (agentUrl === "relay") {
+      if (!token) throw new Error("Relay agent id is required");
+      const response = await apiClient.get(`/agents/${token}/docker/info`);
+      return response.data;
+    }
+
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
     const response = await axios.get(`${agentUrl}/api/v1/info`, { headers, timeout: 10000 });
     return response.data.data;
@@ -169,8 +176,14 @@ export const agentDirectApi = {
     return response.data.data;
   },
 
-  checkHealth: async (agentUrl: string): Promise<boolean> => {
+  checkHealth: async (agentUrl: string, token?: string): Promise<boolean> => {
     try {
+      if (agentUrl === "relay") {
+        if (!token) return false;
+        await apiClient.get(`/agents/${token}/health`);
+        return true;
+      }
+
       await axios.get(`${agentUrl}/health`, { timeout: 5000 });
       return true;
     } catch {

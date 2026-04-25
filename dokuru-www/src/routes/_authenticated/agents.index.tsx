@@ -16,6 +16,7 @@ import { Plus, RefreshCw, Container, Box, HardDrive, Search, ChevronDown, Edit, 
 import { AddAgentModal } from "@/components/agents/AddAgentModal";
 import { agentDirectApi } from "@/lib/api/agent-direct";
 import { agentApi } from "@/lib/api/agent";
+import { dockerCredential } from "@/services/docker-api";
 import { setAgentToken } from "@/stores/use-agent-store";
 import type { Agent } from "@/types/agent";
 import { Input } from "@/components/ui/input";
@@ -364,7 +365,7 @@ function AgentsList() {
     for (const agent of agents) {
       const cached = agentInfos[agent.id];
       if (cached && !cached.loading) continue;
-      const token = agent.token ?? getAgentToken(agent.id);
+      const token = agent.access_mode === "relay" ? dockerCredential(agent) : agent.token ?? getAgentToken(agent.id);
       if (!token) { setAgentInfo(agent.id, null); continue; }
       setAgentInfoLoading(agent.id, true);
       agentDirectApi.getInfo(agent.url, token)
@@ -378,7 +379,7 @@ function AgentsList() {
   useEffect(() => {
     for (const agent of agents) {
       if (agentOnlineStatus[agent.id] === true) {
-        const token = agent.token ?? getAgentToken(agent.id);
+        const token = agent.access_mode === "relay" ? dockerCredential(agent) : agent.token ?? getAgentToken(agent.id);
         if (!token) continue;
         agentDirectApi.getInfo(agent.url, token)
           .then((info) => setAgentInfo(agent.id, info))

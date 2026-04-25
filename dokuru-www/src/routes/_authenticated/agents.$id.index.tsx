@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { agentApi } from "@/lib/api/agent";
 import { agentDirectApi, type DockerInfo, type AuditResponse } from "@/lib/api/agent-direct";
+import { dockerCredential } from "@/services/docker-api";
 import type { Agent } from "@/types/agent";
 import { getAgentToken, setAgentToken } from "@/stores/use-agent-store";
 import { Button } from "@/components/ui/button";
@@ -121,13 +122,15 @@ function AgentDetail() {
 
     const latestAudit: AuditResponse | null = audits?.[audits.length - 1] ?? null;
 
-    const fetchDockerInfo = async (agentUrl: string, agentId: string) => {
-        const token = getAgentToken(agentId);
-        if (!token) return;
+    const fetchDockerInfo = async (targetAgent: Agent) => {
+        const credential = targetAgent.access_mode === "relay"
+            ? dockerCredential(targetAgent)
+            : getAgentToken(targetAgent.id) ?? targetAgent.token ?? "";
+        if (!credential) return;
         setIsLoadingDocker(true);
         setDockerInfo(null);
         try {
-            const info = await agentDirectApi.getInfo(agentUrl, token);
+            const info = await agentDirectApi.getInfo(targetAgent.url, credential);
             setDockerInfo(info);
         } catch { /* silently fail */ } finally {
             setIsLoadingDocker(false);
@@ -139,7 +142,7 @@ function AgentDetail() {
             try {
                 const data = await agentApi.getById(id);
                 setAgent(data);
-                await fetchDockerInfo(data.url, data.id);
+                await fetchDockerInfo(data);
             } catch {
                 toast.error("Failed to load agent");
                 navigate({ to: "/" });
@@ -184,7 +187,7 @@ function AgentDetail() {
             updateAgent(updated);
             setEditDialogOpen(false);
             toast.success("Agent updated");
-            await fetchDockerInfo(updated.url, updated.id);
+            await fetchDockerInfo(updated);
         } catch {
             toast.error("Failed to update agent");
         } finally {
@@ -313,7 +316,7 @@ function AgentDetail() {
                         </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                        <Button variant="outline" size="sm" onClick={() => fetchDockerInfo(agent.url, agent.id)} disabled={isLoadingDocker} className="gap-1.5">
+                        <Button variant="outline" size="sm" onClick={() => fetchDockerInfo(agent)} disabled={isLoadingDocker} className="gap-1.5">
                             <RefreshCw className={`h-3.5 w-3.5 ${isLoadingDocker ? "animate-spin" : ""}`} />
                             Refresh
                         </Button>
@@ -350,7 +353,7 @@ function AgentDetail() {
                     </div>
                     <h3 className="text-xl font-semibold mb-2">Agent unreachable</h3>
                     <p className="text-muted-foreground text-sm mb-4">Make sure the agent is running and accessible.</p>
-                    <Button variant="outline" size="sm" onClick={() => fetchDockerInfo(agent.url, agent.id)} className="gap-2">
+                    <Button variant="outline" size="sm" onClick={() => fetchDockerInfo(agent)} className="gap-2">
                         <RefreshCw className="h-3.5 w-3.5" />
                         Retry Connection
                     </Button>

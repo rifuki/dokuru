@@ -1,5 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import useWebSocket, { ReadyState } from "react-use-websocket";
+import apiClient from "@/lib/api/axios-instance";
+import { wsApiUrl } from "@/lib/api/api-config";
+import { useAuthStore } from "@/stores/use-auth-store";
 
 export interface DockerEvent {
   type: string;
@@ -20,20 +23,30 @@ interface UseDockerEventsOptions {
 
 export function useDockerEvents(agentUrl: string, agentToken: string, options: UseDockerEventsOptions = {}) {
   const { enabled = true, maxEvents = 1000, historySecs = 3600 } = options;
+  const accessToken = useAuthStore((s) => s.accessToken);
   const [events, setEvents] = useState<DockerEvent[]>([]);
   const eventsRef = useRef<DockerEvent[]>([]);
   // Track which agent URL we last loaded history for so we don't double-load
   const historyLoadedForRef = useRef<string>("");
 
-  const wsUrl = agentUrl.replace(/^http/, "ws") + "/docker/events/stream" +
-    (agentToken ? `?token=${encodeURIComponent(agentToken)}` : "");
+  const isRelay = agentUrl === "relay";
+  const wsUrl = useMemo(() => {
+    if (!agentUrl || !agentToken) return null;
+    if (isRelay) {
+      if (!accessToken) return null;
+      return `${wsApiUrl}/agents/${agentToken}/docker/events/stream?access_token=${encodeURIComponent(accessToken)}`;
+    }
+
+    return agentUrl.replace(/^http/, "ws") + "/docker/events/stream" +
+      `?token=${encodeURIComponent(agentToken)}`;
+  }, [accessToken, agentToken, agentUrl, isRelay]);
 
   // Clear events when agent changes - schedule as microtask to avoid sync setState in effect
   useEffect(() => {
     eventsRef.current = [];
     historyLoadedForRef.current = "";
     Promise.resolve().then(() => setEvents([]));
-  }, [agentUrl]);
+  }, [agentUrl, agentToken]);
 
   const { lastMessage, readyState } = useWebSocket(
     wsUrl,
@@ -42,7 +55,7 @@ export function useDockerEvents(agentUrl: string, agentToken: string, options: U
       reconnectAttempts: 10,
       reconnectInterval: 3000,
     },
-    enabled && !!agentUrl && !!agentToken,
+    enabled && !!wsUrl,
   );
 
   // On first successful connection, load the last `historySecs` of events
@@ -50,14 +63,19 @@ export function useDockerEvents(agentUrl: string, agentToken: string, options: U
   useEffect(() => {
     if (readyState !== ReadyState.OPEN) return;
     if (!agentUrl || !agentToken) return;
-    if (historyLoadedForRef.current === agentUrl) return; // already loaded
-    historyLoadedForRef.current = agentUrl;
+    const historyKey = `${agentUrl}:${agentToken}`;
+    if (historyLoadedForRef.current === historyKey) return; // already loaded
+    historyLoadedForRef.current = historyKey;
 
-    const since = Math.floor(Date.now() / 1000) - historySecs;
-    fetch(`${agentUrl}/docker/events?since=${since}`, {
-      headers: { Authorization: `Bearer ${agentToken}` },
-    })
-      .then((r) => r.json())
+    const until = Math.floor(Date.now() / 1000);
+    const since = until - historySecs;
+    const historyRequest = isRelay
+      ? apiClient.get<DockerEvent[]>(`/agents/${agentToken}/docker/events`, { params: { since, until } }).then((r) => r.data)
+      : fetch(`${agentUrl}/docker/events?since=${since}&until=${until}`, {
+          headers: { Authorization: `Bearer ${agentToken}` },
+        }).then((r) => r.json() as Promise<DockerEvent[]>);
+
+    historyRequest
       .then((data: DockerEvent[]) => {
         if (!Array.isArray(data) || data.length === 0) return;
         // Merge with any live events that may have arrived already,
@@ -77,8 +95,7 @@ export function useDockerEvents(agentUrl: string, agentToken: string, options: U
         setEvents([...deduped]);
       })
       .catch(() => { /* ignore — live stream still works */ });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [readyState, agentUrl, agentToken]);
+  }, [readyState, agentUrl, agentToken, isRelay, historySecs, maxEvents]);
 
   // Append each live event that arrives via WebSocket.
   useEffect(() => {

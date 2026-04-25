@@ -1,4 +1,7 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+};
 
 use bollard::{
     Docker,
@@ -10,6 +13,7 @@ use bollard::{
     image::{CreateImageOptions, ListImagesOptions, PruneImagesOptions, RemoveImageOptions},
     models::HistoryResponseItem,
     network::ListNetworksOptions,
+    system::EventsOptions,
     volume::{ListVolumesOptions, PruneVolumesOptions},
 };
 use eyre::{Result, WrapErr, eyre};
@@ -39,6 +43,35 @@ pub struct DockerCommandPayload {
 struct DockerCommandResponse {
     status: u16,
     data: Option<Value>,
+}
+
+#[derive(Serialize)]
+struct ContainerStatsResponse {
+    total: usize,
+    running: usize,
+    stopped: usize,
+    healthy: usize,
+    unhealthy: usize,
+}
+
+#[derive(Serialize)]
+struct EnvironmentInfoResponse {
+    docker_version: String,
+    api_version: Option<String>,
+    os: String,
+    architecture: String,
+    hostname: Option<String>,
+    kernel_version: Option<String>,
+    docker_root_dir: Option<String>,
+    storage_driver: Option<String>,
+    logging_driver: Option<String>,
+    containers: ContainerStatsResponse,
+    stacks: usize,
+    volumes: usize,
+    images: usize,
+    networks: usize,
+    cpu_count: i64,
+    memory_total: i64,
 }
 
 #[derive(Serialize)]
@@ -122,6 +155,9 @@ async fn route(docker: &Docker, payload: &DockerCommandPayload) -> Result<Docker
         .collect();
 
     match segments.as_slice() {
+        ["docker", "info"] if method == "GET" => docker_info(docker).await,
+        ["docker", "events"] if method == "GET" => docker_events(docker, payload).await,
+
         ["docker", "containers"] if method == "GET" => list_containers(docker, payload).await,
         ["docker", "containers", id] if method == "GET" => inspect_container(docker, id).await,
         ["docker", "containers", id] if method == "DELETE" => remove_container(docker, id).await,
@@ -167,6 +203,150 @@ async fn route(docker: &Docker, payload: &DockerCommandPayload) -> Result<Docker
             serde_json::json!({ "error": "Unsupported relay docker operation" }),
         )),
     }
+}
+
+async fn docker_info(docker: &Docker) -> Result<DockerCommandResponse> {
+    let sys = docker.info().await.wrap_err("Failed to get Docker info")?;
+    let all_containers = docker
+        .list_containers(Some(ListContainersOptions::<String> {
+            all: true,
+            ..Default::default()
+        }))
+        .await
+        .wrap_err("Failed to list containers for Docker info")?;
+
+    let mut running = 0usize;
+    let mut stopped = 0usize;
+    let mut healthy = 0usize;
+    let mut unhealthy = 0usize;
+    let mut stack_names = HashSet::new();
+
+    for container in &all_containers {
+        match container.state.as_deref().unwrap_or("") {
+            "running" => running += 1,
+            "exited" | "stopped" => stopped += 1,
+            _ => {}
+        }
+
+        let status = container.status.as_deref().unwrap_or("");
+        if status.contains("unhealthy") {
+            unhealthy += 1;
+        } else if status.contains("healthy") {
+            healthy += 1;
+        }
+
+        if let Some(labels) = &container.labels
+            && let Some(project) = labels.get("com.docker.compose.project")
+        {
+            stack_names.insert(project.clone());
+        }
+    }
+
+    let volumes = docker
+        .list_volumes::<String>(None)
+        .await
+        .wrap_err("Failed to list volumes for Docker info")?
+        .volumes
+        .unwrap_or_default()
+        .len();
+    let images = docker
+        .list_images(Some(ListImagesOptions::<String> {
+            all: false,
+            filters: HashMap::new(),
+            ..Default::default()
+        }))
+        .await
+        .wrap_err("Failed to list images for Docker info")?
+        .len();
+    let networks = docker
+        .list_networks::<String>(None)
+        .await
+        .wrap_err("Failed to list networks for Docker info")?
+        .len();
+    let api_version = docker
+        .version()
+        .await
+        .ok()
+        .and_then(|version| version.api_version);
+
+    json_ok(EnvironmentInfoResponse {
+        docker_version: sys.server_version.unwrap_or_else(|| "unknown".to_string()),
+        api_version,
+        os: sys
+            .operating_system
+            .unwrap_or_else(|| "unknown".to_string()),
+        architecture: sys.architecture.unwrap_or_else(|| "unknown".to_string()),
+        hostname: sys.name,
+        kernel_version: sys.kernel_version,
+        docker_root_dir: sys.docker_root_dir,
+        storage_driver: sys.driver,
+        logging_driver: sys.logging_driver,
+        containers: ContainerStatsResponse {
+            total: all_containers.len(),
+            running,
+            stopped,
+            healthy,
+            unhealthy,
+        },
+        stacks: stack_names.len(),
+        volumes,
+        images,
+        networks,
+        cpu_count: sys.ncpu.unwrap_or(0),
+        memory_total: sys.mem_total.unwrap_or(0),
+    })
+}
+
+async fn docker_events(
+    docker: &Docker,
+    payload: &DockerCommandPayload,
+) -> Result<DockerCommandResponse> {
+    let options = Some(EventsOptions::<String> {
+        since: payload.query.get("since").cloned(),
+        until: payload.query.get("until").cloned(),
+        ..Default::default()
+    });
+    let mut stream = docker.events(options);
+    let mut events = Vec::new();
+
+    while let Some(event) = stream.next().await {
+        if events.len() >= 100 {
+            break;
+        }
+
+        let event = match event {
+            Ok(event) => event,
+            Err(error) => {
+                return Ok(json_response(
+                    500,
+                    serde_json::json!({ "error": error.to_string() }),
+                ));
+            }
+        };
+        let event_type = event.typ.map(|typ| format!("{typ:?}")).unwrap_or_default();
+        let actor_id = event
+            .actor
+            .as_ref()
+            .and_then(|actor| actor.id.clone())
+            .unwrap_or_default();
+        let attributes = event
+            .actor
+            .as_ref()
+            .and_then(|actor| actor.attributes.clone())
+            .unwrap_or_else(HashMap::new);
+
+        events.push(serde_json::json!({
+            "type": event_type,
+            "action": event.action.unwrap_or_default(),
+            "actor": {
+                "id": actor_id,
+                "attributes": attributes,
+            },
+            "time": event.time.unwrap_or_default(),
+        }));
+    }
+
+    json_ok(events)
 }
 
 async fn list_containers(

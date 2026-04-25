@@ -3,6 +3,7 @@ use axum::{
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
     response::Response,
 };
+use base64::{Engine as _, engine::general_purpose};
 use chrono::{Duration, Utc};
 use dashmap::DashMap;
 use futures::{
@@ -31,12 +32,25 @@ pub struct AgentConnection {
     pub token: String,
     pub tx: mpsc::UnboundedSender<String>,
     pending: Arc<DashMap<String, oneshot::Sender<RelayResponse>>>,
+    streams: Arc<DashMap<String, mpsc::UnboundedSender<RelayStreamEvent>>>,
 }
 
 #[derive(Debug)]
 struct RelayResponse {
     success: bool,
     data: serde_json::Value,
+}
+
+#[derive(Debug)]
+enum RelayStreamEvent {
+    Data(Vec<u8>),
+    Close(Option<String>),
+}
+
+#[derive(Clone, Copy)]
+pub enum RelayStreamMode {
+    Binary,
+    Text,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -79,6 +93,19 @@ pub enum WsMessage {
         id: String,
         success: bool,
         data: serde_json::Value,
+    },
+    StreamOpen {
+        id: String,
+        stream: String,
+        payload: serde_json::Value,
+    },
+    StreamData {
+        id: String,
+        data: String,
+    },
+    StreamClose {
+        id: String,
+        reason: Option<String>,
     },
     Ping,
     Pong,
@@ -143,6 +170,151 @@ async fn send_command_with_timeout(
     }
 }
 
+pub async fn proxy_stream_to_websocket(
+    socket: WebSocket,
+    registry: AgentRegistry,
+    agent_id: Uuid,
+    stream: &str,
+    payload: serde_json::Value,
+    mode: RelayStreamMode,
+) {
+    let relay_stream = match open_stream(&registry, agent_id, stream, payload) {
+        Ok(stream) => stream,
+        Err(error) => {
+            close_socket_with_error(socket, error.to_string()).await;
+            return;
+        }
+    };
+
+    bridge_browser_and_agent(socket, relay_stream, mode).await;
+}
+
+struct RelayStream {
+    id: String,
+    tx: mpsc::UnboundedSender<String>,
+    rx: mpsc::UnboundedReceiver<RelayStreamEvent>,
+    streams: Arc<DashMap<String, mpsc::UnboundedSender<RelayStreamEvent>>>,
+}
+
+fn open_stream(
+    registry: &AgentRegistry,
+    agent_id: Uuid,
+    stream: &str,
+    payload: serde_json::Value,
+) -> Result<RelayStream, RelayCommandError> {
+    let connection = find_connection(registry, agent_id).ok_or(RelayCommandError::AgentOffline)?;
+    let id = Uuid::new_v4().to_string();
+    let (tx, rx) = mpsc::unbounded_channel();
+    connection.streams.insert(id.clone(), tx);
+
+    let message = serde_json::to_string(&WsMessage::StreamOpen {
+        id: id.clone(),
+        stream: stream.to_string(),
+        payload,
+    })?;
+
+    if connection.tx.send(message).is_err() {
+        connection.streams.remove(&id);
+        return Err(RelayCommandError::Send);
+    }
+
+    Ok(RelayStream {
+        id,
+        tx: connection.tx.clone(),
+        rx,
+        streams: connection.streams,
+    })
+}
+
+fn find_connection(registry: &AgentRegistry, agent_id: Uuid) -> Option<AgentConnection> {
+    registry
+        .iter()
+        .find_map(|entry| (entry.agent_id == agent_id).then(|| entry.clone()))
+}
+
+async fn close_socket_with_error(mut socket: WebSocket, error: String) {
+    let _ = socket.send(Message::Text(error.into())).await;
+    let _ = socket.close().await;
+}
+
+async fn bridge_browser_and_agent(
+    socket: WebSocket,
+    mut relay_stream: RelayStream,
+    mode: RelayStreamMode,
+) {
+    let (mut browser_tx, mut browser_rx) = socket.split();
+    let mut keepalive = tokio::time::interval(tokio::time::Duration::from_secs(15));
+    keepalive.tick().await;
+
+    loop {
+        tokio::select! {
+            _ = keepalive.tick() => {
+                if browser_tx.send(Message::Ping(vec![].into())).await.is_err() {
+                    break;
+                }
+            }
+            relay_event = relay_stream.rx.recv() => {
+                match relay_event {
+                    Some(RelayStreamEvent::Data(data)) => {
+                        let message = match mode {
+                            RelayStreamMode::Binary => Message::Binary(data.into()),
+                            RelayStreamMode::Text => Message::Text(String::from_utf8_lossy(&data).into_owned().into()),
+                        };
+                        if browser_tx.send(message).await.is_err() {
+                            break;
+                        }
+                    }
+                    Some(RelayStreamEvent::Close(reason)) => {
+                        if let Some(reason) = reason {
+                            let _ = browser_tx.send(Message::Text(reason.into())).await;
+                        }
+                        break;
+                    }
+                    None => break,
+                }
+            }
+            browser_message = browser_rx.next() => {
+                match browser_message {
+                    Some(Ok(Message::Binary(data))) => {
+                        if relay_stream.send_data(data.to_vec()).is_err() {
+                            break;
+                        }
+                    }
+                    Some(Ok(Message::Text(text))) => {
+                        if relay_stream.send_data(text.to_string().into_bytes()).is_err() {
+                            break;
+                        }
+                    }
+                    Some(Ok(Message::Close(_)) | Err(_)) | None => break,
+                    Some(Ok(_)) => {}
+                }
+            }
+        }
+    }
+
+    relay_stream.close(None);
+}
+
+impl RelayStream {
+    fn send_data(&self, data: Vec<u8>) -> Result<(), RelayCommandError> {
+        let message = serde_json::to_string(&WsMessage::StreamData {
+            id: self.id.clone(),
+            data: general_purpose::STANDARD.encode(data),
+        })?;
+        self.tx.send(message).map_err(|_| RelayCommandError::Send)
+    }
+
+    fn close(&self, reason: Option<String>) {
+        self.streams.remove(&self.id);
+        if let Ok(message) = serde_json::to_string(&WsMessage::StreamClose {
+            id: self.id.clone(),
+            reason,
+        }) {
+            let _ = self.tx.send(message);
+        }
+    }
+}
+
 /// WebSocket upgrade handler
 pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
     ws.on_upgrade(|socket| handle_socket(socket, state))
@@ -160,6 +332,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 
     let registry = state.agent_registry.clone();
     let pending = Arc::new(DashMap::new());
+    let streams = Arc::new(DashMap::new());
     register_agent_connection(
         &state,
         &registry,
@@ -167,12 +340,13 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         &token,
         tx.clone(),
         pending.clone(),
+        streams.clone(),
     )
     .await;
 
     let heartbeat_task = spawn_heartbeat(state.db.pool().clone(), agent_id);
     let mut send_task = spawn_agent_sender(sender, rx);
-    let mut recv_task = spawn_agent_receiver(receiver, tx, pending);
+    let mut recv_task = spawn_agent_receiver(receiver, tx, pending, streams);
 
     tokio::select! {
         _ = &mut send_task => {
@@ -258,6 +432,7 @@ async fn register_agent_connection(
     token: &str,
     tx: mpsc::UnboundedSender<String>,
     pending: Arc<DashMap<String, oneshot::Sender<RelayResponse>>>,
+    streams: Arc<DashMap<String, mpsc::UnboundedSender<RelayStreamEvent>>>,
 ) {
     let agent = sqlx::query_as::<_, Agent>("SELECT * FROM agents WHERE id = $1")
         .bind(agent_id)
@@ -283,6 +458,7 @@ async fn register_agent_connection(
             token: token.to_string(),
             tx,
             pending,
+            streams,
         },
     );
 
@@ -355,17 +531,30 @@ fn spawn_agent_receiver(
     mut receiver: SplitStream<WebSocket>,
     tx: mpsc::UnboundedSender<String>,
     pending: Arc<DashMap<String, oneshot::Sender<RelayResponse>>>,
+    streams: Arc<DashMap<String, mpsc::UnboundedSender<RelayStreamEvent>>>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
-        while let Some(Ok(Message::Text(text))) = receiver.next().await {
-            handle_agent_message(&tx, &pending, &text);
+        while let Some(message) = receiver.next().await {
+            match message {
+                Ok(Message::Text(text)) => handle_agent_message(&tx, &pending, &streams, &text),
+                Ok(Message::Close(_)) | Err(_) => break,
+                Ok(_) => {}
+            }
         }
+
+        for entry in streams.iter() {
+            let _ = entry.value().send(RelayStreamEvent::Close(Some(
+                "Relay agent disconnected".to_string(),
+            )));
+        }
+        streams.clear();
     })
 }
 
 fn handle_agent_message(
     tx: &mpsc::UnboundedSender<String>,
     pending: &DashMap<String, oneshot::Sender<RelayResponse>>,
+    streams: &DashMap<String, mpsc::UnboundedSender<RelayStreamEvent>>,
     text: &str,
 ) {
     let Ok(msg) = serde_json::from_str::<WsMessage>(text) else {
@@ -383,6 +572,19 @@ fn handle_agent_message(
         WsMessage::Ping => {
             if let Ok(pong) = serde_json::to_string(&WsMessage::Pong) {
                 let _ = tx.send(pong);
+            }
+        }
+        WsMessage::StreamData { id, data } => {
+            let Ok(data) = general_purpose::STANDARD.decode(data) else {
+                return;
+            };
+            if let Some(sender) = streams.get(&id) {
+                let _ = sender.send(RelayStreamEvent::Data(data));
+            }
+        }
+        WsMessage::StreamClose { id, reason } => {
+            if let Some((_, sender)) = streams.remove(&id) {
+                let _ = sender.send(RelayStreamEvent::Close(reason));
             }
         }
         _ => {}

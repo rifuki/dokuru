@@ -1,7 +1,10 @@
 use axum::{
     Extension, Json,
     body::Body,
-    extract::{Path, State},
+    extract::{
+        Path, Query, State,
+        ws::{WebSocket, WebSocketUpgrade},
+    },
     http::{Request, StatusCode},
     response::{IntoResponse, Response},
 };
@@ -202,6 +205,88 @@ pub async fn relay_docker_request(
 }
 
 #[derive(serde::Deserialize)]
+pub struct RelayExecQuery {
+    rows: Option<u16>,
+    cols: Option<u16>,
+    shell: Option<String>,
+}
+
+pub async fn relay_docker_exec_ws(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path((agent_id, container_id)): Path<(Uuid, String)>,
+    Query(query): Query<RelayExecQuery>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    let agent = match require_relay_agent(&state, auth_user.user_id, agent_id).await {
+        Ok(agent) => agent,
+        Err(error) => return error.into_response(),
+    };
+
+    let payload = serde_json::json!({
+        "container_id": container_id,
+        "rows": query.rows.unwrap_or(24),
+        "cols": query.cols.unwrap_or(80),
+        "shell": query.shell,
+    });
+    let registry = state.agent_registry.clone();
+
+    ws.on_upgrade(move |socket| {
+        relay::proxy_stream_to_websocket(
+            socket,
+            registry,
+            agent.id,
+            "docker_exec",
+            payload,
+            relay::RelayStreamMode::Binary,
+        )
+    })
+}
+
+pub async fn relay_docker_events_ws(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path(agent_id): Path<Uuid>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    let agent = match require_relay_agent(&state, auth_user.user_id, agent_id).await {
+        Ok(agent) => agent,
+        Err(error) => return error.into_response(),
+    };
+
+    let registry = state.agent_registry.clone();
+
+    ws.on_upgrade(move |socket: WebSocket| {
+        relay::proxy_stream_to_websocket(
+            socket,
+            registry,
+            agent.id,
+            "docker_events",
+            serde_json::json!({}),
+            relay::RelayStreamMode::Text,
+        )
+    })
+}
+
+pub async fn relay_health(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path(agent_id): Path<Uuid>,
+) -> ApiResult<serde_json::Value> {
+    let agent = require_relay_agent(&state, auth_user.user_id, agent_id).await?;
+    let health = relay::send_command(
+        &state.agent_registry,
+        agent.id,
+        "health",
+        serde_json::json!({}),
+    )
+    .await
+    .map_err(|error| relay_error_to_api_error(&error))?;
+
+    Ok(ApiSuccess::default().with_data(health))
+}
+
+#[derive(serde::Deserialize)]
 struct RelayDockerResponse {
     status: u16,
     data: Option<serde_json::Value>,
@@ -225,6 +310,32 @@ fn raw_json_response(status: u16, data: Option<serde_json::Value>) -> Response {
         (status, Some(data)) => (status, Json(data)).into_response(),
         (status, None) => status.into_response(),
     }
+}
+
+async fn require_relay_agent(
+    state: &AppState,
+    user_id: Uuid,
+    agent_id: Uuid,
+) -> Result<AgentResponse, ApiError> {
+    let agent = state
+        .agent_service
+        .get_agent(state.db.pool(), agent_id, user_id)
+        .await
+        .map_err(|error| ApiError::default().with_message(error.to_string()))?;
+
+    let Some(agent) = agent else {
+        return Err(ApiError::default()
+            .with_code(StatusCode::NOT_FOUND)
+            .with_message("Agent not found"));
+    };
+
+    if agent.access_mode != "relay" {
+        return Err(ApiError::default()
+            .with_code(StatusCode::BAD_REQUEST)
+            .with_message("Docker relay proxy is only available for relay agents"));
+    }
+
+    Ok(agent)
 }
 
 async fn run_relay_audit_command(
