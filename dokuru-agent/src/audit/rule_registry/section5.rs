@@ -67,7 +67,7 @@ impl Section5 {
                             status: CheckStatus::Pass,
                             message: "No running containers to check".into(),
                             affected: vec![],
-                            remediation_kind: RemediationKind::Guided,
+                            remediation_kind: RemediationKind::Auto,
                             audit_command: None,
                             raw_output: None,
                             references: None,
@@ -118,7 +118,7 @@ impl Section5 {
                             format!("{} container(s) run in privileged mode", failing.len())
                         },
                         affected: failing,
-                        remediation_kind: RemediationKind::Guided,
+                        remediation_kind: RemediationKind::Auto,
                         audit_command: Some("docker inspect --format '{{ .HostConfig.Privileged }}' <container>".into()),
                         raw_output: Some(raw_lines.join("\n")),
                         references: None,
@@ -130,8 +130,13 @@ impl Section5 {
                 })
             },
 
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|docker| {
+                let docker = docker.clone();
+                Box::pin(async move {
+                    Box::pin(fix_helpers::apply_privileged_fix(&docker, "5.5")).await
+                })
+            }),
             remediation_guide: r#"Recreate the container without --privileged.
 
 Example (incorrect — avoid):

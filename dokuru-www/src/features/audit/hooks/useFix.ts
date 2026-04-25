@@ -9,6 +9,14 @@ import { useAuditStore } from "@/stores/use-audit-store";
 export type WizardStep = "confirm" | "applying" | "result";
 
 export function getFixSteps(ruleId: string): string[] {
+    if (ruleId === "5.5") return [
+        "Inspecting containers running with --privileged…",
+        "Saving container configuration…",
+        "Stopping privileged container(s)…",
+        "Removing old container(s)…",
+        "Recreating without --privileged flag…",
+        "Verifying privilege isolation…",
+    ];
     if (ruleId === "5.10") return [
         "Inspecting containers with --network=host…",
         "Saving container configuration…",
@@ -85,7 +93,7 @@ export function getFixSteps(ruleId: string): string[] {
 }
 
 export function isNamespaceRecreateRule(ruleId: string): boolean {
-    return ["5.10", "5.16", "5.17", "5.21", "5.31"].includes(ruleId);
+    return ["5.5", "5.10", "5.16", "5.17", "5.21", "5.31"].includes(ruleId);
 }
 
 interface UseFixArgs {

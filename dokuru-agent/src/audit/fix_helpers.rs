@@ -278,6 +278,150 @@ pub fn supports_namespace_fix(rule_id: &str) -> bool {
     matches!(rule_id, "5.10" | "5.16" | "5.17" | "5.21" | "5.31")
 }
 
+pub fn supports_privileged_fix(rule_id: &str) -> bool {
+    rule_id == "5.5"
+}
+
+/// Stop → remove → recreate (without --privileged) → start all privileged containers.
+pub async fn apply_privileged_fix(docker: &Docker, rule_id: &str) -> eyre::Result<FixOutcome> {
+    if !supports_privileged_fix(rule_id) {
+        return Ok(blocked(rule_id, "Privileged fix only supports rule 5.5"));
+    }
+
+    let containers = docker.list_containers::<String>(None).await?;
+    let mut updated: Vec<String> = Vec::new();
+    let mut failed: Vec<String> = Vec::new();
+
+    for c in &containers {
+        let id = c.id.as_deref().unwrap_or("");
+        let inspect = match docker.inspect_container(id, None).await {
+            Ok(i) => i,
+            Err(e) => {
+                failed.push(format!("{}: inspect failed: {e}", short_id(id)));
+                continue;
+            }
+        };
+
+        let is_privileged = inspect
+            .host_config
+            .as_ref()
+            .and_then(|h| h.privileged)
+            .unwrap_or(false);
+
+        if !is_privileged {
+            continue;
+        }
+
+        let label = inspect
+            .name
+            .as_deref()
+            .unwrap_or("")
+            .trim_start_matches('/')
+            .to_string();
+        let label = if label.is_empty() {
+            short_id(id)
+        } else {
+            label
+        };
+
+        match recreate_without_privileged(docker, id, inspect).await {
+            Ok(()) => updated.push(label),
+            Err(e) => failed.push(format!("{label}: {e}")),
+        }
+    }
+
+    if updated.is_empty() && failed.is_empty() {
+        return Ok(FixOutcome {
+            rule_id: rule_id.to_string(),
+            status: FixStatus::Applied,
+            message: "No containers were running in privileged mode".to_string(),
+            requires_restart: false,
+            restart_command: None,
+            requires_elevation: false,
+        });
+    }
+
+    let mut message = format!(
+        "Recreated {} container(s) without --privileged",
+        updated.len()
+    );
+    if !updated.is_empty() {
+        let _ = write!(message, ": {}", updated.join(", "));
+    }
+    if !failed.is_empty() {
+        let _ = write!(message, ". Failed {}: {}", failed.len(), failed.join("; "));
+    }
+
+    Ok(FixOutcome {
+        rule_id: rule_id.to_string(),
+        status: if updated.is_empty() && !failed.is_empty() {
+            FixStatus::Blocked
+        } else {
+            FixStatus::Applied
+        },
+        message,
+        requires_restart: false,
+        restart_command: None,
+        requires_elevation: false,
+    })
+}
+
+async fn recreate_without_privileged(
+    docker: &Docker,
+    id: &str,
+    inspect: bollard::models::ContainerInspectResponse,
+) -> eyre::Result<()> {
+    let name = inspect
+        .name
+        .as_deref()
+        .unwrap_or("")
+        .trim_start_matches('/')
+        .to_string();
+
+    let container_config = inspect
+        .config
+        .ok_or_else(|| eyre::eyre!("missing container config"))?;
+
+    let mut host_config = inspect.host_config.unwrap_or_default();
+    host_config.privileged = Some(false);
+
+    docker
+        .stop_container(id, Some(StopContainerOptions { t: 10 }))
+        .await?;
+
+    docker
+        .remove_container(
+            id,
+            Some(RemoveContainerOptions {
+                v: false,
+                force: false,
+                link: false,
+            }),
+        )
+        .await?;
+
+    let mut create_config: Config<String> = container_config.into();
+    create_config.host_config = Some(host_config);
+
+    let opts = if name.is_empty() {
+        None
+    } else {
+        Some(CreateContainerOptions {
+            name: name.clone(),
+            platform: None,
+        })
+    };
+
+    let created = docker.create_container(opts, create_config).await?;
+
+    let start_target = if name.is_empty() { created.id } else { name };
+    docker
+        .start_container(&start_target, None::<StartContainerOptions<String>>)
+        .await?;
+
+    Ok(())
+}
+
 /// Stop → remove → recreate (with namespace isolation fixed) → start all violating containers.
 pub async fn apply_namespace_fix(docker: &Docker, rule_id: &str) -> eyre::Result<FixOutcome> {
     if !supports_namespace_fix(rule_id) {
