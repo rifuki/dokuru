@@ -78,13 +78,13 @@ pub(crate) const AUDIT_SECTIONS: &[AuditSection] = &[
         total: 5,
         rules: &[
             AuditRule {
-                rule: "2.8 User namespace remapping",
+                rule: "2.10 User namespace remapping",
                 sev: SeverityKind::Pass,
                 rem: RemediationKind::Ok,
                 detail: "userns-remap: default",
             },
             AuditRule {
-                rule: "5.9 Host network namespace",
+                rule: "5.10 Host network namespace",
                 sev: SeverityKind::Fail,
                 rem: RemediationKind::Guided,
                 detail: "1 container using --net=host",
@@ -113,7 +113,7 @@ pub(crate) const AUDIT_SECTIONS: &[AuditSection] = &[
         passed: 3,
         total: 6,
         rules: &[AuditRule {
-            rule: "5.4 Privileged containers",
+            rule: "5.5 Privileged containers",
             sev: SeverityKind::Fail,
             rem: RemediationKind::Auto,
             detail: "2 containers with --privileged",

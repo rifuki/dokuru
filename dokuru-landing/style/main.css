@@ -375,19 +375,24 @@ pre,
     will-change: opacity, transform;
   }
 
-  .reveal[data-reveal="down"] {
-    transform: none;
+  .dokuru-motion-ready .reveal {
+    opacity: 0;
+    transform: translate3d(0, 50px, 0);
   }
 
-  .reveal[data-reveal="left"] {
-    transform: none;
+  .dokuru-motion-ready .reveal[data-reveal="down"] {
+    transform: translate3d(0, -50px, 0);
   }
 
-  .reveal[data-reveal="right"] {
-    transform: none;
+  .dokuru-motion-ready .reveal[data-reveal="left"] {
+    transform: translate3d(30px, 0, 0);
   }
 
-  .reveal[data-reveal="fade"] {
+  .dokuru-motion-ready .reveal[data-reveal="right"] {
+    transform: translate3d(-50px, 0, 0);
+  }
+
+  .dokuru-motion-ready .reveal[data-reveal="fade"] {
     transform: none;
   }
 
