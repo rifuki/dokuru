@@ -27,11 +27,11 @@ pub async fn save_audit(
         .await
         .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
-    if agent.is_none() {
+    let Some(agent) = agent else {
         return Err(ApiError::default()
             .with_code(StatusCode::NOT_FOUND)
             .with_message("Agent not found"));
-    }
+    };
 
     let result = state
         .audit_service
@@ -43,6 +43,23 @@ pub async fn save_audit(
     state
         .ws_manager
         .broadcast_audit_completed(agent_id, result.id);
+
+    if let Err(error) = state
+        .notification_service
+        .notify_audit_saved(
+            state.db.pool(),
+            auth_user.user_id,
+            &agent,
+            result.id,
+            result.summary.score,
+            result.summary.failed,
+        )
+        .await
+    {
+        tracing::warn!("Failed to create audit notification: {error}");
+    } else {
+        state.ws_manager.broadcast_notifications_updated();
+    }
 
     Ok(ApiSuccess::default()
         .with_code(StatusCode::CREATED)

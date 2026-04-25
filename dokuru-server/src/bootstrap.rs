@@ -98,6 +98,7 @@ async fn create_bootstrap_admin(
                 .execute(db.pool())
                 .await?;
 
+            log_bootstrap_notification(db, auth_response.user.id).await;
             log_bootstrap_admin_created(admin);
         }
         Err(e) => {
@@ -106,6 +107,23 @@ async fn create_bootstrap_admin(
     }
 
     Ok(())
+}
+
+async fn log_bootstrap_notification(db: &Database, user_id: uuid::Uuid) {
+    let result = sqlx::query(
+        r"
+        INSERT INTO notifications (user_id, kind, title, message, target_path, metadata)
+        VALUES ($1, 'system.bootstrap', 'Dokuru is ready', 'This is the first admin account for the server.', '/admin', $2)
+        ",
+    )
+    .bind(user_id)
+    .bind(serde_json::json!({ "user_id": user_id }))
+    .execute(db.pool())
+    .await;
+
+    if let Err(error) = result {
+        tracing::warn!("Failed to create bootstrap notification: {error}");
+    }
 }
 
 fn log_bootstrap_admin_created(admin: &BootstrapAdmin) {

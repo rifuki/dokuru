@@ -19,6 +19,7 @@ use crate::{
             session::{SessionRepository, SessionRepositoryImpl, SessionService},
         },
         document::{DocumentRepository, DocumentService},
+        notification::{NotificationRepository, NotificationRepositoryImpl, NotificationService},
         user::{
             UserProfileRepository, UserProfileRepositoryImpl, UserRepository, UserRepositoryImpl,
         },
@@ -87,6 +88,7 @@ struct AppRepositories {
     session: Arc<dyn SessionRepository>,
     stats: Arc<dyn StatsRepository>,
     document: Arc<DocumentRepository>,
+    notification: Arc<dyn NotificationRepository>,
 }
 
 impl AppRepositories {
@@ -101,6 +103,7 @@ impl AppRepositories {
             session: Arc::new(SessionRepositoryImpl::new()),
             stats: Arc::new(StatsRepositoryImpl::new()),
             document: Arc::new(DocumentRepository::new(db.pool().clone())),
+            notification: Arc::new(NotificationRepositoryImpl::new()),
         }
     }
 }
@@ -111,6 +114,7 @@ struct AppServices {
     audit: Arc<AuditResultService>,
     stats: Arc<StatsService>,
     document: Arc<DocumentService>,
+    notification: Arc<NotificationService>,
     storage: Arc<dyn StorageProvider>,
     email: Arc<EmailService>,
 }
@@ -145,6 +149,9 @@ impl AppServices {
                 Arc::clone(&repositories.document),
                 config.upload.upload_dir.clone(),
             )),
+            notification: Arc::new(NotificationService::new(Arc::clone(
+                &repositories.notification,
+            ))),
             storage: Arc::new(LocalStorage::new(
                 &config.upload.upload_dir,
                 &config.upload.base_url,
@@ -187,6 +194,7 @@ pub struct AppState {
     pub audit_service: Arc<AuditResultService>,
     pub stats_service: Arc<StatsService>,
     pub document_service: Arc<DocumentService>,
+    pub notification_service: Arc<NotificationService>,
     pub storage: Arc<dyn StorageProvider>,
     pub email_service: Arc<EmailService>,
     pub session_blacklist: Option<Arc<dyn SessionBlacklist>>,
@@ -266,6 +274,7 @@ impl AppState {
             audit_service: services.audit,
             stats_service: services.stats,
             document_service: services.document,
+            notification_service: services.notification,
             storage: services.storage,
             email_service: services.email,
             session_blacklist: redis.session_blacklist,

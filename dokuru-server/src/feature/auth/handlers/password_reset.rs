@@ -201,6 +201,16 @@ pub async fn reset_password(
                 .with_message("Failed to reset password")
         })?;
 
+    if let Err(error) = state
+        .notification_service
+        .notify_password_changed(state.db.pool(), user.id)
+        .await
+    {
+        tracing::warn!("Failed to create password reset notification: {error}");
+    } else {
+        state.ws_manager.broadcast_notifications_updated();
+    }
+
     Ok(ApiSuccess::default().with_data(ResetPasswordResponse {
         message: "Password reset successfully".to_string(),
     }))

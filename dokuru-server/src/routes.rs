@@ -3,7 +3,7 @@ use std::time::Duration;
 use tower_http::services::ServeDir;
 
 use crate::{
-    feature::{admin, agent, auth, document, health, user},
+    feature::{admin, agent, auth, document, health, notification, user},
     infrastructure::web::middleware::{RateLimiter, rate_limit_middleware},
     state::AppState,
 };
@@ -36,6 +36,7 @@ pub fn app_routes(state: AppState) -> Router {
         .nest("/auth", auth::auth_routes().merge(auth_sensitive))
         .nest("/users", user::user_routes())
         .nest("/agents", agent::agent_routes())
+        .nest("/notifications", notification::notification_routes())
         .nest("/admin", admin::routes::admin_routes())
         .nest("/admin/api-keys", admin::api_key::api_key_routes())
         .nest("/admin/documents", document::document_routes())

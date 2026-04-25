@@ -12,6 +12,12 @@ export const API_ENDPOINTS = {
     ME: "/users/me",
     UPDATE: "/users/me",
   },
+  NOTIFICATIONS: {
+    LIST: "/notifications",
+    UNREAD_COUNT: "/notifications/unread-count",
+    MARK_READ: (id: string) => `/notifications/${id}/read`,
+    MARK_ALL_READ: "/notifications/read-all",
+  },
   ADMIN: {
     USERS: "/admin/users",
     AGENTS: "/admin/agents",

@@ -3,6 +3,7 @@ use axum::{
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
     response::Response,
 };
+use chrono::{Duration, Utc};
 use dashmap::DashMap;
 use futures::{
     SinkExt, StreamExt,
@@ -14,6 +15,7 @@ use tokio::{sync::mpsc, task::JoinHandle};
 use tracing::{info, warn};
 use uuid::Uuid;
 
+use super::entity::Agent;
 use crate::state::AppState;
 
 /// Global registry of connected agents
@@ -160,6 +162,16 @@ async fn register_agent_connection(
     token: &str,
     tx: mpsc::UnboundedSender<String>,
 ) {
+    let agent = sqlx::query_as::<_, Agent>("SELECT * FROM agents WHERE id = $1")
+        .bind(agent_id)
+        .fetch_optional(state.db.pool())
+        .await
+        .ok()
+        .flatten();
+    let should_notify = agent
+        .as_ref()
+        .is_some_and(|agent| should_notify_connected(agent.last_seen));
+
     let _ = sqlx::query!(
         "UPDATE agents SET last_seen = NOW() WHERE id = $1",
         agent_id
@@ -178,6 +190,25 @@ async fn register_agent_connection(
 
     info!("Agent {} connected via relay", agent_id);
     state.ws_manager.broadcast_agent_connected(agent_id);
+
+    if let Some(agent) = agent
+        && should_notify
+    {
+        if let Err(error) = state
+            .notification_service
+            .notify_agent_connected(state.db.pool(), agent.user_id, agent.id, &agent.name)
+            .await
+        {
+            warn!("Failed to create agent connection notification: {error}");
+        } else {
+            state.ws_manager.broadcast_notifications_updated();
+        }
+    }
+}
+
+fn should_notify_connected(last_seen: Option<chrono::DateTime<Utc>>) -> bool {
+    last_seen
+        .is_none_or(|seen_at| Utc::now().signed_duration_since(seen_at) > Duration::minutes(10))
 }
 
 fn unregister_agent_connection(

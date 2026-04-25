@@ -109,6 +109,21 @@ pub async fn register(
         }
     });
 
+    if let Err(error) = state
+        .notification_service
+        .notify_user_registered(
+            state.db.pool(),
+            response.user.id,
+            &response.user.email,
+            response.user.username.as_deref(),
+        )
+        .await
+    {
+        tracing::warn!("Failed to create registration notification: {error}");
+    } else {
+        state.ws_manager.broadcast_notifications_updated();
+    }
+
     Ok(ApiSuccess::default()
         .with_code(StatusCode::CREATED)
         .with_data(response)

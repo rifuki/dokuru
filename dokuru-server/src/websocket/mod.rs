@@ -93,4 +93,11 @@ impl WsManager {
             data: json!({ "agentId": agent_id, "auditId": audit_id }),
         });
     }
+
+    pub fn broadcast_notifications_updated(&self) {
+        self.broadcast(WsEvent {
+            r#type: "notifications:updated".to_string(),
+            data: json!({}),
+        });
+    }
 }

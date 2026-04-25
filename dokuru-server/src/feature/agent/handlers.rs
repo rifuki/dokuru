@@ -42,6 +42,16 @@ pub async fn create_agent(
         .await
         .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
+    if let Err(error) = state
+        .notification_service
+        .notify_agent_created(state.db.pool(), auth_user.user_id, &agent)
+        .await
+    {
+        tracing::warn!("Failed to create agent notification: {error}");
+    } else {
+        state.ws_manager.broadcast_notifications_updated();
+    }
+
     Ok(ApiSuccess::default()
         .with_code(StatusCode::CREATED)
         .with_data(agent))

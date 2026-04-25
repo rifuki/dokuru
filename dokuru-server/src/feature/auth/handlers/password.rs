@@ -83,5 +83,15 @@ pub async fn change_password(
                 .with_message("Failed to update password")
         })?;
 
+    if let Err(error) = state
+        .notification_service
+        .notify_password_changed(state.db.pool(), auth_user.user_id)
+        .await
+    {
+        tracing::warn!("Failed to create password change notification: {error}");
+    } else {
+        state.ws_manager.broadcast_notifications_updated();
+    }
+
     Ok(ApiSuccess::default().with_message("Password changed successfully"))
 }

@@ -25,6 +25,19 @@ pub async fn verify_email(
     State(state): State<AppState>,
     Query(query): Query<VerifyEmailQuery>,
 ) -> ApiResult<VerifyEmailResponse> {
+    let user = sqlx::query_as::<_, crate::feature::user::User>(
+        "SELECT * FROM users WHERE verification_token = $1 AND verification_token_expires_at > NOW()",
+    )
+    .bind(&query.token)
+    .fetch_optional(state.db.pool())
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to load verification user: {}", e);
+        ApiError::default()
+            .with_code(StatusCode::INTERNAL_SERVER_ERROR)
+            .with_message("Failed to verify email")
+    })?;
+
     let verified = state
         .user_repo
         .verify_email_with_token(state.db.pool(), &query.token)
@@ -42,6 +55,18 @@ pub async fn verify_email(
         return Err(ApiError::default()
             .with_code(StatusCode::BAD_REQUEST)
             .with_message("Invalid or expired verification token"));
+    }
+
+    if let Some(user) = user {
+        if let Err(error) = state
+            .notification_service
+            .notify_email_verified(state.db.pool(), &user)
+            .await
+        {
+            tracing::warn!("Failed to create email verification notification: {error}");
+        } else {
+            state.ws_manager.broadcast_notifications_updated();
+        }
     }
 
     Ok(ApiSuccess::default().with_data(VerifyEmailResponse {
