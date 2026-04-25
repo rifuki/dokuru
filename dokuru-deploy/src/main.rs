@@ -970,7 +970,7 @@ fn generate_files(
         &project_dir.join("docker-compose.override.yaml"),
         strategy.as_str(),
     )?;
-    generate_env_file(config, &project_dir.join("dokuru-server/.env"))?;
+    generate_env_file(&project_dir.join("dokuru-server/.env"))?;
     Ok(())
 }
 
@@ -987,7 +987,7 @@ fn show_completion(
 
     note(
         "Generated files",
-        "dokuru-server/config/local.toml\ndokuru-server/config/secrets.toml\ndokuru-server/.env (DATABASE_URL only)\ndocker-compose.override.yaml",
+        "dokuru-server/config/local.toml\ndokuru-server/config/secrets.toml\ndokuru-server/.env (PORT only)\ndocker-compose.override.yaml",
     )?;
 
     // Show deployment-specific instructions

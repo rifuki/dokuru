@@ -227,18 +227,18 @@ pub fn generate_secret(length: usize) -> String {
         .collect()
 }
 
-pub fn generate_env_file(config: &DeployConfig, output_path: &Path) -> Result<()> {
-    fs::write(output_path, render_env_file(config))?;
+pub fn generate_env_file(output_path: &Path) -> Result<()> {
+    fs::write(output_path, render_env_file())?;
     Ok(())
 }
 
-fn render_env_file(config: &DeployConfig) -> String {
-    format!(
-        "# Database connection string\n\
-         # All other config lives in config/*.toml files\n\
-         DATABASE_URL=postgres://{}:{}@localhost:5432/{}\n",
-        config.db_user, config.db_password, config.db_name
-    )
+const fn render_env_file() -> &'static str {
+    "# Optional service-local override example.\n\
+     # Runtime config lives in config/*.toml. Prefer local.toml and secrets.toml.\n\
+     # Nested overrides use DOKURU__SECTION__KEY, e.g. DOKURU__DATABASE__URL.\n\
+     # PORT is also supported for independent service hosts like Render.\n\
+     \n\
+     PORT=9393\n"
 }
 
 #[cfg(test)]
@@ -350,10 +350,10 @@ from_email = "noreply@dokuru.rifuki.dev"
     }
 
     #[test]
-    fn env_file_only_contains_database_url() {
+    fn env_file_only_contains_port_alias() {
         assert_eq!(
-            render_env_file(&config()),
-            "# Database connection string\n# All other config lives in config/*.toml files\nDATABASE_URL=postgres://dokuru:secret@localhost:5432/dokuru_db\n"
+            render_env_file(),
+            "# Optional service-local override example.\n# Runtime config lives in config/*.toml. Prefer local.toml and secrets.toml.\n# Nested overrides use DOKURU__SECTION__KEY, e.g. DOKURU__DATABASE__URL.\n# PORT is also supported for independent service hosts like Render.\n\nPORT=9393\n"
         );
     }
 }

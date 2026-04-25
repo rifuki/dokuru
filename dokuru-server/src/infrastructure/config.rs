@@ -82,9 +82,7 @@ fn split_csv(value: Option<String>, default: &[String]) -> Vec<String> {
 }
 
 fn get_rust_env(default: &str) -> Result<String> {
-    let rust_env = env_override("RUST_ENV")
-        .or_else(|| env_override("DOKURU__APP__RUST_ENV"))
-        .unwrap_or_else(|| default.to_string());
+    let rust_env = env_override("DOKURU__APP__RUST_ENV").unwrap_or_else(|| default.to_string());
 
     if cfg!(debug_assertions) && rust_env == "production" {
         eyre::bail!("RUST_ENV cannot be 'production' in debug mode");
@@ -115,18 +113,14 @@ impl BootstrapConfig {
     fn from_sources(toml: &TomlConfig) -> Self {
         Self {
             enabled: parse_bool(
-                env_override("BOOTSTRAP_ENABLED")
-                    .or_else(|| env_override("DOKURU__BOOTSTRAP__ENABLED")),
+                env_override("DOKURU__BOOTSTRAP__ENABLED"),
                 toml.bootstrap.enabled,
             ),
-            admin_email: env_override("BOOTSTRAP_ADMIN_EMAIL")
-                .or_else(|| env_override("DOKURU__BOOTSTRAP__ADMIN_EMAIL"))
+            admin_email: env_override("DOKURU__BOOTSTRAP__ADMIN_EMAIL")
                 .unwrap_or_else(|| toml.bootstrap.admin_email.clone()),
-            admin_username: env_override("BOOTSTRAP_ADMIN_USERNAME")
-                .or_else(|| env_override("DOKURU__BOOTSTRAP__ADMIN_USERNAME"))
+            admin_username: env_override("DOKURU__BOOTSTRAP__ADMIN_USERNAME")
                 .unwrap_or_else(|| toml.bootstrap.admin_username.clone()),
-            admin_name: env_override("BOOTSTRAP_ADMIN_NAME")
-                .or_else(|| env_override("DOKURU__BOOTSTRAP__ADMIN_NAME"))
+            admin_name: env_override("DOKURU__BOOTSTRAP__ADMIN_NAME")
                 .unwrap_or_else(|| toml.bootstrap.admin_name.clone()),
         }
     }
@@ -136,13 +130,12 @@ impl ServerConfig {
     fn from_sources(toml: &TomlConfig) -> Result<Self> {
         Ok(Self {
             port: parse_u16(
-                env_override("PORT").or_else(|| env_override("DOKURU__SERVER__PORT")),
+                env_override("DOKURU__SERVER__PORT").or_else(|| env_override("PORT")),
                 toml.server.port,
                 "PORT",
             )?,
             cors_allowed_origins: split_csv(
-                env_override("CORS_ALLOWED_ORIGINS")
-                    .or_else(|| env_override("DOKURU__SERVER__CORS_ALLOWED_ORIGINS")),
+                env_override("DOKURU__SERVER__CORS_ALLOWED_ORIGINS"),
                 &toml.server.cors_allowed_origins,
             ),
         })
@@ -160,22 +153,18 @@ impl DatabaseConfig {
     fn from_sources(toml: &TomlConfig) -> Result<Self> {
         Ok(Self {
             url: require_value(
-                env_override("DATABASE_URL")
-                    .or_else(|| env_override("DOKURU__DATABASE__URL"))
-                    .or_else(|| toml.database.url.clone()),
-                "DATABASE_URL",
+                env_override("DOKURU__DATABASE__URL").or_else(|| toml.database.url.clone()),
+                "DOKURU__DATABASE__URL",
             )?,
             max_connections: parse_u32(
-                env_override("DB_MAX_CONNECTIONS")
-                    .or_else(|| env_override("DOKURU__DATABASE__MAX_CONNECTIONS")),
+                env_override("DOKURU__DATABASE__MAX_CONNECTIONS"),
                 toml.database.max_connections,
-                "DB_MAX_CONNECTIONS",
+                "DOKURU__DATABASE__MAX_CONNECTIONS",
             )?,
             min_connections: parse_u32(
-                env_override("DB_MIN_CONNECTIONS")
-                    .or_else(|| env_override("DOKURU__DATABASE__MIN_CONNECTIONS")),
+                env_override("DOKURU__DATABASE__MIN_CONNECTIONS"),
                 toml.database.min_connections,
-                "DB_MIN_CONNECTIONS",
+                "DOKURU__DATABASE__MIN_CONNECTIONS",
             )?,
         })
     }
@@ -193,28 +182,24 @@ impl AuthConfig {
     fn from_sources(toml: &TomlConfig) -> Result<Self> {
         Ok(Self {
             access_secret: require_value(
-                env_override("JWT_ACCESS_SECRET")
-                    .or_else(|| env_override("DOKURU__AUTH__ACCESS_SECRET"))
+                env_override("DOKURU__AUTH__ACCESS_SECRET")
                     .or_else(|| toml.auth.access_secret.clone()),
-                "JWT_ACCESS_SECRET",
+                "DOKURU__AUTH__ACCESS_SECRET",
             )?,
             refresh_secret: require_value(
-                env_override("JWT_REFRESH_SECRET")
-                    .or_else(|| env_override("DOKURU__AUTH__REFRESH_SECRET"))
+                env_override("DOKURU__AUTH__REFRESH_SECRET")
                     .or_else(|| toml.auth.refresh_secret.clone()),
-                "JWT_REFRESH_SECRET",
+                "DOKURU__AUTH__REFRESH_SECRET",
             )?,
             access_expiry_secs: parse_i64(
-                env_override("JWT_ACCESS_EXPIRY_SECS")
-                    .or_else(|| env_override("DOKURU__AUTH__ACCESS_EXPIRY_SECS")),
+                env_override("DOKURU__AUTH__ACCESS_EXPIRY_SECS"),
                 toml.auth.access_expiry_secs,
-                "JWT_ACCESS_EXPIRY_SECS",
+                "DOKURU__AUTH__ACCESS_EXPIRY_SECS",
             )?,
             refresh_expiry_secs: parse_i64(
-                env_override("JWT_REFRESH_EXPIRY_SECS")
-                    .or_else(|| env_override("DOKURU__AUTH__REFRESH_EXPIRY_SECS")),
+                env_override("DOKURU__AUTH__REFRESH_EXPIRY_SECS"),
                 toml.auth.refresh_expiry_secs,
-                "JWT_REFRESH_EXPIRY_SECS",
+                "DOKURU__AUTH__REFRESH_EXPIRY_SECS",
             )?,
         })
     }
@@ -228,8 +213,7 @@ pub struct LoggingConfig {
 impl LoggingConfig {
     fn from_sources(toml: &TomlConfig) -> Self {
         Self {
-            default_level: env_override("RUST_LOG")
-                .or_else(|| env_override("DOKURU__APP__RUST_LOG"))
+            default_level: env_override("DOKURU__APP__RUST_LOG")
                 .unwrap_or_else(|| toml.app.rust_log.clone()),
         }
     }
@@ -244,19 +228,14 @@ pub struct CookieConfig {
 
 impl CookieConfig {
     fn from_sources(toml: &TomlConfig, is_production: bool) -> Self {
-        let same_site = env_override("COOKIE_SAMESITE")
-            .or_else(|| env_override("DOKURU__COOKIE__SAME_SITE"))
+        let same_site = env_override("DOKURU__COOKIE__SAME_SITE")
             .unwrap_or_else(|| toml.cookie.same_site.clone());
 
         Self {
             same_site: parse_same_site(&same_site, is_production),
-            secure: parse_bool(
-                env_override("COOKIE_SECURE").or_else(|| env_override("DOKURU__COOKIE__SECURE")),
-                toml.cookie.secure,
-            ),
+            secure: parse_bool(env_override("DOKURU__COOKIE__SECURE"), toml.cookie.secure),
             http_only: parse_bool(
-                env_override("COOKIE_HTTPONLY")
-                    .or_else(|| env_override("DOKURU__COOKIE__HTTP_ONLY")),
+                env_override("DOKURU__COOKIE__HTTP_ONLY"),
                 toml.cookie.http_only,
             ),
         }
@@ -273,17 +252,14 @@ pub struct UploadConfig {
 impl UploadConfig {
     fn from_sources(toml: &TomlConfig) -> Result<Self> {
         Ok(Self {
-            upload_dir: env_override("UPLOAD_DIR")
-                .or_else(|| env_override("DOKURU__UPLOAD__DIR"))
+            upload_dir: env_override("DOKURU__UPLOAD__DIR")
                 .unwrap_or_else(|| toml.upload.dir.clone()),
-            base_url: env_override("UPLOAD_BASE_URL")
-                .or_else(|| env_override("DOKURU__UPLOAD__BASE_URL"))
+            base_url: env_override("DOKURU__UPLOAD__BASE_URL")
                 .unwrap_or_else(|| toml.upload.base_url.clone()),
             max_avatar_size: parse_usize(
-                env_override("MAX_AVATAR_SIZE")
-                    .or_else(|| env_override("DOKURU__UPLOAD__MAX_AVATAR_SIZE")),
+                env_override("DOKURU__UPLOAD__MAX_AVATAR_SIZE"),
                 toml.upload.max_avatar_size,
-                "MAX_AVATAR_SIZE",
+                "DOKURU__UPLOAD__MAX_AVATAR_SIZE",
             )?,
         })
     }
@@ -299,16 +275,14 @@ impl EmailConfig {
     fn from_sources(toml: &TomlConfig) -> Result<Self> {
         Ok(Self {
             resend_api_key: require_value(
-                env_override("RESEND_API_KEY")
-                    .or_else(|| env_override("DOKURU__EMAIL__RESEND_API_KEY"))
+                env_override("DOKURU__EMAIL__RESEND_API_KEY")
                     .or_else(|| toml.email.resend_api_key.clone()),
-                "RESEND_API_KEY",
+                "DOKURU__EMAIL__RESEND_API_KEY",
             )?,
             from_email: require_value(
-                env_override("RESEND_FROM_EMAIL")
-                    .or_else(|| env_override("DOKURU__EMAIL__FROM_EMAIL"))
+                env_override("DOKURU__EMAIL__FROM_EMAIL")
                     .or_else(|| Some(toml.email.from_email.clone())),
-                "RESEND_FROM_EMAIL",
+                "DOKURU__EMAIL__FROM_EMAIL",
             )?,
         })
     }
@@ -341,9 +315,7 @@ impl Config {
             bootstrap: BootstrapConfig::from_sources(&toml),
             server: ServerConfig::from_sources(&toml)?,
             database: DatabaseConfig::from_sources(&toml)?,
-            redis_url: env_override("REDIS_URL")
-                .or_else(|| env_override("DOKURU__REDIS__URL"))
-                .or_else(|| toml.redis.url.clone()),
+            redis_url: env_override("DOKURU__REDIS__URL").or_else(|| toml.redis.url.clone()),
             auth: AuthConfig::from_sources(&toml)?,
             logging: LoggingConfig::from_sources(&toml),
             cookie: CookieConfig::from_sources(&toml, is_production),
