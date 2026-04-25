@@ -114,7 +114,7 @@ export function RegisterForm() {
     email.includes('@') && !emailCheck.isLoading && emailCheck.data;
 
   const passwordToggleClass =
-    "absolute right-2.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center text-muted-foreground transition-colors hover:text-foreground";
+    "absolute right-3 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center text-muted-foreground transition-colors hover:text-foreground";
 
   return (
     <div className="w-full max-w-100">
@@ -213,16 +213,8 @@ export function RegisterForm() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={8}
-                className="h-11 pr-20 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"
+                className="h-11 pr-10 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"
               />
-              <div className="absolute right-12 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center">
-                {password.length > 0 && password.length < 8 && (
-                  <XCircle className="h-4 w-4 text-red-500" />
-                )}
-                {password.length >= 8 && (
-                  <CheckCircle2 className="h-4 w-4 text-green-500" />
-                )}
-              </div>
               <button
                 type="button"
                 className={passwordToggleClass}
@@ -236,6 +228,12 @@ export function RegisterForm() {
                 )}
               </button>
             </div>
+            {password.length > 0 && password.length < 8 && (
+              <p className="flex items-center gap-1.5 text-xs text-red-500">
+                <XCircle className="h-3.5 w-3.5" />
+                Use at least 8 characters
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -251,16 +249,8 @@ export function RegisterForm() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
                 minLength={8}
-                className="h-11 pr-20 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"
+                className="h-11 pr-10 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"
               />
-              <div className="absolute right-12 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center">
-                {confirmPassword.length > 0 && confirmPassword !== password && (
-                  <XCircle className="h-4 w-4 text-red-500" />
-                )}
-                {confirmPassword.length > 0 && confirmPassword === password && password.length >= 8 && (
-                  <CheckCircle2 className="h-4 w-4 text-green-500" />
-                )}
-              </div>
               <button
                 type="button"
                 className={passwordToggleClass}
@@ -275,7 +265,10 @@ export function RegisterForm() {
               </button>
             </div>
             {confirmPassword.length > 0 && confirmPassword !== password && (
-              <p className="text-xs text-red-500">Passwords do not match</p>
+              <p className="flex items-center gap-1.5 text-xs text-red-500">
+                <XCircle className="h-3.5 w-3.5" />
+                Passwords do not match
+              </p>
             )}
           </div>
 
