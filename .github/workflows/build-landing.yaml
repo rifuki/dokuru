@@ -63,6 +63,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: dokuru-landing
+          build-args: |
+            TRUNK_VERSION=0.21.14
           platforms: ${{ env.PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
           tags: ${{ steps.meta.outputs.tags }}

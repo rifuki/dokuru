@@ -78,3 +78,15 @@ Thumbs.db
 
 # Uploads
 dokuru-server/uploads/
+
+# Local-only landing replacement artifacts/backups
+dokuru-landing/.git/
+dokuru-landing/.github/
+dokuru-landing-old/
+dokuru-landing/target/
+dokuru-landing/dist/
+dokuru-landing/node_modules/
+dokuru-landing/style/*.generated.css
+dokuru-landing/.env
+dokuru-landing/.env.*
+!dokuru-landing/.env.example

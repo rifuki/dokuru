@@ -1,0 +1,46 @@
+use crate::components::atoms::{Icon, IconKind};
+use crate::utils::reveal::reveal_ref;
+use leptos::{html, prelude::*};
+
+#[component]
+pub(crate) fn FinalCta() -> impl IntoView {
+    let card_ref = reveal_ref::<html::Div>();
+    let label_ref = reveal_ref::<html::Div>();
+    let heading_ref = reveal_ref::<html::H2>();
+    let body_ref = reveal_ref::<html::P>();
+    let actions_ref = reveal_ref::<html::Div>();
+    let preview_ref = reveal_ref::<html::Div>();
+
+    view! {
+        <section id="cta" data-testid="final-cta-section" class="relative py-24 md:py-32 border-t border-white/5">
+            <div class="max-w-6xl mx-auto px-6 md:px-10">
+                <div node_ref=card_ref class="reveal relative rounded-2xl border border-white/10 bg-[#09090B] overflow-hidden">
+                    <div class="absolute inset-0 pointer-events-none bg-grid-fine opacity-60"/>
+                    <div class="orb-breathe absolute -top-32 -right-32 w-[480px] h-[480px] rounded-full bg-[#2496ED]/15 blur-[120px] pointer-events-none"/>
+                    <div class="orb-breathe-delayed absolute -bottom-32 -left-32 w-[420px] h-[420px] rounded-full bg-[#00E5FF]/10 blur-[120px] pointer-events-none"/>
+                    <div class="relative p-5 sm:p-10 md:p-16 grid lg:grid-cols-12 gap-10 items-center">
+                        <div class="lg:col-span-7">
+                            <div node_ref=label_ref class="reveal font-mono text-[11px] uppercase tracking-[0.22em] text-[#2496ED] mb-4" style="--motion-duration: 500ms">"/ start auditing"</div>
+                            <h2 node_ref=heading_ref class="reveal font-heading text-4xl md:text-5xl lg:text-6xl font-black tracking-tighter text-white leading-[1.02]" style="--motion-delay: 100ms; --motion-duration: 500ms">"Start auditing Docker"<br class="hidden sm:block"/>"security with Dokuru."</h2>
+                            <p node_ref=body_ref class="reveal mt-5 text-zinc-400 text-lg max-w-xl" style="--motion-delay: 200ms; --motion-duration: 500ms">"Connect your Docker hosts, run isolation-focused audits, and apply supported fixes — from one dashboard."</p>
+                            <div node_ref=actions_ref class="reveal mt-8 flex flex-wrap items-center gap-3" style="--motion-delay: 300ms; --motion-duration: 500ms">
+                                <a href="#register" data-testid="final-cta-primary" class="group inline-flex items-center gap-2 bg-[#2496ED] hover:bg-[#1C7CBA] text-white font-medium px-6 py-3.5 rounded-md shadow-[0_0_48px_-8px_rgba(36,150,237,0.7)] transition-all hover:scale-105 active:scale-95">"Get Started" <Icon kind=IconKind::ArrowRight size=16 class="transition-transform group-hover:translate-x-0.5"/></a>
+                                <a href="#how-it-works" data-testid="final-cta-secondary" class="inline-flex items-center gap-2 bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-white/25 text-white font-medium px-6 py-3.5 rounded-md transition-all hover:scale-105 active:scale-95"><Icon kind=IconKind::Terminal size=16 class="text-[#2496ED]"/>"View Audit Workflow"</a>
+                            </div>
+                        </div>
+                        <div node_ref=preview_ref class="reveal lg:col-span-5" data-reveal="left" style="--motion-delay: 200ms; --motion-duration: 600ms">
+                            <div class="rounded-xl border border-white/10 bg-black/60 backdrop-blur-sm overflow-hidden">
+                                <div class="flex items-center px-4 py-3 border-b border-white/10 bg-[#0d0d0f]"><div class="flex gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-zinc-700"/><span class="w-2.5 h-2.5 rounded-full bg-zinc-700"/><span class="w-2.5 h-2.5 rounded-full bg-zinc-700"/></div><span class="font-mono text-[11px] text-zinc-500 ml-3">"quick start"</span></div>
+                                <div class="p-5 font-mono text-[13px] leading-7 text-zinc-200">
+                                    <div><span class="text-[#2496ED]">"$"</span> " curl -fsSL " <span class="text-[#00E5FF]">"https://dokuru.rifuki.dev/install"</span> " | bash"</div>
+                                    <div class="text-zinc-500 text-[11px] mt-2">"# Copy URL + token, add to dashboard"</div>
+                                    <div class="text-zinc-500 text-[11px]">"# Run audits from app.dokuru.rifuki.dev" <span class="terminal-cursor"/></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    }
+}

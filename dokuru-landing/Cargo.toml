@@ -1,0 +1,18 @@
+[package]
+name = "dokuru-landing"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+console_error_panic_hook = "0.1.7"
+console_log = "1.0.0"
+leptos = { version = "0.8.5", features = ["csr"] }
+log = "0.4.27"
+wasm-bindgen = "=0.2.100"
+js-sys = "=0.3.77"
+web-sys = { version = "0.3.77", features = ["AddEventListenerOptions", "Clipboard", "Document", "DomRect", "DomTokenList", "Element", "EventTarget", "History", "IntersectionObserver", "IntersectionObserverEntry", "IntersectionObserverInit", "Location", "Navigator", "Node", "NodeList", "Window"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "z"
