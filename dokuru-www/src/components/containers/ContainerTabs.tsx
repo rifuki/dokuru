@@ -220,7 +220,7 @@ export function ContainerLogs({
   token: string;
   containerId: string;
 }) {
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const logViewportRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(false);
 
   const { data: logs, isLoading } = useQuery({
@@ -232,10 +232,6 @@ export function ContainerLogs({
     refetchInterval: 3000,
   });
 
-  useEffect(() => {
-    if (autoScroll) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [logs, autoScroll]);
-
   const normalizedLogs = useMemo(() => {
     if (!logs) return [];
 
@@ -243,6 +239,14 @@ export function ContainerLogs({
       .flatMap((entry) => cleanLogEntry(entry).split("\n"))
       .filter((line) => line.length > 0);
   }, [logs]);
+
+  useEffect(() => {
+    if (!autoScroll) return;
+    const viewport = logViewportRef.current;
+    if (!viewport) return;
+
+    viewport.scrollTop = viewport.scrollHeight;
+  }, [autoScroll, normalizedLogs.length]);
 
   if (isLoading) return <p className="text-sm text-muted-foreground p-6">Loading…</p>;
 
@@ -260,7 +264,7 @@ export function ContainerLogs({
           <Badge variant="secondary" className="text-[10px]">{normalizedLogs.length} lines</Badge>
         </div>
       </div>
-      <div className="h-96 overflow-auto bg-[#0d1117] p-4 font-mono text-xs leading-relaxed">
+      <div ref={logViewportRef} className="h-96 overflow-auto bg-[#0d1117] p-4 font-mono text-xs leading-relaxed">
         {normalizedLogs.length === 0 ? (
           <span className="text-muted-foreground italic">No logs available.</span>
         ) : (
@@ -268,7 +272,6 @@ export function ContainerLogs({
             <div key={i} className="w-max min-w-full whitespace-pre text-gray-300 hover:bg-white/5 px-2 py-0.5 rounded transition-colors">{line}</div>
           ))
         )}
-        <div ref={bottomRef} />
       </div>
     </div>
   );
