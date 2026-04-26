@@ -396,7 +396,12 @@ export function ContainerStats({
 
 type TermStatus = "idle" | "connecting" | "connected" | "disconnected" | "error";
 
-const SHELLS = ["/bin/bash", "/bin/sh"];
+const SHELLS = ["/bin/bash", "/bin/sh"] as const;
+type ShellPath = (typeof SHELLS)[number];
+
+function normalizeShell(shell: string | null | undefined): ShellPath {
+  return shell === "/bin/bash" ? "/bin/bash" : "/bin/sh";
+}
 
 export function ContainerTerminal({
   agentUrl,
@@ -416,19 +421,27 @@ export function ContainerTerminal({
   const shellMenuRef = useRef<HTMLDivElement>(null);
   const [shouldConnect, setShouldConnect] = useState(false);
   const [termDimensions, setTermDimensions] = useState({ cols: 80, rows: 24 });
-  const [selectedShell, setSelectedShell] = useState<string>("/bin/sh");
-  const [detectedShell, setDetectedShell] = useState<string | null>(null);
+  const [selectedShell, setSelectedShell] = useState<ShellPath>("/bin/sh");
+  const [detectedShell, setDetectedShell] = useState<ShellPath | null>(null);
   const [shellMenuOpen, setShellMenuOpen] = useState(false);
   const accessToken = useAuthStore((s) => s.accessToken);
   const isRelay = agentUrl === "relay";
+  const availableShells = useMemo<ShellPath[]>(() => {
+    if (detectedShell === "/bin/bash") return ["/bin/bash", "/bin/sh"];
+    if (detectedShell === "/bin/sh") return ["/bin/sh"];
+    return [];
+  }, [detectedShell]);
+  const activeShell = availableShells.includes(selectedShell)
+    ? selectedShell
+    : availableShells[0] ?? "/bin/sh";
 
   // Build WebSocket URL
   const wsUrl = useMemo(() => {
-    if (!shouldConnect) return null;
+    if (!shouldConnect || detectedShell === null) return null;
     const params = new URLSearchParams({
       cols: String(termDimensions.cols),
       rows: String(termDimensions.rows),
-      shell: selectedShell,
+      shell: activeShell,
     });
 
     if (isRelay) {
@@ -439,7 +452,7 @@ export function ContainerTerminal({
 
     params.set("token", token);
     return `${agentUrl.replace(/^http/, "ws")}/docker/containers/${encodeURIComponent(containerId)}/exec?${params.toString()}`;
-  }, [accessToken, agentUrl, containerId, isRelay, selectedShell, shouldConnect, termDimensions, token]);
+  }, [accessToken, activeShell, agentUrl, containerId, detectedShell, isRelay, shouldConnect, termDimensions, token]);
 
   const { sendMessage, lastMessage, readyState, getWebSocket } = useWebSocket(wsUrl, {
     shouldReconnect: () => false,
@@ -472,9 +485,9 @@ export function ContainerTerminal({
     if (!active || detectedShell !== null) return;
     dockerApi.detectContainerShell(agentUrl, token, containerId)
       .then((res) => {
-        const s = res.data.shell;
-        setDetectedShell(s);
-        setSelectedShell(s);
+        const shell = normalizeShell(res.data.shell);
+        setDetectedShell(shell);
+        setSelectedShell(shell);
       })
       .catch(() => {
         setDetectedShell("/bin/sh");
@@ -496,7 +509,7 @@ export function ContainerTerminal({
 
   // Initialize terminal
   useEffect(() => {
-    if (!active || !wrapperRef.current || termRef.current) return;
+    if (!active || detectedShell === null || !wrapperRef.current || termRef.current) return;
 
     const term = new Terminal({
       cursorBlink: true,
@@ -532,7 +545,7 @@ export function ContainerTerminal({
       termRef.current = null;
       setShouldConnect(false);
     };
-  }, [active]);
+  }, [active, detectedShell]);
 
   // Handle terminal input
   useEffect(() => {
@@ -570,8 +583,9 @@ export function ContainerTerminal({
     }
   }, [readyState, sendMessage, getWebSocket]);
 
-  const reconnect = useCallback(() => {
+  const reconnect = useCallback((nextShell?: ShellPath) => {
     if (!wrapperRef.current) return;
+    if (nextShell) setSelectedShell(nextShell);
     
     // Cleanup existing terminal and observer
     roRef.current?.disconnect();
@@ -672,18 +686,31 @@ export function ContainerTerminal({
               {SHELLS.map((s) => {
                 const isSelected = selectedShell === s;
                 const isDefault  = s === detectedShell;
+                const isAvailable = availableShells.includes(s);
                 return (
                   <button
                     key={s}
-                    onClick={() => { setSelectedShell(s); setShellMenuOpen(false); reconnect(); }}
+                    disabled={!isAvailable}
+                    onClick={() => {
+                      if (!isAvailable) return;
+                      setShellMenuOpen(false);
+                      reconnect(s);
+                    }}
                     className={`w-full text-left px-3 py-2 text-[11px] font-mono transition-colors flex items-center justify-between gap-2 ${
-                      isSelected
+                      !isAvailable
+                        ? "text-muted-foreground/35 cursor-not-allowed"
+                        : isSelected
                         ? "bg-primary/10 text-primary"
                         : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                     }`}
                   >
                     <span>{s}</span>
                     <span className="flex items-center gap-1 shrink-0">
+                      {!isAvailable && (
+                        <span className="text-[8px] px-1 py-0.5 rounded bg-muted text-muted-foreground/60 border border-border font-mono tracking-wide">
+                          missing
+                        </span>
+                      )}
                       {isDefault && (
                         <span className="text-[8px] px-1 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-mono tracking-wide">
                           detected
@@ -731,7 +758,7 @@ export function ContainerTerminal({
           {/* Connect / Reconnect button — hidden when connected */}
           {!isConnected && (
             <button
-              onClick={reconnect}
+              onClick={() => reconnect()}
               disabled={isConnecting}
               className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono font-medium transition-all border ${
                 isConnecting

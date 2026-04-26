@@ -29,6 +29,7 @@ use crate::{
 };
 
 const RELAY_SERVER: &str = "wss://api.dokuru.rifuki.dev/ws/agent";
+const SHELL_PRIORITY: &[&str] = &["/bin/bash", "/bin/sh"];
 
 type RelaySocket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 type RelayWriter = SplitSink<RelaySocket, Message>;
@@ -582,54 +583,57 @@ async fn resolve_shell(
 ) -> String {
     if let Some(shell) = preferred_shell
         && !shell.is_empty()
+        && container_has_shell(docker, container_id, &shell).await
     {
         return shell;
     }
 
-    for candidate in ["/bin/bash", "/bin/sh"] {
-        let probe = docker
-            .create_exec(
-                container_id,
-                CreateExecOptions::<String> {
-                    attach_stdout: Some(true),
-                    attach_stderr: Some(true),
-                    tty: Some(false),
-                    cmd: Some(vec![
-                        "test".to_owned(),
-                        "-f".to_owned(),
-                        candidate.to_owned(),
-                    ]),
-                    ..Default::default()
-                },
-            )
-            .await;
-
-        if let Ok(exec) = probe
-            && let Ok(StartExecResults::Attached { mut output, .. }) = docker
-                .start_exec(
-                    &exec.id,
-                    Some(StartExecOptions {
-                        detach: false,
-                        tty: false,
-                        output_capacity: None,
-                    }),
-                )
-                .await
-        {
-            while output.next().await.is_some() {}
-            if docker
-                .inspect_exec(&exec.id)
-                .await
-                .ok()
-                .and_then(|info| info.exit_code)
-                == Some(0)
-            {
-                return candidate.to_string();
-            }
+    for candidate in SHELL_PRIORITY {
+        if container_has_shell(docker, container_id, candidate).await {
+            return (*candidate).to_string();
         }
     }
 
     "/bin/sh".to_string()
+}
+
+async fn container_has_shell(docker: &Docker, container_id: &str, shell: &str) -> bool {
+    let Ok(exec) = docker
+        .create_exec(
+            container_id,
+            CreateExecOptions::<String> {
+                attach_stdout: Some(true),
+                attach_stderr: Some(true),
+                tty: Some(false),
+                cmd: Some(vec!["test".to_owned(), "-f".to_owned(), shell.to_owned()]),
+                ..Default::default()
+            },
+        )
+        .await
+    else {
+        return false;
+    };
+
+    let Ok(StartExecResults::Attached { mut output, .. }) = docker
+        .start_exec(
+            &exec.id,
+            Some(StartExecOptions {
+                detach: false,
+                tty: false,
+                output_capacity: None,
+            }),
+        )
+        .await
+    else {
+        return false;
+    };
+
+    while output.next().await.is_some() {}
+
+    docker
+        .inspect_exec(&exec.id)
+        .await
+        .is_ok_and(|info| info.exit_code == Some(0))
 }
 
 async fn handle_exec_input(

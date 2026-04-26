@@ -240,53 +240,60 @@ const SHELL_PRIORITY: &[&str] = &["/bin/bash", "/bin/sh"];
 type ExecOutput = futures::stream::BoxStream<'static, Result<LogOutput, bollard::errors::Error>>;
 type ExecInput = Pin<Box<dyn AsyncWrite + Send>>;
 
-/// Resolve which shell to use. Tries `shell` param first, then falls back
-/// to the priority list by checking if the binary exists in the container.
 async fn resolve_shell(docker: &Docker, container_id: &str, preferred: Option<String>) -> String {
     if let Some(s) = preferred
         && !s.is_empty()
+        && container_has_shell(docker, container_id, &s).await
     {
         return s;
     }
-    // Auto-detect: run `test -f <shell>` for each candidate.
+
     for candidate in SHELL_PRIORITY {
-        let probe = docker
-            .create_exec(
-                container_id,
-                bollard::exec::CreateExecOptions::<String> {
-                    attach_stdout: Some(true),
-                    attach_stderr: Some(true),
-                    tty: Some(false),
-                    cmd: Some(vec![
-                        "test".to_owned(),
-                        "-f".to_owned(),
-                        (*candidate).to_string(),
-                    ]),
-                    ..Default::default()
-                },
-            )
-            .await;
-        if let Ok(exec) = probe
-            && let Ok(bollard::exec::StartExecResults::Attached { mut output, .. }) = docker
-                .start_exec(
-                    &exec.id,
-                    Some(bollard::exec::StartExecOptions {
-                        detach: false,
-                        tty: false,
-                        output_capacity: None,
-                    }),
-                )
-                .await
-        {
-            // Drain output; exit code 0 means the file exists.
-            while output.next().await.is_some() {}
-            let info = docker.inspect_exec(&exec.id).await.unwrap_or_default();
-            if info.exit_code == Some(0) {
-                return (*candidate).to_string();
-            }
+        if container_has_shell(docker, container_id, candidate).await {
+            return (*candidate).to_string();
         }
     }
+
     "/bin/sh".to_owned()
+}
+
+async fn container_has_shell(docker: &Docker, container_id: &str, shell: &str) -> bool {
+    let Ok(exec) = docker
+        .create_exec(
+            container_id,
+            CreateExecOptions::<String> {
+                attach_stdout: Some(true),
+                attach_stderr: Some(true),
+                tty: Some(false),
+                cmd: Some(vec!["test".to_owned(), "-f".to_owned(), shell.to_owned()]),
+                ..Default::default()
+            },
+        )
+        .await
+    else {
+        return false;
+    };
+
+    let Ok(StartExecResults::Attached { mut output, .. }) = docker
+        .start_exec(
+            &exec.id,
+            Some(StartExecOptions {
+                detach: false,
+                tty: false,
+                output_capacity: None,
+            }),
+        )
+        .await
+    else {
+        return false;
+    };
+
+    while output.next().await.is_some() {}
+
+    docker
+        .inspect_exec(&exec.id)
+        .await
+        .is_ok_and(|info| info.exit_code == Some(0))
 }
 
 /// GET /docker/containers/{id}/shell — returns the best available shell for the container.
