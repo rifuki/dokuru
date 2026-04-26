@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { PILLAR_META, getRulePillar, type SecurityPillar } from "@/lib/audit-pillars";
 import { FixWizard } from "@/features/audit/components/FixWizard";
 import { FixAllWizard } from "@/features/audit/components/FixAllWizard";
+import { FixHistoryPanel } from "@/features/audit/components/FixHistoryPanel";
 import { useFix } from "@/features/audit/hooks/useFix";
 import { useFixAll } from "@/features/audit/hooks/useFixAll";
 
@@ -964,6 +965,15 @@ function AuditDetailPage() {
                             </div>
                         );
                     })()}
+
+                    {agent && (
+                        <FixHistoryPanel
+                            agentId={id}
+                            agentUrl={agent.url}
+                            agentAccessMode={agent.access_mode}
+                            token={token}
+                        />
+                    )}
 
                     {report?.remediation.total_failed ? (
                         <div className="rounded-2xl border border-border bg-card dark:bg-gradient-to-br dark:from-[#0A0A0B] dark:to-[#111113] overflow-hidden">
