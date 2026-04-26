@@ -42,6 +42,8 @@ const ACTION_COLORS: Record<string, string> = {
 };
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
+const EVENT_ROW_HEIGHT_PX = 64;
+const EVENT_GRID_COLUMNS = "grid-cols-[180px_90px_280px_minmax(0,1fr)]";
 
 function EventsPage() {
   const { id } = Route.useParams();
@@ -176,9 +178,9 @@ function EventsPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-2xl border border-border bg-card overflow-hidden">
+      <div className="rounded-2xl border border-border bg-card overflow-x-auto">
         {/* Header */}
-        <div className="grid grid-cols-[180px_90px_160px_1fr] gap-x-4 px-4 py-2 border-b border-border bg-muted/30 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <div className={`grid ${EVENT_GRID_COLUMNS} min-w-[920px] gap-x-4 px-4 py-2 border-b border-border bg-muted/30 text-xs font-semibold uppercase tracking-wider text-muted-foreground`}>
           <span>Date</span>
           <span>Type</span>
           <span>Action</span>
@@ -186,13 +188,22 @@ function EventsPage() {
         </div>
 
         {/* Rows */}
-        <div className="divide-y divide-border">
+        <div className="divide-y divide-border" style={{ minHeight: `${perPage * EVENT_ROW_HEIGHT_PX}px` }}>
           {pageEvents.length === 0 ? (
-            <div className="py-16 text-center text-sm text-muted-foreground">
+            <div
+              className="flex min-w-[920px] items-center justify-center text-center text-sm text-muted-foreground"
+              style={{ height: `${perPage * EVENT_ROW_HEIGHT_PX}px` }}
+            >
               {paused ? "Stream paused — resume to see new events" : isConnecting ? "Connecting to event stream…" : "No events yet"}
             </div>
           ) : (
-            pageEvents.map((event, idx) => {
+            Array.from({ length: perPage }).map((_, idx) => {
+              const event = pageEvents[idx];
+
+              if (!event) {
+                return <div key={`empty-${safePage}-${idx}`} className="h-16 min-w-[920px]" aria-hidden="true" />;
+              }
+
               const ts = new Date(event.time * 1000).toLocaleString("en-US", {
                 month: "2-digit", day: "2-digit", year: "numeric",
                 hour: "2-digit", minute: "2-digit", second: "2-digit",
@@ -206,22 +217,25 @@ function EventsPage() {
               return (
                 <div
                   key={`${event.time}-${event.actor.id}-${idx}`}
-                  className="grid grid-cols-[180px_90px_160px_1fr] gap-x-4 px-4 py-2.5 hover:bg-muted/5 transition-colors text-sm font-mono items-center"
+                  className={`grid h-16 ${EVENT_GRID_COLUMNS} min-w-[920px] gap-x-4 px-4 hover:bg-muted/5 transition-colors text-sm font-mono items-center`}
                 >
-                  <span className="text-xs text-muted-foreground tabular-nums">{ts}</span>
+                  <span className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">{ts}</span>
 
                   <span className={`inline-flex w-fit items-center px-2 py-0.5 rounded border text-[11px] font-semibold uppercase ${TYPE_COLORS[type] ?? "bg-muted/20 text-muted-foreground border-border"}`}>
                     {event.type}
                   </span>
 
-                  <span className={`inline-flex w-fit items-center px-2 py-0.5 rounded text-[11px] font-medium ${ACTION_COLORS[action] ?? "bg-muted/10 text-muted-foreground"}`}>
-                    {event.action}
+                  <span
+                    title={event.action}
+                    className={`inline-flex min-w-0 max-w-full items-center rounded px-2 py-0.5 text-[11px] font-medium ${ACTION_COLORS[action] ?? "bg-muted/10 text-muted-foreground"}`}
+                  >
+                    <span className="truncate">{event.action}</span>
                   </span>
 
-                  <div className="min-w-0">
-                    <span className="font-semibold text-foreground truncate">{name}</span>
+                  <div className="flex min-w-0 items-center gap-2 overflow-hidden">
+                    <span title={name} className="max-w-[45%] shrink-0 truncate font-semibold text-foreground">{name}</span>
                     {image && (
-                      <span className="ml-2 text-xs text-muted-foreground truncate">{image}</span>
+                      <span title={image} className="min-w-0 truncate text-xs text-muted-foreground">{image}</span>
                     )}
                   </div>
                 </div>
@@ -231,7 +245,7 @@ function EventsPage() {
         </div>
 
         {/* Footer / Pagination */}
-        <div className="px-4 py-3 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
+        <div className="min-w-[920px] px-4 py-3 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
           <span>
             {filtered.length === 0
               ? "No events"

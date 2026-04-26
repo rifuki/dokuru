@@ -202,6 +202,15 @@ export function ContainerOverview({
 
 // ─── Logs tab ─────────────────────────────────────────────────────────────────
 
+const ANSI_ESCAPE_PATTERN = new RegExp(
+  `${String.fromCharCode(27)}(?:\\[[0-?]*[ -/]*[@-~]|\\].*?(?:${String.fromCharCode(7)}|${String.fromCharCode(27)}\\\\))`,
+  "g",
+);
+
+function cleanLogEntry(entry: string) {
+  return entry.replace(ANSI_ESCAPE_PATTERN, "").replace(/\r/g, "");
+}
+
 export function ContainerLogs({
   agentUrl,
   token,
@@ -227,6 +236,14 @@ export function ContainerLogs({
     if (autoScroll) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs, autoScroll]);
 
+  const normalizedLogs = useMemo(() => {
+    if (!logs) return [];
+
+    return logs
+      .flatMap((entry) => cleanLogEntry(entry).split("\n"))
+      .filter((line) => line.length > 0);
+  }, [logs]);
+
   if (isLoading) return <p className="text-sm text-muted-foreground p-6">Loading…</p>;
 
   return (
@@ -240,15 +257,15 @@ export function ContainerLogs({
           >
             {autoScroll ? "Auto-scroll: ON" : "Auto-scroll: OFF"}
           </button>
-          <Badge variant="secondary" className="text-[10px]">{logs?.length ?? 0} lines</Badge>
+          <Badge variant="secondary" className="text-[10px]">{normalizedLogs.length} lines</Badge>
         </div>
       </div>
-      <div className="h-96 overflow-y-auto bg-[#0d1117] p-4 font-mono text-xs leading-relaxed">
-        {(!logs || logs.length === 0) ? (
+      <div className="h-96 overflow-auto bg-[#0d1117] p-4 font-mono text-xs leading-relaxed">
+        {normalizedLogs.length === 0 ? (
           <span className="text-muted-foreground italic">No logs available.</span>
         ) : (
-          logs.map((line, i) => (
-            <div key={i} className="whitespace-pre-wrap break-all text-gray-300 hover:bg-white/5 px-2 py-0.5 rounded transition-colors">{line}</div>
+          normalizedLogs.map((line, i) => (
+            <div key={i} className="w-max min-w-full whitespace-pre text-gray-300 hover:bg-white/5 px-2 py-0.5 rounded transition-colors">{line}</div>
           ))
         )}
         <div ref={bottomRef} />
