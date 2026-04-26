@@ -12,6 +12,7 @@ use std::process::{Command, Stdio};
 pub const REPO_URL: &str = "https://github.com/rifuki/dokuru";
 pub const LATEST_RELEASE_BASE_URL: &str =
     "https://github.com/rifuki/dokuru/releases/download/latest";
+const DOKURU_GROUP: &str = "dokuru";
 
 #[derive(Debug)]
 pub struct InstallerConfig {
@@ -784,6 +785,8 @@ pub fn write_config_file(
     token_hash: Option<String>,
     relay_token: Option<String>,
 ) -> Result<()> {
+    ensure_dokuru_group()?;
+
     fs::create_dir_all(&config.config_dir)
         .wrap_err_with(|| format!("Failed to create {}", config.config_dir.display()))?;
 
@@ -795,11 +798,7 @@ pub fn write_config_file(
     fs::set_permissions(&config.config_dir, dir_permissions)
         .wrap_err_with(|| format!("Failed to chmod {}", config.config_dir.display()))?;
 
-    // Set group ownership to dokuru
-    run_command(
-        "chgrp",
-        &["dokuru", &config.config_dir.display().to_string()],
-    )?;
+    chgrp_dokuru(&config.config_dir)?;
 
     let config_path = runtime_config_path(config);
 
@@ -844,10 +843,27 @@ pub fn write_config_file(
     fs::set_permissions(&config_path, file_permissions)
         .wrap_err_with(|| format!("Failed to chmod {}", config_path.display()))?;
 
-    // Set group ownership to dokuru
-    run_command("chgrp", &["dokuru", &config_path.display().to_string()])?;
+    chgrp_dokuru(&config_path)?;
 
     Ok(())
+}
+
+fn ensure_dokuru_group() -> Result<()> {
+    if command_success("getent", &["group", DOKURU_GROUP]) {
+        return Ok(());
+    }
+
+    if command_success("groupadd", &["--system", DOKURU_GROUP])
+        || command_success("groupadd", &[DOKURU_GROUP])
+    {
+        return Ok(());
+    }
+
+    bail!("failed to create required system group '{DOKURU_GROUP}'")
+}
+
+fn chgrp_dokuru(path: &Path) -> Result<()> {
+    run_command("chgrp", &[DOKURU_GROUP, &path.display().to_string()])
 }
 
 /// Write config file preserving existing token
