@@ -6,7 +6,6 @@ on:
       - main
     paths:
       - 'dokuru-agent/**'
-      - 'install.sh'
       - '.github/workflows/release-agent.yaml'
     tags:
       - 'v*.*.*'
@@ -259,7 +258,7 @@ jobs:
           files: |
             dokuru-linux-*
             SHA256SUMS
-            install.sh
+            dokuru-agent/install.sh
             version.json
           draft: false
           prerelease: ${{ steps.release.outputs.prerelease }}

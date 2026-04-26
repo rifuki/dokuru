@@ -533,7 +533,7 @@ fn repair_compose_override(project_dir: &Path, repairs: &mut Vec<String>) -> Res
         let repaired = content
             .replace(
                 "https://raw.githubusercontent.com/rifuki/dokuru/main/install.sh",
-                "https://github.com/rifuki/dokuru/releases/download/latest/install.sh",
+                "https://raw.githubusercontent.com/rifuki/dokuru/main/dokuru-agent/install.sh",
             )
             .replace(
                 "https://raw.githubusercontent.com/rifuki/dokuru/main/dokuru-deploy/install.sh",

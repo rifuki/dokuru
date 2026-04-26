@@ -65,6 +65,7 @@ pub enum SecurityPillar {
 }
 
 impl SecurityPillar {
+    #[must_use]
     pub const fn key(&self) -> &'static str {
         match self {
             Self::Namespace => "namespace",
@@ -75,6 +76,7 @@ impl SecurityPillar {
         }
     }
 
+    #[must_use]
     pub const fn label(&self) -> &'static str {
         match self {
             Self::Namespace => "Namespace Isolation",
@@ -184,6 +186,7 @@ pub fn build_audit_view_report(results: Vec<CheckResult>) -> AuditViewReport {
     }
 }
 
+#[must_use]
 pub fn summarize_results(results: &[CheckResult]) -> AuditSummary {
     let passed = results
         .iter()
@@ -208,6 +211,7 @@ pub fn summarize_results(results: &[CheckResult]) -> AuditSummary {
     }
 }
 
+#[must_use]
 pub fn section_meta(section: &str) -> SectionMeta {
     match section {
         "Host Configuration" => SectionMeta {
@@ -249,6 +253,7 @@ pub fn section_meta(section: &str) -> SectionMeta {
     }
 }
 
+#[must_use]
 pub fn rule_pillar(rule_id: &str) -> SecurityPillar {
     match rule_id {
         "2.8" | "2.10" | "5.9" | "5.10" | "5.16" | "5.17" | "5.21" | "5.31" => {
@@ -268,6 +273,7 @@ pub fn rule_pillar(rule_id: &str) -> SecurityPillar {
     }
 }
 
+#[must_use]
 pub const fn score_band(score: u8) -> ScoreBand {
     if score >= 80 {
         ScoreBand::Healthy
@@ -319,32 +325,35 @@ fn summarize_sections(results: &[CheckResult]) -> Vec<GroupSummary> {
 
     for result in results {
         let meta = section_meta(&result.rule.section);
-        let summary = match summaries.iter_mut().find(|summary| summary.key == meta.key) {
-            Some(summary) => summary,
-            None => {
-                summaries.push(GroupSummary {
-                    key: meta.key,
-                    label: meta.label,
-                    number: if meta.number.is_empty() {
-                        None
-                    } else {
-                        Some(meta.number)
-                    },
-                    total: 0,
-                    passed: 0,
-                    failed: 0,
-                    errors: 0,
-                    percent: 0,
-                });
-                summaries.last_mut().expect("just pushed summary")
-            }
-        };
+        let summary = section_summary_for(&mut summaries, meta);
         apply_status(summary, &result.status);
     }
 
     finish_group_summaries(&mut summaries);
     summaries.sort_by(section_summary_order);
     summaries
+}
+
+fn section_summary_for(summaries: &mut Vec<GroupSummary>, meta: SectionMeta) -> &mut GroupSummary {
+    if let Some(index) = summaries.iter().position(|summary| summary.key == meta.key) {
+        return &mut summaries[index];
+    }
+
+    summaries.push(GroupSummary {
+        key: meta.key,
+        label: meta.label,
+        number: if meta.number.is_empty() {
+            None
+        } else {
+            Some(meta.number)
+        },
+        total: 0,
+        passed: 0,
+        failed: 0,
+        errors: 0,
+        percent: 0,
+    });
+    summaries.last_mut().expect("just pushed summary")
 }
 
 fn summarize_pillars(results: &[CheckResult]) -> Vec<GroupSummary> {
@@ -466,7 +475,7 @@ fn first_meaningful_line(text: &str) -> Option<&str> {
         .find(|line| !line.is_empty() && !line.starts_with('#'))
 }
 
-fn apply_status(summary: &mut GroupSummary, status: &str) {
+const fn apply_status(summary: &mut GroupSummary, status: &str) {
     if is_pass(status) {
         summary.passed += 1;
         summary.total += 1;
@@ -504,7 +513,7 @@ fn compare_remediation_actions(a: &RemediationAction, b: &RemediationAction) -> 
         .then_with(|| compare_rule_ids(&a.rule_id, &b.rule_id))
 }
 
-fn effort_rank(effort: &RemediationEffort) -> u8 {
+const fn effort_rank(effort: &RemediationEffort) -> u8 {
     match effort {
         RemediationEffort::Quick => 0,
         RemediationEffort::Moderate => 1,
@@ -530,7 +539,7 @@ fn compare_rule_ids(a: &str, b: &str) -> Ordering {
     }
 }
 
-fn status_rank(status: &str) -> u8 {
+const fn status_rank(status: &str) -> u8 {
     if is_fail(status) {
         0
     } else if is_error(status) {
@@ -542,15 +551,15 @@ fn status_rank(status: &str) -> u8 {
     }
 }
 
-fn is_pass(status: &str) -> bool {
+const fn is_pass(status: &str) -> bool {
     status.eq_ignore_ascii_case("pass")
 }
 
-fn is_fail(status: &str) -> bool {
+const fn is_fail(status: &str) -> bool {
     status.eq_ignore_ascii_case("fail")
 }
 
-fn is_error(status: &str) -> bool {
+const fn is_error(status: &str) -> bool {
     status.eq_ignore_ascii_case("error")
 }
 
