@@ -1,5 +1,8 @@
 /// Shared helpers for `fix_fn` implementations
-use crate::audit::types::{FixOutcome, FixStatus, FixTarget};
+use crate::audit::types::{
+    FixHistoryEntry, FixOutcome, FixPreview, FixPreviewTarget, FixProgress, FixRequest, FixStatus,
+    FixTarget, ResourceSuggestion, RollbackRequest,
+};
 use bollard::{
     Docker,
     container::{
@@ -12,7 +15,15 @@ use serde_yaml::{Mapping, Value};
 use std::collections::HashSet;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 use tokio::process::Command;
+use tokio::sync::{RwLock, mpsc};
+use uuid::Uuid;
+
+pub type ProgressSender = mpsc::UnboundedSender<FixProgress>;
+
+static FIX_HISTORY: LazyLock<RwLock<Vec<FixHistoryEntry>>> =
+    LazyLock::new(|| RwLock::new(Vec::new()));
 
 const DEFAULT_MEMORY_BYTES: i64 = 256 * 1024 * 1024;
 const DEFAULT_CPU_SHARES: i64 = 512;
@@ -65,9 +76,162 @@ pub fn supports_cgroup_resource_fix(rule_id: &str) -> bool {
     matches!(rule_id, "5.11" | "5.12" | "5.29" | "cgroup_all")
 }
 
+pub fn suggest_resource_limits(name: &str, image: &str) -> ResourceSuggestion {
+    let value = format!("{name} {image}").to_lowercase();
+    if value.contains("postgres")
+        || value.contains("mysql")
+        || value.contains("mariadb")
+        || value.contains("mongo")
+        || value.contains("node")
+        || value.contains("next")
+        || value.contains("nuxt")
+    {
+        return ResourceSuggestion {
+            memory: 512 * 1024 * 1024,
+            cpu_shares: 1024,
+            pids_limit: 200,
+        };
+    }
+
+    if value.contains("redis") || value.contains("memcached") || value.contains("cache") {
+        return ResourceSuggestion {
+            memory: 128 * 1024 * 1024,
+            cpu_shares: 512,
+            pids_limit: 100,
+        };
+    }
+
+    ResourceSuggestion {
+        memory: DEFAULT_MEMORY_BYTES,
+        cpu_shares: DEFAULT_CPU_SHARES,
+        pids_limit: DEFAULT_PIDS_LIMIT,
+    }
+}
+
+pub fn fix_steps(rule_id: &str) -> Vec<String> {
+    if supports_cgroup_resource_fix(rule_id) {
+        return vec![
+            "Inspect current cgroup limits".to_string(),
+            "Apply docker update".to_string(),
+            "Verify cgroup limits".to_string(),
+        ];
+    }
+    if supports_namespace_fix(rule_id) || supports_privileged_fix(rule_id) {
+        return vec![
+            "Inspect container configuration".to_string(),
+            "Save rollback metadata".to_string(),
+            "Stop or update compose service".to_string(),
+            "Recreate container with hardened isolation".to_string(),
+            "Start container".to_string(),
+            "Verify isolation".to_string(),
+        ];
+    }
+    vec!["Apply fix".to_string(), "Verify result".to_string()]
+}
+
+pub async fn preview_fix(docker: &Docker, rule_id: &str) -> eyre::Result<FixPreview> {
+    let containers = docker.list_containers::<String>(None).await?;
+    let mut targets = Vec::new();
+
+    for container in &containers {
+        let Some(id) = container.id.as_deref() else {
+            continue;
+        };
+        let inspect = docker.inspect_container(id, None).await?;
+        let violates = if supports_cgroup_resource_fix(rule_id) {
+            default_target_for_rule(docker, rule_id, container)
+                .await
+                .is_some()
+        } else {
+            container_violates_rule(&inspect, rule_id)
+        };
+        if !violates {
+            continue;
+        }
+
+        targets.push(preview_target_from_inspect(id, &inspect, rule_id));
+    }
+
+    Ok(FixPreview {
+        rule_id: rule_id.to_string(),
+        targets,
+        requires_restart: supports_namespace_fix(rule_id) || supports_privileged_fix(rule_id),
+        requires_elevation: false,
+        steps: fix_steps(rule_id),
+    })
+}
+
+fn preview_target_from_inspect(
+    id: &str,
+    inspect: &ContainerInspectResponse,
+    rule_id: &str,
+) -> FixPreviewTarget {
+    let name = inspect_name(inspect).unwrap_or_else(|| short_id(id));
+    let image = inspect
+        .config
+        .as_ref()
+        .and_then(|config| config.image.clone())
+        .unwrap_or_default();
+    let suggestion = suggest_resource_limits(&name, &image);
+    let host_config = inspect.host_config.as_ref();
+    let compose = compose_context_from_inspect(inspect);
+    let strategy = if supports_cgroup_resource_fix(rule_id) {
+        "docker_update"
+    } else if compose.is_some() {
+        "compose_update"
+    } else {
+        "recreate"
+    };
+
+    FixPreviewTarget {
+        container_id: id.to_string(),
+        container_name: name,
+        image,
+        current_memory: host_config.and_then(|config| config.memory),
+        current_cpu_shares: host_config.and_then(|config| config.cpu_shares),
+        current_pids_limit: host_config.and_then(|config| config.pids_limit),
+        suggestion,
+        strategy: strategy.to_string(),
+        compose_project: compose.as_ref().map(|ctx| ctx.project.clone()),
+        compose_service: compose.map(|ctx| ctx.service),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn emit_progress(
+    progress: Option<&ProgressSender>,
+    rule_id: &str,
+    container_name: &str,
+    step: u8,
+    total_steps: u8,
+    action: &str,
+    status: &str,
+    detail: Option<String>,
+) {
+    if let Some(progress) = progress {
+        let _ = progress.send(FixProgress {
+            rule_id: rule_id.to_string(),
+            container_name: container_name.to_string(),
+            step,
+            total_steps,
+            action: action.to_string(),
+            status: status.to_string(),
+            detail,
+        });
+    }
+}
+
 pub async fn apply_default_cgroup_resource_fix(
     docker: &Docker,
     rule_id: &str,
+) -> eyre::Result<FixOutcome> {
+    apply_default_cgroup_resource_fix_with_progress(docker, rule_id, None).await
+}
+
+pub async fn apply_default_cgroup_resource_fix_with_progress(
+    docker: &Docker,
+    rule_id: &str,
+    progress: Option<&ProgressSender>,
 ) -> eyre::Result<FixOutcome> {
     let containers = docker.list_containers::<String>(None).await?;
     let mut targets = Vec::new();
@@ -79,7 +243,7 @@ pub async fn apply_default_cgroup_resource_fix(
         targets.push(target);
     }
 
-    apply_cgroup_resource_fix(docker, rule_id, &targets).await
+    apply_cgroup_resource_fix_with_progress(docker, rule_id, &targets, progress).await
 }
 
 async fn default_target_for_rule(
@@ -119,10 +283,21 @@ async fn default_target_for_rule(
     })
 }
 
+#[allow(dead_code)]
 pub async fn apply_cgroup_resource_fix(
     docker: &Docker,
     rule_id: &str,
     targets: &[FixTarget],
+) -> eyre::Result<FixOutcome> {
+    apply_cgroup_resource_fix_with_progress(docker, rule_id, targets, None).await
+}
+
+#[allow(clippy::too_many_lines)]
+pub async fn apply_cgroup_resource_fix_with_progress(
+    docker: &Docker,
+    rule_id: &str,
+    targets: &[FixTarget],
+    progress: Option<&ProgressSender>,
 ) -> eyre::Result<FixOutcome> {
     if !supports_cgroup_resource_fix(rule_id) {
         return Ok(blocked(
@@ -147,22 +322,86 @@ pub async fn apply_cgroup_resource_fix(
 
     for target in targets {
         let container_label = container_label(docker, &target.container_id).await;
+        emit_progress(
+            progress,
+            rule_id,
+            &container_label,
+            1,
+            3,
+            "inspect_current_cgroup",
+            "done",
+            Some("Read current container resource limits".to_string()),
+        );
         let options = match update_options(rule_id, target) {
             Ok(options) => options,
             Err(error) => {
+                emit_progress(
+                    progress,
+                    rule_id,
+                    &container_label,
+                    2,
+                    3,
+                    "prepare_update",
+                    "error",
+                    Some(error.to_string()),
+                );
                 failed.push(format!("{container_label}: {error}"));
                 continue;
             }
         };
 
+        emit_progress(
+            progress,
+            rule_id,
+            &container_label,
+            2,
+            3,
+            "docker_update",
+            "in_progress",
+            Some(cgroup_update_detail(rule_id, target)),
+        );
         match docker.update_container(&target.container_id, options).await {
             Ok(()) => match verify_cgroup_update(docker, rule_id, target).await {
-                Ok(()) => updated.push(container_label),
+                Ok(()) => {
+                    emit_progress(
+                        progress,
+                        rule_id,
+                        &container_label,
+                        3,
+                        3,
+                        "verify_cgroup",
+                        "done",
+                        Some("Container cgroup limits updated and verified".to_string()),
+                    );
+                    updated.push(container_label);
+                }
                 Err(error) => {
+                    emit_progress(
+                        progress,
+                        rule_id,
+                        &container_label,
+                        3,
+                        3,
+                        "verify_cgroup",
+                        "error",
+                        Some(error.to_string()),
+                    );
                     failed.push(format!("{container_label}: verification failed: {error}"));
                 }
             },
-            Err(error) => failed.push(format!("{container_label}: update failed: {error}")),
+            Err(error) => {
+                emit_progress(
+                    progress,
+                    rule_id,
+                    &container_label,
+                    2,
+                    3,
+                    "docker_update",
+                    "error",
+                    Some(error.to_string()),
+                );
+                failed.push(format!("{container_label}: update failed: {error}"));
+            }
         }
     }
 
@@ -186,6 +425,30 @@ pub async fn apply_cgroup_resource_fix(
         restart_command: None,
         requires_elevation: false,
     })
+}
+
+fn cgroup_update_detail(rule_id: &str, target: &FixTarget) -> String {
+    match rule_id {
+        "5.11" => format!(
+            "memory={} bytes",
+            target.memory.unwrap_or(DEFAULT_MEMORY_BYTES)
+        ),
+        "5.12" => format!(
+            "cpu_shares={}",
+            target.cpu_shares.unwrap_or(DEFAULT_CPU_SHARES)
+        ),
+        "5.29" => format!(
+            "pids_limit={}",
+            target.pids_limit.unwrap_or(DEFAULT_PIDS_LIMIT)
+        ),
+        "cgroup_all" => format!(
+            "memory={} bytes, cpu_shares={}, pids_limit={}",
+            target.memory.unwrap_or(DEFAULT_MEMORY_BYTES),
+            target.cpu_shares.unwrap_or(DEFAULT_CPU_SHARES),
+            target.pids_limit.unwrap_or(DEFAULT_PIDS_LIMIT)
+        ),
+        _ => "resource update".to_string(),
+    }
 }
 
 fn update_options(
@@ -279,6 +542,14 @@ async fn container_label(docker: &Docker, id: &str) -> String {
     }
 }
 
+fn inspect_name(inspect: &ContainerInspectResponse) -> Option<String> {
+    inspect
+        .name
+        .as_deref()
+        .map(|name| name.trim_start_matches('/').to_string())
+        .filter(|name| !name.is_empty())
+}
+
 fn short_id(id: &str) -> String {
     id.chars().take(12).collect()
 }
@@ -293,6 +564,15 @@ pub fn supports_privileged_fix(rule_id: &str) -> bool {
 
 /// Stop → remove → recreate (without --privileged) → start all privileged containers.
 pub async fn apply_privileged_fix(docker: &Docker, rule_id: &str) -> eyre::Result<FixOutcome> {
+    Box::pin(apply_privileged_fix_with_progress(docker, rule_id, None)).await
+}
+
+#[allow(clippy::too_many_lines)]
+pub async fn apply_privileged_fix_with_progress(
+    docker: &Docker,
+    rule_id: &str,
+    progress: Option<&ProgressSender>,
+) -> eyre::Result<FixOutcome> {
     if !supports_privileged_fix(rule_id) {
         return Ok(blocked(rule_id, "Privileged fix only supports rule 5.5"));
     }
@@ -307,6 +587,16 @@ pub async fn apply_privileged_fix(docker: &Docker, rule_id: &str) -> eyre::Resul
         let inspect = match docker.inspect_container(id, None).await {
             Ok(i) => i,
             Err(e) => {
+                emit_progress(
+                    progress,
+                    rule_id,
+                    &short_id(id),
+                    1,
+                    6,
+                    "inspect_container",
+                    "error",
+                    Some(e.to_string()),
+                );
                 failed.push(format!("{}: inspect failed: {e}", short_id(id)));
                 continue;
             }
@@ -334,10 +624,21 @@ pub async fn apply_privileged_fix(docker: &Docker, rule_id: &str) -> eyre::Resul
             label
         };
 
+        emit_progress(
+            progress,
+            rule_id,
+            &label,
+            1,
+            6,
+            "inspect_container",
+            "done",
+            Some("Container is running with --privileged".to_string()),
+        );
+
         if let Some(ctx) = compose_context_from_inspect(&inspect) {
             let key = ctx.key();
             if compose_services.insert(key) {
-                match apply_compose_service_fix(docker, rule_id, &ctx).await {
+                match apply_compose_service_fix(docker, rule_id, &ctx, progress).await {
                     Ok(()) => updated.push(format!("{}:{} (compose)", ctx.project, ctx.service)),
                     Err(e) => failed.push(format!("{label}: compose fix failed: {e}")),
                 }
@@ -345,7 +646,7 @@ pub async fn apply_privileged_fix(docker: &Docker, rule_id: &str) -> eyre::Resul
             continue;
         }
 
-        match recreate_without_privileged(docker, id, inspect).await {
+        match recreate_without_privileged(docker, id, inspect, progress, &label, rule_id).await {
             Ok(()) => updated.push(label),
             Err(e) => failed.push(format!("{label}: {e}")),
         }
@@ -387,10 +688,14 @@ pub async fn apply_privileged_fix(docker: &Docker, rule_id: &str) -> eyre::Resul
     })
 }
 
+#[allow(clippy::too_many_lines)]
 async fn recreate_without_privileged(
     docker: &Docker,
     id: &str,
-    inspect: bollard::models::ContainerInspectResponse,
+    inspect: ContainerInspectResponse,
+    progress: Option<&ProgressSender>,
+    label: &str,
+    rule_id: &str,
 ) -> eyre::Result<()> {
     let name = inspect
         .name
@@ -406,10 +711,52 @@ async fn recreate_without_privileged(
     let mut host_config = inspect.host_config.unwrap_or_default();
     host_config.privileged = Some(false);
 
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        2,
+        6,
+        "save_config",
+        "done",
+        Some("Saved container config before recreate".to_string()),
+    );
+
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        3,
+        6,
+        "stop_container",
+        "in_progress",
+        None,
+    );
     docker
         .stop_container(id, Some(StopContainerOptions { t: 10 }))
         .await?;
 
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        3,
+        6,
+        "stop_container",
+        "done",
+        None,
+    );
+
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        4,
+        6,
+        "remove_container",
+        "in_progress",
+        None,
+    );
     docker
         .remove_container(
             id,
@@ -420,6 +767,17 @@ async fn recreate_without_privileged(
             }),
         )
         .await?;
+
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        4,
+        6,
+        "remove_container",
+        "done",
+        None,
+    );
 
     let mut create_config: Config<String> = container_config.into();
     create_config.host_config = Some(host_config);
@@ -433,18 +791,69 @@ async fn recreate_without_privileged(
         })
     };
 
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        5,
+        6,
+        "recreate_container",
+        "in_progress",
+        None,
+    );
     let created = docker.create_container(opts, create_config).await?;
 
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        5,
+        6,
+        "recreate_container",
+        "done",
+        None,
+    );
+
     let start_target = if name.is_empty() { created.id } else { name };
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        6,
+        6,
+        "start_container",
+        "in_progress",
+        None,
+    );
     docker
         .start_container(&start_target, None::<StartContainerOptions<String>>)
         .await?;
+
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        6,
+        6,
+        "verify_isolation",
+        "done",
+        Some("Container restarted without --privileged".to_string()),
+    );
 
     Ok(())
 }
 
 /// Stop → remove → recreate (with namespace isolation fixed) → start all violating containers.
 pub async fn apply_namespace_fix(docker: &Docker, rule_id: &str) -> eyre::Result<FixOutcome> {
+    Box::pin(apply_namespace_fix_with_progress(docker, rule_id, None)).await
+}
+
+#[allow(clippy::too_many_lines)]
+pub async fn apply_namespace_fix_with_progress(
+    docker: &Docker,
+    rule_id: &str,
+    progress: Option<&ProgressSender>,
+) -> eyre::Result<FixOutcome> {
     if !supports_namespace_fix(rule_id) {
         return Ok(blocked(
             rule_id,
@@ -462,6 +871,16 @@ pub async fn apply_namespace_fix(docker: &Docker, rule_id: &str) -> eyre::Result
         let inspect = match docker.inspect_container(id, None).await {
             Ok(i) => i,
             Err(e) => {
+                emit_progress(
+                    progress,
+                    rule_id,
+                    &short_id(id),
+                    1,
+                    6,
+                    "inspect_container",
+                    "error",
+                    Some(e.to_string()),
+                );
                 failed.push(format!("{}: inspect failed: {e}", short_id(id)));
                 continue;
             }
@@ -493,10 +912,21 @@ pub async fn apply_namespace_fix(docker: &Docker, rule_id: &str) -> eyre::Result
             label
         };
 
+        emit_progress(
+            progress,
+            rule_id,
+            &label,
+            1,
+            6,
+            "inspect_container",
+            "done",
+            Some("Container violates namespace isolation rule".to_string()),
+        );
+
         if let Some(ctx) = compose_context_from_inspect(&inspect) {
             let key = ctx.key();
             if compose_services.insert(key) {
-                match apply_compose_service_fix(docker, rule_id, &ctx).await {
+                match apply_compose_service_fix(docker, rule_id, &ctx, progress).await {
                     Ok(()) => updated.push(format!("{}:{} (compose)", ctx.project, ctx.service)),
                     Err(e) => failed.push(format!("{label}: compose fix failed: {e}")),
                 }
@@ -504,7 +934,7 @@ pub async fn apply_namespace_fix(docker: &Docker, rule_id: &str) -> eyre::Result
             continue;
         }
 
-        match recreate_without_namespace(docker, id, inspect, rule_id).await {
+        match recreate_without_namespace(docker, id, inspect, rule_id, progress, &label).await {
             Ok(()) => updated.push(label),
             Err(e) => failed.push(format!("{label}: {e}")),
         }
@@ -546,11 +976,14 @@ pub async fn apply_namespace_fix(docker: &Docker, rule_id: &str) -> eyre::Result
     })
 }
 
+#[allow(clippy::too_many_lines)]
 async fn recreate_without_namespace(
     docker: &Docker,
     id: &str,
     inspect: ContainerInspectResponse,
     rule_id: &str,
+    progress: Option<&ProgressSender>,
+    label: &str,
 ) -> eyre::Result<()> {
     let name = inspect
         .name
@@ -575,12 +1008,53 @@ async fn recreate_without_namespace(
         _ => {}
     }
 
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        2,
+        6,
+        "save_config",
+        "done",
+        Some("Saved container config before namespace recreate".to_string()),
+    );
+
     // Stop with 10s grace period
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        3,
+        6,
+        "stop_container",
+        "in_progress",
+        None,
+    );
     docker
         .stop_container(id, Some(StopContainerOptions { t: 10 }))
         .await?;
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        3,
+        6,
+        "stop_container",
+        "done",
+        None,
+    );
 
     // Remove (keep volumes)
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        4,
+        6,
+        "remove_container",
+        "in_progress",
+        None,
+    );
     docker
         .remove_container(
             id,
@@ -591,6 +1065,16 @@ async fn recreate_without_namespace(
             }),
         )
         .await?;
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        4,
+        6,
+        "remove_container",
+        "done",
+        None,
+    );
 
     // Reconstruct Config<String> from the inspect result
     let mut create_config: Config<String> = container_config.into();
@@ -605,14 +1089,66 @@ async fn recreate_without_namespace(
         })
     };
 
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        5,
+        6,
+        "recreate_container",
+        "in_progress",
+        Some(namespace_fix_detail(rule_id).to_string()),
+    );
     let created = docker.create_container(opts, create_config).await?;
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        5,
+        6,
+        "recreate_container",
+        "done",
+        None,
+    );
 
     let start_target = if name.is_empty() { created.id } else { name };
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        6,
+        6,
+        "start_container",
+        "in_progress",
+        None,
+    );
     docker
         .start_container(&start_target, None::<StartContainerOptions<String>>)
         .await?;
 
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        6,
+        6,
+        "verify_isolation",
+        "done",
+        Some("Container restarted with hardened namespace isolation".to_string()),
+    );
+
     Ok(())
+}
+
+fn namespace_fix_detail(rule_id: &str) -> &'static str {
+    match rule_id {
+        "5.10" => "Set network mode to bridge",
+        "5.16" => "Remove host PID namespace sharing",
+        "5.17" => "Set IPC namespace to private",
+        "5.21" => "Remove host UTS namespace sharing",
+        "5.31" => "Remove host user namespace sharing",
+        _ => "Apply namespace isolation fix",
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -643,15 +1179,48 @@ fn compose_context_from_inspect(inspect: &ContainerInspectResponse) -> Option<Co
     })
 }
 
+#[allow(clippy::too_many_lines)]
 async fn apply_compose_service_fix(
     docker: &Docker,
     rule_id: &str,
     ctx: &ComposeContext,
+    progress: Option<&ProgressSender>,
 ) -> eyre::Result<()> {
+    let label = format!("{}:{}", ctx.project, ctx.service);
+    emit_progress(
+        progress,
+        rule_id,
+        &label,
+        2,
+        6,
+        "resolve_compose_file",
+        "in_progress",
+        Some("Resolving Docker Compose config files".to_string()),
+    );
     let compose_paths = resolve_compose_files(ctx).await?;
+    emit_progress(
+        progress,
+        rule_id,
+        &label,
+        2,
+        6,
+        "resolve_compose_file",
+        "done",
+        Some(format!("{} compose file(s) found", compose_paths.len())),
+    );
     let mut update: Option<(PathBuf, Value)> = None;
     let mut skipped = Vec::new();
 
+    emit_progress(
+        progress,
+        rule_id,
+        &label,
+        3,
+        6,
+        "update_compose_yaml",
+        "in_progress",
+        Some("Editing Compose service definition".to_string()),
+    );
     for compose_path in &compose_paths {
         let content = tokio::fs::read_to_string(compose_path).await?;
         let mut document: Value = serde_yaml::from_str(&content)?;
@@ -679,18 +1248,89 @@ async fn apply_compose_service_fix(
     };
 
     let backup_path = compose_backup_path(&compose_path);
+    emit_progress(
+        progress,
+        rule_id,
+        &label,
+        3,
+        6,
+        "backup_compose_yaml",
+        "in_progress",
+        Some(format!("Creating backup {}", backup_path.display())),
+    );
     tokio::fs::copy(&compose_path, &backup_path).await?;
     tokio::fs::write(&compose_path, serde_yaml::to_string(&document)?).await?;
+    emit_progress(
+        progress,
+        rule_id,
+        &label,
+        3,
+        6,
+        "update_compose_yaml",
+        "done",
+        Some(format!("Updated {}", compose_path.display())),
+    );
 
+    emit_progress(
+        progress,
+        rule_id,
+        &label,
+        4,
+        6,
+        "docker_compose_up",
+        "in_progress",
+        Some(format!("Recreating service {}", ctx.service)),
+    );
     if let Err(error) = run_compose_up(ctx, &compose_paths).await {
         let _ = tokio::fs::copy(&backup_path, &compose_path).await;
+        emit_progress(
+            progress,
+            rule_id,
+            &label,
+            4,
+            6,
+            "docker_compose_up",
+            "error",
+            Some(error.to_string()),
+        );
         return Err(eyre::eyre!(
             "{error}; compose file was restored from {}",
             backup_path.display()
         ));
     }
+    emit_progress(
+        progress,
+        rule_id,
+        &label,
+        5,
+        6,
+        "docker_compose_up",
+        "done",
+        None,
+    );
 
-    verify_compose_service(docker, rule_id, ctx).await
+    emit_progress(
+        progress,
+        rule_id,
+        &label,
+        6,
+        6,
+        "verify_compose_service",
+        "in_progress",
+        None,
+    );
+    verify_compose_service(docker, rule_id, ctx).await?;
+    emit_progress(
+        progress,
+        rule_id,
+        &label,
+        6,
+        6,
+        "verify_compose_service",
+        "done",
+        Some("Compose service recreated and verified".to_string()),
+    );
+    Ok(())
 }
 
 async fn resolve_compose_files(ctx: &ComposeContext) -> eyre::Result<Vec<PathBuf>> {
@@ -900,6 +1540,136 @@ fn container_violates_rule(inspect: &ContainerInspectResponse, rule_id: &str) ->
         "5.31" => host_config.and_then(|h| h.userns_mode.as_deref()) == Some("host"),
         _ => false,
     }
+}
+
+pub async fn cgroup_rollback_targets(
+    docker: &Docker,
+    request: &FixRequest,
+) -> eyre::Result<Vec<FixTarget>> {
+    if !supports_cgroup_resource_fix(&request.rule_id) {
+        return Ok(Vec::new());
+    }
+
+    let target_ids = if request.targets.is_empty() {
+        preview_fix(docker, &request.rule_id)
+            .await?
+            .targets
+            .into_iter()
+            .map(|target| target.container_id)
+            .collect::<Vec<_>>()
+    } else {
+        request
+            .targets
+            .iter()
+            .map(|target| target.container_id.clone())
+            .collect()
+    };
+
+    let mut rollback_targets = Vec::new();
+    for container_id in target_ids {
+        let inspect = docker.inspect_container(&container_id, None).await?;
+        let Some(host_config) = inspect.host_config else {
+            continue;
+        };
+        rollback_targets.push(FixTarget {
+            container_id,
+            memory: host_config.memory,
+            cpu_shares: host_config.cpu_shares,
+            pids_limit: host_config.pids_limit,
+            strategy: Some("cgroup_rollback".to_string()),
+        });
+    }
+
+    Ok(rollback_targets)
+}
+
+pub async fn record_fix_history(
+    request: FixRequest,
+    outcome: FixOutcome,
+    rollback_targets: Vec<FixTarget>,
+) -> FixHistoryEntry {
+    let rollback_supported = !rollback_targets.is_empty() && outcome.status == FixStatus::Applied;
+    let entry = FixHistoryEntry {
+        id: Uuid::new_v4().to_string(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        request,
+        outcome,
+        rollback_supported,
+        rollback_targets,
+        rollback_note: rollback_supported
+            .then(|| "Rollback restores previous cgroup resource limits".to_string()),
+    };
+
+    let mut history = FIX_HISTORY.write().await;
+    history.insert(0, entry.clone());
+    history.truncate(50);
+    entry
+}
+
+pub async fn list_fix_history() -> Vec<FixHistoryEntry> {
+    FIX_HISTORY.read().await.clone()
+}
+
+pub async fn rollback_fix(docker: &Docker, request: &RollbackRequest) -> eyre::Result<FixOutcome> {
+    let entry = {
+        let history = FIX_HISTORY.read().await;
+        history
+            .iter()
+            .find(|entry| entry.id == request.history_id)
+            .cloned()
+    };
+    let Some(entry) = entry else {
+        return Ok(blocked("rollback", "Fix history entry not found"));
+    };
+
+    if !entry.rollback_supported || entry.rollback_targets.is_empty() {
+        return Ok(blocked(
+            &entry.request.rule_id,
+            "Rollback is only supported for cgroup fixes with captured previous limits",
+        ));
+    }
+
+    let mut restored = Vec::new();
+    let mut failed = Vec::new();
+    for target in &entry.rollback_targets {
+        let options = UpdateContainerOptions::<String> {
+            memory: target.memory,
+            cpu_shares: target
+                .cpu_shares
+                .and_then(|shares| isize::try_from(shares).ok()),
+            pids_limit: target.pids_limit,
+            ..Default::default()
+        };
+        let label = container_label(docker, &target.container_id).await;
+        match docker.update_container(&target.container_id, options).await {
+            Ok(()) => restored.push(label),
+            Err(error) => failed.push(format!("{label}: {error}")),
+        }
+    }
+
+    let mut message = format!(
+        "Rolled back cgroup limits for {} container(s)",
+        restored.len()
+    );
+    if !restored.is_empty() {
+        let _ = write!(message, ": {}", restored.join(", "));
+    }
+    if !failed.is_empty() {
+        let _ = write!(message, ". Failed {}: {}", failed.len(), failed.join("; "));
+    }
+
+    Ok(FixOutcome {
+        rule_id: entry.request.rule_id,
+        status: if restored.is_empty() && !failed.is_empty() {
+            FixStatus::Blocked
+        } else {
+            FixStatus::Applied
+        },
+        message,
+        requires_restart: false,
+        restart_command: None,
+        requires_elevation: false,
+    })
 }
 
 /// Merge a key into /etc/docker/daemon.json, creating the file if needed.

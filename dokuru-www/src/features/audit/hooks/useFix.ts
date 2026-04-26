@@ -1,9 +1,8 @@
 import { useState, useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { agentApi } from "@/lib/api/agent";
-import { agentDirectApi, type AuditResult, type FixOutcome } from "@/lib/api/agent-direct";
+import { agentDirectApi, type AuditResult, type FixOutcome, type FixPreview, type FixProgress, type FixTarget } from "@/lib/api/agent-direct";
 import { useAuditStore } from "@/stores/use-audit-store";
 
 export type WizardStep = "confirm" | "applying" | "result";
@@ -135,102 +134,179 @@ interface UseFixArgs {
     token?: string;
 }
 
+export type TargetConfig = {
+    memoryMb: number;
+    cpuShares: number;
+    pidsLimit: number;
+};
+
+type FixStreamMessage =
+    | { type: "progress"; data: FixProgress }
+    | { type: "outcome"; data: FixOutcome }
+    | { type: "error"; message: string };
+
 export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs) {
     const [open, setOpen] = useState(false);
     const [step, setStep] = useState<WizardStep>("confirm");
     const [outcome, setOutcome] = useState<FixOutcome | null>(null);
     const [stepIndex, setStepIndex] = useState(0);
     const [activeResult, setActiveResult] = useState<AuditResult | null>(null);
-    const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const [preview, setPreview] = useState<FixPreview | null>(null);
+    const [previewLoading, setPreviewLoading] = useState(false);
+    const [targetConfig, setTargetConfig] = useState<Record<string, TargetConfig>>({});
+    const [progressEvents, setProgressEvents] = useState<FixProgress[]>([]);
+    const socketRef = useRef<WebSocket | null>(null);
 
     const { setFixing, setFixOutcome } = useAuditStore();
     const queryClient = useQueryClient();
-    const navigate = useNavigate();
 
     const openWizard = useCallback((result: AuditResult) => {
         setActiveResult(result);
         setStep("confirm");
         setOutcome(null);
         setStepIndex(0);
+        setProgressEvents([]);
+        setPreview(null);
+        setTargetConfig({});
         setOpen(true);
+        setPreviewLoading(true);
+
+        const loadPreview = agentAccessMode === "relay"
+            ? agentApi.previewFix(agentId, result.rule.id)
+            : agentDirectApi.previewFix(agentUrl, result.rule.id, token);
+
+        loadPreview
+            .then((nextPreview) => {
+                setPreview(nextPreview);
+                setTargetConfig(Object.fromEntries(nextPreview.targets.map((target) => [
+                    target.container_id,
+                    {
+                        memoryMb: Math.round(target.suggestion.memory / 1024 / 1024),
+                        cpuShares: target.suggestion.cpu_shares,
+                        pidsLimit: target.suggestion.pids_limit,
+                    },
+                ])));
+            })
+            .catch(() => toast.error(`Failed to load fix preview for rule ${result.rule.id}`))
+            .finally(() => setPreviewLoading(false));
+    }, [agentAccessMode, agentId, agentUrl, token]);
+
+    const updateTargetConfig = useCallback((containerId: string, patch: Partial<TargetConfig>) => {
+        setTargetConfig((current) => ({
+            ...current,
+            [containerId]: { ...current[containerId], ...patch },
+        }));
     }, []);
 
     const closeWizard = useCallback(() => {
-        if (intervalRef.current) clearInterval(intervalRef.current);
+        socketRef.current?.close();
+        socketRef.current = null;
         setOpen(false);
         setTimeout(() => {
             setStep("confirm");
             setOutcome(null);
             setStepIndex(0);
+            setPreview(null);
+            setTargetConfig({});
+            setProgressEvents([]);
         }, 300);
     }, []);
+
+    const buildTargets = useCallback((ruleId: string): FixTarget[] => {
+        if (!preview) return [];
+        return preview.targets.map((target) => {
+            const config = targetConfig[target.container_id];
+            const base: FixTarget = {
+                container_id: target.container_id,
+                strategy: target.strategy,
+            };
+            if (ruleId === "5.11") base.memory = Math.max(1, config?.memoryMb ?? 256) * 1024 * 1024;
+            if (ruleId === "5.12") base.cpu_shares = Math.max(2, config?.cpuShares ?? 512);
+            if (ruleId === "5.29") base.pids_limit = Math.max(1, config?.pidsLimit ?? 100);
+            return base;
+        });
+    }, [preview, targetConfig]);
+
+    const applyFixViaStream = useCallback((ruleId: string, targets: FixTarget[]) => new Promise<FixOutcome>((resolve, reject) => {
+        const request = { rule_id: ruleId, targets };
+        const url = agentAccessMode === "relay"
+            ? agentApi.fixStreamUrl(agentId, request)
+            : agentDirectApi.fixStreamUrl(agentUrl, request, token);
+        const socket = new WebSocket(url);
+        let settled = false;
+        socketRef.current = socket;
+
+        socket.onmessage = (event) => {
+            try {
+                const message = JSON.parse(String(event.data)) as FixStreamMessage;
+                if (message.type === "progress") {
+                    setProgressEvents((events) => [...events, message.data]);
+                    setStepIndex(Math.max(0, message.data.step - 1));
+                    return;
+                }
+                if (message.type === "outcome") {
+                    settled = true;
+                    resolve(message.data);
+                    socket.close();
+                    return;
+                }
+                if (message.type === "error") {
+                    settled = true;
+                    reject(new Error(message.message));
+                    socket.close();
+                }
+            } catch (error) {
+                settled = true;
+                reject(error instanceof Error ? error : new Error("Invalid fix stream message"));
+                socket.close();
+            }
+        };
+
+        socket.onerror = () => {
+            if (!settled) {
+                settled = true;
+                reject(new Error("Fix progress stream failed"));
+            }
+        };
+        socket.onclose = () => {
+            if (socketRef.current === socket) socketRef.current = null;
+            if (!settled) {
+                settled = true;
+                reject(new Error("Fix progress stream closed before completion"));
+            }
+        };
+    }), [agentAccessMode, agentId, agentUrl, token]);
 
     const applyFix = useCallback(async () => {
         if (!activeResult) return;
         const { rule } = activeResult;
         const steps = getFixSteps(rule.id);
+        const targets = buildTargets(rule.id);
 
         setStep("applying");
         setStepIndex(0);
+        setProgressEvents([]);
         setFixing(agentId, rule.id, true);
         setFixOutcome(agentId, rule.id, null);
 
-        let idx = 0;
-        intervalRef.current = setInterval(() => {
-            idx++;
-            if (idx < steps.length) setStepIndex(idx);
-            else if (intervalRef.current) clearInterval(intervalRef.current);
-        }, 1400);
-
         try {
-            let fixOutcome: FixOutcome;
+            const fixOutcome = await applyFixViaStream(rule.id, targets);
+            setStepIndex(steps.length);
+            setOutcome(fixOutcome);
+            setFixOutcome(agentId, rule.id, fixOutcome);
+            setStep("result");
 
-            if (agentAccessMode === "relay") {
-                const res = await agentApi.applyFix(agentId, rule.id);
-                fixOutcome = res.outcome;
-                if (intervalRef.current) clearInterval(intervalRef.current);
-                setStepIndex(steps.length);
-                setOutcome(fixOutcome);
-                setFixOutcome(agentId, rule.id, fixOutcome);
-                setStep("result");
-
-                if (fixOutcome.status === "Applied") {
-                    toast.success(`Fix applied — rule ${rule.id}`);
-                    await queryClient.invalidateQueries({ queryKey: ["agent-audit"] });
-                    if (res.audit?.id) {
-                        closeWizard();
-                        navigate({
-                            to: "/agents/$id/audits/$auditId",
-                            params: { id: agentId, auditId: res.audit.id },
-                        });
-                    }
-                } else if (fixOutcome.status === "Blocked") {
-                    toast.error(`${rule.id}: ${fixOutcome.message.slice(0, 80)}`);
-                }
-            } else {
-                fixOutcome = await agentDirectApi.applyFix(agentUrl, rule.id, token);
-                if (intervalRef.current) clearInterval(intervalRef.current);
-                setStepIndex(steps.length);
-                setOutcome(fixOutcome);
-                setFixOutcome(agentId, rule.id, fixOutcome);
-                setStep("result");
-
-                if (fixOutcome.status === "Applied") {
-                    toast.success(`Fix applied — rule ${rule.id}`);
-                    await queryClient.invalidateQueries({ queryKey: ["agent-audit"] });
-                    setTimeout(() => setFixOutcome(agentId, rule.id, null), 3000);
-                } else if (fixOutcome.status === "Blocked") {
-                    toast.error(`${rule.id}: ${fixOutcome.message.slice(0, 80)}`);
-                }
+            if (fixOutcome.status === "Applied") {
+                toast.success(`Fix applied — rule ${rule.id}`);
+                await queryClient.invalidateQueries({ queryKey: ["agent-audit"] });
+            } else if (fixOutcome.status === "Blocked") {
+                toast.error(`${rule.id}: ${fixOutcome.message.slice(0, 80)}`);
             }
-        } catch {
-            if (intervalRef.current) clearInterval(intervalRef.current);
+        } catch (error) {
             const errOutcome: FixOutcome = {
                 rule_id: rule.id,
                 status: "Blocked",
-                message: agentAccessMode === "relay"
-                    ? "Failed to apply relay fix — check agent connectivity"
-                    : "Failed to connect to agent — verify URL and token",
+                message: error instanceof Error ? error.message : "Failed to stream fix progress from agent",
                 requires_restart: false,
                 requires_elevation: false,
             };
@@ -242,7 +318,21 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
         } finally {
             setFixing(agentId, rule.id, false);
         }
-    }, [activeResult, agentId, agentUrl, agentAccessMode, token, queryClient, navigate, closeWizard, setFixing, setFixOutcome]);
+    }, [activeResult, agentId, buildTargets, applyFixViaStream, queryClient, setFixing, setFixOutcome]);
 
-    return { open, step, outcome, stepIndex, activeResult, openWizard, closeWizard, applyFix };
+    return {
+        open,
+        step,
+        outcome,
+        stepIndex,
+        activeResult,
+        preview,
+        previewLoading,
+        targetConfig,
+        progressEvents,
+        updateTargetConfig,
+        openWizard,
+        closeWizard,
+        applyFix,
+    };
 }

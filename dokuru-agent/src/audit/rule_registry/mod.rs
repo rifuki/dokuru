@@ -197,34 +197,48 @@ impl RuleRegistry {
 
     /// Fix a rule using the request payload from API/relay callers.
     pub async fn fix_request(&self, request: &FixRequest, docker: &Docker) -> Result<FixOutcome> {
+        self.fix_request_with_progress(request, docker, None).await
+    }
+
+    /// Fix a rule and optionally emit real progress events from agent-side work.
+    pub async fn fix_request_with_progress(
+        &self,
+        request: &FixRequest,
+        docker: &Docker,
+        progress: Option<&super::fix_helpers::ProgressSender>,
+    ) -> Result<FixOutcome> {
         if super::fix_helpers::supports_cgroup_resource_fix(&request.rule_id) {
             if request.targets.is_empty() {
-                return super::fix_helpers::apply_default_cgroup_resource_fix(
+                return super::fix_helpers::apply_default_cgroup_resource_fix_with_progress(
                     docker,
                     &request.rule_id,
+                    progress,
                 )
                 .await;
             }
-            return super::fix_helpers::apply_cgroup_resource_fix(
+            return super::fix_helpers::apply_cgroup_resource_fix_with_progress(
                 docker,
                 &request.rule_id,
                 &request.targets,
+                progress,
             )
             .await;
         }
 
         if super::fix_helpers::supports_namespace_fix(&request.rule_id) {
-            return Box::pin(super::fix_helpers::apply_namespace_fix(
+            return Box::pin(super::fix_helpers::apply_namespace_fix_with_progress(
                 docker,
                 &request.rule_id,
+                progress,
             ))
             .await;
         }
 
         if super::fix_helpers::supports_privileged_fix(&request.rule_id) {
-            return Box::pin(super::fix_helpers::apply_privileged_fix(
+            return Box::pin(super::fix_helpers::apply_privileged_fix_with_progress(
                 docker,
                 &request.rule_id,
+                progress,
             ))
             .await;
         }

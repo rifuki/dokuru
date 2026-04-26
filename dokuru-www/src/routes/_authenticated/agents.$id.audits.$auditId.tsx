@@ -584,7 +584,21 @@ function AuditDetailPage() {
     const [viewMode, setViewMode] = useState<ViewMode>("pillar");
     const [loading, setLoading] = useState(true);
 
-    const { open: wizardOpen, step: wizardStep, outcome: wizardOutcome, stepIndex: wizardStepIndex, activeResult: wizardResult, openWizard, closeWizard, applyFix } = useFix({
+    const {
+        open: wizardOpen,
+        step: wizardStep,
+        outcome: wizardOutcome,
+        preview: wizardPreview,
+        previewLoading: wizardPreviewLoading,
+        targetConfig: wizardTargetConfig,
+        progressEvents: wizardProgressEvents,
+        stepIndex: wizardStepIndex,
+        activeResult: wizardResult,
+        openWizard,
+        closeWizard,
+        applyFix,
+        updateTargetConfig,
+    } = useFix({
         agentId: id,
         agentUrl: agent?.url ?? "",
         agentAccessMode: agent?.access_mode,
@@ -1247,9 +1261,14 @@ function AuditDetailPage() {
                 step={wizardStep}
                 result={wizardResult}
                 outcome={wizardOutcome}
+                preview={wizardPreview}
+                previewLoading={wizardPreviewLoading}
+                targetConfig={wizardTargetConfig}
+                progressEvents={wizardProgressEvents}
                 stepIndex={wizardStepIndex}
                 onConfirm={() => void applyFix()}
                 onClose={closeWizard}
+                onTargetChange={updateTargetConfig}
                 onRerunAudit={() => {
                     closeWizard();
                     void navigate({ to: "/agents/$id/audit", params: { id } });

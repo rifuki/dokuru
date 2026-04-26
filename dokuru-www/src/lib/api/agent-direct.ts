@@ -68,6 +68,53 @@ export interface FixTarget {
   strategy?: string;
 }
 
+export interface ResourceSuggestion {
+  memory: number;
+  cpu_shares: number;
+  pids_limit: number;
+}
+
+export interface FixPreviewTarget {
+  container_id: string;
+  container_name: string;
+  image: string;
+  current_memory?: number | null;
+  current_cpu_shares?: number | null;
+  current_pids_limit?: number | null;
+  suggestion: ResourceSuggestion;
+  strategy: string;
+  compose_project?: string;
+  compose_service?: string;
+}
+
+export interface FixPreview {
+  rule_id: string;
+  targets: FixPreviewTarget[];
+  requires_restart: boolean;
+  requires_elevation: boolean;
+  steps: string[];
+}
+
+export interface FixProgress {
+  rule_id: string;
+  container_name: string;
+  step: number;
+  total_steps: number;
+  action: string;
+  status: "in_progress" | "done" | "error" | string;
+  detail?: string;
+}
+
+export interface FixHistoryEntry {
+  id: string;
+  timestamp: string;
+  request: { rule_id: string; targets: FixTarget[] };
+  outcome: FixOutcome;
+  rollback_supported: boolean;
+  rollback_targets: FixTarget[];
+  rollback_note?: string;
+}
+
 export interface AuditSummary {
   total: number;
   passed: number;
@@ -183,6 +230,41 @@ export const agentDirectApi = {
     const payload = targets ? { rule_id: ruleId, targets } : { rule_id: ruleId };
     const response = await axios.post(`${agentUrl}/fix`, payload, { headers });
     return response.data.data;
+  },
+
+  previewFix: async (agentUrl: string, ruleId: string, token?: string): Promise<FixPreview> => {
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const response = await axios.get(`${agentUrl}/fix/preview`, {
+      headers,
+      params: { rule_id: ruleId },
+    });
+    return response.data.data;
+  },
+
+  verifyFix: async (agentUrl: string, ruleId: string, token?: string): Promise<AuditResult> => {
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const response = await axios.post(`${agentUrl}/fix/verify`, { rule_id: ruleId }, { headers });
+    return response.data.data;
+  },
+
+  listFixHistory: async (agentUrl: string, token?: string): Promise<FixHistoryEntry[]> => {
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const response = await axios.get(`${agentUrl}/fix/history`, { headers });
+    return response.data.data;
+  },
+
+  rollbackFix: async (agentUrl: string, historyId: string, token?: string): Promise<FixOutcome> => {
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const response = await axios.post(`${agentUrl}/fix/rollback`, { history_id: historyId }, { headers });
+    return response.data.data;
+  },
+
+  fixStreamUrl: (agentUrl: string, request: { rule_id: string; targets?: FixTarget[] }, token?: string): string => {
+    const url = new URL(`${agentUrl}/fix/stream`);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    url.searchParams.set("payload", JSON.stringify({ rule_id: request.rule_id, targets: request.targets ?? [] }));
+    if (token) url.searchParams.set("token", token);
+    return url.toString();
   },
 
   checkHealth: async (agentUrl: string, token?: string): Promise<boolean> => {

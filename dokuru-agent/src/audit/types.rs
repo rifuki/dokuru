@@ -147,6 +147,56 @@ pub struct FixTarget {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceSuggestion {
+    pub memory: i64,
+    pub cpu_shares: i64,
+    pub pids_limit: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixPreviewTarget {
+    pub container_id: String,
+    pub container_name: String,
+    pub image: String,
+    pub current_memory: Option<i64>,
+    pub current_cpu_shares: Option<i64>,
+    pub current_pids_limit: Option<i64>,
+    pub suggestion: ResourceSuggestion,
+    pub strategy: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compose_project: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compose_service: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixPreview {
+    pub rule_id: String,
+    pub targets: Vec<FixPreviewTarget>,
+    pub requires_restart: bool,
+    pub requires_elevation: bool,
+    pub steps: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixHistoryEntry {
+    pub id: String,
+    pub timestamp: String,
+    pub request: FixRequest,
+    pub outcome: FixOutcome,
+    pub rollback_supported: bool,
+    #[serde(default)]
+    pub rollback_targets: Vec<FixTarget>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rollback_note: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RollbackRequest {
+    pub history_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(dead_code)]
 pub struct FixProgress {
     pub rule_id: String,

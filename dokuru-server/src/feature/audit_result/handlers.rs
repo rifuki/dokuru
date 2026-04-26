@@ -139,6 +139,117 @@ pub async fn run_relay_fix(
     Ok(ApiSuccess::default().with_data(RelayFixResponse { outcome, audit }))
 }
 
+#[derive(serde::Deserialize)]
+pub struct RelayFixPreviewQuery {
+    rule_id: String,
+}
+
+#[derive(serde::Deserialize)]
+pub struct RelayFixStreamQuery {
+    payload: String,
+}
+
+pub async fn relay_fix_preview(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path(agent_id): Path<Uuid>,
+    Query(query): Query<RelayFixPreviewQuery>,
+) -> ApiResult<serde_json::Value> {
+    let agent = require_relay_agent(&state, auth_user.user_id, agent_id).await?;
+    relay::send_command(
+        &state.agent_registry,
+        agent.id,
+        "fix_preview",
+        serde_json::json!({ "rule_id": query.rule_id }),
+    )
+    .await
+    .map(|data| ApiSuccess::default().with_data(data))
+    .map_err(|error| relay_error_to_api_error(&error))
+}
+
+pub async fn relay_fix_verify(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path(agent_id): Path<Uuid>,
+    Json(dto): Json<FixRuleDto>,
+) -> ApiResult<serde_json::Value> {
+    let agent = require_relay_agent(&state, auth_user.user_id, agent_id).await?;
+    relay::send_command(
+        &state.agent_registry,
+        agent.id,
+        "fix_verify",
+        serde_json::json!({ "rule_id": dto.rule_id, "targets": dto.targets }),
+    )
+    .await
+    .map(|data| ApiSuccess::default().with_data(data))
+    .map_err(|error| relay_error_to_api_error(&error))
+}
+
+pub async fn relay_fix_history(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path(agent_id): Path<Uuid>,
+) -> ApiResult<serde_json::Value> {
+    let agent = require_relay_agent(&state, auth_user.user_id, agent_id).await?;
+    relay::send_command(
+        &state.agent_registry,
+        agent.id,
+        "fix_history",
+        serde_json::json!({}),
+    )
+    .await
+    .map(|data| ApiSuccess::default().with_data(data))
+    .map_err(|error| relay_error_to_api_error(&error))
+}
+
+pub async fn relay_fix_rollback(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path(agent_id): Path<Uuid>,
+    Json(payload): Json<serde_json::Value>,
+) -> ApiResult<serde_json::Value> {
+    let agent = require_relay_agent(&state, auth_user.user_id, agent_id).await?;
+    relay::send_command(&state.agent_registry, agent.id, "fix_rollback", payload)
+        .await
+        .map(|data| ApiSuccess::default().with_data(data))
+        .map_err(|error| relay_error_to_api_error(&error))
+}
+
+pub async fn relay_fix_stream_ws(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path(agent_id): Path<Uuid>,
+    Query(query): Query<RelayFixStreamQuery>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    let agent = match require_relay_agent(&state, auth_user.user_id, agent_id).await {
+        Ok(agent) => agent,
+        Err(error) => return error.into_response(),
+    };
+    let payload = match serde_json::from_str::<serde_json::Value>(&query.payload) {
+        Ok(payload) => payload,
+        Err(error) => {
+            return ApiError::default()
+                .with_code(StatusCode::BAD_REQUEST)
+                .with_message("Invalid fix stream payload")
+                .with_debug(error.to_string())
+                .into_response();
+        }
+    };
+    let registry = state.agent_registry.clone();
+
+    ws.on_upgrade(move |socket| {
+        relay::proxy_stream_to_websocket(
+            socket,
+            registry,
+            agent.id,
+            "fix_progress",
+            payload,
+            relay::RelayStreamMode::Text,
+        )
+    })
+}
+
 pub async fn relay_docker_request(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,

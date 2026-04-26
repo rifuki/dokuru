@@ -1,6 +1,8 @@
 import { apiClient } from "@/lib/api";
+import { wsApiUrl } from "@/lib/api/api-config";
+import { useAuthStore } from "@/stores/use-auth-store";
 import type { Agent, CreateAgentDto, UpdateAgentDto } from "@/types/agent";
-import type { AuditReportResponse, AuditResponse, FixOutcome, FixTarget } from "./agent-direct";
+import type { AuditReportResponse, AuditResponse, AuditResult, FixHistoryEntry, FixOutcome, FixPreview, FixTarget } from "./agent-direct";
 
 export interface RelayFixResponse {
   outcome: FixOutcome;
@@ -46,6 +48,34 @@ export const agentApi = {
     const payload = targets ? { rule_id: ruleId, targets } : { rule_id: ruleId };
     const response = await apiClient.post(`/agents/${id}/fix`, payload);
     return response.data.data;
+  },
+
+  previewFix: async (id: string, ruleId: string): Promise<FixPreview> => {
+    const response = await apiClient.get(`/agents/${id}/fix/preview`, { params: { rule_id: ruleId } });
+    return response.data.data;
+  },
+
+  verifyFix: async (id: string, ruleId: string): Promise<AuditResult> => {
+    const response = await apiClient.post(`/agents/${id}/fix/verify`, { rule_id: ruleId });
+    return response.data.data;
+  },
+
+  listFixHistory: async (id: string): Promise<FixHistoryEntry[]> => {
+    const response = await apiClient.get(`/agents/${id}/fix/history`);
+    return response.data.data;
+  },
+
+  rollbackFix: async (id: string, historyId: string): Promise<FixOutcome> => {
+    const response = await apiClient.post(`/agents/${id}/fix/rollback`, { history_id: historyId });
+    return response.data.data;
+  },
+
+  fixStreamUrl: (id: string, request: { rule_id: string; targets?: FixTarget[] }): string => {
+    const url = new URL(`${wsApiUrl}/agents/${id}/fix/stream`);
+    url.searchParams.set("payload", JSON.stringify({ rule_id: request.rule_id, targets: request.targets ?? [] }));
+    const accessToken = useAuthStore.getState().accessToken;
+    if (accessToken) url.searchParams.set("access_token", accessToken);
+    return url.toString();
   },
 
   getAuditById: async (id: string, auditId: string): Promise<AuditResponse> => {

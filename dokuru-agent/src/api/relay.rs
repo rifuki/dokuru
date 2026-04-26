@@ -25,7 +25,7 @@ use tracing::{error, info, warn};
 use crate::{
     api::Config,
     api::relay_docker,
-    audit::{FixRequest, RuleRegistry},
+    audit::{FixOutcome, FixProgress, FixRequest, RollbackRequest, RuleRegistry, fix_helpers},
 };
 
 const RELAY_SERVER: &str = "wss://api.dokuru.rifuki.dev/ws/agent";
@@ -340,6 +340,7 @@ async fn execute_stream(
     match stream {
         "docker_exec" => docker_exec_stream(payload, input_rx, tx, id).await,
         "docker_events" => docker_events_stream(input_rx, tx, id).await,
+        "fix_progress" => fix_progress_stream(payload, input_rx, tx, id).await,
         _ => Err(eyre::eyre!("Unknown stream: {stream}")),
     }
 }
@@ -397,6 +398,85 @@ async fn docker_events_stream(
                 send_stream_data(tx, id, payload)?;
             }
         }
+    }
+
+    Ok(())
+}
+
+#[derive(Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum FixStreamMessage {
+    Progress { data: FixProgress },
+    Outcome { data: FixOutcome },
+    Error { message: String },
+}
+
+async fn fix_progress_stream(
+    payload: serde_json::Value,
+    mut input_rx: mpsc::UnboundedReceiver<StreamInput>,
+    tx: &mpsc::UnboundedSender<Message>,
+    id: &str,
+) -> Result<()> {
+    let request = serde_json::from_value::<FixRequest>(payload)
+        .wrap_err("Invalid fix progress stream payload")?;
+    let docker = crate::docker::get_docker_client()?;
+    let rollback_targets = fix_helpers::cgroup_rollback_targets(&docker, &request)
+        .await
+        .unwrap_or_default();
+    let registry = RuleRegistry::new();
+    let (progress_tx, mut progress_rx) = mpsc::unbounded_channel::<FixProgress>();
+    let (outcome_tx, outcome_rx) = tokio::sync::oneshot::channel();
+    let request_for_task = request.clone();
+    let docker_for_task = docker.clone();
+
+    tokio::spawn(async move {
+        let outcome = registry
+            .fix_request_with_progress(&request_for_task, &docker_for_task, Some(&progress_tx))
+            .await;
+        let _ = outcome_tx.send(outcome);
+    });
+
+    tokio::pin!(outcome_rx);
+    let outcome = loop {
+        tokio::select! {
+            input = input_rx.recv() => {
+                if matches!(input, Some(StreamInput::Close) | None) {
+                    return Ok(());
+                }
+            }
+            progress = progress_rx.recv() => {
+                if let Some(progress) = progress {
+                    let payload = serde_json::to_vec(&FixStreamMessage::Progress { data: progress })?;
+                    send_stream_data(tx, id, payload)?;
+                }
+            }
+            outcome = &mut outcome_rx => break outcome,
+        }
+    };
+
+    match outcome {
+        Ok(Ok(outcome)) => {
+            fix_helpers::record_fix_history(request, outcome.clone(), rollback_targets).await;
+            send_stream_data(
+                tx,
+                id,
+                serde_json::to_vec(&FixStreamMessage::Outcome { data: outcome })?,
+            )?;
+        }
+        Ok(Err(error)) => send_stream_data(
+            tx,
+            id,
+            serde_json::to_vec(&FixStreamMessage::Error {
+                message: error.to_string(),
+            })?,
+        )?,
+        Err(_) => send_stream_data(
+            tx,
+            id,
+            serde_json::to_vec(&FixStreamMessage::Error {
+                message: "Fix task ended before returning an outcome".to_string(),
+            })?,
+        )?,
     }
 
     Ok(())
@@ -602,9 +682,42 @@ async fn execute_command(command: &str, payload: serde_json::Value) -> Result<se
                 .wrap_err("Invalid fix command payload")?;
             let docker = bollard::Docker::connect_with_local_defaults()
                 .wrap_err("Failed to connect to local Docker daemon")?;
+            let rollback_targets = fix_helpers::cgroup_rollback_targets(&docker, &payload)
+                .await
+                .unwrap_or_default();
             let registry = RuleRegistry::new();
             let outcome = Box::pin(registry.fix_request(&payload, &docker)).await?;
+            fix_helpers::record_fix_history(payload, outcome.clone(), rollback_targets).await;
             serde_json::to_value(outcome).wrap_err("Failed to serialize fix outcome")
+        }
+        "fix_preview" => {
+            let rule_id = payload
+                .get("rule_id")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| eyre::eyre!("rule_id is required"))?;
+            let docker = bollard::Docker::connect_with_local_defaults()
+                .wrap_err("Failed to connect to local Docker daemon")?;
+            serde_json::to_value(fix_helpers::preview_fix(&docker, rule_id).await?)
+                .wrap_err("Failed to serialize fix preview")
+        }
+        "fix_verify" => {
+            let payload = serde_json::from_value::<FixRequest>(payload)
+                .wrap_err("Invalid verify command payload")?;
+            let docker = bollard::Docker::connect_with_local_defaults()
+                .wrap_err("Failed to connect to local Docker daemon")?;
+            let registry = RuleRegistry::new();
+            serde_json::to_value(registry.check_rule(&payload.rule_id, &docker).await?)
+                .wrap_err("Failed to serialize fix verification")
+        }
+        "fix_history" => serde_json::to_value(fix_helpers::list_fix_history().await)
+            .wrap_err("Failed to serialize fix history"),
+        "fix_rollback" => {
+            let payload = serde_json::from_value::<RollbackRequest>(payload)
+                .wrap_err("Invalid rollback command payload")?;
+            let docker = bollard::Docker::connect_with_local_defaults()
+                .wrap_err("Failed to connect to local Docker daemon")?;
+            serde_json::to_value(fix_helpers::rollback_fix(&docker, &payload).await?)
+                .wrap_err("Failed to serialize rollback outcome")
         }
         "docker" => relay_docker::execute(payload).await,
         _ => Err(eyre::eyre!("Unknown command: {}", command)),

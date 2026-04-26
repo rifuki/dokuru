@@ -8,10 +8,10 @@ import {
     RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { AuditResult, FixOutcome } from "@/lib/api/agent-direct";
+import type { AuditResult, FixOutcome, FixPreview, FixProgress } from "@/lib/api/agent-direct";
 import {
     getFixSteps, isNamespaceRecreateRule, isCgroupRule,
-    getSuggestedLimits, formatCgroupSuggestion, type WizardStep,
+    type TargetConfig, type WizardStep,
 } from "@/features/audit/hooks/useFix";
 
 // ── Step indicator ────────────────────────────────────────────────────────────
@@ -82,72 +82,122 @@ function CopyButton({ text }: { text: string }) {
 
 function ConfirmStep({
     result,
+    preview,
+    previewLoading,
+    targetConfig,
     onConfirm,
     onCancel,
+    onTargetChange,
 }: {
     result: AuditResult;
+    preview: FixPreview | null;
+    previewLoading: boolean;
+    targetConfig: Record<string, TargetConfig>;
     onConfirm: () => void;
     onCancel: () => void;
+    onTargetChange: (containerId: string, patch: Partial<TargetConfig>) => void;
 }) {
     const { rule, affected } = result;
-    const steps = getFixSteps(rule.id);
+    const steps = preview?.steps ?? getFixSteps(rule.id);
     const isRecreate = isNamespaceRecreateRule(rule.id);
-    const needsDaemonRestart = rule.id === "2.10";
     const isCgroup = isCgroupRule(rule.id);
+    const targets = preview?.targets ?? [];
 
     return (
         <div className="flex flex-col gap-5">
             {/* Restart warning */}
-            {(isRecreate || needsDaemonRestart) && (
+            {isRecreate && (
                 <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/8 px-4 py-3">
                     <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
                     <div className="space-y-0.5">
                         <p className="text-xs font-semibold text-amber-400">
-                            {isRecreate ? "Container restart required" : "Docker daemon restart required"}
+                            Container restart required
                         </p>
                         <p className="text-xs text-amber-400/70 leading-relaxed">
-                            {isRecreate
-                                ? "Namespace flags cannot be changed on a running container. Affected containers will be stopped, recreated with the correct config, and restarted. Expect ~5 seconds of downtime per container."
-                                : "The Docker daemon will be restarted to apply this configuration change. Running containers may be briefly interrupted."
-                            }
+                            Namespace and privileged flags cannot be changed on a running container. Standalone containers are recreated, while Compose-managed services update the compose file and run docker compose up.
                         </p>
                     </div>
                 </div>
             )}
 
             {/* Affected containers */}
-            {affected.length > 0 && (
+            {previewLoading && (
+                <div className="rounded-lg border border-white/8 bg-white/[0.02] px-4 py-3 text-xs font-mono text-white/40">
+                    Loading agent preview and suggested values...
+                </div>
+            )}
+
+            {targets.length > 0 ? (
                 <div>
                     <div className="flex items-center justify-between mb-2">
                         <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/40">
-                            Affected containers ({affected.length})
+                            Agent preview ({targets.length})
                         </p>
                         {isCgroup && (
                             <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-[#2496ED]/60">
-                                suggested limit
+                                editable values
                             </p>
                         )}
                     </div>
                     <div className="rounded-lg border border-white/8 bg-white/[0.02] overflow-hidden">
-                        {affected.map((name, i) => {
-                            const suggestion = isCgroup ? getSuggestedLimits(name) : null;
-                            const label = suggestion ? formatCgroupSuggestion(rule.id, suggestion) : null;
+                        {targets.map((target, i) => {
+                            const config = targetConfig[target.container_id];
                             return (
                                 <div
-                                    key={i}
+                                    key={target.container_id}
                                     className={cn(
-                                        "flex items-center justify-between gap-2.5 px-3 py-2 text-xs font-mono",
-                                        i < affected.length - 1 && "border-b border-white/5"
+                                        "flex flex-col gap-2 px-3 py-2 text-xs font-mono sm:flex-row sm:items-center sm:justify-between",
+                                        i < targets.length - 1 && "border-b border-white/5"
                                     )}
                                 >
                                     <div className="flex items-center gap-2.5 min-w-0">
                                         <Server className="h-3 w-3 text-white/30 shrink-0" />
-                                        <span className="text-white/70 truncate">{name}</span>
+                                        <div className="min-w-0">
+                                            <span className="text-white/70 truncate block">{target.container_name}</span>
+                                            <span className="text-white/25 text-[10px] truncate block">
+                                                {target.strategy}{target.compose_project ? ` · ${target.compose_project}/${target.compose_service}` : ""}
+                                            </span>
+                                        </div>
                                     </div>
-                                    {label && (
-                                        <span className="text-[#2496ED] text-[11px] shrink-0 ml-2">
-                                            → {label}
-                                        </span>
+                                    {isCgroup && config && (
+                                        <div className="grid grid-cols-3 gap-1.5 sm:w-[230px]">
+                                            {rule.id === "5.11" && (
+                                                <label className="col-span-3 text-[10px] text-white/35">
+                                                    Memory MB
+                                                    <input
+                                                        type="number"
+                                                        min={1}
+                                                        value={config.memoryMb}
+                                                        onChange={(e) => onTargetChange(target.container_id, { memoryMb: Number(e.target.value) })}
+                                                        className="mt-1 w-full rounded border border-white/10 bg-black/30 px-2 py-1 text-xs text-white/80 outline-none focus:border-[#2496ED]/60"
+                                                    />
+                                                </label>
+                                            )}
+                                            {rule.id === "5.12" && (
+                                                <label className="col-span-3 text-[10px] text-white/35">
+                                                    CPU shares
+                                                    <input
+                                                        type="number"
+                                                        min={2}
+                                                        value={config.cpuShares}
+                                                        onChange={(e) => onTargetChange(target.container_id, { cpuShares: Number(e.target.value) })}
+                                                        className="mt-1 w-full rounded border border-white/10 bg-black/30 px-2 py-1 text-xs text-white/80 outline-none focus:border-[#2496ED]/60"
+                                                    />
+                                                </label>
+                                            )}
+                                            {rule.id === "5.29" && (
+                                                <label className="col-span-3 text-[10px] text-white/35">
+                                                    PIDs limit
+                                                    <input
+                                                        type="number"
+                                                        min={1}
+                                                        value={config.pidsLimit}
+                                                        onChange={(e) => onTargetChange(target.container_id, { pidsLimit: Number(e.target.value) })}
+                                                        className="mt-1 w-full rounded border border-white/10 bg-black/30 px-2 py-1 text-xs text-white/80 outline-none focus:border-[#2496ED]/60"
+                                                    />
+                                                </label>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
                             );
@@ -155,9 +205,19 @@ function ConfirmStep({
                     </div>
                     {isCgroup && (
                         <p className="text-[10px] text-white/25 font-mono mt-1.5 pl-1">
-                            Values are estimates based on image name — agent applies safe defaults.
+                            Suggested values come from the agent preview and can be edited per container before apply.
                         </p>
                     )}
+                </div>
+            ) : affected.length > 0 && !previewLoading ? (
+                <div className="rounded-lg border border-white/8 bg-white/[0.02] px-4 py-3 text-xs font-mono text-white/50">
+                    Agent preview returned no target details. Affected from audit: {affected.join(", ")}
+                </div>
+            ) : null}
+
+            {preview && targets.length === 0 && (
+                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/8 px-4 py-3 text-xs text-emerald-400/80">
+                    Agent preview says no containers currently need this fix.
                 </div>
             )}
 
@@ -186,6 +246,7 @@ function ConfirmStep({
                 </button>
                 <button
                     onClick={onConfirm}
+                    disabled={previewLoading}
                     className="flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-[#2496ED] hover:bg-[#1e80cc] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] transition-all hover:shadow-[0_0_24px_-4px_rgba(36,150,237,0.65)] active:scale-[0.98]"
                 >
                     <Zap className="h-3.5 w-3.5" />
@@ -198,7 +259,7 @@ function ConfirmStep({
 
 // ── Step 2: Applying ──────────────────────────────────────────────────────────
 
-function ApplyingStep({ ruleId, stepIndex }: { ruleId: string; stepIndex: number }) {
+function ApplyingStep({ ruleId, stepIndex, progressEvents }: { ruleId: string; stepIndex: number; progressEvents: FixProgress[] }) {
     const steps = getFixSteps(ruleId);
 
     return (
@@ -252,8 +313,29 @@ function ApplyingStep({ ruleId, stepIndex }: { ruleId: string; stepIndex: number
             </div>
 
             <p className="text-[11px] text-white/30 font-mono text-center">
-                Do not close this panel while fix is in progress
+                Live progress is streamed from dokuru-agent. Do not close this panel while fix is in progress.
             </p>
+
+            {progressEvents.length > 0 && (
+                <div className="rounded-lg border border-white/8 bg-white/[0.02] overflow-hidden">
+                    <div className="px-3 py-2 border-b border-white/5 text-[10px] font-mono uppercase tracking-[0.15em] text-white/30">
+                        real-time agent events
+                    </div>
+                    <div className="max-h-48 overflow-y-auto p-3 space-y-2">
+                        {progressEvents.slice(-12).map((event, i) => (
+                            <div key={`${event.container_name}-${event.action}-${i}`} className="text-[11px] font-mono text-white/50">
+                                <span className={cn(
+                                    "mr-2 uppercase",
+                                    event.status === "done" ? "text-emerald-400" : event.status === "error" ? "text-rose-400" : "text-[#2496ED]"
+                                )}>{event.status}</span>
+                                <span className="text-white/70">{event.container_name}</span>
+                                <span className="text-white/25"> · {event.action}</span>
+                                {event.detail && <span className="text-white/35"> · {event.detail}</span>}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -375,15 +457,20 @@ interface FixWizardProps {
     step: WizardStep;
     result: AuditResult | null;
     outcome: FixOutcome | null;
+    preview: FixPreview | null;
+    previewLoading: boolean;
+    targetConfig: Record<string, TargetConfig>;
+    progressEvents: FixProgress[];
     stepIndex: number;
     onConfirm: () => void;
     onClose: () => void;
     onRerunAudit: () => void;
+    onTargetChange: (containerId: string, patch: Partial<TargetConfig>) => void;
 }
 
 export function FixWizard({
-    open, step, result, outcome, stepIndex,
-    onConfirm, onClose, onRerunAudit,
+    open, step, result, outcome, preview, previewLoading, targetConfig, progressEvents, stepIndex,
+    onConfirm, onClose, onRerunAudit, onTargetChange,
 }: FixWizardProps) {
     if (!result) return null;
     const { rule } = result;
@@ -421,12 +508,16 @@ export function FixWizard({
                     {step === "confirm" && (
                         <ConfirmStep
                             result={result}
+                            preview={preview}
+                            previewLoading={previewLoading}
+                            targetConfig={targetConfig}
                             onConfirm={onConfirm}
                             onCancel={onClose}
+                            onTargetChange={onTargetChange}
                         />
                     )}
                     {step === "applying" && (
-                        <ApplyingStep ruleId={rule.id} stepIndex={stepIndex} />
+                        <ApplyingStep ruleId={rule.id} stepIndex={stepIndex} progressEvents={progressEvents} />
                     )}
                     {step === "result" && outcome && (
                         <ResultStep
