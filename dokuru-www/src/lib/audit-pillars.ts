@@ -1,4 +1,4 @@
-import { Box, Gauge, Shield, Server, Image } from "lucide-react";
+import { Box, Gauge, Shield, Server, Layers } from "lucide-react";
 import type { AuditResult } from "./api/agent-direct";
 
 export type SecurityPillar = "namespace" | "cgroup" | "runtime" | "host" | "images";
@@ -38,7 +38,7 @@ export const PILLAR_META = {
   },
   images: {
     name: "Images & Daemon",
-    icon: Image,
+    icon: Layers,
     color: "text-[#2496ED]",
     bg: "bg-muted/30",
     border: "border-border",
