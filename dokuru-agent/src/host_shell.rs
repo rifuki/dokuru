@@ -25,13 +25,6 @@ pub fn detect_shell(preferred: Option<&str>) -> String {
         return shell.to_string();
     }
 
-    if let Ok(shell) = std::env::var("SHELL")
-        && is_allowed_shell(&shell)
-        && is_executable(&shell)
-    {
-        return shell;
-    }
-
     HOST_SHELL_PRIORITY
         .iter()
         .find(|shell| is_executable(shell))

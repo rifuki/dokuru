@@ -38,7 +38,15 @@ export function HostShellTerminal({
   const [shouldConnect, setShouldConnect] = useState(false);
   const accessToken = useAuthStore((s) => s.accessToken);
   const isRelay = accessMode === "relay";
-  const activeShell = selectedShell;
+  const availableShells = useMemo<HostShellPath[]>(() => {
+    if (detectedShell === "/bin/zsh") return ["/bin/zsh", "/bin/bash", "/bin/sh"];
+    if (detectedShell === "/bin/bash") return ["/bin/bash", "/bin/sh"];
+    if (detectedShell === "/bin/sh") return ["/bin/sh"];
+    return [];
+  }, [detectedShell]);
+  const activeShell = availableShells.includes(selectedShell)
+    ? selectedShell
+    : availableShells[0] ?? "/bin/sh";
 
   const wsUrl = useMemo(() => {
     if (!shouldConnect || detectedShell === null) return null;
@@ -190,7 +198,7 @@ export function HostShellTerminal({
 
   const isConnected = status === "connected";
   const isConnecting = status === "connecting";
-  const shellLabel = selectedShell.split("/").pop();
+  const shellLabel = activeShell.split("/").pop();
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-lg">
@@ -226,22 +234,36 @@ export function HostShellTerminal({
             </button>
             {shellMenuOpen && (
               <div className="absolute right-0 top-full z-20 mt-1 min-w-32 overflow-hidden rounded-md border bg-popover shadow-lg">
-                {HOST_SHELLS.map((shell) => (
-                  <button
-                    key={shell}
-                    type="button"
-                    onClick={() => {
-                      setSelectedShell(shell);
-                      setShellMenuOpen(false);
-                    }}
-                    className={cn(
-                      "block w-full px-3 py-2 text-left font-mono text-xs hover:bg-accent",
-                      selectedShell === shell && "bg-accent text-foreground"
-                    )}
-                  >
-                    {shell}
-                  </button>
-                ))}
+                {HOST_SHELLS.map((shell) => {
+                  const isAvailable = availableShells.includes(shell);
+                  const isDefault = shell === detectedShell;
+                  const isSelected = shell === activeShell;
+
+                  return (
+                    <button
+                      key={shell}
+                      type="button"
+                      disabled={!isAvailable}
+                      onClick={() => {
+                        if (!isAvailable) return;
+                        setSelectedShell(shell);
+                        setShellMenuOpen(false);
+                      }}
+                      className={cn(
+                        "flex w-full items-center justify-between gap-2 px-3 py-2 text-left font-mono text-xs hover:bg-accent",
+                        !isAvailable && "cursor-not-allowed text-muted-foreground/40 hover:bg-transparent",
+                        isSelected && "bg-accent text-foreground"
+                      )}
+                    >
+                      <span>{shell}</span>
+                      {isDefault && (
+                        <span className="rounded border border-emerald-500/20 bg-emerald-500/10 px-1 py-0.5 text-[9px] text-emerald-400">
+                          detected
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>

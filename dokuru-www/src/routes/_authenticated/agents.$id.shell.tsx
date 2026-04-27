@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ArrowLeft, Lock, Terminal } from "lucide-react";
+import { ArrowLeft, Lock, Terminal } from "lucide-react";
 
 import { HostShellTerminal } from "@/components/agents/HostShellTerminal";
 import { Button } from "@/components/ui/button";
@@ -51,28 +51,6 @@ function AgentHostShellPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 pb-8">
-      <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div className="flex gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
-              <AlertTriangle className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-400">Dev/Demo Mode</p>
-              <h1 className="mt-1 text-2xl font-black tracking-tight">VPS Shell</h1>
-              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-                This opens a real interactive shell on <span className="font-semibold text-foreground">{agent.name}</span>. Use it only for trusted demos because commands run on the agent host.
-              </p>
-            </div>
-          </div>
-          <Button asChild variant="outline" size="sm">
-            <Link to="/agents/$id" params={{ id }}>
-              <ArrowLeft className="mr-2 h-4 w-4" /> Dashboard
-            </Link>
-          </Button>
-        </div>
-      </div>
-
       <div className="rounded-2xl border bg-card p-3">
         <div className="mb-3 flex items-center gap-2 px-1 text-sm font-semibold text-muted-foreground">
           <Terminal className="h-4 w-4 text-[#2496ED]" />
