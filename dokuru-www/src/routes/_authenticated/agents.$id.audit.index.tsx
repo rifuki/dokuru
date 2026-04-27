@@ -748,9 +748,6 @@ function AuditRunTerminal({
                     {error && <p className="text-rose-400">! {error}</p>}
                 </div>
 
-                <p className="font-mono text-[10px] text-white/30">
-                    Stream berhenti di satu rule biasanya signal/connection issue atau command rule tersebut hang/error.
-                </p>
             </div>
         </div>
     );
@@ -938,9 +935,6 @@ function AuditPage() {
     const fmtDate = (ts: string) => {
         try { return new Date(ts).toLocaleString(); } catch { return ts; }
     };
-
-    const auditProgressPercent = auditTotal > 0 ? Math.round((auditCurrent / auditTotal) * 100) : 0;
-    const activeAuditLine = auditProgressLines.at(-1);
 
     return (
         <div className="max-w-5xl mx-auto w-full space-y-6 pb-10">
@@ -1147,12 +1141,14 @@ function AuditPage() {
             ) : (
                 <>
                     {/* ── Run New Audit Card ────────────────────────────── */}
-                    <div className="relative h-[520px] overflow-hidden rounded-2xl border border-dashed bg-card/50 px-4 py-4 transition-[height] duration-500 sm:h-[540px] md:h-[560px]">
+                    <div className={cn(
+                        "relative overflow-hidden rounded-2xl border border-dashed bg-card/50 px-4 py-4 transition-[height] duration-500",
+                        isRunning ? "h-[430px] sm:h-[450px] md:h-[470px]" : "h-[340px] sm:h-[350px] md:h-[360px]",
+                    )}>
                         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(36,150,237,0.16),transparent_34%),linear-gradient(180deg,rgba(36,150,237,0.08),transparent_42%)]" />
-                        <div className="pointer-events-none absolute inset-x-8 top-24 h-px bg-gradient-to-r from-transparent via-primary/25 to-transparent" />
                         {isRunning ? (
                             <div className="relative z-10 flex h-full flex-col">
-                                <div className="flex items-start justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-500">
+                                <div className="flex items-start gap-4 animate-in fade-in slide-in-from-top-2 duration-500">
                                     <div className="flex min-w-0 items-center gap-3">
                                         <div className="rounded-xl border border-primary/20 bg-primary/10 p-2 shadow-[0_0_24px_-10px_rgba(36,150,237,0.8)]">
                                             <Shield className="h-5 w-5 text-primary" />
@@ -1160,20 +1156,12 @@ function AuditPage() {
                                         <div className="min-w-0 text-left">
                                             <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-primary">Run New Security Audit</p>
                                             <h3 className="truncate text-base font-semibold">Live scan in progress</h3>
-                                            <p className="truncate text-xs text-muted-foreground">
-                                                {activeAuditLine
-                                                    ? `${activeAuditLine.ruleId} · ${activeAuditLine.title}`
-                                                    : "Opening WebSocket stream to dokuru-agent..."}
-                                            </p>
                                         </div>
-                                    </div>
-                                    <div className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 font-mono text-xs tabular-nums text-primary">
-                                        {auditProgressPercent}% · {auditCurrent}/{auditTotal || "?"}
                                     </div>
                                 </div>
 
-                                <div className="flex min-h-0 flex-1 items-center justify-center py-5 md:py-6">
-                                    <div className="h-[340px] w-full max-w-3xl animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-500 sm:h-[360px] md:h-[380px]">
+                                <div className="flex min-h-0 flex-1 items-center justify-center py-4">
+                                    <div className="h-[280px] w-full max-w-3xl animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-500 sm:h-[300px] md:h-[315px]">
                                         <AuditRunTerminal
                                             total={auditTotal}
                                             current={auditCurrent}
@@ -1181,11 +1169,6 @@ function AuditPage() {
                                             error={auditStreamError}
                                         />
                                     </div>
-                                </div>
-
-                                <div className="flex items-center justify-center gap-2 text-center font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                                    <span>Terminal stays fixed here, history stays visible below</span>
                                 </div>
                             </div>
                         ) : (
