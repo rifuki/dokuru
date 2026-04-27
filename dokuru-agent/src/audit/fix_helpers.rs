@@ -805,7 +805,7 @@ async fn migrate_named_volumes(
 async fn fix_bind_mount_permissions(
     bind_paths: &[String],
     uid: u32,
-    gid: u32,
+    _gid: u32,
     progress: Option<&ProgressSender>,
 ) -> UsernsRecoveryResult {
     let mut result = UsernsRecoveryResult::default();
@@ -823,7 +823,23 @@ async fn fix_bind_mount_permissions(
         return result;
     }
 
-    let owner = format!("{uid}:{gid}");
+    if let Some(error) = ensure_setfacl_available().await {
+        result.failed.push(format!(
+            "setfacl is required to preserve host ownership while granting remapped UID access: {error}"
+        ));
+        send_progress(
+            progress,
+            userns_progress_event(
+                8,
+                "fix_bind_mount_permissions",
+                "error",
+                Some(result.failed.join("; ")),
+                Some("install acl package or run setfacl manually".to_string()),
+            ),
+        );
+        return result;
+    }
+
     for path in bind_paths {
         if !is_safe_userns_bind_path(path) {
             result.skipped += 1;
@@ -835,18 +851,14 @@ async fn fix_bind_mount_permissions(
             continue;
         };
 
-        let args = if metadata.is_dir() {
-            vec!["-R", owner.as_str(), path.as_str()]
-        } else {
-            vec![owner.as_str(), path.as_str()]
-        };
-
-        match run_cmd("chown", &args).await {
+        match grant_userns_bind_mount_access(path, &metadata, uid).await {
             Ok((_, _, true)) => result.completed += 1,
             Ok((_, stderr, _)) => result
                 .failed
-                .push(format!("{path}: chown failed: {stderr}")),
-            Err(error) => result.failed.push(format!("{path}: chown failed: {error}")),
+                .push(format!("{path}: setfacl failed: {stderr}")),
+            Err(error) => result
+                .failed
+                .push(format!("{path}: setfacl failed: {error}")),
         }
     }
 
@@ -857,12 +869,12 @@ async fn fix_bind_mount_permissions(
     };
     let detail = if result.failed.is_empty() {
         format!(
-            "Fixed ownership on {} bind mount path(s), skipped {} unsafe/missing path(s)",
+            "Granted remapped UID access on {} bind mount path(s), skipped {} unsafe/missing path(s)",
             result.completed, result.skipped
         )
     } else {
         format!(
-            "Fixed ownership on {} path(s), skipped {}, failed {}: {}",
+            "Granted remapped UID access on {} path(s), skipped {}, failed {}: {}",
             result.completed,
             result.skipped,
             result.failed.len(),
@@ -880,6 +892,54 @@ async fn fix_bind_mount_permissions(
         userns_progress_event(8, "fix_bind_mount_permissions", status, Some(detail), None),
     );
     result
+}
+
+async fn grant_userns_bind_mount_access(
+    path: &str,
+    metadata: &std::fs::Metadata,
+    uid: u32,
+) -> std::io::Result<(String, String, bool)> {
+    let user_acl = format!("u:{uid}:rwX");
+    if metadata.is_dir() {
+        let default_acl = format!("d:u:{uid}:rwX");
+        return run_cmd(
+            "setfacl",
+            &["-R", "-m", &user_acl, "-m", &default_acl, path],
+        )
+        .await;
+    }
+
+    run_cmd("setfacl", &["-m", &user_acl, path]).await
+}
+
+async fn ensure_setfacl_available() -> Option<String> {
+    if command_available("setfacl").await {
+        return None;
+    }
+
+    let installers: [(&str, &[&str]); 4] = [
+        ("apt-get", &["install", "-y", "acl"]),
+        ("dnf", &["install", "-y", "acl"]),
+        ("yum", &["install", "-y", "acl"]),
+        ("apk", &["add", "acl"]),
+    ];
+    let mut errors = Vec::new();
+
+    for (cmd, args) in installers {
+        match run_cmd(cmd, args).await {
+            Ok((_, _, true)) if command_available("setfacl").await => return None,
+            Ok((_, stderr, _)) => errors.push(format!("{cmd}: {}", stderr.trim())),
+            Err(error) => errors.push(format!("{cmd}: {error}")),
+        }
+    }
+
+    Some(errors.join("; "))
+}
+
+async fn command_available(command: &str) -> bool {
+    run_cmd("which", &[command])
+        .await
+        .is_ok_and(|(_, _, success)| success)
 }
 
 fn compose_recovery_targets(snapshots: &[ContainerSnapshot]) -> Vec<ComposeRecoveryTarget> {
@@ -1344,10 +1404,12 @@ async fn recover_userns_state(
             "fix_bind_mount_permissions",
             "in_progress",
             Some(format!(
-                "Fixing ownership on {} bind mount path(s)",
+                "Granting remapped UID access on {} bind mount path(s) without changing host ownership",
                 state.bind_paths.len()
             )),
-            Some(format!("chown -R {uid}:{gid} <bind-paths>")),
+            Some(format!(
+                "setfacl -R -m u:{uid}:rwX -m d:u:{uid}:rwX <bind-paths>"
+            )),
         ),
     );
     let bind_result = fix_bind_mount_permissions(&state.bind_paths, uid, gid, progress).await;
