@@ -510,8 +510,7 @@ function AgentHero({
     const statusRing = isOnline ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-500" : "border-muted-foreground/30 bg-muted/10 text-muted-foreground";
 
     return (
-        <section className="relative overflow-hidden rounded-2xl border border-border/50 bg-background/40 p-4 backdrop-blur-xl">
-            <div className="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
+        <section className="relative overflow-hidden rounded-2xl border bg-card p-4">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between relative">
                 <div className="flex min-w-0 items-center gap-4">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border bg-muted/30">
@@ -810,16 +809,15 @@ function SecurityOverview({
         <SectionCard
             title="Security Flight Deck"
             description="CIS posture, weak zones, and remediation signals at a glance."
-            action={<Button size="sm" variant="secondary" className="bg-background/50 hover:bg-background/80" asChild><Link to="/agents/$id/audit" params={{ id }}>Run Audit</Link></Button>}
+            action={<Button size="sm" asChild><Link to="/agents/$id/audit" params={{ id }}>Run Audit</Link></Button>}
         >
             <div className="grid gap-4 xl:grid-cols-[1fr_minmax(0,2fr)]">
                 {/* Score Section */}
-                <div className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border/50 bg-background/40 p-5 backdrop-blur-sm transition-all hover:border-primary/20">
-                    <div className={cn(
-                        "absolute inset-x-0 -top-px h-[2px]",
-                        SCORE_COPY[band] === "Healthy posture" ? "bg-emerald-500/50" :
-                        SCORE_COPY[band] === "Needs attention" ? "bg-amber-500/50" : "bg-rose-500/50"
-                    )} />
+                <div className={cn(
+                    "group relative flex flex-col justify-between overflow-hidden rounded-2xl border bg-card p-5 transition-all border-t-2",
+                    SCORE_COPY[band] === "Healthy posture" ? "border-t-emerald-500/50" :
+                    SCORE_COPY[band] === "Needs attention" ? "border-t-amber-500/50" : "border-t-rose-500/50"
+                )}>
                     <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-primary/5 blur-3xl transition-opacity group-hover:bg-primary/10" />
                     
                     <div className="relative flex items-center justify-between">
@@ -867,7 +865,7 @@ function SecurityOverview({
                     </div>
 
                     {/* Pillars List */}
-                    <div className="rounded-2xl border border-border/50 bg-background/40 p-4 backdrop-blur-sm">
+                    <div className="rounded-2xl border bg-card p-4">
                         <div className="mb-4 flex items-center justify-between">
                             <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Security Pillars</h3>
                             <Badge variant="outline" className="text-[10px] font-mono">{passRate}% avg</Badge>
@@ -893,7 +891,7 @@ function PillarRow({ pillar }: { pillar: AuditReportResponse["report"]["pillars"
     const percent = pillar.percent ?? 0;
 
     return (
-        <div className="group relative flex items-center justify-between overflow-hidden rounded-xl border border-border/40 bg-card/30 p-3 transition-colors hover:border-primary/30 hover:bg-muted/30">
+        <div className="group relative flex items-center justify-between overflow-hidden rounded-xl border bg-muted/20 p-3 transition-colors hover:border-primary/30 hover:bg-muted/50">
             <div className="flex items-center gap-3">
                 <div className={cn("flex size-8 items-center justify-center rounded-md border bg-muted/30 text-muted-foreground", meta?.color)}>
                     <Icon className="h-3.5 w-3.5" />
@@ -925,8 +923,10 @@ function SignalCard({
 }) {
     const toneClass = toneClasses(tone);
     return (
-        <div className="group relative overflow-hidden rounded-xl border border-border/40 bg-card/30 p-3.5 transition-colors hover:border-primary/20 hover:bg-muted/30">
-            <div className={cn("absolute inset-x-0 -top-px h-[2px] opacity-50", toneClass.bg.replace("/10", ""))} />
+        <div className={cn(
+            "group relative overflow-hidden rounded-xl border bg-muted/20 p-3.5 transition-colors hover:bg-muted/50 border-t-2",
+            tone === "zinc" ? "border-t-transparent hover:border-border" : toneClass.border.replace("border-", "border-t-").replace("/20", "/50")
+        )}>
             <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{label}</span>
                 <Icon className={cn("h-3.5 w-3.5 transition-transform group-hover:scale-110", toneClass.text)} />
@@ -957,7 +957,7 @@ function WorkloadOverview({
     return (
         <SectionCard title="Workload Snapshot" description="Recent containers and biggest compose stacks on this Docker host.">
             <div className="grid gap-4 lg:grid-cols-2">
-                <div className="overflow-hidden rounded-xl border border-border/40 bg-card/30 backdrop-blur-sm">
+                <div className="overflow-hidden rounded-xl border bg-card">
                     <ListHeader icon={ContainerIcon} title="Recent Containers" action={<Link to="/agents/$id/containers" params={{ id }} className="text-xs font-medium text-primary hover:underline">View all</Link>} />
                     <div className="divide-y divide-border/40">
                         {isContainersLoading ? (
@@ -968,7 +968,7 @@ function WorkloadOverview({
                                     key={container.id}
                                     to="/agents/$id/containers/$containerId"
                                     params={{ id, containerId: container.id }}
-                                    className="group flex flex-col gap-2 p-3 transition-colors hover:bg-muted/30 sm:flex-row sm:items-center"
+                                    className="group flex flex-col gap-2 p-3 transition-colors hover:bg-muted/50 sm:flex-row sm:items-center"
                                 >
                                     <div className="flex shrink-0 items-center gap-3">
                                         <span className="flex size-8 items-center justify-center rounded-md border border-border/50 bg-muted/30 text-muted-foreground group-hover:border-primary/30 group-hover:text-primary transition-colors">
@@ -991,7 +991,7 @@ function WorkloadOverview({
                     </div>
                 </div>
 
-                <div className="overflow-hidden rounded-xl border border-border/40 bg-card/30 backdrop-blur-sm">
+                <div className="overflow-hidden rounded-xl border bg-card">
                     <ListHeader icon={SquareStack} title="Compose Stacks" action={<Link to="/agents/$id/stacks" params={{ id }} className="text-xs font-medium text-primary hover:underline">View stacks</Link>} />
                     <div className="divide-y divide-border/40">
                         {isStacksLoading ? (
@@ -1039,13 +1039,13 @@ function ActionPanel({ id, agent, latestAudit }: { id: string; agent: Agent; lat
                 </Button>
                 
                 <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-1">
-                    <Button variant="outline" className="w-full justify-between border-border/50 bg-card/30 hover:bg-muted/30" asChild>
+                    <Button variant="outline" className="w-full justify-between hover:bg-muted/50" asChild>
                         <Link to="/agents/$id/containers" params={{ id }}>
                             <span className="inline-flex items-center gap-2"><ContainerIcon className="h-4 w-4 text-muted-foreground" />Manage Containers</span>
                             <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground" />
                         </Link>
                     </Button>
-                    <Button variant="outline" className="w-full justify-between border-border/50 bg-card/30 hover:bg-muted/30" asChild>
+                    <Button variant="outline" className="w-full justify-between hover:bg-muted/50" asChild>
                         <Link to="/agents/$id/audits" params={{ id }}>
                             <span className="inline-flex items-center gap-2"><Activity className="h-4 w-4 text-muted-foreground" />Audit Reports</span>
                             <Badge variant="outline" className="font-mono text-[10px] bg-muted/10">{latestAudit ? latestAudit.summary.score : "-"}</Badge>
@@ -1053,7 +1053,7 @@ function ActionPanel({ id, agent, latestAudit }: { id: string; agent: Agent; lat
                     </Button>
                 </div>
             </div>
-            <div className="mt-4 flex flex-col gap-2 rounded-xl border border-border/40 bg-card/30 p-3.5">
+            <div className="mt-4 flex flex-col gap-2 rounded-xl border bg-muted/20 p-3.5">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Connection Status</span>
                 <div className="flex flex-col gap-1.5 text-sm">
                     <div className="flex justify-between items-center">
@@ -1168,7 +1168,7 @@ function FailingRuleRow({
             : "text-muted-foreground";
 
     const remediationLabel = result.remediation_kind === "auto" ? "Auto-fix" : result.remediation_kind;
-    const rowClassName = "group relative block overflow-hidden rounded-xl border border-border/40 bg-card/30 p-4 transition-all hover:border-primary/40 hover:bg-muted/20 backdrop-blur-sm";
+    const rowClassName = "group relative block overflow-hidden rounded-xl border bg-card p-4 transition-all hover:border-primary/40 hover:bg-muted/30";
     const content = (
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div className={cn("absolute inset-y-0 left-0 w-1", severityClass.replace("bg-", "").replace("border-", "bg-").split(" ")[0])} />
@@ -1257,7 +1257,7 @@ function SectionCard({
     children: React.ReactNode;
 }) {
     return (
-        <section className="relative overflow-hidden rounded-2xl border border-border/40 bg-background/40 p-5 backdrop-blur-md">
+        <section className="relative overflow-hidden rounded-2xl border bg-card p-5">
             <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h2 className="text-lg font-bold tracking-tight">{title}</h2>
