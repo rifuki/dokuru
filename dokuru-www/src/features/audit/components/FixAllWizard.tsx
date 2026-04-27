@@ -3,7 +3,7 @@ import {
 } from "@/components/ui/sheet";
 import {
     AlertTriangle, CheckCircle2, Loader2, XCircle, Zap,
-    RefreshCw, Check,
+    RefreshCw, Check, ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isNamespaceRecreateRule } from "@/features/audit/hooks/useFix";
@@ -48,18 +48,39 @@ function StepIndicator({ current }: { current: FixAllStep }) {
 
 // ── Rule row ──────────────────────────────────────────────────────────────────
 
-function RuleRow({ rs, showOutcome }: { rs: RuleFixStatus; showOutcome: boolean }) {
+function RuleRow({
+    rs, showOutcome, selectable, onToggle,
+}: {
+    rs: RuleFixStatus;
+    showOutcome: boolean;
+    selectable?: boolean;
+    onToggle?: (ruleId: string) => void;
+}) {
     const isRecreate = isNamespaceRecreateRule(rs.ruleId);
     const applied = rs.outcome?.status === "Applied";
+    const skipped = rs.state === "skipped";
 
     return (
-        <div className={cn(
+        <button
+            type="button"
+            onClick={() => selectable && onToggle?.(rs.ruleId)}
+            disabled={!selectable}
+            className={cn(
             "flex items-start gap-3 px-3 py-2.5 text-xs",
-            rs.state === "applying" && "bg-[#2496ED]/5"
+            rs.state === "applying" && "bg-[#2496ED]/5",
+            selectable && "w-full text-left hover:bg-white/[0.03] transition-colors",
+            !rs.selected && !showOutcome && "opacity-45"
         )}>
             {/* Status icon */}
             <div className="mt-px shrink-0 w-4 flex justify-center">
-                {rs.state === "done"
+                {selectable
+                    ? <span className={cn(
+                        "inline-flex h-3.5 w-3.5 items-center justify-center rounded border mt-0.5",
+                        rs.selected ? "border-[#2496ED] bg-[#2496ED] text-white" : "border-white/20 bg-transparent",
+                    )}>{rs.selected && <Check size={10} strokeWidth={3} />}</span>
+                    : skipped
+                    ? <span className="inline-block w-3 h-3 rounded-full border border-white/10 mt-0.5" />
+                    : rs.state === "done"
                     ? applied
                         ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
                         : <XCircle className="h-3.5 w-3.5 text-rose-400" />
@@ -78,15 +99,24 @@ function RuleRow({ rs, showOutcome }: { rs: RuleFixStatus; showOutcome: boolean 
                             recreate
                         </span>
                     )}
+                    {rs.highRisk && (
+                        <span className="inline-flex items-center gap-1 text-[9px] font-mono text-rose-400/75 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded">
+                            <ShieldAlert className="h-2.5 w-2.5" /> risky
+                        </span>
+                    )}
                 </div>
                 <p className={cn(
                     "text-[11px] mt-0.5 leading-snug truncate",
-                    rs.state === "done"
+                    skipped
+                        ? "text-white/22"
+                        : rs.state === "done"
                         ? applied ? "text-emerald-400/80" : "text-rose-400/80"
                         : rs.state === "applying" ? "text-white/80"
                         : "text-white/30"
                 )}>
-                    {rs.state === "done" && rs.outcome
+                    {skipped
+                        ? "Skipped by selection"
+                        : rs.state === "done" && rs.outcome
                         ? rs.outcome.message.slice(0, 72)
                         : rs.title}
                 </p>
@@ -104,25 +134,45 @@ function RuleRow({ rs, showOutcome }: { rs: RuleFixStatus; showOutcome: boolean 
                 </span>
             )}
             {!showOutcome && rs.state === "pending" && (
-                <span className="text-[9px] font-mono text-white/20 shrink-0">pending</span>
+                <span className="text-[9px] font-mono text-white/20 shrink-0">
+                    {rs.selected ? "selected" : "skipped"}
+                </span>
             )}
-        </div>
+        </button>
     );
 }
 
 // ── Confirm step ──────────────────────────────────────────────────────────────
 
 function ConfirmStep({
-    ruleStatuses, onConfirm, onCancel,
+    ruleStatuses, selectedCount, onConfirm, onCancel, onToggleRule, onSetAllSelected,
 }: {
     ruleStatuses: RuleFixStatus[];
+    selectedCount: number;
     onConfirm: () => void;
     onCancel: () => void;
+    onToggleRule: (ruleId: string) => void;
+    onSetAllSelected: (selected: boolean) => void;
 }) {
-    const recreateCount = ruleStatuses.filter(r => isNamespaceRecreateRule(r.ruleId)).length;
+    const recreateCount = ruleStatuses.filter(r => r.selected && isNamespaceRecreateRule(r.ruleId)).length;
+    const highRiskCount = ruleStatuses.filter(r => r.highRisk && !r.selected).length;
 
     return (
         <div className="flex flex-col gap-5">
+            {highRiskCount > 0 && (
+                <div className="flex items-start gap-3 rounded-lg border border-rose-500/30 bg-rose-500/8 px-4 py-3">
+                    <ShieldAlert className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                        <p className="text-xs font-semibold text-rose-400">
+                            Risky auto-fixes are not selected by default
+                        </p>
+                        <p className="text-xs text-rose-400/70 leading-relaxed">
+                            Recreate/user namespace fixes like 5.31 can restart containers. Select them manually only when you are ready.
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {recreateCount > 0 && (
                 <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/8 px-4 py-3">
                     <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
@@ -138,12 +188,37 @@ function ConfirmStep({
             )}
 
             <div>
-                <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/40 mb-2">
-                    {ruleStatuses.length} rules will be fixed
-                </p>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/40">
+                        {selectedCount}/{ruleStatuses.length} rules selected
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => onSetAllSelected(true)}
+                            className="text-[10px] font-mono uppercase tracking-[0.14em] text-[#2496ED]/70 hover:text-[#2496ED]"
+                        >
+                            select all
+                        </button>
+                        <span className="text-white/15">/</span>
+                        <button
+                            type="button"
+                            onClick={() => onSetAllSelected(false)}
+                            className="text-[10px] font-mono uppercase tracking-[0.14em] text-white/35 hover:text-white/70"
+                        >
+                            clear
+                        </button>
+                    </div>
+                </div>
                 <div className="rounded-lg border border-white/8 bg-white/[0.02] overflow-hidden divide-y divide-white/5">
                     {ruleStatuses.map(rs => (
-                        <RuleRow key={rs.ruleId} rs={rs} showOutcome={false} />
+                        <RuleRow
+                            key={rs.ruleId}
+                            rs={rs}
+                            showOutcome={false}
+                            selectable
+                            onToggle={onToggleRule}
+                        />
                     ))}
                 </div>
             </div>
@@ -157,10 +232,11 @@ function ConfirmStep({
                 </button>
                 <button
                     onClick={onConfirm}
-                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-[#2496ED] hover:bg-[#1e80cc] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] transition-all hover:shadow-[0_0_24px_-4px_rgba(36,150,237,0.65)] active:scale-[0.98]"
+                    disabled={selectedCount === 0}
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-[#2496ED] hover:bg-[#1e80cc] disabled:bg-white/10 disabled:text-white/25 disabled:shadow-none px-4 py-2.5 text-sm font-semibold text-white shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] transition-all hover:shadow-[0_0_24px_-4px_rgba(36,150,237,0.65)] active:scale-[0.98]"
                 >
                     <Zap className="h-3.5 w-3.5" />
-                    Apply All {ruleStatuses.length} Fixes
+                    Apply {selectedCount} Selected
                 </button>
             </div>
         </div>
@@ -175,7 +251,9 @@ function ApplyingStep({
     ruleStatuses: RuleFixStatus[];
     currentIndex: number;
 }) {
-    const done = ruleStatuses.filter(r => r.state === "done").length;
+    const selected = ruleStatuses.filter(r => r.selected);
+    const done = selected.filter(r => r.state === "done").length;
+    const total = selected.length;
 
     return (
         <div className="flex flex-col gap-4">
@@ -187,7 +265,7 @@ function ApplyingStep({
                     </span>
                 </div>
                 <span className="text-xs font-mono text-white/40">
-                    {done}/{ruleStatuses.length}
+                    {done}/{total}
                 </span>
             </div>
 
@@ -195,7 +273,7 @@ function ApplyingStep({
             <div className="h-1 rounded-full bg-white/5 overflow-hidden">
                 <div
                     className="h-full rounded-full bg-[#2496ED] transition-all duration-500"
-                    style={{ width: `${ruleStatuses.length > 0 ? (done / ruleStatuses.length) * 100 : 0}%` }}
+                    style={{ width: `${total > 0 ? (done / total) * 100 : 0}%` }}
                 />
             </div>
 
@@ -205,7 +283,7 @@ function ApplyingStep({
                         dokuru-agent · sequential fix
                     </span>
                     <span className="ml-auto text-[10px] font-mono text-[#2496ED]/60 uppercase tracking-[0.15em]">
-                        {currentIndex + 1}/{ruleStatuses.length}
+                        {Math.min(currentIndex + 1, total)}/{total}
                     </span>
                 </div>
                 {ruleStatuses.map(rs => (
@@ -229,8 +307,10 @@ function ResultStep({
     onRerunAudit: () => void;
     onClose: () => void;
 }) {
-    const applied = ruleStatuses.filter(r => r.outcome?.status === "Applied").length;
-    const blocked = ruleStatuses.filter(r => r.outcome?.status === "Blocked").length;
+    const selected = ruleStatuses.filter(r => r.selected);
+    const applied = selected.filter(r => r.outcome?.status === "Applied").length;
+    const blocked = selected.filter(r => r.outcome?.status === "Blocked").length;
+    const skipped = ruleStatuses.filter(r => r.state === "skipped").length;
     const allApplied = blocked === 0;
 
     return (
@@ -247,13 +327,13 @@ function ResultStep({
                 <div>
                     <p className={cn("text-sm font-semibold", allApplied ? "text-emerald-400" : "text-amber-400")}>
                         {allApplied
-                            ? `All ${applied} fixes applied successfully`
+                            ? `${applied} selected fixes applied successfully`
                             : `${applied} applied, ${blocked} blocked`
                         }
                     </p>
                     <p className={cn("text-xs mt-0.5", allApplied ? "text-emerald-400/70" : "text-amber-400/70")}>
                         {allApplied
-                            ? "Re-run the audit to see the updated score."
+                            ? skipped > 0 ? `${skipped} rule(s) were skipped by selection. Re-run the audit to see the updated score.` : "Re-run the audit to see the updated score."
                             : "Blocked fixes may require elevated privileges or manual intervention."
                         }
                     </p>
@@ -294,14 +374,17 @@ interface FixAllWizardProps {
     step: FixAllStep;
     currentIndex: number;
     ruleStatuses: RuleFixStatus[];
+    selectedCount: number;
     onConfirm: () => void;
     onClose: () => void;
     onRerunAudit: () => void;
+    onToggleRule: (ruleId: string) => void;
+    onSetAllSelected: (selected: boolean) => void;
 }
 
 export function FixAllWizard({
-    open, step, currentIndex, ruleStatuses,
-    onConfirm, onClose, onRerunAudit,
+    open, step, currentIndex, ruleStatuses, selectedCount,
+    onConfirm, onClose, onRerunAudit, onToggleRule, onSetAllSelected,
 }: FixAllWizardProps) {
     return (
         <Sheet open={open} onOpenChange={(v) => { if (!v && step !== "applying") onClose(); }}>
@@ -318,7 +401,7 @@ export function FixAllWizard({
                                 Fix All
                             </span>
                             <span className="text-[10px] font-mono text-white/30 uppercase tracking-[0.15em]">
-                                {ruleStatuses.length} rules · auto fix
+                                {selectedCount}/{ruleStatuses.length} selected · auto fix
                             </span>
                         </div>
                         <p className="text-base font-semibold text-white leading-snug">
@@ -333,8 +416,11 @@ export function FixAllWizard({
                     {step === "confirm" && (
                         <ConfirmStep
                             ruleStatuses={ruleStatuses}
+                            selectedCount={selectedCount}
                             onConfirm={onConfirm}
                             onCancel={onClose}
+                            onToggleRule={onToggleRule}
+                            onSetAllSelected={onSetAllSelected}
                         />
                     )}
                     {step === "applying" && (

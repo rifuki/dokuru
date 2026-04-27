@@ -45,6 +45,13 @@ export const agentApi = {
     return response.data.data;
   },
 
+  auditStreamUrl: (id: string): string => {
+    const url = new URL(`${wsApiUrl}/agents/${id}/audit/stream`);
+    const accessToken = useAuthStore.getState().accessToken;
+    if (accessToken) url.searchParams.set("access_token", accessToken);
+    return url.toString();
+  },
+
   applyFix: async (id: string, ruleId: string, targets?: FixTarget[]): Promise<RelayFixResponse> => {
     const payload = targets ? { rule_id: ruleId, targets } : { rule_id: ruleId };
     const response = await apiClient.post(`/agents/${id}/fix`, payload);

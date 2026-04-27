@@ -10,8 +10,12 @@ export type RuleFixStatus = {
     ruleId: string;
     title: string;
     outcome: FixOutcome | null;
-    state: "pending" | "applying" | "done";
+    state: "pending" | "applying" | "done" | "skipped";
+    selected: boolean;
+    highRisk: boolean;
 };
+
+const HIGH_RISK_AUTO_FIX_RULES = new Set(["2.10", "5.5", "5.10", "5.16", "5.17", "5.21", "5.31"]);
 
 interface UseFixAllArgs {
     agentId: string;
@@ -82,10 +86,26 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
             title: r.rule.title,
             outcome: null,
             state: "pending",
+            selected: !HIGH_RISK_AUTO_FIX_RULES.has(r.rule.id),
+            highRisk: HIGH_RISK_AUTO_FIX_RULES.has(r.rule.id),
         })));
         setStep("confirm");
         setCurrentIndex(-1);
         setOpen(true);
+    }, []);
+
+    const toggleRule = useCallback((ruleId: string) => {
+        setRuleStatuses(statuses => statuses.map(status => (
+            status.ruleId === ruleId && status.state === "pending"
+                ? { ...status, selected: !status.selected }
+                : status
+        )));
+    }, []);
+
+    const setAllSelected = useCallback((selected: boolean) => {
+        setRuleStatuses(statuses => statuses.map(status => (
+            status.state === "pending" ? { ...status, selected } : status
+        )));
     }, []);
 
     const closeFixAll = useCallback(() => {
@@ -98,11 +118,23 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
     }, []);
 
     const applyAll = useCallback(async () => {
+        const selectedTotal = ruleStatuses.filter(r => r.selected).length;
+        if (selectedTotal === 0) {
+            toast.error("Select at least one rule to fix");
+            return;
+        }
+
         setStep("applying");
-        const updated = ruleStatuses.map(r => ({ ...r }));
+        const updated: RuleFixStatus[] = ruleStatuses.map(r => ({
+            ...r,
+            state: r.selected ? "pending" : "skipped",
+        }));
+        let appliedIndex = 0;
 
         for (let i = 0; i < updated.length; i++) {
-            setCurrentIndex(i);
+            if (!updated[i].selected) continue;
+
+            setCurrentIndex(appliedIndex);
             updated[i].state = "applying";
             setRuleStatuses([...updated]);
 
@@ -121,13 +153,15 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
                 updated[i].state = "done";
             }
             setRuleStatuses([...updated]);
+            appliedIndex += 1;
         }
 
-        setCurrentIndex(updated.length);
+        setCurrentIndex(selectedTotal);
         setStep("result");
 
-        const applied = updated.filter(r => r.outcome?.status === "Applied").length;
-        const blocked = updated.filter(r => r.outcome?.status === "Blocked").length;
+        const selected = updated.filter(r => r.selected);
+        const applied = selected.filter(r => r.outcome?.status === "Applied").length;
+        const blocked = selected.filter(r => r.outcome?.status === "Blocked").length;
 
         if (applied > 0) {
             toast.success(`Applied ${applied} fix${applied > 1 ? "es" : ""}${blocked > 0 ? `, ${blocked} blocked` : ""}`);
@@ -137,5 +171,18 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
         }
     }, [ruleStatuses, applyRuleViaStream, queryClient]);
 
-    return { open, step, currentIndex, ruleStatuses, openFixAll, closeFixAll, applyAll };
+    const selectedCount = ruleStatuses.filter(r => r.selected).length;
+
+    return {
+        open,
+        step,
+        currentIndex,
+        ruleStatuses,
+        selectedCount,
+        openFixAll,
+        closeFixAll,
+        applyAll,
+        toggleRule,
+        setAllSelected,
+    };
 }

@@ -52,6 +52,10 @@ pub fn agent_routes() -> Router<AppState> {
         )
         .route("/{id}/audit", post(audit_handlers::save_audit))
         .route("/{id}/audit/run", post(audit_handlers::run_relay_audit))
+        .route(
+            "/{id}/audit/stream",
+            get(audit_handlers::relay_audit_stream_ws),
+        )
         .route("/{id}/audit/latest", get(audit_handlers::get_latest_audit))
         .route(
             "/{id}/audit/{audit_id}/report",

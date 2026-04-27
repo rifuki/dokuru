@@ -228,7 +228,7 @@ fn display_status(status: &StatusReport) -> Result<()> {
 
     if status.settings.is_cloudflare() && !status.tunnel.is_healthy() {
         log::error(
-            "❌ Cloudflare Tunnel is DOWN! Agent is NOT accessible from outside.\n   → Restart tunnel: sudo systemctl restart dokuru-tunnel\n   → Or switch to Relay mode: sudo dokuru configure",
+            "❌ Cloudflare Tunnel is DOWN! Agent is NOT accessible from outside.\n   → Refresh tunnel URL: sudo dokuru restart\n   → Or switch to Relay mode: sudo dokuru configure",
         )?;
     }
 

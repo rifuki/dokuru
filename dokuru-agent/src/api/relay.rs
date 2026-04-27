@@ -25,7 +25,10 @@ use tracing::{error, info, warn};
 use crate::{
     api::Config,
     api::relay_docker,
-    audit::{FixOutcome, FixProgress, FixRequest, RollbackRequest, RuleRegistry, fix_helpers},
+    audit::{
+        AuditReport, AuditSummary, CheckResult, CheckStatus, FixOutcome, FixProgress, FixRequest,
+        RollbackRequest, RuleDefinition, RuleRegistry, fix_helpers,
+    },
     host_shell,
 };
 
@@ -351,6 +354,7 @@ async fn execute_stream(
         "host_shell" => host_shell_stream(payload, input_rx, tx, id).await,
         "docker_events" => docker_events_stream(input_rx, tx, id).await,
         "fix_progress" => fix_progress_stream(payload, input_rx, tx, id).await,
+        "audit_progress" => audit_progress_stream(input_rx, tx, id).await,
         _ => Err(eyre::eyre!("Unknown stream: {stream}")),
     }
 }
@@ -419,6 +423,224 @@ enum FixStreamMessage {
     Progress { data: FixProgress },
     Outcome { data: FixOutcome },
     Error { message: String },
+}
+
+#[derive(Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum AuditStreamMessage {
+    Started {
+        total: usize,
+    },
+    Progress {
+        index: usize,
+        total: usize,
+        data: Box<CheckResult>,
+    },
+    Complete {
+        data: Box<AuditReport>,
+    },
+    Error {
+        message: String,
+    },
+}
+
+struct RelayAuditPreflight {
+    hostname: String,
+    docker_version: String,
+    containers: Vec<bollard::models::ContainerSummary>,
+}
+
+struct RelayAuditResults {
+    results: Vec<CheckResult>,
+    passed: usize,
+    failed: usize,
+}
+
+async fn audit_progress_stream(
+    mut input_rx: mpsc::UnboundedReceiver<StreamInput>,
+    tx: &mpsc::UnboundedSender<Message>,
+    id: &str,
+) -> Result<()> {
+    let Some(docker) = relay_docker_client_or_error(tx, id)? else {
+        return Ok(());
+    };
+    let registry = RuleRegistry::new();
+    let mut rules = registry.all();
+    rules.sort_by(|left, right| left.id.cmp(&right.id));
+    let Some(preflight) = relay_audit_preflight(&docker, tx, id).await? else {
+        return Ok(());
+    };
+    let Some(stream_results) = relay_stream_audit_rules(
+        &docker,
+        &preflight.containers,
+        &rules,
+        &mut input_rx,
+        tx,
+        id,
+    )
+    .await?
+    else {
+        return Ok(());
+    };
+
+    let scored_total = stream_results.passed + stream_results.failed;
+    send_stream_data(
+        tx,
+        id,
+        serde_json::to_vec(&AuditStreamMessage::Complete {
+            data: Box::new(AuditReport {
+                timestamp: chrono::Utc::now().to_rfc3339(),
+                hostname: preflight.hostname,
+                docker_version: preflight.docker_version,
+                total_containers: preflight.containers.len(),
+                results: stream_results.results,
+                summary: AuditSummary {
+                    total: scored_total,
+                    passed: stream_results.passed,
+                    failed: stream_results.failed,
+                    score: audit_score(stream_results.passed, scored_total),
+                },
+            }),
+        })?,
+    )?;
+
+    Ok(())
+}
+
+fn relay_docker_client_or_error(
+    tx: &mpsc::UnboundedSender<Message>,
+    id: &str,
+) -> Result<Option<Docker>> {
+    match crate::docker::get_docker_client() {
+        Ok(docker) => Ok(Some(docker)),
+        Err(error) => {
+            send_audit_stream_error(tx, id, format!("Failed to connect to Docker: {error}"))?;
+            Ok(None)
+        }
+    }
+}
+
+async fn relay_audit_preflight(
+    docker: &Docker,
+    tx: &mpsc::UnboundedSender<Message>,
+    id: &str,
+) -> Result<Option<RelayAuditPreflight>> {
+    let info = match docker.info().await {
+        Ok(info) => info,
+        Err(error) => {
+            send_audit_stream_error(tx, id, format!("Failed to inspect Docker daemon: {error}"))?;
+            return Ok(None);
+        }
+    };
+    let version = match docker.version().await {
+        Ok(version) => version,
+        Err(error) => {
+            send_audit_stream_error(tx, id, format!("Failed to read Docker version: {error}"))?;
+            return Ok(None);
+        }
+    };
+    let containers = match docker.list_containers::<String>(None).await {
+        Ok(containers) => containers,
+        Err(error) => {
+            send_audit_stream_error(tx, id, format!("Failed to list containers: {error}"))?;
+            return Ok(None);
+        }
+    };
+
+    Ok(Some(RelayAuditPreflight {
+        hostname: info.name.unwrap_or_else(|| "unknown".to_string()),
+        docker_version: version.version.unwrap_or_else(|| "unknown".to_string()),
+        containers,
+    }))
+}
+
+async fn relay_stream_audit_rules(
+    docker: &Docker,
+    containers: &[bollard::models::ContainerSummary],
+    rules: &[&RuleDefinition],
+    input_rx: &mut mpsc::UnboundedReceiver<StreamInput>,
+    tx: &mpsc::UnboundedSender<Message>,
+    id: &str,
+) -> Result<Option<RelayAuditResults>> {
+    let total = rules.len();
+    let mut results = Vec::with_capacity(total);
+    let mut passed = 0usize;
+    let mut failed = 0usize;
+
+    send_stream_data(
+        tx,
+        id,
+        serde_json::to_vec(&AuditStreamMessage::Started { total })?,
+    )?;
+
+    for (offset, rule) in rules.iter().enumerate() {
+        if relay_stream_closed(input_rx) {
+            return Ok(None);
+        }
+
+        let result = match rule.check(docker, containers).await {
+            Ok(result) => result,
+            Err(error) => {
+                send_audit_stream_error(
+                    tx,
+                    id,
+                    format!("Rule {} failed to run: {error}", rule.id),
+                )?;
+                return Ok(None);
+            }
+        };
+        if rule.scored {
+            match result.status {
+                CheckStatus::Pass => passed += 1,
+                CheckStatus::Fail => failed += 1,
+                CheckStatus::Error => {}
+            }
+        }
+
+        results.push(result.clone());
+        send_stream_data(
+            tx,
+            id,
+            serde_json::to_vec(&AuditStreamMessage::Progress {
+                index: offset + 1,
+                total,
+                data: Box::new(result),
+            })?,
+        )?;
+        tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+    }
+
+    Ok(Some(RelayAuditResults {
+        results,
+        passed,
+        failed,
+    }))
+}
+
+fn relay_stream_closed(input_rx: &mut mpsc::UnboundedReceiver<StreamInput>) -> bool {
+    while let Ok(input) = input_rx.try_recv() {
+        if matches!(input, StreamInput::Close) {
+            return true;
+        }
+    }
+    false
+}
+
+fn audit_score(passed: usize, total: usize) -> u8 {
+    let percent = (passed * 100).checked_div(total).unwrap_or(0);
+    u8::try_from(percent).unwrap_or(100)
+}
+
+fn send_audit_stream_error(
+    tx: &mpsc::UnboundedSender<Message>,
+    id: &str,
+    message: String,
+) -> Result<()> {
+    send_stream_data(
+        tx,
+        id,
+        serde_json::to_vec(&AuditStreamMessage::Error { message })?,
+    )
 }
 
 async fn fix_progress_stream(

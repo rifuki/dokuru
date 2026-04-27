@@ -779,7 +779,18 @@ function AuditDetailPage() {
     token,
   });
 
-  const { open: fixAllOpen, step: fixAllStep, currentIndex: fixAllIndex, ruleStatuses, openFixAll, closeFixAll, applyAll } = useFixAll({
+  const {
+    open: fixAllOpen,
+    step: fixAllStep,
+    currentIndex: fixAllIndex,
+    ruleStatuses,
+    selectedCount: fixAllSelectedCount,
+    openFixAll,
+    closeFixAll,
+    applyAll,
+    toggleRule: toggleFixAllRule,
+    setAllSelected: setAllFixAllSelected,
+  } = useFixAll({
     agentId: id,
     agentUrl: agent?.url ?? "",
     agentAccessMode: agent?.access_mode,
@@ -1468,8 +1479,11 @@ function AuditDetailPage() {
         step={fixAllStep}
         currentIndex={fixAllIndex}
         ruleStatuses={ruleStatuses}
+        selectedCount={fixAllSelectedCount}
         onConfirm={() => void applyAll()}
         onClose={closeFixAll}
+        onToggleRule={toggleFixAllRule}
+        onSetAllSelected={setAllFixAllSelected}
         onRerunAudit={() => {
           closeFixAll();
           void navigate({ to: "/agents/$id/audit", params: { id } });

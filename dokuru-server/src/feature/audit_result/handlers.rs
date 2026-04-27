@@ -84,6 +84,30 @@ pub async fn run_relay_audit(
         .with_data(result))
 }
 
+pub async fn relay_audit_stream_ws(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path(agent_id): Path<Uuid>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    let agent = match require_relay_agent(&state, auth_user.user_id, agent_id).await {
+        Ok(agent) => agent,
+        Err(error) => return error.into_response(),
+    };
+    let registry = state.agent_registry.clone();
+
+    ws.on_upgrade(move |socket| {
+        relay::proxy_stream_to_websocket(
+            socket,
+            registry,
+            agent.id,
+            "audit_progress",
+            serde_json::json!({}),
+            relay::RelayStreamMode::Text,
+        )
+    })
+}
+
 pub async fn run_relay_fix(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,

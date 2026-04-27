@@ -205,6 +205,12 @@ export interface AuditResponse {
   summary: AuditSummary;
 }
 
+export type AuditStreamMessage =
+  | { type: "started"; total: number }
+  | { type: "progress"; index: number; total: number; data: AuditResult }
+  | { type: "complete"; data: AuditResponse }
+  | { type: "error"; message: string };
+
 export interface AuditReportResponse {
   audit_id: string;
   agent_id: string;
@@ -232,6 +238,13 @@ export const agentDirectApi = {
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
     const response = await axios.get(`${agentUrl}/audit`, { headers });
     return response.data.data;
+  },
+
+  auditStreamUrl: (agentUrl: string, token?: string): string => {
+    const url = new URL(`${agentUrl}/audit/ws`);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    if (token) url.searchParams.set("token", token);
+    return url.toString();
   },
 
   applyFix: async (agentUrl: string, ruleId: string, token?: string, targets?: FixTarget[]): Promise<FixOutcome> => {

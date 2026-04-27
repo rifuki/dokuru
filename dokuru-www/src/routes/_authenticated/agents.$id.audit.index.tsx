@@ -4,7 +4,7 @@ import { useAgentStore } from "@/stores/use-agent-store";
 import { useAuditStore } from "@/stores/use-audit-store";
 import { useEffect, useRef, useState } from "react";
 import { agentApi } from "@/lib/api/agent";
-import { agentDirectApi, type AuditResponse, type AuditResult, type FixOutcome } from "@/lib/api/agent-direct";
+import { agentDirectApi, type AuditResponse, type AuditResult, type AuditStreamMessage, type FixOutcome } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
 import { dockerApi, dockerCredential, type Container as DockerContainer } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
@@ -663,6 +663,99 @@ function SectionHeader({ section, total, passed }: { section: string; total: num
 
 type StatusFilter = "all" | "Pass" | "Fail";
 
+type AuditProgressLine = {
+    index: number;
+    total: number;
+    ruleId: string;
+    title: string;
+    status: "Pass" | "Fail" | "Error";
+    message: string;
+    command?: string;
+    timestamp: string;
+};
+
+function AuditRunTerminal({
+    total,
+    current,
+    lines,
+    error,
+}: {
+    total: number;
+    current: number;
+    lines: AuditProgressLine[];
+    error: string | null;
+}) {
+    const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+    const latest = lines.at(-1);
+
+    return (
+        <div className="w-full max-w-2xl rounded-xl border border-[#2496ED]/25 bg-[#05070A] text-left shadow-[0_0_40px_-20px_rgba(36,150,237,0.6)] overflow-hidden">
+            <div className="flex items-center justify-between border-b border-white/8 bg-white/[0.03] px-4 py-2.5">
+                <div className="flex items-center gap-2 min-w-0">
+                    <Terminal className="h-4 w-4 text-[#2496ED] shrink-0" />
+                    <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-[#2496ED]">
+                        live audit stream
+                    </span>
+                </div>
+                <span className="font-mono text-[11px] text-white/45">
+                    {current}/{total || "?"} · {pct}%
+                </span>
+            </div>
+
+            <div className="px-4 py-3 space-y-3">
+                <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-3">
+                        <p className="font-mono text-xs text-white/70 truncate">
+                            {error
+                                ? "audit stream failed"
+                                : latest
+                                ? `checking ${latest.ruleId} · ${latest.title}`
+                                : "opening audit stream..."}
+                        </p>
+                        {error ? (
+                            <XCircle className="h-4 w-4 text-rose-400 shrink-0" />
+                        ) : (
+                            <Loader2 className="h-4 w-4 animate-spin text-[#2496ED] shrink-0" />
+                        )}
+                    </div>
+                    <div className="h-2 rounded-full bg-white/7 overflow-hidden">
+                        <div
+                            className={cn("h-full rounded-full transition-all duration-500", error ? "bg-rose-500" : "bg-[#2496ED]")}
+                            style={{ width: `${pct}%` }}
+                        />
+                    </div>
+                </div>
+
+                <div className="max-h-56 overflow-y-auto rounded-lg border border-white/8 bg-black/40 p-3 font-mono text-[11px] leading-relaxed">
+                    {lines.length === 0 && !error && (
+                        <p className="text-white/35">$ connecting to dokuru-agent audit websocket...</p>
+                    )}
+                    {lines.slice(-8).map(line => (
+                        <div key={`${line.ruleId}-${line.index}`} className="space-y-0.5 border-b border-white/5 py-1.5 last:border-b-0">
+                            <div className="flex items-center gap-2">
+                                <span className="text-white/25">[{line.index.toString().padStart(2, "0")}/{line.total}]</span>
+                                <span className={cn(
+                                    "font-bold",
+                                    line.status === "Pass" ? "text-emerald-400" : line.status === "Fail" ? "text-rose-400" : "text-amber-400",
+                                )}>{line.status.toUpperCase()}</span>
+                                <span className="text-[#2496ED]">{line.ruleId}</span>
+                                <span className="truncate text-white/60">{line.title}</span>
+                            </div>
+                            {line.command && <p className="pl-16 text-white/28 truncate">$ {line.command}</p>}
+                            <p className="pl-16 text-white/42 truncate">{line.message}</p>
+                        </div>
+                    ))}
+                    {error && <p className="text-rose-400">! {error}</p>}
+                </div>
+
+                <p className="font-mono text-[10px] text-white/30">
+                    Kalau stream berhenti di satu rule, ini biasanya signal/connection issue atau command audit rule tersebut hang/error.
+                </p>
+            </div>
+        </div>
+    );
+}
+
 function AuditPage() {
     const { id } = Route.useParams();
     const navigate = useNavigate();
@@ -678,6 +771,11 @@ function AuditPage() {
     const auditHistory = auditHistories[id] ?? [];
     const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
     const [sectionFilter, setSectionFilter] = useState<string>("all");
+    const [auditTotal, setAuditTotal] = useState(0);
+    const [auditCurrent, setAuditCurrent] = useState(0);
+    const [auditProgressLines, setAuditProgressLines] = useState<AuditProgressLine[]>([]);
+    const [auditStreamError, setAuditStreamError] = useState<string | null>(null);
+    const auditSocketRef = useRef<WebSocket | null>(null);
 
     useEffect(() => {
         agentApi.getById(id).then(a => {
@@ -696,16 +794,93 @@ function AuditPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]);
 
+    useEffect(() => () => {
+        auditSocketRef.current?.close();
+    }, []);
+
+    const runAuditViaStream = () => new Promise<AuditResponse>((resolve, reject) => {
+        if (!agent) {
+            reject(new Error("Agent not loaded"));
+            return;
+        }
+
+        const url = agent.access_mode === "relay"
+            ? agentApi.auditStreamUrl(agent.id)
+            : agentDirectApi.auditStreamUrl(agent.url, token);
+        const socket = new WebSocket(url);
+        auditSocketRef.current = socket;
+        let settled = false;
+
+        socket.onmessage = (event) => {
+            try {
+                const message = JSON.parse(String(event.data)) as AuditStreamMessage;
+                if (message.type === "started") {
+                    setAuditTotal(message.total);
+                    setAuditCurrent(0);
+                    return;
+                }
+                if (message.type === "progress") {
+                    setAuditTotal(message.total);
+                    setAuditCurrent(message.index);
+                    setAuditProgressLines(lines => [...lines, {
+                        index: message.index,
+                        total: message.total,
+                        ruleId: message.data.rule.id,
+                        title: message.data.rule.title,
+                        status: message.data.status,
+                        message: message.data.message,
+                        command: message.data.audit_command,
+                        timestamp: new Date().toISOString(),
+                    }]);
+                    return;
+                }
+                if (message.type === "complete") {
+                    settled = true;
+                    resolve(message.data);
+                    socket.close();
+                    return;
+                }
+                if (message.type === "error") {
+                    settled = true;
+                    reject(new Error(message.message));
+                    socket.close();
+                }
+            } catch (error) {
+                settled = true;
+                reject(error instanceof Error ? error : new Error("Invalid audit stream message"));
+                socket.close();
+            }
+        };
+
+        socket.onerror = () => {
+            if (!settled) {
+                settled = true;
+                reject(new Error("Audit progress stream failed"));
+            }
+        };
+
+        socket.onclose = () => {
+            if (auditSocketRef.current === socket) auditSocketRef.current = null;
+            if (!settled) {
+                settled = true;
+                reject(new Error("Audit progress stream closed before completion"));
+            }
+        };
+    });
+
     const handleRunAudit = async () => {
         if (!agent) return;
         if (agent.access_mode !== "relay" && !token) {
             return toast.error("Agent token not found. Edit this agent and paste the token once to sync it across devices.");
         }
         setRunning(id, true);
+        setAuditTotal(0);
+        setAuditCurrent(0);
+        setAuditProgressLines([]);
+        setAuditStreamError(null);
         try {
-            const savedAudit = agent.access_mode === "relay"
-                ? await agentApi.runAudit(agent.id)
-                : await agentApi.saveAudit(agent.id, await agentDirectApi.runAudit(agent.url, token));
+            const streamedAudit = await runAuditViaStream();
+            const savedAudit = await agentApi.saveAudit(agent.id, streamedAudit);
             try {
                 toast.success(`Audit complete — ${savedAudit.summary.score}/100`);
                 await queryClient.invalidateQueries({ queryKey: ["audits", id] });
@@ -718,8 +893,10 @@ function AuditPage() {
             } catch {
                 toast.error("Failed to open audit result");
             }
-        } catch {
-            toast.error("Audit failed");
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Audit failed";
+            setAuditStreamError(message);
+            toast.error(message);
         } finally {
             setRunning(id, false);
         }
@@ -770,14 +947,14 @@ function AuditPage() {
                     <h2 className="text-2xl font-bold tracking-tight">Security Audit</h2>
                     <p className="text-muted-foreground text-sm mt-0.5">CIS Docker Benchmark v1.8.0</p>
                 </div>
-                <Button onClick={handleRunAudit} disabled={isRunning || !agent || !isOnline} className="shrink-0" title={!isOnline ? "Agent offline" : undefined}>
-                    {isRunning
-                        ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Running…</>
-                        : auditData
-                        ? <><RefreshCw className="h-4 w-4 mr-2" /> Re-run Audit</>
-                        : <><Play className="h-4 w-4 mr-2" /> Run Audit</>
-                    }
-                </Button>
+                {!isRunning && (
+                    <Button onClick={handleRunAudit} disabled={!agent || !isOnline} className="shrink-0" title={!isOnline ? "Agent offline" : undefined}>
+                        {auditData
+                            ? <><RefreshCw className="h-4 w-4 mr-2" /> Re-run Audit</>
+                            : <><Play className="h-4 w-4 mr-2" /> Run Audit</>
+                        }
+                    </Button>
+                )}
             </div>
 
             {auditData ? (
@@ -978,12 +1155,18 @@ function AuditPage() {
                                 cgroup configuration, file permissions, and more.
                             </p>
                         </div>
-                        <Button onClick={handleRunAudit} disabled={isRunning || !agent || !isOnline}>
-                            {isRunning
-                                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Running Audit…</>
-                                : <><Play className="h-4 w-4 mr-2" /> Run Security Audit</>
-                            }
-                        </Button>
+                        {isRunning ? (
+                            <AuditRunTerminal
+                                total={auditTotal}
+                                current={auditCurrent}
+                                lines={auditProgressLines}
+                                error={auditStreamError}
+                            />
+                        ) : (
+                            <Button onClick={handleRunAudit} disabled={!agent || !isOnline}>
+                                <Play className="h-4 w-4 mr-2" /> Run Security Audit
+                            </Button>
+                        )}
                         <div className="flex flex-wrap justify-center gap-2 mt-2">
                             {["Host Config", "Daemon", "File Perms", "Images", "Namespaces", "Cgroups"].map(t => (
                                 <span key={t} className="text-[10px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full">{t}</span>
