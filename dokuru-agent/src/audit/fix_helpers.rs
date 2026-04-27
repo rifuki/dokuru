@@ -14,6 +14,7 @@ use bollard::{
 use serde_yaml::{Mapping, Value};
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write as _;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use tokio::process::Command;
@@ -38,6 +39,21 @@ const COMPOSE_FILENAMES: &[&str] = &[
     "docker-compose.yaml",
     "docker-compose.yml",
     "compose.yml",
+];
+const RUNTIME_BIND_COMPONENTS: &[&str] = &[
+    "cache",
+    "data",
+    "database",
+    "db",
+    "log",
+    "logs",
+    "postgres_data",
+    "redis_data",
+    "sessions",
+    "state",
+    "storage",
+    "tmp",
+    "uploads",
 ];
 
 /// Run a shell command and return (stdout, stderr, success)
@@ -805,7 +821,7 @@ async fn migrate_named_volumes(
 async fn fix_bind_mount_permissions(
     bind_paths: &[String],
     uid: u32,
-    _gid: u32,
+    gid: u32,
     progress: Option<&ProgressSender>,
 ) -> UsernsRecoveryResult {
     let mut result = UsernsRecoveryResult::default();
@@ -851,14 +867,14 @@ async fn fix_bind_mount_permissions(
             continue;
         };
 
-        match grant_userns_bind_mount_access(path, &metadata, uid).await {
+        match recover_bind_mount_access(path, &metadata, uid, gid).await {
             Ok((_, _, true)) => result.completed += 1,
             Ok((_, stderr, _)) => result
                 .failed
-                .push(format!("{path}: setfacl failed: {stderr}")),
+                .push(format!("{path}: recovery failed: {stderr}")),
             Err(error) => result
                 .failed
-                .push(format!("{path}: setfacl failed: {error}")),
+                .push(format!("{path}: recovery failed: {error}")),
         }
     }
 
@@ -894,7 +910,20 @@ async fn fix_bind_mount_permissions(
     result
 }
 
-async fn grant_userns_bind_mount_access(
+async fn recover_bind_mount_access(
+    path: &str,
+    metadata: &std::fs::Metadata,
+    uid: u32,
+    gid: u32,
+) -> std::io::Result<(String, String, bool)> {
+    if should_chown_runtime_bind_path(path) {
+        return chown_runtime_bind_path_preserving_host_access(path, metadata, uid, gid).await;
+    }
+
+    grant_acl_user_access(path, metadata, uid).await
+}
+
+async fn grant_acl_user_access(
     path: &str,
     metadata: &std::fs::Metadata,
     uid: u32,
@@ -910,6 +939,49 @@ async fn grant_userns_bind_mount_access(
     }
 
     run_cmd("setfacl", &["-m", &user_acl, path]).await
+}
+
+async fn chown_runtime_bind_path_preserving_host_access(
+    path: &str,
+    metadata: &std::fs::Metadata,
+    uid: u32,
+    gid: u32,
+) -> std::io::Result<(String, String, bool)> {
+    let host_uid = metadata.uid();
+    let owner = format!("{uid}:{gid}");
+    let chown_result = if metadata.is_dir() {
+        run_cmd("chown", &["-R", &owner, path]).await?
+    } else {
+        run_cmd("chown", &[&owner, path]).await?
+    };
+
+    if !chown_result.2 {
+        return Ok(chown_result);
+    }
+
+    // Keep the original host owner able to edit/delete tracked files so Git operations still work.
+    match grant_acl_user_access(path, metadata, host_uid).await {
+        Ok((_, _, true)) => Ok(chown_result),
+        Ok((stdout, stderr, false)) => Ok((
+            stdout,
+            format!("runtime chown succeeded, but preserving host owner ACL failed: {stderr}"),
+            false,
+        )),
+        Err(error) => Ok((
+            chown_result.0,
+            format!("runtime chown succeeded, but preserving host owner ACL failed: {error}"),
+            false,
+        )),
+    }
+}
+
+fn should_chown_runtime_bind_path(path: &str) -> bool {
+    Path::new(path).components().any(|component| {
+        let name = component.as_os_str().to_string_lossy().to_lowercase();
+        RUNTIME_BIND_COMPONENTS.contains(&name.as_str())
+            || name.ends_with("_data")
+            || name.ends_with("-data")
+    })
 }
 
 async fn ensure_setfacl_available() -> Option<String> {
@@ -1404,11 +1476,11 @@ async fn recover_userns_state(
             "fix_bind_mount_permissions",
             "in_progress",
             Some(format!(
-                "Granting remapped UID access on {} bind mount path(s) without changing host ownership",
+                "Recovering {} bind mount path(s): ACL for normal paths, runtime data dirs chowned to remap UID with host-owner ACL preserved",
                 state.bind_paths.len()
             )),
             Some(format!(
-                "setfacl -R -m u:{uid}:rwX -m d:u:{uid}:rwX <bind-paths>"
+                "setfacl -R -m u:{uid}:rwX -m d:u:{uid}:rwX <bind-paths>; chown -R {uid}:{gid} <runtime-data-bind-paths>"
             )),
         ),
     );
