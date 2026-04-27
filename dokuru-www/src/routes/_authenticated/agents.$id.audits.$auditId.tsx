@@ -57,7 +57,15 @@ function sectionMeta(section: string) {
 
 // ── Severity badge ───────────────────────────────────────────────────────────
 
-function SeverityBadge({ severity }: { severity: string }) {
+function SeverityBadge({ severity, status }: { severity: string; status?: "Pass" | "Fail" | "Error" }) {
+  if (status === "Pass") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded border border-border bg-muted/30 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground">
+        {severity} if failed
+      </span>
+    );
+  }
+
   const config: Record<string, { cls: string; dot: string }> = {
     High: { cls: "bg-red-500/10 text-red-400 border-red-500/20", dot: "bg-red-400" },
     Medium: { cls: "bg-amber-500/10 text-amber-400 border-amber-500/20", dot: "bg-amber-400" },
@@ -194,7 +202,7 @@ function AgentVerificationPanel({
         {result && (
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
-              <SeverityBadge severity={result.rule.severity} />
+              <SeverityBadge severity={result.rule.severity} status={result.status} />
               <span className={cn(
                 "inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-bold uppercase",
                 result.status === "Pass" ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
@@ -280,7 +288,7 @@ function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, 
                 <PillarIcon size={10} className={pillarMeta.color} />
                 {pillarMeta.name}
               </span>
-              <SeverityBadge severity={rule.severity} />
+              <SeverityBadge severity={rule.severity} status={status} />
               {affected.length > 0 && (
                 <span className="inline-flex items-center gap-1 text-[10px] text-amber-400 border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.5 rounded font-medium">
                   <AlertTriangle className="h-2.5 w-2.5" />

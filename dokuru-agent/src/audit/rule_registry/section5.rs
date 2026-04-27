@@ -1253,6 +1253,8 @@ A reasonable value for most workloads is 50-200."#.into(),
 This flag disables user namespace remapping and gives the container root = host root.
 Dokuru will stop, recreate and restart the container without --userns=host.
 
+Note: rule 2.10 can pass while this rule still fails. Rule 2.10 checks that the Docker daemon supports/remaps user namespaces globally; rule 5.31 checks each running container and fails any container that explicitly opts out with userns=host.
+
 Example (incorrect — avoid):
   docker run --userns=host nginx
 

@@ -44,7 +44,15 @@ function sectionMeta(section: string) {
 
 // ── Severity badge ───────────────────────────────────────────────────────────
 
-function SeverityBadge({ severity }: { severity: string }) {
+function SeverityBadge({ severity, status }: { severity: string; status?: "Pass" | "Fail" | "Error" }) {
+    if (status === "Pass") {
+        return (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase border border-border bg-muted/30 text-muted-foreground">
+                {severity} if failed
+            </span>
+        );
+    }
+
     const map: Record<string, string> = {
         High: "bg-red-500/15 text-red-500 border-red-500/30",
         Medium: "bg-yellow-500/15 text-yellow-600 border-yellow-500/30",
@@ -435,7 +443,7 @@ function RuleCard({ result, agentId, agentUrl, agentAccessMode, token, container
                             <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded border", meta.bg, meta.color, meta.border)}>
                                 {meta.num} {meta.label}
                             </span>
-                            <SeverityBadge severity={rule.severity} />
+                            <SeverityBadge severity={rule.severity} status={status} />
                             {affected.length > 0 && (
                                 <span className="inline-flex items-center gap-1 text-[10px] bg-orange-500/10 text-orange-500 border border-orange-500/30 px-1.5 py-0.5 rounded font-semibold">
                                     <AlertTriangle className="h-2.5 w-2.5" />
