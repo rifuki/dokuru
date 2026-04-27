@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { agentApi } from "@/lib/api/agent";
 import { agentDirectApi, type AuditResponse, type AuditResult, type FixOutcome } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
+import { dockerApi, dockerCredential, type Container as DockerContainer } from "@/services/docker-api";
 import { getAgentToken } from "@/stores/use-agent-store";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { AffectedItems } from "@/features/audit/components/AffectedItems";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/audit/")({
     component: AuditPage,
@@ -196,12 +198,13 @@ function FixProgress({ steps, currentStep }: { steps: string[]; currentStep: num
 
 // ── Rule Card ────────────────────────────────────────────────────────────────
 
-function RuleCard({ result, agentId, agentUrl, agentAccessMode, token }: {
+function RuleCard({ result, agentId, agentUrl, agentAccessMode, token, containers }: {
     result: AuditResult;
     agentId: string;
     agentUrl: string;
     agentAccessMode?: string;
     token?: string;
+    containers?: DockerContainer[];
 }) {
     const queryClient = useQueryClient();
     const navigate = useNavigate();
@@ -513,11 +516,12 @@ function RuleCard({ result, agentId, agentUrl, agentAccessMode, token }: {
                                 <AlertTriangle className="h-3.5 w-3.5" /> Affected ({affected.length})
                             </h5>
                             <div className="flex flex-wrap gap-1.5">
-                                {affected.map((item, i) => (
-                                    <code key={i} className="text-xs bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20 px-2 py-0.5 rounded">
-                                        {item}
-                                    </code>
-                                ))}
+                                <AffectedItems
+                                    items={affected}
+                                    containers={containers}
+                                    agentId={agentId}
+                                    chipClassName="py-0.5"
+                                />
                             </div>
                         </div>
                     )}
@@ -631,6 +635,7 @@ function AuditPage() {
     const isOnline = !!agentOnlineStatus[id];
     const [agent, setAgent] = useState<Agent | null>(null);
     const [token, setToken] = useState<string | undefined>();
+    const [containers, setContainers] = useState<DockerContainer[]>([]);
     const [auditData] = useState<AuditResponse | null>(null);
     const isRunning = runningAudits[id] ?? false;
     const auditHistory = auditHistories[id] ?? [];
@@ -642,6 +647,14 @@ function AuditPage() {
             setAgent(a);
             setToken(getAgentToken(a.id) ?? undefined);
             agentApi.listAudits(a.id).then(h => setAuditHistory(id, h)).catch(() => {});
+            const credential = dockerCredential(a);
+            if (!credential) {
+                setContainers([]);
+                return;
+            }
+            dockerApi.listContainers(a.url, credential, true)
+                .then(response => setContainers(response.data))
+                .catch(() => setContainers([]));
         }).catch(() => toast.error("Failed to load agent"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]);
@@ -901,6 +914,7 @@ function AuditPage() {
                                                         agentUrl={agent?.url ?? ""}
                                                         agentAccessMode={agent?.access_mode}
                                                         token={token}
+                                                        containers={containers}
                                                     />
                                                 ))
                                             }

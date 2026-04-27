@@ -10,7 +10,18 @@ import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
 import { ContainerTabPanel } from "@/components/containers/ContainerTabs";
 
+type ContainerDetailSearch = {
+  from?: "audit" | "containers";
+  auditId?: string;
+  ruleId?: string;
+};
+
 export const Route = createFileRoute("/_authenticated/agents/$id/containers/$containerId")({
+  validateSearch: (search: Record<string, unknown>): ContainerDetailSearch => ({
+    from: search.from === "audit" || search.from === "containers" ? search.from : undefined,
+    auditId: typeof search.auditId === "string" ? search.auditId : undefined,
+    ruleId: typeof search.ruleId === "string" ? search.ruleId : undefined,
+  }),
   component: ContainerDetailPage,
 });
 
@@ -26,8 +37,11 @@ function stateColor(state: string) {
 
 function ContainerDetailPage() {
   const { id, containerId } = Route.useParams();
+  const { from, auditId, ruleId } = Route.useSearch();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const hasAuditBack = from === "audit" && !!auditId;
+  const backLabel = hasAuditBack ? "Back to Audit Rule" : "Back to Containers";
 
   const { data: agent } = useQuery({
     queryKey: ["agent", id],
@@ -113,7 +127,13 @@ function ContainerDetailPage() {
           <h3 className="text-lg font-semibold">Container not found</h3>
           <p className="text-muted-foreground mt-2 text-sm">The container may have been removed.</p>
           <Button asChild className="mt-4" variant="outline">
-            <Link to="/agents/$id/containers" params={{ id }}>Back to Containers</Link>
+            {hasAuditBack ? (
+              <Link to="/agents/$id/audits/$auditId" params={{ id, auditId }} search={{ ruleId }}>
+                {backLabel}
+              </Link>
+            ) : (
+              <Link to="/agents/$id/containers" params={{ id }}>{backLabel}</Link>
+            )}
           </Button>
         </div>
       </div>
@@ -126,10 +146,17 @@ function ContainerDetailPage() {
       <div className="flex items-start justify-between gap-4 min-w-0">
         <div className="flex items-center gap-4 min-w-0">
           <Button asChild variant="ghost" size="sm" className="shrink-0">
-            <Link to="/agents/$id/containers" params={{ id }}>
-              <ArrowLeft className="h-4 w-4 mr-1" />
-              Back
-            </Link>
+            {hasAuditBack ? (
+              <Link to="/agents/$id/audits/$auditId" params={{ id, auditId }} search={{ ruleId }}>
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                {backLabel}
+              </Link>
+            ) : (
+              <Link to="/agents/$id/containers" params={{ id }}>
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                {backLabel}
+              </Link>
+            )}
           </Button>
           <div className="flex items-center gap-3 min-w-0">
             <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 text-primary shrink-0">
