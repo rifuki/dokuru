@@ -1136,9 +1136,9 @@ function FailingRules({
             }
         >
             <div className="mb-4 flex flex-wrap gap-2 text-sm">
-                <Badge variant="destructive" className="bg-rose-500/10 text-rose-500 border-none hover:bg-rose-500/20">{highCount} High Risks</Badge>
-                <Badge variant="secondary" className="bg-amber-500/10 text-amber-500 border-none hover:bg-amber-500/20">{mediumCount} Medium Risks</Badge>
-                <Badge variant="outline">{lowCount} Low Risks</Badge>
+                <Badge variant="outline" className="border-rose-500/30 bg-rose-500/10 text-rose-500">{highCount} High Risks</Badge>
+                <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-500">{mediumCount} Medium Risks</Badge>
+                <Badge variant="outline" className="text-muted-foreground border-border/50">{lowCount} Low Risks</Badge>
             </div>
 
             <div className="grid gap-2">
