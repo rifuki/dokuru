@@ -345,30 +345,49 @@ async fn write_audit_rule(
 }
 
 async fn reload_auditd(rule_id: &str, progress: Option<&ProgressSender>, target: &str) -> bool {
-    let reload_command = "service auditd reload";
     let mut start = audit_progress_event(rule_id, target, 3, "reload_auditd", "in_progress");
     start.detail = Some("Reloading auditd so the rule becomes active".to_string());
-    start.command = Some(reload_command.to_string());
+    start.command = Some("systemctl reload-or-restart auditd".to_string());
     send_progress(progress, start);
 
-    let result = capture_command("service", &["auditd", "reload"]).await;
+    // Install auditd if not present
+    let auditd_installed = capture_command("which", &["auditd"]).await.success
+        || capture_command("systemctl", &["cat", "auditd"]).await.success;
+    if !auditd_installed {
+        let install = capture_command("apt-get", &["install", "-y", "--no-install-recommends", "auditd"]).await;
+        if !install.success {
+            // Try yum/dnf as fallback
+            let _ = capture_command("yum", &["install", "-y", "audit"]).await;
+        }
+    }
+
+    // Enable and start auditd if not running
+    let _ = capture_command("systemctl", &["enable", "--now", "auditd"]).await;
+
+    // Try reload via systemctl first, then auditctl, then legacy service
+    let result = if capture_command("systemctl", &["reload-or-restart", "auditd"]).await.success {
+        true
+    } else if capture_command("auditctl", &["-R", AUDIT_RULES_PATH]).await.success {
+        true
+    } else {
+        capture_command("service", &["auditd", "reload"]).await.success
+    };
+
     let mut done = audit_progress_event(
         rule_id,
         target,
         3,
         "reload_auditd",
-        if result.success { "done" } else { "error" },
+        if result { "done" } else { "error" },
     );
-    done.detail = Some(if result.success {
+    done.detail = Some(if result {
         "auditd reload completed".to_string()
     } else {
         "auditd reload did not complete; manual reload may be required".to_string()
     });
-    done.command = Some(reload_command.to_string());
-    done.stdout = command_output(&result.stdout);
-    done.stderr = command_output(&result.stderr);
+    done.command = Some("systemctl reload-or-restart auditd".to_string());
     send_progress(progress, done);
-    result.success
+    result
 }
 
 async fn verify_audit_rule(rule_id: &str, progress: Option<&ProgressSender>, target: &str) -> bool {
@@ -441,9 +460,95 @@ pub async fn apply_audit_rule_fix_with_progress(
                 spec.target
             ),
             requires_restart: false,
-            restart_command: Some("sudo service auditd reload".to_string()),
+            restart_command: Some("sudo systemctl reload-or-restart auditd".to_string()),
             requires_elevation: true,
         })
+    }
+}
+
+pub fn supports_userns_remap_fix(rule_id: &str) -> bool {
+    rule_id == "2.10"
+}
+
+pub async fn apply_userns_remap_fix_with_progress(
+    progress: Option<&ProgressSender>,
+) -> eyre::Result<FixOutcome> {
+    const RULE_ID: &str = "2.10";
+    const TOTAL: u8 = 5;
+
+    let make_event = |step: u8, action: &str, status: &str, detail: Option<String>, command: Option<String>| FixProgress {
+        rule_id: RULE_ID.to_string(),
+        container_name: "Docker daemon".to_string(),
+        step,
+        total_steps: TOTAL,
+        action: action.to_string(),
+        status: status.to_string(),
+        detail,
+        command,
+        stdout: None,
+        stderr: None,
+    };
+
+    send_progress(progress, make_event(1, "create_dockremap_user", "in_progress",
+        Some("Creating dockremap system user".to_string()),
+        Some("useradd -r -s /bin/false dockremap".to_string())));
+    let _ = run_cmd("useradd", &["-r", "-s", "/bin/false", "dockremap"]).await;
+    send_progress(progress, make_event(1, "create_dockremap_user", "done",
+        Some("dockremap user ready".to_string()), None));
+
+    send_progress(progress, make_event(2, "create_subid_files", "in_progress",
+        Some("Ensuring /etc/subuid and /etc/subgid exist".to_string()),
+        Some("touch /etc/subuid /etc/subgid".to_string())));
+    let _ = run_cmd("touch", &["/etc/subuid", "/etc/subgid"]).await;
+    send_progress(progress, make_event(2, "create_subid_files", "done",
+        Some("/etc/subuid and /etc/subgid ready".to_string()), None));
+
+    send_progress(progress, make_event(3, "map_uid_gid_ranges", "in_progress",
+        Some("Mapping UID/GID ranges for dockremap".to_string()),
+        Some("usermod --add-subuids 100000-165535 --add-subgids 100000-165535 dockremap".to_string())));
+    let _ = run_cmd("usermod", &["--add-subuids", "100000-165535", "dockremap"]).await;
+    let _ = run_cmd("usermod", &["--add-subgids", "100000-165535", "dockremap"]).await;
+    send_progress(progress, make_event(3, "map_uid_gid_ranges", "done",
+        Some("UID/GID ranges mapped".to_string()), None));
+
+    send_progress(progress, make_event(4, "write_daemon_json", "in_progress",
+        Some("Writing userns-remap to /etc/docker/daemon.json".to_string()),
+        Some(r#"{"userns-remap":"default"} → /etc/docker/daemon.json"#.to_string())));
+    match merge_daemon_json("userns-remap", serde_json::Value::String("default".into())) {
+        Err(e) => {
+            send_progress(progress, make_event(4, "write_daemon_json", "error",
+                Some(e.to_string()), None));
+            return Ok(blocked(RULE_ID, &format!("Failed to update daemon.json: {e}")));
+        }
+        Ok(()) => {
+            send_progress(progress, make_event(4, "write_daemon_json", "done",
+                Some("userns-remap: default written to daemon.json".to_string()), None));
+        }
+    }
+
+    send_progress(progress, make_event(5, "restart_docker", "in_progress",
+        Some("Restarting Docker daemon — all running containers will stop".to_string()),
+        Some("systemctl restart docker".to_string())));
+    match run_cmd("systemctl", &["restart", "docker"]).await {
+        Ok((_, _, true)) => {
+            send_progress(progress, make_event(5, "restart_docker", "done",
+                Some("Docker daemon restarted with userns-remap enabled".to_string()), None));
+            Ok(applied(
+                RULE_ID,
+                "userns-remap enabled: dockremap user created, subuid/subgid mapped, Docker restarted",
+                false,
+            ))
+        }
+        Ok((_, stderr, _)) => {
+            send_progress(progress, make_event(5, "restart_docker", "error",
+                Some(stderr.clone()), None));
+            Ok(blocked(RULE_ID, &format!("daemon.json updated but Docker restart failed: {stderr}")))
+        }
+        Err(e) => {
+            send_progress(progress, make_event(5, "restart_docker", "error",
+                Some(e.to_string()), None));
+            Ok(blocked(RULE_ID, &format!("daemon.json updated but restart command failed: {e}")))
+        }
     }
 }
 
@@ -789,6 +894,9 @@ fn update_options(
             return Err(eyre::eyre!("memory must be greater than zero"));
         }
         options.memory = Some(memory);
+        // Must update memoryswap together with memory, otherwise Docker returns 409
+        // if the existing memoryswap < new memory value. -1 = unlimited swap.
+        options.memory_swap = Some(-1);
     }
 
     if matches!(rule_id, "5.12" | "cgroup_all") {
@@ -1956,6 +2064,7 @@ pub async fn rollback_fix(docker: &Docker, request: &RollbackRequest) -> eyre::R
     for target in &entry.rollback_targets {
         let options = UpdateContainerOptions::<String> {
             memory: target.memory,
+            memory_swap: target.memory.map(|_| -1i64),
             cpu_shares: target
                 .cpu_shares
                 .and_then(|shares| isize::try_from(shares).ok()),

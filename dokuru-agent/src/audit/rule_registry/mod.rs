@@ -302,6 +302,10 @@ impl RuleRegistry {
             .await;
         }
 
+        if super::fix_helpers::supports_userns_remap_fix(&request.rule_id) {
+            return super::fix_helpers::apply_userns_remap_fix_with_progress(progress).await;
+        }
+
         if !request.targets.is_empty() {
             return Ok(FixOutcome {
                 rule_id: request.rule_id.clone(),

@@ -105,6 +105,21 @@ function ConfirmStep({
 
     return (
         <div className="flex flex-col gap-5">
+            {/* Destructive warning for userns-remap (rule 2.10) */}
+            {rule.id === "2.10" && (
+                <div className="flex items-start gap-3 rounded-lg border border-red-500/40 bg-red-500/8 px-4 py-3">
+                    <AlertTriangle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                        <p className="text-xs font-semibold text-red-400">
+                            Destructive — Docker daemon will restart
+                        </p>
+                        <p className="text-xs text-red-400/70 leading-relaxed">
+                            All running containers will be stopped immediately. Containers created before userns-remap was enabled will become inaccessible and must be recreated manually. Volume data is preserved, but container configurations must be reapplied.
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {/* Restart warning */}
             {isRecreate && (
                 <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/8 px-4 py-3">
