@@ -5,6 +5,8 @@ use crate::audit::types::{
     CheckResult, CheckStatus, CisRule, RemediationKind, RuleCategory, Severity,
 };
 
+const HEALTHCHECK_AUDIT_COMMAND: &str = r#"docker ps --format "{{.ID}} {{.Names}}" | while read -r id name; do healthcheck=$(docker inspect --format "{{ if .Config.Healthcheck }}true{{ else }}false{{ end }}" "$id"); printf "%s: Healthcheck=%s\n" "$name" "$healthcheck"; done"#;
+
 pub struct Section4;
 
 impl Section4 {
@@ -156,7 +158,7 @@ Or use the --user flag at runtime:
             category: RuleCategory::Runtime,
             severity: Severity::Low,
             scored: true,
-            audit_command: Some("docker ps --quiet | xargs docker inspect --format '{{ .Id }}: Healthcheck={{ .Config.Healthcheck }}'".into()),
+            audit_command: Some(HEALTHCHECK_AUDIT_COMMAND.into()),
             check_fn: |docker, containers| {
                 let docker = docker.clone();
                 let containers = containers.to_vec();
@@ -207,7 +209,7 @@ Or use the --user flag at runtime:
                         },
                         affected: failing,
                         remediation_kind: RemediationKind::Manual,
-                        audit_command: Some("docker inspect --format '{{ .Config.Healthcheck }}' <container>".into()),
+                        audit_command: Some(HEALTHCHECK_AUDIT_COMMAND.into()),
                         raw_output: Some(raw_lines.join("\n")),
                         references: None,
                         rationale: None,

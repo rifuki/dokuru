@@ -98,6 +98,7 @@ function AgentVerificationPanel({
 }) {
   const [result, setResult] = useState<AuditResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [verifiedAt, setVerifiedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const canRun = agentAccessMode === "relay" || !!agentUrl;
@@ -111,11 +112,22 @@ function AgentVerificationPanel({
         ? await agentApi.verifyFix(agentId, ruleId)
         : await agentDirectApi.verifyFix(agentUrl, ruleId, token);
       setResult(nextResult);
+      setVerifiedAt(new Date().toLocaleTimeString());
     } catch (verifyError) {
       setResult(null);
+      setVerifiedAt(null);
       setError(verifyError instanceof Error ? verifyError.message : "Failed to run verification on agent");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const copyCommand = async (command: string) => {
+    try {
+      await navigator.clipboard.writeText(command);
+      toast.success("Command copied");
+    } catch {
+      toast.error("Failed to copy command");
     }
   };
 
@@ -126,7 +138,7 @@ function AgentVerificationPanel({
           <Terminal className="h-3.5 w-3.5 text-[#2496ED] shrink-0" />
           <div className="min-w-0">
             <p className="text-[10px] font-bold uppercase tracking-widest text-[#2496ED]">Agent Verify</p>
-            <p className="text-[11px] text-muted-foreground truncate">Run this rule check on the remote agent now.</p>
+            <p className="text-[11px] text-muted-foreground truncate">Run this rule check through dokuru-agent now.</p>
           </div>
         </div>
         <Button size="sm" variant="outline" disabled={!canRun || loading} onClick={() => void runVerification()} className="h-8 shrink-0">
@@ -161,11 +173,21 @@ function AgentVerificationPanel({
                 {result.status}
               </span>
               <span className="text-xs text-muted-foreground">{result.message}</span>
+              {verifiedAt && <span className="text-[11px] text-muted-foreground/60">Verified at {verifiedAt}</span>}
+            </div>
+
+            <div className="rounded border border-border/50 bg-background/40 px-3 py-2 text-[11px] text-muted-foreground">
+              Dokuru verified this with the agent's Docker API. The command below is an equivalent manual check for cross-checking, not captured shell stdout.
             </div>
 
             {result.audit_command && (
               <div>
-                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">Command</p>
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">Equivalent Manual Command</p>
+                  <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => void copyCommand(result.audit_command!)}>
+                    Copy
+                  </Button>
+                </div>
                 <code className="block rounded border border-border/50 bg-zinc-950 p-3 font-mono text-xs text-emerald-400 overflow-x-auto">
                   $ {result.audit_command}
                 </code>
