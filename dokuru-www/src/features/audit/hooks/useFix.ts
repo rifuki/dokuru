@@ -79,8 +79,10 @@ export function getFixSteps(ruleId: string): string[] {
         "Restarting Docker daemon…",
     ];
     if (ruleId.startsWith("1.1")) return [
+        "Preflighting audit target…",
         "Writing audit rule to /etc/audit/rules.d/docker.rules…",
         "Reloading auditd service…",
+        "Verifying persisted audit rule…",
     ];
     if (["3.1", "3.3", "3.5", "3.17"].includes(ruleId)) return [
         "Running chown root:root on target path…",
@@ -144,6 +146,11 @@ type FixStreamMessage =
     | { type: "progress"; data: FixProgress }
     | { type: "outcome"; data: FixOutcome }
     | { type: "error"; message: string };
+
+type FixStreamResult = {
+    outcome: FixOutcome;
+    events: FixProgress[];
+};
 
 export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs) {
     const [open, setOpen] = useState(false);
@@ -227,26 +234,33 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
         });
     }, [preview, targetConfig]);
 
-    const applyFixViaStream = useCallback((ruleId: string, targets: FixTarget[]) => new Promise<FixOutcome>((resolve, reject) => {
+    const applyFixViaStream = useCallback((ruleId: string, targets: FixTarget[]) => new Promise<FixStreamResult>((resolve, reject) => {
         const request = { rule_id: ruleId, targets };
         const url = agentAccessMode === "relay"
             ? agentApi.fixStreamUrl(agentId, request)
             : agentDirectApi.fixStreamUrl(agentUrl, request, token);
         const socket = new WebSocket(url);
         let settled = false;
+        const streamEvents: FixProgress[] = [];
         socketRef.current = socket;
 
         socket.onmessage = (event) => {
             try {
                 const message = JSON.parse(String(event.data)) as FixStreamMessage;
                 if (message.type === "progress") {
+                    streamEvents.push(message.data);
                     setProgressEvents((events) => [...events, message.data]);
                     setStepIndex(Math.max(0, message.data.step - 1));
                     return;
                 }
                 if (message.type === "outcome") {
                     settled = true;
-                    resolve(message.data);
+                    if (message.data.status === "Applied" && streamEvents.length === 0) {
+                        reject(new Error("Agent returned success without live command/evidence output"));
+                        socket.close();
+                        return;
+                    }
+                    resolve({ outcome: message.data, events: streamEvents });
                     socket.close();
                     return;
                 }
@@ -272,7 +286,12 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
             if (socketRef.current === socket) socketRef.current = null;
             if (!settled) {
                 settled = true;
-                reject(new Error("Fix progress stream closed before completion"));
+                const lastEvent = streamEvents.at(-1);
+                reject(new Error(
+                    lastEvent
+                        ? `Fix progress stream closed before final outcome. Last event: ${lastEvent.action} (${lastEvent.status})`
+                        : "Fix progress stream closed before completion",
+                ));
             }
         };
     }), [agentAccessMode, agentId, agentUrl, token]);
@@ -290,7 +309,7 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
         setFixOutcome(agentId, rule.id, null);
 
         try {
-            const fixOutcome = await applyFixViaStream(rule.id, targets);
+            const { outcome: fixOutcome } = await applyFixViaStream(rule.id, targets);
             setStepIndex(steps.length);
             setOutcome(fixOutcome);
             setFixOutcome(agentId, rule.id, fixOutcome);

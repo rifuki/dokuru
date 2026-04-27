@@ -243,6 +243,14 @@ impl RuleRegistry {
             .await;
         }
 
+        if super::fix_helpers::supports_audit_rule_fix(&request.rule_id) {
+            return super::fix_helpers::apply_audit_rule_fix_with_progress(
+                &request.rule_id,
+                progress,
+            )
+            .await;
+        }
+
         if !request.targets.is_empty() {
             return Ok(FixOutcome {
                 rule_id: request.rule_id.clone(),

@@ -1,8 +1,8 @@
-import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { WebSocketProvider } from "@/providers/WebSocketProvider";
 import { useWebSocketContext } from "@/providers/WebSocketProvider";
-import { useIsAuthenticated, useAuthLoading } from "@/stores/use-auth-store";
+import { useIsAuthenticated, useAuthLoading, useAuthUser } from "@/stores/use-auth-store";
 import { useEffect, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
@@ -56,16 +56,24 @@ function AppLayout() {
 function RequireAuth({ children }: { children: React.ReactNode }) {
     const isAuth = useIsAuthenticated();
     const isLoading = useAuthLoading();
+    const user = useAuthUser();
+    const location = useLocation();
     const navigate = useNavigate();
+    const isAdmin = user?.role === "admin";
+    const isAdminRoute = location.pathname === "/admin" || location.pathname.startsWith("/admin/");
 
     useEffect(() => {
         if (isLoading) return;
         if (!isAuth) {
             navigate({ to: "/login", replace: true });
+            return;
         }
-    }, [isAuth, isLoading, navigate]);
+        if (isAdmin && !isAdminRoute) {
+            navigate({ to: "/admin", replace: true });
+        }
+    }, [isAdmin, isAdminRoute, isAuth, isLoading, navigate]);
 
-    if (isLoading || !isAuth) return null;
+    if (isLoading || !isAuth || (isAdmin && !isAdminRoute)) return null;
 
     return <>{children}</>;
 }

@@ -28,6 +28,8 @@ static FIX_HISTORY: LazyLock<RwLock<Vec<FixHistoryEntry>>> =
 const DEFAULT_MEMORY_BYTES: i64 = 256 * 1024 * 1024;
 const DEFAULT_CPU_SHARES: i64 = 512;
 const DEFAULT_PIDS_LIMIT: i64 = 100;
+const AUDIT_RULES_PATH: &str = "/etc/audit/rules.d/docker.rules";
+const AUDIT_FIX_STEPS: u8 = 4;
 const COMPOSE_FILENAMES: &[&str] = &[
     "compose.yaml",
     "docker-compose.yaml",
@@ -126,7 +128,323 @@ pub fn fix_steps(rule_id: &str) -> Vec<String> {
             "Verify isolation".to_string(),
         ];
     }
+    if supports_audit_rule_fix(rule_id) {
+        return vec![
+            "Preflight audit target".to_string(),
+            "Write audit rule".to_string(),
+            "Reload auditd".to_string(),
+            "Verify persisted audit rule".to_string(),
+        ];
+    }
     vec!["Apply fix".to_string(), "Verify result".to_string()]
+}
+
+struct AuditRuleFixSpec {
+    target: String,
+    rule_line: String,
+    required_path: Option<String>,
+}
+
+fn audit_rule_fix_spec(rule_id: &str) -> Option<AuditRuleFixSpec> {
+    if rule_id == "1.1.7" {
+        let target = docker_service_unit_path();
+        return Some(AuditRuleFixSpec {
+            rule_line: format!("-w {target} -p rwxa -k docker"),
+            target,
+            required_path: None,
+        });
+    }
+
+    let (target, required_path) = match rule_id {
+        "1.1.3" => ("/usr/bin/dockerd", None),
+        "1.1.4" => ("/run/containerd", None),
+        "1.1.5" => ("/var/lib/docker", None),
+        "1.1.6" => ("/etc/docker", None),
+        "1.1.8" => ("/run/containerd/containerd.sock", None),
+        "1.1.9" => ("/var/run/docker.sock", None),
+        "1.1.10" => ("/etc/default/docker", Some("/etc/default/docker")),
+        "1.1.11" => ("/etc/docker/daemon.json", Some("/etc/docker/daemon.json")),
+        "1.1.12" => (
+            "/etc/containerd/config.toml",
+            Some("/etc/containerd/config.toml"),
+        ),
+        "1.1.14" => ("/usr/bin/containerd", None),
+        "1.1.18" => ("/usr/bin/runc", None),
+        _ => return None,
+    };
+
+    Some(AuditRuleFixSpec {
+        target: target.to_string(),
+        rule_line: format!("-w {target} -p rwxa -k docker"),
+        required_path: required_path.map(str::to_string),
+    })
+}
+
+pub fn supports_audit_rule_fix(rule_id: &str) -> bool {
+    audit_rule_fix_spec(rule_id).is_some()
+}
+
+fn docker_service_unit_path() -> String {
+    [
+        "/lib/systemd/system/docker.service",
+        "/usr/lib/systemd/system/docker.service",
+        "/etc/systemd/system/docker.service",
+    ]
+    .into_iter()
+    .find(|path| Path::new(path).exists())
+    .unwrap_or("/lib/systemd/system/docker.service")
+    .to_string()
+}
+
+fn command_output(output: &str) -> Option<String> {
+    let trimmed = output.trim();
+    (!trimmed.is_empty()).then(|| trimmed.to_string())
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\"'\"'"))
+}
+
+fn audit_write_command(rule_line: &str) -> String {
+    let rules_dir = shell_quote("/etc/audit/rules.d");
+    let rules_path = shell_quote(AUDIT_RULES_PATH);
+    let rule_line = shell_quote(rule_line);
+    format!(
+        "mkdir -p {rules_dir} && touch {rules_path} && (grep -qxF -- {rule_line} {rules_path} || printf '%s\\n' {rule_line} >> {rules_path})"
+    )
+}
+
+struct FixCommandResult {
+    stdout: String,
+    stderr: String,
+    success: bool,
+}
+
+async fn capture_command(cmd: &str, args: &[&str]) -> FixCommandResult {
+    match run_cmd(cmd, args).await {
+        Ok((stdout, stderr, success)) => FixCommandResult {
+            stdout,
+            stderr,
+            success,
+        },
+        Err(error) => FixCommandResult {
+            stdout: String::new(),
+            stderr: error.to_string(),
+            success: false,
+        },
+    }
+}
+
+fn audit_progress_event(
+    rule_id: &str,
+    target: &str,
+    step: u8,
+    action: &str,
+    status: &str,
+) -> FixProgress {
+    FixProgress {
+        rule_id: rule_id.to_string(),
+        container_name: target.to_string(),
+        step,
+        total_steps: AUDIT_FIX_STEPS,
+        action: action.to_string(),
+        status: status.to_string(),
+        detail: None,
+        command: None,
+        stdout: None,
+        stderr: None,
+    }
+}
+
+fn send_progress(progress: Option<&ProgressSender>, event: FixProgress) {
+    if let Some(progress) = progress {
+        let _ = progress.send(event);
+    }
+}
+
+fn preflight_audit_target(
+    rule_id: &str,
+    progress: Option<&ProgressSender>,
+    spec: &AuditRuleFixSpec,
+) -> Option<FixOutcome> {
+    let mut event = audit_progress_event(rule_id, &spec.target, 1, "preflight_target", "done");
+
+    if let Some(required_path) = &spec.required_path {
+        let exists = Path::new(required_path).exists();
+        event.status = if exists { "done" } else { "error" }.to_string();
+        event.detail = Some(if exists {
+            format!("{required_path} exists")
+        } else {
+            format!("{required_path} does not exist on this host")
+        });
+        event.command = Some(format!("test -e {}", shell_quote(required_path)));
+        send_progress(progress, event);
+
+        if !exists {
+            return Some(blocked(
+                rule_id,
+                &format!("{required_path} does not exist on this system"),
+            ));
+        }
+
+        return None;
+    }
+
+    event.detail = Some(format!("Selected audit target {}", spec.target));
+    send_progress(progress, event);
+    None
+}
+
+async fn write_audit_rule(
+    rule_id: &str,
+    progress: Option<&ProgressSender>,
+    spec: &AuditRuleFixSpec,
+) -> Result<(), FixOutcome> {
+    let write_command = audit_write_command(&spec.rule_line);
+    let rule_already_present = std::fs::read_to_string(AUDIT_RULES_PATH)
+        .unwrap_or_default()
+        .lines()
+        .any(|line| line.trim() == spec.rule_line);
+
+    let mut start =
+        audit_progress_event(rule_id, &spec.target, 2, "write_audit_rule", "in_progress");
+    start.detail = Some(format!("Writing to {AUDIT_RULES_PATH}"));
+    start.command = Some(write_command.clone());
+    send_progress(progress, start);
+
+    let result = capture_command("sh", &["-c", &write_command]).await;
+    let mut done = audit_progress_event(
+        rule_id,
+        &spec.target,
+        2,
+        "write_audit_rule",
+        if result.success { "done" } else { "error" },
+    );
+    done.detail = Some(if result.success {
+        if rule_already_present {
+            format!("Rule already existed: {}", spec.rule_line)
+        } else {
+            format!("Appended: {}", spec.rule_line)
+        }
+    } else {
+        "Failed to write audit rule".to_string()
+    });
+    done.command = Some(write_command);
+    done.stdout = command_output(&result.stdout);
+    done.stderr = command_output(&result.stderr);
+    send_progress(progress, done);
+
+    if result.success {
+        Ok(())
+    } else {
+        Err(blocked(
+            rule_id,
+            &format!("Failed to write audit rule: {}", result.stderr),
+        ))
+    }
+}
+
+async fn reload_auditd(rule_id: &str, progress: Option<&ProgressSender>, target: &str) -> bool {
+    let reload_command = "service auditd reload";
+    let mut start = audit_progress_event(rule_id, target, 3, "reload_auditd", "in_progress");
+    start.detail = Some("Reloading auditd so the rule becomes active".to_string());
+    start.command = Some(reload_command.to_string());
+    send_progress(progress, start);
+
+    let result = capture_command("service", &["auditd", "reload"]).await;
+    let mut done = audit_progress_event(
+        rule_id,
+        target,
+        3,
+        "reload_auditd",
+        if result.success { "done" } else { "error" },
+    );
+    done.detail = Some(if result.success {
+        "auditd reload completed".to_string()
+    } else {
+        "auditd reload did not complete; manual reload may be required".to_string()
+    });
+    done.command = Some(reload_command.to_string());
+    done.stdout = command_output(&result.stdout);
+    done.stderr = command_output(&result.stderr);
+    send_progress(progress, done);
+    result.success
+}
+
+async fn verify_audit_rule(rule_id: &str, progress: Option<&ProgressSender>, target: &str) -> bool {
+    let verify_command = format!(
+        "grep -F -- {} {}",
+        shell_quote(target),
+        shell_quote(AUDIT_RULES_PATH)
+    );
+    let result = capture_command("grep", &["-F", "--", target, AUDIT_RULES_PATH]).await;
+    let mut event = audit_progress_event(
+        rule_id,
+        target,
+        4,
+        "verify_audit_rule",
+        if result.success { "done" } else { "error" },
+    );
+    event.detail = Some(if result.success {
+        "Persisted audit rule found".to_string()
+    } else {
+        "Persisted audit rule was not found after write".to_string()
+    });
+    event.command = Some(verify_command);
+    event.stdout = command_output(&result.stdout);
+    event.stderr = command_output(&result.stderr);
+    send_progress(progress, event);
+    result.success
+}
+
+pub async fn apply_audit_rule_fix_with_progress(
+    rule_id: &str,
+    progress: Option<&ProgressSender>,
+) -> eyre::Result<FixOutcome> {
+    let Some(spec) = audit_rule_fix_spec(rule_id) else {
+        return Ok(blocked(
+            rule_id,
+            "No audit rule fix is registered for this rule",
+        ));
+    };
+
+    if let Some(outcome) = preflight_audit_target(rule_id, progress, &spec) {
+        return Ok(outcome);
+    }
+
+    if let Err(outcome) = write_audit_rule(rule_id, progress, &spec).await {
+        return Ok(outcome);
+    }
+
+    let reload_success = reload_auditd(rule_id, progress, &spec.target).await;
+    let verify_success = verify_audit_rule(rule_id, progress, &spec.target).await;
+
+    if !verify_success {
+        return Ok(blocked(
+            rule_id,
+            &format!("Audit rule was not found in {AUDIT_RULES_PATH} after write"),
+        ));
+    }
+
+    if reload_success {
+        Ok(applied(
+            rule_id,
+            &format!("Audit rule added for {}", spec.target),
+            false,
+        ))
+    } else {
+        Ok(FixOutcome {
+            rule_id: rule_id.to_string(),
+            status: FixStatus::Guided,
+            message: format!(
+                "Audit rule saved for {}, but auditd reload did not complete. Run the reload command manually.",
+                spec.target
+            ),
+            requires_restart: false,
+            restart_command: Some("sudo service auditd reload".to_string()),
+            requires_elevation: true,
+        })
+    }
 }
 
 pub async fn preview_fix(docker: &Docker, rule_id: &str) -> eyre::Result<FixPreview> {
@@ -156,7 +474,7 @@ pub async fn preview_fix(docker: &Docker, rule_id: &str) -> eyre::Result<FixPrev
         rule_id: rule_id.to_string(),
         targets,
         requires_restart: supports_namespace_fix(rule_id) || supports_privileged_fix(rule_id),
-        requires_elevation: false,
+        requires_elevation: supports_audit_rule_fix(rule_id),
         steps: fix_steps(rule_id),
     })
 }
@@ -208,8 +526,9 @@ fn emit_progress(
     status: &str,
     detail: Option<String>,
 ) {
-    if let Some(progress) = progress {
-        let _ = progress.send(FixProgress {
+    send_progress(
+        progress,
+        FixProgress {
             rule_id: rule_id.to_string(),
             container_name: container_name.to_string(),
             step,
@@ -217,8 +536,11 @@ fn emit_progress(
             action: action.to_string(),
             status: status.to_string(),
             detail,
-        });
-    }
+            command: None,
+            stdout: None,
+            stderr: None,
+        },
+    );
 }
 
 pub async fn apply_default_cgroup_resource_fix(
@@ -1694,7 +2016,7 @@ pub fn merge_daemon_json(key: &str, value: serde_json::Value) -> eyre::Result<()
 
 /// Append an audit rule line to /etc/audit/rules.d/docker.rules if not already present.
 pub fn ensure_audit_rule(rule_line: &str) -> eyre::Result<bool> {
-    let path = "/etc/audit/rules.d/docker.rules";
+    let path = AUDIT_RULES_PATH;
     std::fs::create_dir_all("/etc/audit/rules.d")?;
 
     let existing = std::fs::read_to_string(path).unwrap_or_default();

@@ -4,9 +4,9 @@ import { useAuthStore } from "@/stores/use-auth-store";
 
 export const Route = createFileRoute("/register")({
   beforeLoad: () => {
-    const { isAuthenticated } = useAuthStore.getState();
+    const { isAuthenticated, user } = useAuthStore.getState();
     if (isAuthenticated) {
-      throw redirect({ to: "/" });
+      throw redirect({ to: user?.role === "admin" ? "/admin" : "/" });
     }
   },
   component: RegisterPage,

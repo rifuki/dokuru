@@ -103,6 +103,9 @@ export interface FixProgress {
   action: string;
   status: "in_progress" | "done" | "error" | string;
   detail?: string;
+  command?: string;
+  stdout?: string;
+  stderr?: string;
 }
 
 export interface FixHistoryEntry {

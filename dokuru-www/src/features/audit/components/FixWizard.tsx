@@ -259,6 +259,61 @@ function ConfirmStep({
 
 // ── Step 2: Applying ──────────────────────────────────────────────────────────
 
+function ProgressEventsPanel({
+    progressEvents,
+    title = "real-time command evidence",
+}: {
+    progressEvents: FixProgress[];
+    title?: string;
+}) {
+    if (progressEvents.length === 0) return null;
+
+    return (
+        <div className="rounded-lg border border-white/8 bg-white/[0.02] overflow-hidden">
+            <div className="px-3 py-2 border-b border-white/5 text-[10px] font-mono uppercase tracking-[0.15em] text-white/30">
+                {title}
+            </div>
+            <div className="max-h-64 overflow-y-auto p-3 space-y-3">
+                {progressEvents.slice(-16).map((event, i) => (
+                    <div key={`${event.container_name}-${event.action}-${event.step}-${i}`} className="space-y-1.5 text-[11px] font-mono">
+                        <div className="text-white/50">
+                            <span className={cn(
+                                "mr-2 uppercase",
+                                event.status === "done" ? "text-emerald-400" : event.status === "error" ? "text-rose-400" : "text-[#2496ED]"
+                            )}>{event.status}</span>
+                            <span className="text-white/70">{event.container_name}</span>
+                            <span className="text-white/25"> · {event.action}</span>
+                            {event.detail && <span className="text-white/35"> · {event.detail}</span>}
+                        </div>
+                        {event.command && (
+                            <pre className="rounded border border-white/8 bg-black/40 px-3 py-2 text-[10px] text-[#2496ED] whitespace-pre-wrap break-words">
+                                <span className="text-white/30 select-none">$ </span>
+                                {event.command}
+                            </pre>
+                        )}
+                        {(event.stdout || event.stderr) && (
+                            <div className="rounded border border-white/8 bg-[#050507] overflow-hidden">
+                                {event.stdout && (
+                                    <pre className="px-3 py-2 text-[10px] text-emerald-300/80 whitespace-pre-wrap break-words">
+                                        <span className="text-white/30 select-none">stdout\n</span>
+                                        {event.stdout}
+                                    </pre>
+                                )}
+                                {event.stderr && (
+                                    <pre className="px-3 py-2 text-[10px] text-rose-300/80 whitespace-pre-wrap break-words border-t border-white/5">
+                                        <span className="text-white/30 select-none">stderr\n</span>
+                                        {event.stderr}
+                                    </pre>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 function ApplyingStep({ ruleId, stepIndex, progressEvents }: { ruleId: string; stepIndex: number; progressEvents: FixProgress[] }) {
     const steps = getFixSteps(ruleId);
 
@@ -316,26 +371,7 @@ function ApplyingStep({ ruleId, stepIndex, progressEvents }: { ruleId: string; s
                 Live progress is streamed from dokuru-agent. Do not close this panel while fix is in progress.
             </p>
 
-            {progressEvents.length > 0 && (
-                <div className="rounded-lg border border-white/8 bg-white/[0.02] overflow-hidden">
-                    <div className="px-3 py-2 border-b border-white/5 text-[10px] font-mono uppercase tracking-[0.15em] text-white/30">
-                        real-time agent events
-                    </div>
-                    <div className="max-h-48 overflow-y-auto p-3 space-y-2">
-                        {progressEvents.slice(-12).map((event, i) => (
-                            <div key={`${event.container_name}-${event.action}-${i}`} className="text-[11px] font-mono text-white/50">
-                                <span className={cn(
-                                    "mr-2 uppercase",
-                                    event.status === "done" ? "text-emerald-400" : event.status === "error" ? "text-rose-400" : "text-[#2496ED]"
-                                )}>{event.status}</span>
-                                <span className="text-white/70">{event.container_name}</span>
-                                <span className="text-white/25"> · {event.action}</span>
-                                {event.detail && <span className="text-white/35"> · {event.detail}</span>}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
+            <ProgressEventsPanel progressEvents={progressEvents} />
         </div>
     );
 }
@@ -344,10 +380,12 @@ function ApplyingStep({ ruleId, stepIndex, progressEvents }: { ruleId: string; s
 
 function ResultStep({
     outcome,
+    progressEvents,
     onRerunAudit,
     onClose,
 }: {
     outcome: FixOutcome;
+    progressEvents: FixProgress[];
     onRerunAudit: () => void;
     onClose: () => void;
 }) {
@@ -408,6 +446,8 @@ function ResultStep({
                     )}
                 </div>
             )}
+
+            <ProgressEventsPanel progressEvents={progressEvents} title="executed command evidence" />
 
             {/* Restart command */}
             {outcome.restart_command && (
@@ -522,6 +562,7 @@ export function FixWizard({
                     {step === "result" && outcome && (
                         <ResultStep
                             outcome={outcome}
+                            progressEvents={progressEvents}
                             onRerunAudit={onRerunAudit}
                             onClose={onClose}
                         />
