@@ -67,6 +67,7 @@ import {
     Cpu,
     Box,
     Folder,
+    Terminal,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -1055,6 +1056,33 @@ function ActionPanel({ id, agent, latestAudit }: { id: string; agent: Agent; lat
                         <Link to="/agents/$id/audits" params={{ id }}>
                             <span className="inline-flex items-center gap-2"><Activity className="h-4 w-4 text-muted-foreground" />Audit Reports</span>
                             <Badge variant="outline" className="font-mono text-[10px] bg-muted/10">{latestAudit ? latestAudit.summary.score : "-"}</Badge>
+                        </Link>
+                    </Button>
+                </div>
+
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4 2xl:grid-cols-2">
+                    <Button variant="outline" className="flex h-auto w-full flex-col items-center gap-2 py-3 hover:bg-muted/50 group" asChild>
+                        <Link to="/agents/$id/images" params={{ id }}>
+                            <Layers className="h-5 w-5 text-muted-foreground transition-transform group-hover:scale-110" />
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Images</span>
+                        </Link>
+                    </Button>
+                    <Button variant="outline" className="flex h-auto w-full flex-col items-center gap-2 py-3 hover:bg-muted/50 group" asChild>
+                        <Link to="/agents/$id/volumes" params={{ id }}>
+                            <HardDrive className="h-5 w-5 text-muted-foreground transition-transform group-hover:scale-110" />
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Volumes</span>
+                        </Link>
+                    </Button>
+                    <Button variant="outline" className="flex h-auto w-full flex-col items-center gap-2 py-3 hover:bg-muted/50 group" asChild>
+                        <Link to="/agents/$id/networks" params={{ id }}>
+                            <Network className="h-5 w-5 text-muted-foreground transition-transform group-hover:scale-110" />
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Networks</span>
+                        </Link>
+                    </Button>
+                    <Button variant="outline" className="flex h-auto w-full flex-col items-center gap-2 py-3 hover:bg-muted/50 group" asChild>
+                        <Link to="/agents/$id/shell" params={{ id }}>
+                            <Terminal className="h-5 w-5 text-emerald-500 transition-transform group-hover:scale-110" />
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-500">VPS Shell</span>
                         </Link>
                     </Button>
                 </div>
