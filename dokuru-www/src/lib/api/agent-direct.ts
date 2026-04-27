@@ -120,6 +120,10 @@ export interface FixHistoryEntry {
   rollback_note?: string;
 }
 
+export interface HostShellInfo {
+  shell: string;
+}
+
 export interface AuditSummary {
   total: number;
   passed: number;
@@ -250,6 +254,12 @@ export const agentDirectApi = {
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
     const response = await axios.post(`${agentUrl}/fix/verify`, { rule_id: ruleId }, { headers });
     return response.data.data;
+  },
+
+  detectHostShell: async (agentUrl: string, token?: string): Promise<HostShellInfo> => {
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const response = await axios.get(`${agentUrl}/host/shell`, { headers });
+    return response.data.data ?? response.data;
   },
 
   listFixHistory: async (agentUrl: string, token?: string): Promise<FixHistoryEntry[]> => {

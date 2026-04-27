@@ -322,6 +322,54 @@ pub struct RelayExecQuery {
     shell: Option<String>,
 }
 
+pub async fn relay_host_shell_info(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path(agent_id): Path<Uuid>,
+) -> ApiResult<serde_json::Value> {
+    let agent = require_relay_agent(&state, auth_user.user_id, agent_id).await?;
+    relay::send_command(
+        &state.agent_registry,
+        agent.id,
+        "host_shell_info",
+        serde_json::json!({}),
+    )
+    .await
+    .map(|data| ApiSuccess::default().with_data(data))
+    .map_err(|error| relay_error_to_api_error(&error))
+}
+
+pub async fn relay_host_shell_ws(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path(agent_id): Path<Uuid>,
+    Query(query): Query<RelayExecQuery>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    let agent = match require_relay_agent(&state, auth_user.user_id, agent_id).await {
+        Ok(agent) => agent,
+        Err(error) => return error.into_response(),
+    };
+
+    let payload = serde_json::json!({
+        "rows": query.rows.unwrap_or(24),
+        "cols": query.cols.unwrap_or(80),
+        "shell": query.shell,
+    });
+    let registry = state.agent_registry.clone();
+
+    ws.on_upgrade(move |socket| {
+        relay::proxy_stream_to_websocket(
+            socket,
+            registry,
+            agent.id,
+            "host_shell",
+            payload,
+            relay::RelayStreamMode::Binary,
+        )
+    })
+}
+
 pub async fn relay_docker_exec_ws(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,

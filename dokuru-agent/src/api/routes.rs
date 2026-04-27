@@ -1,4 +1,6 @@
-use super::feature::{audit, containers, environments, fix, health, info, proxy, rules, trivy, ws};
+use super::feature::{
+    audit, containers, environments, fix, health, host_shell, info, proxy, rules, trivy, ws,
+};
 use super::infrastructure::web::middleware::agent_auth_middleware;
 use super::state::AppState;
 use crate::docker;
@@ -14,6 +16,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(audit::routes())
         .merge(fix::routes())
         .merge(rules::routes())
+        .merge(host_shell::routes::routes())
         .merge(containers::routes())
         .merge(trivy::routes())
         .merge(environments::routes())

@@ -3,6 +3,7 @@ import { wsApiUrl } from "@/lib/api/api-config";
 import { useAuthStore } from "@/stores/use-auth-store";
 import type { Agent, CreateAgentDto, UpdateAgentDto } from "@/types/agent";
 import type { AuditReportResponse, AuditResponse, AuditResult, FixHistoryEntry, FixOutcome, FixPreview, FixTarget } from "./agent-direct";
+import type { HostShellInfo } from "./agent-direct";
 
 export interface RelayFixResponse {
   outcome: FixOutcome;
@@ -57,6 +58,11 @@ export const agentApi = {
 
   verifyFix: async (id: string, ruleId: string): Promise<AuditResult> => {
     const response = await apiClient.post(`/agents/${id}/fix/verify`, { rule_id: ruleId });
+    return response.data.data;
+  },
+
+  detectHostShell: async (id: string): Promise<HostShellInfo> => {
+    const response = await apiClient.get(`/agents/${id}/host/shell`);
     return response.data.data;
   },
 

@@ -4,6 +4,7 @@ mod api;
 mod audit;
 mod cli;
 mod docker;
+mod host_shell;
 
 const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", env!("GIT_HASH"), ")");
 

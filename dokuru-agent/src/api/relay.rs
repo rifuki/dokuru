@@ -26,6 +26,7 @@ use crate::{
     api::Config,
     api::relay_docker,
     audit::{FixOutcome, FixProgress, FixRequest, RollbackRequest, RuleRegistry, fix_helpers},
+    host_shell,
 };
 
 const RELAY_SERVER: &str = "wss://api.dokuru.rifuki.dev/ws/agent";
@@ -89,6 +90,13 @@ enum WsMessage {
 #[derive(Debug, Deserialize)]
 struct ExecStreamPayload {
     container_id: String,
+    rows: Option<u16>,
+    cols: Option<u16>,
+    shell: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct HostShellStreamPayload {
     rows: Option<u16>,
     cols: Option<u16>,
     shell: Option<String>,
@@ -340,6 +348,7 @@ async fn execute_stream(
 ) -> Result<()> {
     match stream {
         "docker_exec" => docker_exec_stream(payload, input_rx, tx, id).await,
+        "host_shell" => host_shell_stream(payload, input_rx, tx, id).await,
         "docker_events" => docker_events_stream(input_rx, tx, id).await,
         "fix_progress" => fix_progress_stream(payload, input_rx, tx, id).await,
         _ => Err(eyre::eyre!("Unknown stream: {stream}")),
@@ -524,6 +533,45 @@ async fn docker_exec_stream(
     Ok(())
 }
 
+async fn host_shell_stream(
+    payload: serde_json::Value,
+    mut input_rx: mpsc::UnboundedReceiver<StreamInput>,
+    tx: &mpsc::UnboundedSender<Message>,
+    id: &str,
+) -> Result<()> {
+    let payload = serde_json::from_value::<HostShellStreamPayload>(payload)
+        .wrap_err("Invalid host shell stream payload")?;
+    let (shell, mut session) = host_shell::start(
+        payload.rows.unwrap_or(24),
+        payload.cols.unwrap_or(80),
+        payload.shell.as_deref(),
+    )?;
+
+    send_stream_data(
+        tx,
+        id,
+        format!("\r\n\x1b[90mDokuru host shell: {shell}\x1b[0m\r\n").into_bytes(),
+    )?;
+
+    loop {
+        tokio::select! {
+            output = session.recv_output() => {
+                let Some(output) = output else { break };
+                send_stream_data(tx, id, output)?;
+            }
+            input = input_rx.recv() => {
+                match input {
+                    Some(StreamInput::Data(data)) => handle_host_shell_input(data, &session)?,
+                    Some(StreamInput::Close) | None => break,
+                }
+            }
+        }
+    }
+
+    session.shutdown();
+    Ok(())
+}
+
 async fn setup_exec(
     docker: &Docker,
     container_id: &str,
@@ -671,9 +719,29 @@ async fn handle_exec_resize(json: serde_json::Value, docker: &Docker, exec_id: &
     }
 }
 
+fn handle_host_shell_input(data: Vec<u8>, session: &host_shell::HostShellSession) -> Result<()> {
+    if let Ok(text) = std::str::from_utf8(&data)
+        && let Ok(json) = serde_json::from_str::<serde_json::Value>(text)
+        && json.get("type").and_then(serde_json::Value::as_str) == Some("resize")
+    {
+        if let (Some(cols), Some(rows)) = (json["cols"].as_u64(), json["rows"].as_u64()) {
+            session.resize(
+                u16::try_from(rows).unwrap_or(24),
+                u16::try_from(cols).unwrap_or(80),
+            );
+        }
+        return Ok(());
+    }
+
+    session.send_input(data)
+}
+
 async fn execute_command(command: &str, payload: serde_json::Value) -> Result<serde_json::Value> {
     match command {
         "health" => Ok(serde_json::json!({ "status": "healthy" })),
+        "host_shell_info" => Ok(serde_json::json!({
+            "shell": host_shell::detect_shell(None),
+        })),
         "audit" => {
             let docker = bollard::Docker::connect_with_local_defaults()
                 .wrap_err("Failed to connect to local Docker daemon")?;

@@ -22,6 +22,7 @@ import {
   Box,
   Settings,
   FileText,
+  Terminal,
 } from "lucide-react";
 
 import {
@@ -47,17 +48,23 @@ import { useAgentStore } from "@/stores/use-agent-store";
 import { Loader2 } from "lucide-react";
 import { useRealtimeAgents } from "@/hooks/useRealtimeAgents";
 import { useAgentConnections } from "@/hooks/useAgentConnections";
+import { HOST_SHELL_ENABLED } from "@/lib/host-shell";
 
-const agentNavItems = (agentId: string) => [
-  { title: "Dashboard",  href: `/agents/${agentId}`,            icon: LayoutDashboard, requiresOnline: false },
-  { title: "Audit",      href: `/agents/${agentId}/audit`,      icon: ShieldCheck,     requiresOnline: false },
-  { title: "Containers", href: `/agents/${agentId}/containers`, icon: Container,       requiresOnline: true },
-  { title: "Stacks",     href: `/agents/${agentId}/stacks`,     icon: Layers,          requiresOnline: true },
-  { title: "Images",     href: `/agents/${agentId}/images`,     icon: Box,             requiresOnline: true },
-  { title: "Networks",   href: `/agents/${agentId}/networks`,   icon: Network,         requiresOnline: true },
-  { title: "Volumes",    href: `/agents/${agentId}/volumes`,    icon: HardDrive,       requiresOnline: true },
-  { title: "Events",     href: `/agents/${agentId}/events`,     icon: Activity,        requiresOnline: true },
-];
+const agentNavItems = (agentId: string) => {
+  const items = [
+    { title: "Dashboard",  href: `/agents/${agentId}`,            icon: LayoutDashboard, requiresOnline: false, devOnly: false },
+    { title: "Audit",      href: `/agents/${agentId}/audit`,      icon: ShieldCheck,     requiresOnline: false, devOnly: false },
+    { title: "Containers", href: `/agents/${agentId}/containers`, icon: Container,       requiresOnline: true,  devOnly: false },
+    { title: "Stacks",     href: `/agents/${agentId}/stacks`,     icon: Layers,          requiresOnline: true,  devOnly: false },
+    { title: "Images",     href: `/agents/${agentId}/images`,     icon: Box,             requiresOnline: true,  devOnly: false },
+    { title: "Networks",   href: `/agents/${agentId}/networks`,   icon: Network,         requiresOnline: true,  devOnly: false },
+    { title: "Volumes",    href: `/agents/${agentId}/volumes`,    icon: HardDrive,       requiresOnline: true,  devOnly: false },
+    { title: "Events",     href: `/agents/${agentId}/events`,     icon: Activity,        requiresOnline: true,  devOnly: false },
+    { title: "VPS Shell",  href: `/agents/${agentId}/shell`,      icon: Terminal,        requiresOnline: true,  devOnly: true },
+  ];
+
+  return HOST_SHELL_ENABLED ? items : items.filter((item) => !item.devOnly);
+};
 
 export function AppSidebar() {
   const user = useAuthUser();

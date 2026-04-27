@@ -29,6 +29,14 @@ pub fn agent_routes() -> Router<AppState> {
             get(audit_handlers::relay_docker_exec_ws),
         )
         .route(
+            "/{id}/host/shell/stream",
+            get(audit_handlers::relay_host_shell_ws),
+        )
+        .route(
+            "/{id}/host/shell",
+            get(audit_handlers::relay_host_shell_info),
+        )
+        .route(
             "/{id}/docker/{*tail}",
             any(audit_handlers::relay_docker_request),
         )
