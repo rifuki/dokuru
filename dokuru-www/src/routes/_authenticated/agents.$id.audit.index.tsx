@@ -7,7 +7,6 @@ import { agentApi } from "@/lib/api/agent";
 import { agentDirectApi, type AuditResponse, type AuditResult, type FixOutcome } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
 import { dockerApi, dockerCredential, type Container as DockerContainer } from "@/services/docker-api";
-import { getAgentToken } from "@/stores/use-agent-store";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -675,7 +674,7 @@ function AuditPage() {
     useEffect(() => {
         agentApi.getById(id).then(a => {
             setAgent(a);
-            setToken(getAgentToken(a.id) ?? undefined);
+            setToken(dockerCredential(a) || undefined);
             agentApi.listAudits(a.id).then(h => setAuditHistory(id, h)).catch(() => {});
             const credential = dockerCredential(a);
             if (!credential) {
@@ -691,7 +690,9 @@ function AuditPage() {
 
     const handleRunAudit = async () => {
         if (!agent) return;
-        if (agent.access_mode !== "relay" && !token) return toast.error("Agent token not found");
+        if (agent.access_mode !== "relay" && !token) {
+            return toast.error("Agent token not found. Edit this agent and paste the token once to sync it across devices.");
+        }
         setRunning(id, true);
         try {
             const savedAudit = agent.access_mode === "relay"

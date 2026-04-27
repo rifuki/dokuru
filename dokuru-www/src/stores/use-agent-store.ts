@@ -29,6 +29,12 @@ interface AgentState {
   setAgentInfoLoading: (id: string, loading: boolean) => void;
 }
 
+function cacheAgentToken(agent: Agent) {
+  if (agent.token) {
+    localStorage.setItem(`agent_token_${agent.id}`, agent.token);
+  }
+}
+
 export const useAgentStore = create<AgentState>((set) => ({
   agents: [],
   isLoading: false,
@@ -42,6 +48,7 @@ export const useAgentStore = create<AgentState>((set) => ({
     set({ isLoading: true, error: null });
     try {
       const agents = await agentApi.list();
+      agents.forEach(cacheAgentToken);
       set({ agents, isLoading: false });
     } catch (err) {
       set({ error: (err as Error).message, isLoading: false });
@@ -53,9 +60,7 @@ export const useAgentStore = create<AgentState>((set) => ({
     try {
       const agent = await agentApi.create(dto);
 
-      if (agent.token) {
-        localStorage.setItem(`agent_token_${agent.id}`, agent.token);
-      }
+      cacheAgentToken(agent);
 
       set((state) => ({
         agents: [agent, ...state.agents],

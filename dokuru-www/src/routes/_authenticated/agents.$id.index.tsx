@@ -87,7 +87,7 @@ type DashboardTone = "green" | "amber" | "red" | "blue" | "violet" | "cyan" | "z
 function dockerCredentialFor(agent: Agent | null | undefined) {
     if (!agent) return "";
     if (agent.access_mode === "relay") return agent.id;
-    return getAgentToken(agent.id) ?? agent.token ?? "";
+    return agent.token ?? getAgentToken(agent.id) ?? "";
 }
 
 function fmtMemory(bytes: number | null | undefined) {

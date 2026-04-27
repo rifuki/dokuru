@@ -55,6 +55,9 @@ export function useRealtimeAgents() {
                     });
                     break;
 
+                case "notifications:updated":
+                    break;
+
                 default:
                     console.log("Unknown WebSocket message:", data);
             }

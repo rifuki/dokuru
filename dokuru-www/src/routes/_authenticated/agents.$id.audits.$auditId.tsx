@@ -5,7 +5,6 @@ import { agentApi } from "@/lib/api/agent";
 import { agentDirectApi, type AuditReportResponse, type AuditResponse, type AuditResult } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
 import { dockerApi, dockerCredential, type Container as DockerContainer } from "@/services/docker-api";
-import { getAgentToken } from "@/stores/use-agent-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog";
@@ -785,7 +784,7 @@ function AuditDetailPage() {
       try {
         const a = await agentApi.getById(id);
         setAgent(a);
-        setToken(getAgentToken(a.id) ?? undefined);
+        setToken(dockerCredential(a) || undefined);
         const credential = dockerCredential(a);
 
         if (credential) {

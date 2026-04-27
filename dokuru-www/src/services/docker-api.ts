@@ -1,5 +1,6 @@
 import axios, { type AxiosPromise } from "axios";
 import { apiClient } from "@/lib/api";
+import { getAgentToken } from "@/stores/use-agent-store";
 
 export interface Container {
   id: string;
@@ -81,7 +82,7 @@ type DockerQuery = Record<string, string | number | boolean | undefined>;
 
 export function dockerCredential(agent: DockerAgentLike | null | undefined) {
   if (!agent) return "";
-  return agent.access_mode === "relay" ? agent.id : agent.token ?? "";
+  return agent.access_mode === "relay" ? agent.id : agent.token ?? getAgentToken(agent.id) ?? "";
 }
 
 export function canUseDockerAgent(agent: DockerAgentLike | null | undefined) {

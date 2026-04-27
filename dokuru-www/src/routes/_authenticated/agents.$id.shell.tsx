@@ -5,8 +5,8 @@ import { ArrowLeft, Lock, Terminal } from "lucide-react";
 import { HostShellTerminal } from "@/components/agents/HostShellTerminal";
 import { Button } from "@/components/ui/button";
 import { agentApi } from "@/lib/api/agent";
+import { dockerCredential } from "@/services/docker-api";
 import { HOST_SHELL_ENABLED } from "@/lib/host-shell";
-import { getAgentToken } from "@/stores/use-agent-store";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/shell")({
   component: AgentHostShellPage,
@@ -47,7 +47,7 @@ function AgentHostShellPage() {
     );
   }
 
-  const token = getAgentToken(agent.id) ?? agent.token ?? undefined;
+  const token = dockerCredential(agent) || undefined;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 pb-8">
