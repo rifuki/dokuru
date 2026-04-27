@@ -5,15 +5,10 @@ import { type AuditReportResponse, type AuditResponse, type AuditResult } from "
 import type { Agent } from "@/types/agent";
 import { getAgentToken } from "@/stores/use-agent-store";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
-    AlertDialog, AlertDialogAction, AlertDialogContent,
-    AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
     Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
-    Terminal, Wrench, AlertTriangle, Info, Server,
+    Terminal, Wrench, AlertTriangle, Server,
     ArrowLeft, Clock, Cpu, Container, Zap, BookOpen,
     Search, X, Layers, ArrowLeftRight, Link, FileText,
 } from "lucide-react";
@@ -33,14 +28,14 @@ export const Route = createFileRoute("/_authenticated/agents/$id/audits/$auditId
 // ── Section metadata (CIS sections) ─────────────────────────────────────────
 
 const SECTION_META: Record<string, { label: string; num: string; color: string; bg: string; border: string }> = {
-    "Host Configuration":     { label: "Host",    num: "S1", color: "text-blue-500",   bg: "bg-blue-500/10",   border: "border-blue-500/30" },
-    "Docker Daemon Configuration": { label: "Daemon", num: "S2", color: "text-violet-500", bg: "bg-violet-500/10", border: "border-violet-500/30" },
-    "Daemon Configuration":   { label: "Daemon",  num: "S2", color: "text-violet-500", bg: "bg-violet-500/10", border: "border-violet-500/30" },
-    "Docker Daemon Configuration Files": { label: "Files", num: "S3", color: "text-orange-500", bg: "bg-orange-500/10", border: "border-orange-500/30" },
-    "Config File Permissions":{ label: "Files",   num: "S3", color: "text-orange-500", bg: "bg-orange-500/10", border: "border-orange-500/30" },
-    "Container Images and Build Files": { label: "Images", num: "S4", color: "text-teal-500", bg: "bg-teal-500/10", border: "border-teal-500/30" },
-    "Container Images":       { label: "Images",  num: "S4", color: "text-teal-500",   bg: "bg-teal-500/10",   border: "border-teal-500/30" },
-    "Container Runtime":      { label: "Runtime", num: "S5", color: "text-indigo-500", bg: "bg-indigo-500/10", border: "border-indigo-500/30" },
+    "Host Configuration":     { label: "Host",    num: "S1", color: "text-muted-foreground", bg: "bg-muted/30", border: "border-border" },
+    "Docker Daemon Configuration": { label: "Daemon", num: "S2", color: "text-muted-foreground", bg: "bg-muted/30", border: "border-border" },
+    "Daemon Configuration":   { label: "Daemon",  num: "S2", color: "text-muted-foreground", bg: "bg-muted/30", border: "border-border" },
+    "Docker Daemon Configuration Files": { label: "Files", num: "S3", color: "text-muted-foreground", bg: "bg-muted/30", border: "border-border" },
+    "Config File Permissions":{ label: "Files",   num: "S3", color: "text-muted-foreground", bg: "bg-muted/30", border: "border-border" },
+    "Container Images and Build Files": { label: "Images", num: "S4", color: "text-muted-foreground", bg: "bg-muted/30", border: "border-border" },
+    "Container Images":       { label: "Images",  num: "S4", color: "text-muted-foreground", bg: "bg-muted/30", border: "border-border" },
+    "Container Runtime":      { label: "Runtime", num: "S5", color: "text-muted-foreground", bg: "bg-muted/30", border: "border-border" },
 };
 
 function sectionMeta(section: string) {
@@ -51,13 +46,15 @@ function sectionMeta(section: string) {
 // ── Severity badge ───────────────────────────────────────────────────────────
 
 function SeverityBadge({ severity }: { severity: string }) {
-    const map: Record<string, string> = {
-        High: "bg-red-500/15 text-red-500 border-red-500/30",
-        Medium: "bg-yellow-500/15 text-yellow-600 border-yellow-500/30",
-        Low: "bg-blue-500/15 text-blue-500 border-blue-500/30",
+    const config: Record<string, { cls: string; dot: string }> = {
+        High:   { cls: "bg-red-500/10 text-red-400 border-red-500/20",     dot: "bg-red-400" },
+        Medium: { cls: "bg-amber-500/10 text-amber-400 border-amber-500/20", dot: "bg-amber-400" },
+        Low:    { cls: "bg-muted/40 text-muted-foreground border-border",    dot: "bg-zinc-500" },
     };
+    const c = config[severity] ?? config.Low;
     return (
-        <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase border", map[severity] ?? "bg-muted text-muted-foreground")}>
+        <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-semibold uppercase", c.cls)}>
+            <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", c.dot)} />
             {severity}
         </span>
     );
@@ -82,155 +79,67 @@ function RuleCard({ result, onOpenWizard }: {
     onOpenWizard: (result: AuditResult) => void;
 }) {
     const [open, setOpen] = useState(false);
-    const [guideOpen, setGuideOpen] = useState(false);
+    const [activeTab, setActiveTab] = useState<"overview" | "fix" | "debug">("overview");
 
     const { rule, status, message, affected, audit_command, raw_output, references, rationale, impact, remediation_kind, remediation_guide } = result;
 
     const borderLeft = status === "Pass"
-        ? "border-l-green-500/60"
+        ? "border-l-emerald-500/50"
         : status === "Fail"
-        ? "border-l-red-500/60"
-        : "border-l-orange-500/60";
+        ? "border-l-red-500/50"
+        : "border-l-amber-500/50";
+
+    const pillar = getRulePillar(rule.id);
+    const pillarMeta = PILLAR_META[pillar];
+    const PillarIcon = pillarMeta.icon;
+
+    const hasFix = status === "Fail" && !!(rule.remediation || remediation_guide || affected.length > 0);
+    const hasDebug = !!(audit_command || raw_output || (references && references.length > 0));
+    const tabs = [
+        { id: "overview" as const, label: "Overview", show: true },
+        { id: "fix" as const, label: "Fix", show: hasFix },
+        { id: "debug" as const, label: "Debug", show: hasDebug },
+    ].filter(t => t.show);
 
     return (
-        <>
-        {/* Manual Guide dialog */}
-        <AlertDialog open={guideOpen} onOpenChange={setGuideOpen}>
-            <AlertDialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-                <AlertDialogHeader>
-                    <AlertDialogTitle className="flex items-center gap-2">
-                        <BookOpen className="h-4 w-4 text-amber-500" />
-                        Manual Remediation Guide — Rule {rule.id}
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                        {rule.title}
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-
-                <div className="space-y-4 text-sm">
-                    {rule.remediation && (
-                        <div>
-                            <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-2">Steps</h5>
-                            <p className="text-sm text-muted-foreground bg-muted/40 rounded-lg p-3 font-mono whitespace-pre-wrap">{rule.remediation}</p>
-                        </div>
-                    )}
-                    
-                    {audit_command && (
-                        <div>
-                            <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-2">Verify with</h5>
-                            <code className="block text-xs bg-zinc-900 dark:bg-zinc-950 text-green-400 p-3 rounded-lg overflow-x-auto font-mono">
-                                $ {audit_command}
-                            </code>
-                        </div>
-                    )}
-
-                    {(rationale || impact) && (
-                        <div className="grid grid-cols-1 gap-3">
-                            {rationale && (
-                                <div className="bg-muted/30 rounded-lg p-3">
-                                    <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1">Rationale</h5>
-                                    <p className="text-xs text-muted-foreground leading-relaxed">{rationale}</p>
-                                </div>
-                            )}
-                            {impact && (
-                                <div className="bg-muted/30 rounded-lg p-3">
-                                    <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1">Impact</h5>
-                                    <p className="text-xs text-muted-foreground leading-relaxed">{impact}</p>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {references && references.length > 0 && (
-                        <div>
-                            <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-2">References</h5>
-                            <div className="space-y-1">
-                                {references.map((ref, i) => (
-                                    <a key={i} href={ref.startsWith("http") ? ref : undefined}
-                                        target="_blank" rel="noopener noreferrer"
-                                        className="flex items-center gap-1.5 text-xs text-primary hover:underline break-all">
-                                        <Link className="h-3 w-3 shrink-0" />
-                                        {ref}
-                                    </a>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                <AlertDialogFooter>
-                    <AlertDialogAction onClick={() => setGuideOpen(false)}>Close</AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
-
-        <div className={cn("rounded-xl border bg-card dark:bg-gradient-to-br dark:from-[#0A0A0B] dark:to-[#111113] border-l-4 transition-all hover:shadow-lg hover:scale-[1.01]", borderLeft)}>
+        <div className={cn("rounded-lg border bg-card border-l-2 transition-colors", borderLeft)}>
             {/* Header row */}
-            <div
-                className={cn(
-                    "px-5 py-4 flex items-start gap-4",
-                    status === "Pass" ? "hover:bg-emerald-500/5" : status === "Fail" ? "hover:bg-rose-500/5" : "hover:bg-amber-500/5",
-                    "rounded-xl transition-all duration-200"
-                )}
-            >
-                {/* Clickable area */}
-                <button onClick={() => setOpen(v => !v)} className="flex items-start gap-3 flex-1 min-w-0 text-left">
+            <div className="px-4 py-3 flex items-center gap-3">
+                <button onClick={() => setOpen(v => !v)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
                     <StatusIcon status={status} />
                     <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2 mb-2">
-                            <span className="font-mono text-xs font-black text-muted-foreground bg-muted/40 px-2 py-1 rounded border border-border">
+                        <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                            <span className="font-mono text-[11px] font-bold text-muted-foreground/70 bg-muted/40 px-1.5 py-0.5 rounded">
                                 {rule.id}
                             </span>
-                            {/* Pillar badge */}
-                            {(() => {
-                                const pillar = getRulePillar(rule.id);
-                                const pillarMeta = PILLAR_META[pillar];
-                                const PillarIcon = pillarMeta.icon;
-                                return (
-                                    <span className={cn("inline-flex items-center gap-1.5 text-xs font-bold px-2 py-1 rounded border", pillarMeta.bg, pillarMeta.color, pillarMeta.border)}>
-                                        <PillarIcon size={12} />
-                                        {pillarMeta.name}
-                                    </span>
-                                );
-                            })()}
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded border bg-muted/30 border-border text-muted-foreground">
+                                <PillarIcon size={10} className={pillarMeta.color} />
+                                {pillarMeta.name}
+                            </span>
                             <SeverityBadge severity={rule.severity} />
                             {affected.length > 0 && (
-                                <span className="inline-flex items-center gap-1 text-[10px] bg-amber-500/15 text-amber-400 border border-amber-500/40 px-2 py-1 rounded font-bold">
-                                    <AlertTriangle className="h-3 w-3" />
+                                <span className="inline-flex items-center gap-1 text-[10px] text-amber-400 border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.5 rounded font-medium">
+                                    <AlertTriangle className="h-2.5 w-2.5" />
                                     {affected.length} affected
                                 </span>
                             )}
                         </div>
-                        <p className="font-semibold text-base leading-snug text-foreground">{rule.title}</p>
-                        <p className="text-sm text-muted-foreground mt-1 line-clamp-1">{message}</p>
+                        <p className="font-medium text-sm leading-snug text-foreground">{rule.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{message}</p>
                     </div>
                 </button>
 
-                {/* Right controls */}
-                <div className="flex items-center gap-2 shrink-0 mt-0.5">
-                    {/* Fix button — only for failed rules */}
-                    {status === "Fail" && (
-                        <>
-                            {remediation_kind === "auto" && (
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); onOpenWizard(result); }}
-                                    className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg border transition-all shadow-sm bg-[#2496ED] hover:bg-[#1d7ac7] text-white border-[#2496ED]/50 hover:shadow-[0_0_12px_rgba(36,150,237,0.4)]"
-                                >
-                                    <Zap className="h-3.5 w-3.5" />
-                                    Auto Fix
-                                </button>
-                            )}
-                            <button
-                                onClick={(e) => { e.stopPropagation(); setGuideOpen(true); }}
-                                className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-lg border transition-all bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border-amber-500/40 hover:shadow-sm"
-                            >
-                                <BookOpen className="h-3.5 w-3.5" />
-                                Manual Guide
-                            </button>
-                        </>
+                <div className="flex items-center gap-2 shrink-0">
+                    {status === "Fail" && remediation_kind === "auto" && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onOpenWizard(result); }}
+                            className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-md bg-[#2496ED] hover:bg-[#1d7ac7] text-white transition-all shadow-sm"
+                        >
+                            <Zap className="h-3 w-3" />
+                            Auto Fix
+                        </button>
                     )}
-
-                    <button onClick={() => setOpen(v => !v)}>
+                    <button onClick={() => setOpen(v => !v)} className="p-1 hover:bg-muted/40 rounded transition-colors">
                         {open
                             ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
                             : <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -239,154 +148,158 @@ function RuleCard({ result, onOpenWizard }: {
                 </div>
             </div>
 
-            {/* Expanded detail */}
+            {/* Expanded: tabbed content */}
             {open && (
-                <div className="px-4 pb-4 pt-0 border-t border-border/50 space-y-4 text-sm">
-                    {/* Description */}
-                    {rule.description && (
-                        <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4 mt-3">
-                            <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-blue-400 mb-2">
-                                <Info className="h-4 w-4" /> About
-                            </h5>
-                            <p className="text-sm text-foreground/80 leading-relaxed">{rule.description}</p>
-                        </div>
-                    )}
+                <div className="border-t border-border/60">
+                    {/* Tab bar */}
+                    <div className="flex items-center px-4 border-b border-border/60">
+                        {tabs.map(tab => (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={cn(
+                                    "px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px",
+                                    activeTab === tab.id
+                                        ? "border-[#2496ED] text-[#2496ED]"
+                                        : "border-transparent text-muted-foreground hover:text-foreground"
+                                )}
+                            >
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
 
-                    {/* Affected */}
-                    {affected.length > 0 && (
-                        <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4">
-                            <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-amber-400 mb-3">
-                                <AlertTriangle className="h-4 w-4" /> Affected ({affected.length})
-                            </h5>
-                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                                {affected.map((item, i) => {
-                                    // Smart icon detection
-                                    let IconComponent = Container;
-                                    if (item.includes('dockerd') || item.includes('/usr/bin/') || item.includes('daemon')) {
-                                        IconComponent = Server;
-                                    } else if (item.includes('.sock') || item.includes('.socket')) {
-                                        IconComponent = Link;
-                                    } else if (item.includes('/etc/') || item.includes('.conf') || item.includes('.json') || item.includes('.service')) {
-                                        IconComponent = FileText;
-                                    }
-                                    
-                                    return (
-                                        <div key={i} className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 group hover:bg-amber-500/15 transition-colors">
-                                            <IconComponent className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                                            <code className="text-xs text-amber-300 font-mono truncate">{item}</code>
+                    <div className="p-4">
+                        {/* Overview: description + rationale/impact */}
+                        {activeTab === "overview" && (
+                            <div className="space-y-3">
+                                {rule.description && (
+                                    <p className="text-sm text-foreground/70 leading-relaxed">{rule.description}</p>
+                                )}
+                                {(rationale || impact) && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
+                                        {rationale && (
+                                            <div className="rounded-lg border border-border bg-muted/20 p-3">
+                                                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-1.5">Rationale</p>
+                                                <p className="text-xs text-foreground/60 leading-relaxed">{rationale}</p>
+                                            </div>
+                                        )}
+                                        {impact && (
+                                            <div className="rounded-lg border border-border bg-muted/20 p-3">
+                                                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-1.5">Impact</p>
+                                                <p className="text-xs text-foreground/60 leading-relaxed">{impact}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                {!rule.description && !rationale && !impact && (
+                                    <p className="text-xs text-muted-foreground/40 italic">No description available.</p>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Fix: affected + remediation + fix guide */}
+                        {activeTab === "fix" && (
+                            <div className="space-y-3">
+                                {affected.length > 0 && (
+                                    <div>
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-2">
+                                            Affected ({affected.length})
+                                        </p>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {affected.map((item, i) => {
+                                                let IconComponent = Container;
+                                                if (item.includes('dockerd') || item.includes('/usr/bin/') || item.includes('daemon')) {
+                                                    IconComponent = Server;
+                                                } else if (item.includes('.sock') || item.includes('.socket')) {
+                                                    IconComponent = Link;
+                                                } else if (item.includes('/etc/') || item.includes('.conf') || item.includes('.json') || item.includes('.service')) {
+                                                    IconComponent = FileText;
+                                                }
+                                                return (
+                                                    <code key={i} className="inline-flex items-center gap-1.5 text-[11px] bg-muted/40 border border-border rounded px-2 py-1 font-mono text-foreground/70">
+                                                        <IconComponent className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                                                        {item}
+                                                    </code>
+                                                );
+                                            })}
                                         </div>
-                                    );
-                                })}
+                                    </div>
+                                )}
+                                {rule.remediation && (
+                                    <div>
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-2">Remediation</p>
+                                        <p className="text-xs text-foreground/70 bg-muted/30 rounded-lg p-3 font-mono leading-relaxed border border-border">
+                                            {rule.remediation}
+                                        </p>
+                                    </div>
+                                )}
+                                {remediation_guide && (
+                                    <div>
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-2">Fix Guide</p>
+                                        <pre className="text-xs bg-zinc-950 text-zinc-300 rounded-lg p-3 font-mono leading-relaxed whitespace-pre-wrap overflow-x-auto border border-border/50">
+                                            {remediation_guide}
+                                        </pre>
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                    )}
+                        )}
 
-                    {/* Remediation */}
-                    {rule.remediation && (
-                        <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-4">
-                            <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-emerald-400 mb-2">
-                                <Wrench className="h-4 w-4" /> Remediation
-                            </h5>
-                            <p className="text-sm text-foreground/80 bg-muted/60 dark:bg-black/30 rounded-lg p-3 font-mono leading-relaxed">{rule.remediation}</p>
-                        </div>
-                    )}
-
-                    {/* Fix Guide */}
-                    {remediation_guide && (
-                        <div className="bg-[#2496ED]/5 border border-[#2496ED]/20 rounded-lg p-4">
-                            <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-[#2496ED] mb-2">
-                                <BookOpen className="h-4 w-4" /> Fix Guide
-                            </h5>
-                            <pre className="text-sm bg-muted/60 dark:bg-black/30 rounded-lg p-3 font-mono text-foreground/80 leading-relaxed whitespace-pre-wrap">{remediation_guide}</pre>
-                        </div>
-                    )}
-
-                    {/* Audit Command */}
-                    {audit_command && (
-                        <div className="bg-muted/20 border border-border rounded-lg p-4">
-                            <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-foreground/80 mb-2">
-                                <Terminal className="h-4 w-4" /> Audit Command
-                            </h5>
-                            <code className="block text-sm bg-muted dark:bg-black/50 text-emerald-400 p-3 rounded-lg overflow-x-auto font-mono border border-emerald-500/20">
-                                $ {audit_command}
-                            </code>
-                        </div>
-                    )}
-
-                    {/* Raw Output */}
-                    {raw_output && (
-                        <div className="bg-muted/20 border border-border rounded-lg p-4">
-                            <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-foreground/80 mb-2">
-                                <FileText className="h-4 w-4" /> Raw Output
-                            </h5>
-                            <pre className="text-xs bg-muted dark:bg-black/50 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap font-mono text-muted-foreground border border-border">
-                                {raw_output}
-                            </pre>
-                        </div>
-                    )}
-
-                    {/* Rationale + Impact */}
-                    {(rationale || impact) && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {rationale && (
-                                <div className="bg-violet-500/5 border border-violet-500/20 rounded-lg p-4">
-                                    <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-violet-400 mb-2">
-                                        <Info className="h-4 w-4" /> Rationale
-                                    </h5>
-                                    <p className="text-sm text-foreground/80 leading-relaxed">{rationale}</p>
-                                </div>
-                            )}
-                            {impact && (
-                                <div className="bg-rose-500/5 border border-rose-500/20 rounded-lg p-4">
-                                    <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-rose-400 mb-2">
-                                        <AlertTriangle className="h-4 w-4" /> Impact
-                                    </h5>
-                                    <p className="text-sm text-foreground/80 leading-relaxed">{impact}</p>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* References */}
-                    {references && references.length > 0 && (
-                        <div className="bg-muted/20 border border-border rounded-lg p-4">
-                            <h5 className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide text-foreground/80 mb-3">
-                                <BookOpen className="h-4 w-4" /> References
-                            </h5>
-                            <div className="space-y-2">
-                                {references.map((ref, i) => {
-                                    // Check if it's a CIS reference
-                                    const isCIS = ref.includes("CIS Docker Benchmark");
-                                    
-                                    if (isCIS) {
-                                        return (
-                                            <button
-                                                key={i}
-                                                onClick={() => toast.info("📄 CIS PDF viewer coming soon!", { description: "Upload PDF to backend and view inline" })}
-                                                className="flex items-center gap-2 text-sm text-[#2496ED] hover:text-[#1d7ac7] transition-colors group w-full text-left"
-                                            >
-                                                <BookOpen className="h-3.5 w-3.5 shrink-0 group-hover:scale-110 transition-transform" />
-                                                <span className="group-hover:underline">{ref}</span>
-                                            </button>
-                                        );
-                                    }
-                                    
-                                    return (
-                                        <a key={i} href={ref.startsWith("http") ? ref : undefined}
-                                            target="_blank" rel="noopener noreferrer"
-                                            className="flex items-center gap-2 text-sm text-[#2496ED] hover:text-[#1d7ac7] transition-colors group">
-                                            <Link className="h-3.5 w-3.5 shrink-0 group-hover:scale-110 transition-transform" />
-                                            <span className="group-hover:underline break-all">{ref}</span>
-                                        </a>
-                                    );
-                                })}
+                        {/* Debug: audit command + raw output + references */}
+                        {activeTab === "debug" && (
+                            <div className="space-y-3">
+                                {audit_command && (
+                                    <div>
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-2">Audit Command</p>
+                                        <code className="block text-xs bg-zinc-950 text-emerald-400 p-3 rounded-lg font-mono border border-border/50">
+                                            $ {audit_command}
+                                        </code>
+                                    </div>
+                                )}
+                                {raw_output && (
+                                    <div>
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-2">Raw Output</p>
+                                        <pre className="text-xs bg-muted/20 rounded-lg p-3 font-mono text-muted-foreground border border-border whitespace-pre-wrap max-h-36 overflow-y-auto">
+                                            {raw_output}
+                                        </pre>
+                                    </div>
+                                )}
+                                {references && references.length > 0 && (
+                                    <div>
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-2">References</p>
+                                        <div className="space-y-1.5">
+                                            {references.map((ref, i) => {
+                                                const isCIS = ref.includes("CIS Docker Benchmark");
+                                                if (isCIS) {
+                                                    return (
+                                                        <button
+                                                            key={i}
+                                                            onClick={() => toast.info("📄 CIS PDF viewer coming soon!", { description: "Upload PDF to backend and view inline" })}
+                                                            className="flex items-center gap-1.5 text-xs text-[#2496ED] hover:underline w-full text-left"
+                                                        >
+                                                            <BookOpen className="h-3 w-3 shrink-0" />
+                                                            {ref}
+                                                        </button>
+                                                    );
+                                                }
+                                                return (
+                                                    <a key={i} href={ref.startsWith("http") ? ref : undefined}
+                                                        target="_blank" rel="noopener noreferrer"
+                                                        className="flex items-center gap-1.5 text-xs text-[#2496ED] hover:underline">
+                                                        <Link className="h-3 w-3 shrink-0" />
+                                                        {ref}
+                                                    </a>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
             )}
         </div>
-        </>
     );
 }
 
@@ -396,24 +309,20 @@ function SectionHeader({ section, total, passed }: { section: string; total: num
     const meta = sectionMeta(section);
     const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
     return (
-        <div className="space-y-2">
-            <div className="flex items-center gap-3">
-                <span className={cn("text-sm font-bold px-3 py-1.5 rounded-lg border shrink-0", meta.bg, meta.color, meta.border)}>
-                    {meta.num}
-                </span>
-                <span className="text-sm font-semibold text-foreground/90 min-w-[120px]">{meta.label}</span>
-                <div className="flex-1 h-1.5 bg-muted/40 rounded-full overflow-hidden shadow-inner">
-                    <div
-                        className={cn("h-full rounded-full transition-all duration-700", 
-                            pct === 100 ? "bg-emerald-500 shadow-[0_0_8px_rgba(52,211,153,0.6)]" 
-                            : pct >= 50 ? "bg-amber-500 shadow-[0_0_8px_rgba(251,191,36,0.6)]" 
-                            : "bg-rose-500 shadow-[0_0_8px_rgba(251,113,133,0.6)]"
-                        )}
-                        style={{ width: `${pct}%` }}
-                    />
-                </div>
-                <span className="text-xs text-muted-foreground/60 font-mono shrink-0 min-w-[50px] text-right">{passed}<span className="text-muted-foreground/40">/</span>{total}</span>
+        <div className="flex items-center gap-3">
+            <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded border shrink-0 bg-muted/30 border-border text-muted-foreground">
+                {meta.num}
+            </span>
+            <span className="text-sm font-medium text-foreground/80 min-w-[100px]">{meta.label}</span>
+            <div className="flex-1 h-1 bg-muted/40 rounded-full overflow-hidden">
+                <div
+                    className={cn("h-full rounded-full transition-all duration-700",
+                        pct === 100 ? "bg-emerald-500" : pct >= 50 ? "bg-amber-500" : "bg-red-500"
+                    )}
+                    style={{ width: `${pct}%` }}
+                />
             </div>
+            <span className="text-xs text-muted-foreground/50 font-mono shrink-0">{passed}/{total}</span>
         </div>
     );
 }
@@ -1118,12 +1027,12 @@ function AuditDetailPage() {
                                         return (
                                             <button key={pillar}
                                                 onClick={() => setPillarFilter(f => f === pillar ? "all" : pillar)}
-                                                className={cn("inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-bold transition-all",
+                                                className={cn("inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-medium transition-all",
                                                     pillarFilter === pillar
-                                                        ? cn(meta.bg, meta.color, meta.border, "shadow-sm")
+                                                        ? "bg-[#2496ED]/10 text-[#2496ED] border-[#2496ED]/30"
                                                         : "bg-muted/20 border-border text-muted-foreground hover:bg-muted/40")}
                                             >
-                                                <Icon size={12} />
+                                                <Icon size={12} className={pillarFilter === pillar ? "text-[#2496ED]" : meta.color} />
                                                 {meta.name}
                                             </button>
                                         );
@@ -1147,9 +1056,9 @@ function AuditDetailPage() {
                                         return (
                                             <button key={s}
                                                 onClick={() => setSectionFilter(f => f === s ? "all" : s)}
-                                                className={cn("text-xs px-3 py-1.5 rounded-lg border font-bold transition-all",
+                                                className={cn("text-xs px-3 py-1.5 rounded-lg border font-medium transition-all",
                                                     sectionFilter === s
-                                                        ? cn(meta.bg, meta.color, meta.border, "shadow-sm")
+                                                        ? "bg-[#2496ED]/10 text-[#2496ED] border-[#2496ED]/30"
                                                         : "bg-muted/20 border-border text-muted-foreground hover:bg-muted/40")}
                                             >
                                                 {meta.num} {meta.label}
@@ -1198,14 +1107,13 @@ function AuditDetailPage() {
 
                                     return (
                                         <div key={groupName}>
-                                            <div className="flex items-center gap-3 mb-4 pb-3 border-b border-border">
-                                                <Icon size={16} className={meta.color} />
-                                                <span className={cn("text-sm font-black px-3 py-1.5 rounded-lg border inline-flex items-center gap-2", meta.bg, meta.color, meta.border)}>
-                                                    {groupName}
-                                                </span>
-                                                <Badge variant="outline" className="text-xs ml-auto font-mono font-bold bg-muted/20 border-border text-muted-foreground">
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <Icon size={13} className={meta.color} />
+                                                <span className="text-xs font-bold text-foreground/60 uppercase tracking-wide">{groupName}</span>
+                                                <div className="flex-1 h-px bg-border mx-1" />
+                                                <span className="text-xs text-muted-foreground/40 font-mono">
                                                     {results.filter(r => r.status === "Pass").length}/{results.length}
-                                                </Badge>
+                                                </span>
                                             </div>
                                             <div className="space-y-3">
                                                 {results
@@ -1229,14 +1137,13 @@ function AuditDetailPage() {
                                     const meta = sectionMeta(groupName);
                                     return (
                                         <div key={groupName}>
-                                            <div className="flex items-center gap-3 mb-4 pb-3 border-b border-border">
-                                                <span className={cn("text-sm font-black px-3 py-1.5 rounded-lg border", meta.bg, meta.color, meta.border)}>
-                                                    {meta.num} {meta.label}
-                                                </span>
-                                                <span className="text-sm text-muted-foreground font-medium">{groupName}</span>
-                                                <Badge variant="outline" className="text-xs ml-auto font-mono font-bold bg-muted/20 border-border text-muted-foreground">
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <span className="font-mono text-[11px] font-bold bg-muted/40 px-1.5 py-0.5 rounded border border-border text-muted-foreground shrink-0">{meta.num}</span>
+                                                <span className="text-xs font-bold text-foreground/60 uppercase tracking-wide truncate">{groupName}</span>
+                                                <div className="flex-1 h-px bg-border mx-1" />
+                                                <span className="text-xs text-muted-foreground/40 font-mono shrink-0">
                                                     {results.filter(r => r.status === "Pass").length}/{results.length}
-                                                </Badge>
+                                                </span>
                                             </div>
                                             <div className="space-y-3">
                                                 {results
