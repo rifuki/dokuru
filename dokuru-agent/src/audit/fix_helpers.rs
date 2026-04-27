@@ -1240,13 +1240,19 @@ async fn restart_docker_for_userns(progress: Option<&ProgressSender>) -> Option<
 
     match run_cmd("systemctl", &["restart", "docker"]).await {
         Ok((_, _, true)) => {
+            let socket_detail = normalize_docker_socket_permissions().await;
             send_progress(
                 progress,
                 userns_progress_event(
                     6,
                     "restart_docker",
                     "done",
-                    Some("Docker daemon restarted with userns-remap enabled".to_string()),
+                    Some(socket_detail.map_or_else(
+                        || "Docker daemon restarted with userns-remap enabled; docker socket permissions are root:docker 660".to_string(),
+                        |detail| format!(
+                            "Docker daemon restarted with userns-remap enabled; docker socket permission normalization skipped/failed: {detail}"
+                        ),
+                    )),
                     None,
                 ),
             );
@@ -1273,6 +1279,39 @@ async fn restart_docker_for_userns(progress: Option<&ProgressSender>) -> Option<
             ))
         }
     }
+}
+
+async fn normalize_docker_socket_permissions() -> Option<String> {
+    const DOCKER_SOCKET: &str = "/var/run/docker.sock";
+
+    if !Path::new(DOCKER_SOCKET).exists() {
+        return Some("/var/run/docker.sock does not exist".to_string());
+    }
+
+    match run_cmd("getent", &["group", "docker"]).await {
+        Ok((_, _, true)) => {}
+        Ok((_, stderr, _)) => {
+            return Some(format!("docker group not found: {stderr}"));
+        }
+        Err(error) => {
+            return Some(format!("failed to check docker group: {error}"));
+        }
+    }
+
+    let mut failures = Vec::new();
+    match run_cmd("chgrp", &["docker", DOCKER_SOCKET]).await {
+        Ok((_, _, true)) => {}
+        Ok((_, stderr, _)) => failures.push(format!("chgrp failed: {stderr}")),
+        Err(error) => failures.push(format!("chgrp failed: {error}")),
+    }
+
+    match run_cmd("chmod", &["660", DOCKER_SOCKET]).await {
+        Ok((_, _, true)) => {}
+        Ok((_, stderr, _)) => failures.push(format!("chmod failed: {stderr}")),
+        Err(error) => failures.push(format!("chmod failed: {error}")),
+    }
+
+    (!failures.is_empty()).then(|| failures.join("; "))
 }
 
 async fn recover_userns_state(
