@@ -90,18 +90,32 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                     </DialogDescription>
                 </DialogHeader>
 
-                <form onSubmit={handleSubmit} className="space-y-4 pt-1">
+                <form
+                    onSubmit={handleSubmit}
+                    className="space-y-4 pt-1"
+                    autoComplete="off"
+                    data-form-type="other"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                >
                     {/* Name Input with Random Generator */}
                     <div className="space-y-2">
                         <Label htmlFor="name" className="text-sm font-medium">Agent Name</Label>
                         <div className="flex gap-2">
                             <Input
                                 id="name"
+                                name="agent_display_name"
                                 placeholder="e.g. Production Server"
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
                                 disabled={isLoading}
                                 autoComplete="off"
+                                autoCorrect="off"
+                                autoCapitalize="off"
+                                spellCheck={false}
+                                data-form-type="other"
+                                data-lpignore="true"
+                                data-1p-ignore="true"
                                 className="flex-1"
                             />
                             <Button
@@ -193,6 +207,9 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                             <Label htmlFor="url" className="text-sm font-medium">Agent URL</Label>
                             <Input
                                 id="url"
+                                name="agent_endpoint_url"
+                                type="url"
+                                inputMode="url"
                                 placeholder={
                                     accessMode === "cloudflare"
                                         ? "https://xxx.trycloudflare.com"
@@ -202,6 +219,12 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                                 onChange={(e) => setUrl(e.target.value.trim())}
                                 disabled={isLoading}
                                 autoComplete="off"
+                                autoCorrect="off"
+                                autoCapitalize="off"
+                                spellCheck={false}
+                                data-form-type="other"
+                                data-lpignore="true"
+                                data-1p-ignore="true"
                             />
                             <p className="text-xs text-muted-foreground">
                                 {accessMode === "cloudflare"
@@ -216,13 +239,22 @@ export function AddAgentModal({ open, onOpenChange }: AddAgentModalProps) {
                         <Label htmlFor="token" className="text-sm font-medium">Agent Token</Label>
                         <Input
                             id="token"
-                            type="password"
+                            name="agent_access_token"
+                            type="text"
+                            inputMode="text"
                             placeholder="dok_..."
                             value={token}
                             onChange={(e) => setToken(e.target.value.trim())}
                             disabled={isLoading}
-                            autoComplete="off"
+                            autoComplete="new-password"
+                            autoCorrect="off"
+                            autoCapitalize="off"
+                            spellCheck={false}
+                            data-form-type="other"
+                            data-lpignore="true"
+                            data-1p-ignore="true"
                             className="font-mono text-sm"
+                            style={{ WebkitTextSecurity: "disc" } as React.CSSProperties}
                         />
                         <p className="text-xs text-muted-foreground">
                             Token from <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-xs">dokuru onboard</code> (shown once only)
