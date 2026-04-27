@@ -72,11 +72,15 @@ export function getFixSteps(ruleId: string): string[] {
         "Verifying PIDs cgroup limits…",
     ];
     if (ruleId === "2.10") return [
+        "Snapshotting container mounts and Compose context...",
         "Creating dockremap system user…",
         "Writing /etc/subuid and /etc/subgid…",
         "Mapping UID/GID ranges for dockremap…",
         "Writing userns-remap to daemon.json…",
         "Restarting Docker daemon…",
+        "Migrating named volumes to the remapped Docker root...",
+        "Fixing bind mount ownership...",
+        "Restarting recovered containers...",
     ];
     if (ruleId.startsWith("1.1")) return [
         "Preflighting audit target…",

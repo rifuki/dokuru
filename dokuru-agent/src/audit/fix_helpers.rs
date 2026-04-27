@@ -6,13 +6,13 @@ use crate::audit::types::{
 use bollard::{
     Docker,
     container::{
-        Config, CreateContainerOptions, RemoveContainerOptions, StartContainerOptions,
-        StopContainerOptions, UpdateContainerOptions,
+        Config, CreateContainerOptions, ListContainersOptions, RemoveContainerOptions,
+        StartContainerOptions, StopContainerOptions, UpdateContainerOptions,
     },
-    models::{ContainerInspectResponse, ContainerSummary},
+    models::{ContainerInspectResponse, ContainerSummary, MountPointTypeEnum},
 };
 use serde_yaml::{Mapping, Value};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
@@ -30,6 +30,9 @@ const DEFAULT_CPU_SHARES: i64 = 512;
 const DEFAULT_PIDS_LIMIT: i64 = 100;
 const AUDIT_RULES_PATH: &str = "/etc/audit/rules.d/docker.rules";
 const AUDIT_FIX_STEPS: u8 = 4;
+const USERNS_SNAPSHOT_PATH: &str = "/tmp/dokuru-userns-remap-snapshot.json";
+const USERNS_REMAP_RULE_ID: &str = "2.10";
+const USERNS_REMAP_TOTAL_STEPS: u8 = 9;
 const COMPOSE_FILENAMES: &[&str] = &[
     "compose.yaml",
     "docker-compose.yaml",
@@ -134,6 +137,19 @@ pub fn fix_steps(rule_id: &str) -> Vec<String> {
             "Write audit rule".to_string(),
             "Reload auditd".to_string(),
             "Verify persisted audit rule".to_string(),
+        ];
+    }
+    if supports_userns_remap_fix(rule_id) {
+        return vec![
+            "Snapshot container mounts and Compose context".to_string(),
+            "Create dockremap system user".to_string(),
+            "Write /etc/subuid and /etc/subgid".to_string(),
+            "Map UID/GID ranges for dockremap".to_string(),
+            "Write userns-remap to daemon.json".to_string(),
+            "Restart Docker daemon".to_string(),
+            "Migrate named volumes to the remapped Docker root".to_string(),
+            "Fix bind mount ownership".to_string(),
+            "Restart recovered containers".to_string(),
         ];
     }
     vec!["Apply fix".to_string(), "Verify result".to_string()]
@@ -352,9 +368,15 @@ async fn reload_auditd(rule_id: &str, progress: Option<&ProgressSender>, target:
 
     // Install auditd if not present
     let auditd_installed = capture_command("which", &["auditd"]).await.success
-        || capture_command("systemctl", &["cat", "auditd"]).await.success;
+        || capture_command("systemctl", &["cat", "auditd"])
+            .await
+            .success;
     if !auditd_installed {
-        let install = capture_command("apt-get", &["install", "-y", "--no-install-recommends", "auditd"]).await;
+        let install = capture_command(
+            "apt-get",
+            &["install", "-y", "--no-install-recommends", "auditd"],
+        )
+        .await;
         if !install.success {
             // Try yum/dnf as fallback
             let _ = capture_command("yum", &["install", "-y", "audit"]).await;
@@ -365,13 +387,15 @@ async fn reload_auditd(rule_id: &str, progress: Option<&ProgressSender>, target:
     let _ = capture_command("systemctl", &["enable", "--now", "auditd"]).await;
 
     // Try reload via systemctl first, then auditctl, then legacy service
-    let result = if capture_command("systemctl", &["reload-or-restart", "auditd"]).await.success {
-        true
-    } else if capture_command("auditctl", &["-R", AUDIT_RULES_PATH]).await.success {
-        true
-    } else {
-        capture_command("service", &["auditd", "reload"]).await.success
-    };
+    let result = capture_command("systemctl", &["reload-or-restart", "auditd"])
+        .await
+        .success
+        || capture_command("auditctl", &["-R", AUDIT_RULES_PATH])
+            .await
+            .success
+        || capture_command("service", &["auditd", "reload"])
+            .await
+            .success;
 
     let mut done = audit_progress_event(
         rule_id,
@@ -467,89 +491,913 @@ pub async fn apply_audit_rule_fix_with_progress(
 }
 
 pub fn supports_userns_remap_fix(rule_id: &str) -> bool {
-    rule_id == "2.10"
+    rule_id == USERNS_REMAP_RULE_ID
 }
 
-pub async fn apply_userns_remap_fix_with_progress(
-    progress: Option<&ProgressSender>,
-) -> eyre::Result<FixOutcome> {
-    const RULE_ID: &str = "2.10";
-    const TOTAL: u8 = 5;
+#[derive(Debug, Clone, serde::Serialize)]
+struct ContainerSnapshot {
+    id: String,
+    name: String,
+    was_running: bool,
+    bind_mount_paths: Vec<String>,
+    named_volume_names: Vec<String>,
+    compose_working_dir: Option<String>,
+    compose_config_files: Option<String>,
+    compose_project: Option<String>,
+    compose_service: Option<String>,
+    is_compose_managed: bool,
+    uses_host_userns: bool,
+    #[serde(skip_serializing)]
+    inspect: Option<ContainerInspectResponse>,
+}
 
-    let make_event = |step: u8, action: &str, status: &str, detail: Option<String>, command: Option<String>| FixProgress {
-        rule_id: RULE_ID.to_string(),
+#[derive(Debug, Clone)]
+struct ComposeRecoveryTarget {
+    project: String,
+    working_dir: Option<PathBuf>,
+    config_files: Option<String>,
+    services: Vec<String>,
+}
+
+#[derive(Debug, Default)]
+struct UsernsRecoveryResult {
+    completed: usize,
+    skipped: usize,
+    failed: Vec<String>,
+}
+
+struct UsernsSnapshotState {
+    snapshots: Vec<ContainerSnapshot>,
+    bind_paths: Vec<String>,
+    volume_names: Vec<String>,
+}
+
+struct UsernsRecoverySummary {
+    volume_result: UsernsRecoveryResult,
+    bind_result: UsernsRecoveryResult,
+    restart_result: UsernsRecoveryResult,
+    failures: Vec<String>,
+}
+
+fn userns_progress_event(
+    step: u8,
+    action: &str,
+    status: &str,
+    detail: Option<String>,
+    command: Option<String>,
+) -> FixProgress {
+    FixProgress {
+        rule_id: USERNS_REMAP_RULE_ID.to_string(),
         container_name: "Docker daemon".to_string(),
         step,
-        total_steps: TOTAL,
+        total_steps: USERNS_REMAP_TOTAL_STEPS,
         action: action.to_string(),
         status: status.to_string(),
         detail,
         command,
         stdout: None,
         stderr: None,
+    }
+}
+
+async fn snapshot_all_containers(docker: &Docker) -> Vec<ContainerSnapshot> {
+    let Ok(containers) = docker
+        .list_containers(Some(ListContainersOptions::<String> {
+            all: true,
+            ..Default::default()
+        }))
+        .await
+    else {
+        return Vec::new();
     };
 
-    send_progress(progress, make_event(1, "create_dockremap_user", "in_progress",
-        Some("Creating dockremap system user".to_string()),
-        Some("useradd -r -s /bin/false dockremap".to_string())));
+    let mut snapshots = Vec::new();
+    for container in containers {
+        let Some(id) = container.id.as_deref() else {
+            continue;
+        };
+
+        let Ok(inspect) = docker.inspect_container(id, None).await else {
+            continue;
+        };
+
+        let name = inspect_name(&inspect).unwrap_or_else(|| short_id(id));
+        let was_running = inspect
+            .state
+            .as_ref()
+            .and_then(|state| state.running)
+            .unwrap_or(false);
+        let uses_host_userns = inspect
+            .host_config
+            .as_ref()
+            .and_then(|host_config| host_config.userns_mode.as_deref())
+            == Some("host");
+
+        let mut bind_mount_paths = Vec::new();
+        let mut named_volume_names = Vec::new();
+        if let Some(mounts) = &inspect.mounts {
+            for mount in mounts {
+                match mount.typ {
+                    Some(MountPointTypeEnum::BIND) => {
+                        if let Some(source) =
+                            mount.source.as_ref().filter(|source| !source.is_empty())
+                        {
+                            bind_mount_paths.push(source.clone());
+                        }
+                    }
+                    Some(MountPointTypeEnum::VOLUME) => {
+                        if let Some(name) = mount.name.as_ref().filter(|name| !name.is_empty()) {
+                            named_volume_names.push(name.clone());
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        let compose_ctx = compose_context_from_inspect(&inspect);
+        snapshots.push(ContainerSnapshot {
+            id: id.to_string(),
+            name,
+            was_running,
+            bind_mount_paths,
+            named_volume_names,
+            compose_working_dir: compose_ctx
+                .as_ref()
+                .and_then(|ctx| ctx.working_dir.as_ref())
+                .map(|path| path.to_string_lossy().to_string()),
+            compose_config_files: compose_ctx
+                .as_ref()
+                .and_then(|ctx| ctx.config_files.clone()),
+            compose_project: compose_ctx.as_ref().map(|ctx| ctx.project.clone()),
+            compose_service: compose_ctx.as_ref().map(|ctx| ctx.service.clone()),
+            is_compose_managed: compose_ctx.is_some(),
+            uses_host_userns,
+            inspect: Some(inspect),
+        });
+    }
+
+    snapshots
+}
+
+async fn persist_userns_snapshot(snapshots: &[ContainerSnapshot]) {
+    if let Ok(json) = serde_json::to_string_pretty(snapshots) {
+        let _ = tokio::fs::write(USERNS_SNAPSHOT_PATH, json).await;
+    }
+}
+
+fn unique_snapshot_values(
+    snapshots: &[ContainerSnapshot],
+    extract: impl Fn(&ContainerSnapshot) -> &[String],
+) -> Vec<String> {
+    let mut values: Vec<String> = snapshots
+        .iter()
+        .flat_map(|snapshot| extract(snapshot).iter().cloned())
+        .collect();
+    values.sort();
+    values.dedup();
+    values
+}
+
+fn subid_start(path: &str, user: &str) -> Option<u32> {
+    std::fs::read_to_string(path)
+        .ok()?
+        .lines()
+        .find_map(|line| {
+            let mut parts = line.split(':');
+            let name = parts.next()?;
+            let start = parts.next()?;
+            (name == user).then(|| start.parse().ok()).flatten()
+        })
+}
+
+fn dockremap_uid_gid() -> (u32, u32) {
+    let uid = subid_start("/etc/subuid", "dockremap").unwrap_or(100_000);
+    let gid = subid_start("/etc/subgid", "dockremap").unwrap_or(uid);
+    (uid, gid)
+}
+
+fn is_safe_userns_bind_path(path: &str) -> bool {
+    let path = Path::new(path);
+    if !path.is_absolute() || path == Path::new("/") {
+        return false;
+    }
+
+    [
+        "/bin",
+        "/boot",
+        "/dev",
+        "/etc",
+        "/lib",
+        "/lib64",
+        "/proc",
+        "/run",
+        "/sbin",
+        "/sys",
+        "/usr",
+        "/var/lib/docker",
+        "/var/run",
+    ]
+    .into_iter()
+    .map(Path::new)
+    .all(|blocked| path != blocked && !path.starts_with(blocked))
+}
+
+async fn migrate_named_volumes(
+    volume_names: &[String],
+    uid: u32,
+    gid: u32,
+    progress: Option<&ProgressSender>,
+) -> UsernsRecoveryResult {
+    let mut result = UsernsRecoveryResult::default();
+    if volume_names.is_empty() {
+        send_progress(
+            progress,
+            userns_progress_event(
+                7,
+                "migrate_named_volumes",
+                "done",
+                Some("No named volumes to migrate".to_string()),
+                None,
+            ),
+        );
+        return result;
+    }
+
+    let old_root = "/var/lib/docker/volumes";
+    let new_root = format!("/var/lib/docker/{uid}.{gid}/volumes");
+    let owner = format!("{uid}:{gid}");
+    let timestamp = chrono::Utc::now().format("%Y%m%d%H%M%S");
+
+    for name in volume_names {
+        let old_path = format!("{old_root}/{name}/_data");
+        let new_dir = format!("{new_root}/{name}");
+        let new_path = format!("{new_dir}/_data");
+
+        if !Path::new(&old_path).exists() {
+            result.skipped += 1;
+            continue;
+        }
+
+        match run_cmd("mkdir", &["-p", &new_dir]).await {
+            Ok((_, _, true)) => {}
+            Ok((_, stderr, _)) => {
+                result
+                    .failed
+                    .push(format!("{name}: create target directory failed: {stderr}"));
+                continue;
+            }
+            Err(error) => {
+                result
+                    .failed
+                    .push(format!("{name}: create target directory failed: {error}"));
+                continue;
+            }
+        }
+
+        if Path::new(&new_path).exists() {
+            let backup = format!("{new_dir}/_data.dokuru-backup-{timestamp}");
+            let _ = run_cmd("mv", &[&new_path, &backup]).await;
+        }
+
+        match run_cmd("cp", &["-a", &old_path, &new_path]).await {
+            Ok((_, _, true)) => {
+                let _ = run_cmd("chown", &["-R", &owner, &new_path]).await;
+                result.completed += 1;
+            }
+            Ok((_, stderr, _)) => result.failed.push(format!("{name}: copy failed: {stderr}")),
+            Err(error) => result.failed.push(format!("{name}: copy failed: {error}")),
+        }
+    }
+
+    let status = if result.failed.is_empty() {
+        "done"
+    } else {
+        "error"
+    };
+    let detail = if result.failed.is_empty() {
+        format!(
+            "Migrated {} volume(s), skipped {}",
+            result.completed, result.skipped
+        )
+    } else {
+        format!(
+            "Migrated {} volume(s), skipped {}, failed {}: {}",
+            result.completed,
+            result.skipped,
+            result.failed.len(),
+            result
+                .failed
+                .iter()
+                .take(3)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("; ")
+        )
+    };
+    send_progress(
+        progress,
+        userns_progress_event(7, "migrate_named_volumes", status, Some(detail), None),
+    );
+    result
+}
+
+async fn fix_bind_mount_permissions(
+    bind_paths: &[String],
+    uid: u32,
+    gid: u32,
+    progress: Option<&ProgressSender>,
+) -> UsernsRecoveryResult {
+    let mut result = UsernsRecoveryResult::default();
+    if bind_paths.is_empty() {
+        send_progress(
+            progress,
+            userns_progress_event(
+                8,
+                "fix_bind_mount_permissions",
+                "done",
+                Some("No bind mounts to fix".to_string()),
+                None,
+            ),
+        );
+        return result;
+    }
+
+    let owner = format!("{uid}:{gid}");
+    for path in bind_paths {
+        if !is_safe_userns_bind_path(path) {
+            result.skipped += 1;
+            continue;
+        }
+
+        let Ok(metadata) = tokio::fs::metadata(path).await else {
+            result.skipped += 1;
+            continue;
+        };
+
+        let args = if metadata.is_dir() {
+            vec!["-R", owner.as_str(), path.as_str()]
+        } else {
+            vec![owner.as_str(), path.as_str()]
+        };
+
+        match run_cmd("chown", &args).await {
+            Ok((_, _, true)) => result.completed += 1,
+            Ok((_, stderr, _)) => result
+                .failed
+                .push(format!("{path}: chown failed: {stderr}")),
+            Err(error) => result.failed.push(format!("{path}: chown failed: {error}")),
+        }
+    }
+
+    let status = if result.failed.is_empty() {
+        "done"
+    } else {
+        "error"
+    };
+    let detail = if result.failed.is_empty() {
+        format!(
+            "Fixed ownership on {} bind mount path(s), skipped {} unsafe/missing path(s)",
+            result.completed, result.skipped
+        )
+    } else {
+        format!(
+            "Fixed ownership on {} path(s), skipped {}, failed {}: {}",
+            result.completed,
+            result.skipped,
+            result.failed.len(),
+            result
+                .failed
+                .iter()
+                .take(3)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("; ")
+        )
+    };
+    send_progress(
+        progress,
+        userns_progress_event(8, "fix_bind_mount_permissions", status, Some(detail), None),
+    );
+    result
+}
+
+fn compose_recovery_targets(snapshots: &[ContainerSnapshot]) -> Vec<ComposeRecoveryTarget> {
+    let mut targets = BTreeMap::<String, ComposeRecoveryTarget>::new();
+
+    for snapshot in snapshots
+        .iter()
+        .filter(|snapshot| snapshot.is_compose_managed && snapshot.was_running)
+    {
+        let (Some(project), Some(service)) = (&snapshot.compose_project, &snapshot.compose_service)
+        else {
+            continue;
+        };
+        let key = format!(
+            "{}|{}|{}",
+            project,
+            snapshot.compose_working_dir.as_deref().unwrap_or_default(),
+            snapshot.compose_config_files.as_deref().unwrap_or_default()
+        );
+        let entry = targets.entry(key).or_insert_with(|| ComposeRecoveryTarget {
+            project: project.clone(),
+            working_dir: snapshot.compose_working_dir.as_ref().map(PathBuf::from),
+            config_files: snapshot.compose_config_files.clone(),
+            services: Vec::new(),
+        });
+        if !entry.services.contains(service) {
+            entry.services.push(service.clone());
+            entry.services.sort();
+        }
+    }
+
+    targets.into_values().collect()
+}
+
+async fn run_compose_project_up(target: &ComposeRecoveryTarget) -> eyre::Result<()> {
+    let Some(first_service) = target.services.first() else {
+        return Ok(());
+    };
+    let ctx = ComposeContext {
+        project: target.project.clone(),
+        service: first_service.clone(),
+        working_dir: target.working_dir.clone(),
+        config_files: target.config_files.clone(),
+    };
+    let compose_paths = resolve_compose_files(&ctx).await?;
+
+    let mut command = Command::new("docker");
+    command.arg("compose");
+    for compose_path in compose_paths {
+        command.arg("-f").arg(compose_path);
+    }
+    command.arg("up").arg("-d");
+    for service in &target.services {
+        command.arg(service);
+    }
+    if let Some(working_dir) = &target.working_dir {
+        command.current_dir(working_dir);
+    }
+
+    let output = command.output().await?;
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Err(eyre::eyre!(
+        "docker compose up failed: {}",
+        if stderr.is_empty() { stdout } else { stderr }
+    ))
+}
+
+async fn restart_compose_stacks(snapshots: &[ContainerSnapshot]) -> UsernsRecoveryResult {
+    let mut result = UsernsRecoveryResult::default();
+    for target in compose_recovery_targets(snapshots) {
+        match run_compose_project_up(&target).await {
+            Ok(()) => result.completed += 1,
+            Err(error) => result.failed.push(format!("{}: {}", target.project, error)),
+        }
+    }
+    result
+}
+
+async fn recreate_standalone_containers(
+    docker: &Docker,
+    snapshots: &[ContainerSnapshot],
+) -> UsernsRecoveryResult {
+    let mut result = UsernsRecoveryResult::default();
+    for snapshot in snapshots
+        .iter()
+        .filter(|snapshot| !snapshot.is_compose_managed && snapshot.was_running)
+    {
+        let Some(inspect) = snapshot.inspect.clone() else {
+            result.skipped += 1;
+            continue;
+        };
+        let Some(container_config) = inspect.config else {
+            result
+                .failed
+                .push(format!("{}: missing config", snapshot.name));
+            continue;
+        };
+
+        let mut create_config: Config<String> = container_config.into();
+        create_config.host_config = inspect.host_config;
+        let opts = (!snapshot.name.is_empty()).then(|| CreateContainerOptions {
+            name: snapshot.name.clone(),
+            platform: None,
+        });
+
+        match docker.create_container(opts, create_config).await {
+            Ok(created) => {
+                let start_target = if snapshot.name.is_empty() {
+                    created.id
+                } else {
+                    snapshot.name.clone()
+                };
+                match docker
+                    .start_container(&start_target, None::<StartContainerOptions<String>>)
+                    .await
+                {
+                    Ok(()) => result.completed += 1,
+                    Err(error) => result
+                        .failed
+                        .push(format!("{}: start failed: {error}", snapshot.name)),
+                }
+            }
+            Err(error) => result
+                .failed
+                .push(format!("{}: recreate failed: {error}", snapshot.name)),
+        }
+    }
+    result
+}
+
+async fn restart_recovered_containers(
+    docker: &Docker,
+    snapshots: &[ContainerSnapshot],
+    progress: Option<&ProgressSender>,
+) -> UsernsRecoveryResult {
+    let mut result = restart_compose_stacks(snapshots).await;
+    let standalone = recreate_standalone_containers(docker, snapshots).await;
+    result.completed += standalone.completed;
+    result.skipped += standalone.skipped;
+    result.failed.extend(standalone.failed);
+
+    let status = if result.failed.is_empty() {
+        "done"
+    } else {
+        "error"
+    };
+    let detail = if result.failed.is_empty() {
+        format!(
+            "Restarted/recreated {} container group(s)",
+            result.completed
+        )
+    } else {
+        format!(
+            "Restarted/recreated {} group(s), skipped {}, failed {}: {}",
+            result.completed,
+            result.skipped,
+            result.failed.len(),
+            result
+                .failed
+                .iter()
+                .take(3)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("; ")
+        )
+    };
+    send_progress(
+        progress,
+        userns_progress_event(9, "restart_containers", status, Some(detail), None),
+    );
+    result
+}
+
+async fn snapshot_userns_recovery_state(
+    docker: &Docker,
+    progress: Option<&ProgressSender>,
+) -> UsernsSnapshotState {
+    send_progress(
+        progress,
+        userns_progress_event(
+            1,
+            "snapshot_containers",
+            "in_progress",
+            Some("Snapshotting all container mounts and Compose context".to_string()),
+            Some("docker inspect $(docker ps -aq)".to_string()),
+        ),
+    );
+    let snapshots = snapshot_all_containers(docker).await;
+    persist_userns_snapshot(&snapshots).await;
+    let bind_paths = unique_snapshot_values(&snapshots, |snapshot| &snapshot.bind_mount_paths);
+    let volume_names = unique_snapshot_values(&snapshots, |snapshot| &snapshot.named_volume_names);
+    let host_userns_count = snapshots
+        .iter()
+        .filter(|snapshot| snapshot.uses_host_userns)
+        .count();
+    send_progress(
+        progress,
+        userns_progress_event(
+            1,
+            "snapshot_containers",
+            "done",
+            Some(format!(
+                "Snapshotted {} container(s), {} bind mount(s), {} named volume(s), {} userns=host container(s). Snapshot saved to {}",
+                snapshots.len(),
+                bind_paths.len(),
+                volume_names.len(),
+                host_userns_count,
+                USERNS_SNAPSHOT_PATH
+            )),
+            None,
+        ),
+    );
+
+    UsernsSnapshotState {
+        snapshots,
+        bind_paths,
+        volume_names,
+    }
+}
+
+async fn create_dockremap_user(progress: Option<&ProgressSender>) {
+    send_progress(
+        progress,
+        userns_progress_event(
+            2,
+            "create_dockremap_user",
+            "in_progress",
+            Some("Creating dockremap system user".to_string()),
+            Some("useradd -r -s /bin/false dockremap".to_string()),
+        ),
+    );
     let _ = run_cmd("useradd", &["-r", "-s", "/bin/false", "dockremap"]).await;
-    send_progress(progress, make_event(1, "create_dockremap_user", "done",
-        Some("dockremap user ready".to_string()), None));
+    send_progress(
+        progress,
+        userns_progress_event(
+            2,
+            "create_dockremap_user",
+            "done",
+            Some("dockremap user ready".to_string()),
+            None,
+        ),
+    );
+}
 
-    send_progress(progress, make_event(2, "create_subid_files", "in_progress",
-        Some("Ensuring /etc/subuid and /etc/subgid exist".to_string()),
-        Some("touch /etc/subuid /etc/subgid".to_string())));
+async fn create_subid_files(progress: Option<&ProgressSender>) {
+    send_progress(
+        progress,
+        userns_progress_event(
+            3,
+            "create_subid_files",
+            "in_progress",
+            Some("Ensuring /etc/subuid and /etc/subgid exist".to_string()),
+            Some("touch /etc/subuid /etc/subgid".to_string()),
+        ),
+    );
     let _ = run_cmd("touch", &["/etc/subuid", "/etc/subgid"]).await;
-    send_progress(progress, make_event(2, "create_subid_files", "done",
-        Some("/etc/subuid and /etc/subgid ready".to_string()), None));
+    send_progress(
+        progress,
+        userns_progress_event(
+            3,
+            "create_subid_files",
+            "done",
+            Some("/etc/subuid and /etc/subgid ready".to_string()),
+            None,
+        ),
+    );
+}
 
-    send_progress(progress, make_event(3, "map_uid_gid_ranges", "in_progress",
-        Some("Mapping UID/GID ranges for dockremap".to_string()),
-        Some("usermod --add-subuids 100000-165535 --add-subgids 100000-165535 dockremap".to_string())));
+async fn map_dockremap_ranges(progress: Option<&ProgressSender>) {
+    send_progress(
+        progress,
+        userns_progress_event(
+            4,
+            "map_uid_gid_ranges",
+            "in_progress",
+            Some("Mapping UID/GID ranges for dockremap".to_string()),
+            Some(
+                "usermod --add-subuids 100000-165535 --add-subgids 100000-165535 dockremap"
+                    .to_string(),
+            ),
+        ),
+    );
     let _ = run_cmd("usermod", &["--add-subuids", "100000-165535", "dockremap"]).await;
     let _ = run_cmd("usermod", &["--add-subgids", "100000-165535", "dockremap"]).await;
-    send_progress(progress, make_event(3, "map_uid_gid_ranges", "done",
-        Some("UID/GID ranges mapped".to_string()), None));
+    send_progress(
+        progress,
+        userns_progress_event(
+            4,
+            "map_uid_gid_ranges",
+            "done",
+            Some("UID/GID ranges mapped".to_string()),
+            None,
+        ),
+    );
+}
 
-    send_progress(progress, make_event(4, "write_daemon_json", "in_progress",
-        Some("Writing userns-remap to /etc/docker/daemon.json".to_string()),
-        Some(r#"{"userns-remap":"default"} → /etc/docker/daemon.json"#.to_string())));
+fn write_userns_daemon_json(progress: Option<&ProgressSender>) -> Option<FixOutcome> {
+    send_progress(
+        progress,
+        userns_progress_event(
+            5,
+            "write_daemon_json",
+            "in_progress",
+            Some("Writing userns-remap to /etc/docker/daemon.json".to_string()),
+            Some(r#"{"userns-remap":"default"} -> /etc/docker/daemon.json"#.to_string()),
+        ),
+    );
+
     match merge_daemon_json("userns-remap", serde_json::Value::String("default".into())) {
-        Err(e) => {
-            send_progress(progress, make_event(4, "write_daemon_json", "error",
-                Some(e.to_string()), None));
-            return Ok(blocked(RULE_ID, &format!("Failed to update daemon.json: {e}")));
-        }
         Ok(()) => {
-            send_progress(progress, make_event(4, "write_daemon_json", "done",
-                Some("userns-remap: default written to daemon.json".to_string()), None));
+            send_progress(
+                progress,
+                userns_progress_event(
+                    5,
+                    "write_daemon_json",
+                    "done",
+                    Some("userns-remap: default written to daemon.json".to_string()),
+                    None,
+                ),
+            );
+            None
         }
-    }
-
-    send_progress(progress, make_event(5, "restart_docker", "in_progress",
-        Some("Restarting Docker daemon — all running containers will stop".to_string()),
-        Some("systemctl restart docker".to_string())));
-    match run_cmd("systemctl", &["restart", "docker"]).await {
-        Ok((_, _, true)) => {
-            send_progress(progress, make_event(5, "restart_docker", "done",
-                Some("Docker daemon restarted with userns-remap enabled".to_string()), None));
-            Ok(applied(
-                RULE_ID,
-                "userns-remap enabled: dockremap user created, subuid/subgid mapped, Docker restarted",
-                false,
+        Err(error) => {
+            send_progress(
+                progress,
+                userns_progress_event(
+                    5,
+                    "write_daemon_json",
+                    "error",
+                    Some(error.to_string()),
+                    None,
+                ),
+            );
+            Some(blocked(
+                USERNS_REMAP_RULE_ID,
+                &format!("Failed to update daemon.json: {error}"),
             ))
         }
-        Ok((_, stderr, _)) => {
-            send_progress(progress, make_event(5, "restart_docker", "error",
-                Some(stderr.clone()), None));
-            Ok(blocked(RULE_ID, &format!("daemon.json updated but Docker restart failed: {stderr}")))
+    }
+}
+
+async fn restart_docker_for_userns(progress: Option<&ProgressSender>) -> Option<FixOutcome> {
+    send_progress(
+        progress,
+        userns_progress_event(
+            6,
+            "restart_docker",
+            "in_progress",
+            Some("Restarting Docker daemon; all running containers will stop".to_string()),
+            Some("systemctl restart docker".to_string()),
+        ),
+    );
+
+    match run_cmd("systemctl", &["restart", "docker"]).await {
+        Ok((_, _, true)) => {
+            send_progress(
+                progress,
+                userns_progress_event(
+                    6,
+                    "restart_docker",
+                    "done",
+                    Some("Docker daemon restarted with userns-remap enabled".to_string()),
+                    None,
+                ),
+            );
+            None
         }
-        Err(e) => {
-            send_progress(progress, make_event(5, "restart_docker", "error",
-                Some(e.to_string()), None));
-            Ok(blocked(RULE_ID, &format!("daemon.json updated but restart command failed: {e}")))
+        Ok((_, stderr, _)) => {
+            send_progress(
+                progress,
+                userns_progress_event(6, "restart_docker", "error", Some(stderr.clone()), None),
+            );
+            Some(blocked(
+                USERNS_REMAP_RULE_ID,
+                &format!("daemon.json updated but Docker restart failed: {stderr}"),
+            ))
+        }
+        Err(error) => {
+            send_progress(
+                progress,
+                userns_progress_event(6, "restart_docker", "error", Some(error.to_string()), None),
+            );
+            Some(blocked(
+                USERNS_REMAP_RULE_ID,
+                &format!("daemon.json updated but restart command failed: {error}"),
+            ))
         }
     }
+}
+
+async fn recover_userns_state(
+    docker: &Docker,
+    state: &UsernsSnapshotState,
+    progress: Option<&ProgressSender>,
+) -> UsernsRecoverySummary {
+    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+    let (uid, gid) = dockremap_uid_gid();
+
+    send_progress(
+        progress,
+        userns_progress_event(
+            7,
+            "migrate_named_volumes",
+            "in_progress",
+            Some(format!(
+                "Migrating {} named volume(s) to /var/lib/docker/{uid}.{gid}",
+                state.volume_names.len()
+            )),
+            Some("cp -a /var/lib/docker/volumes/<name>/_data /var/lib/docker/<uid>.<gid>/volumes/<name>/_data".to_string()),
+        ),
+    );
+    let volume_result = migrate_named_volumes(&state.volume_names, uid, gid, progress).await;
+
+    send_progress(
+        progress,
+        userns_progress_event(
+            8,
+            "fix_bind_mount_permissions",
+            "in_progress",
+            Some(format!(
+                "Fixing ownership on {} bind mount path(s)",
+                state.bind_paths.len()
+            )),
+            Some(format!("chown -R {uid}:{gid} <bind-paths>")),
+        ),
+    );
+    let bind_result = fix_bind_mount_permissions(&state.bind_paths, uid, gid, progress).await;
+
+    send_progress(
+        progress,
+        userns_progress_event(
+            9,
+            "restart_containers",
+            "in_progress",
+            Some("Restarting Compose stacks and standalone containers from snapshot".to_string()),
+            Some("docker compose up -d".to_string()),
+        ),
+    );
+    let restart_result = restart_recovered_containers(docker, &state.snapshots, progress).await;
+
+    let failures = volume_result
+        .failed
+        .iter()
+        .chain(&bind_result.failed)
+        .chain(&restart_result.failed)
+        .cloned()
+        .collect();
+
+    UsernsRecoverySummary {
+        volume_result,
+        bind_result,
+        restart_result,
+        failures,
+    }
+}
+
+fn userns_final_outcome(summary: &UsernsRecoverySummary) -> FixOutcome {
+    let volumes = summary.volume_result.completed;
+    let binds = summary.bind_result.completed;
+    let restarts = summary.restart_result.completed;
+
+    if summary.failures.is_empty() {
+        return applied(
+            USERNS_REMAP_RULE_ID,
+            &format!(
+                "userns-remap enabled and recovery completed: migrated {volumes} volume(s), fixed {binds} bind mount path(s), restarted/recreated {restarts} container group(s)"
+            ),
+            false,
+        );
+    }
+
+    FixOutcome {
+        rule_id: USERNS_REMAP_RULE_ID.to_string(),
+        status: FixStatus::Guided,
+        message: format!(
+            "userns-remap enabled, but recovery needs manual attention. Completed: {volumes} volume(s), {binds} bind path(s), {restarts} container group(s). Failed {}: {}",
+            summary.failures.len(),
+            summary
+                .failures
+                .iter()
+                .take(5)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("; ")
+        ),
+        requires_restart: false,
+        restart_command: None,
+        requires_elevation: true,
+    }
+}
+
+pub async fn apply_userns_remap_fix_with_progress(
+    docker: &Docker,
+    progress: Option<&ProgressSender>,
+) -> eyre::Result<FixOutcome> {
+    let state = snapshot_userns_recovery_state(docker, progress).await;
+
+    create_dockremap_user(progress).await;
+
+    create_subid_files(progress).await;
+
+    map_dockremap_ranges(progress).await;
+
+    if let Some(outcome) = write_userns_daemon_json(progress) {
+        return Ok(outcome);
+    }
+
+    if let Some(outcome) = restart_docker_for_userns(progress).await {
+        return Ok(outcome);
+    }
+
+    let summary = recover_userns_state(docker, &state, progress).await;
+    Ok(userns_final_outcome(&summary))
 }
 
 pub async fn preview_fix(docker: &Docker, rule_id: &str) -> eyre::Result<FixPreview> {
@@ -578,8 +1426,10 @@ pub async fn preview_fix(docker: &Docker, rule_id: &str) -> eyre::Result<FixPrev
     Ok(FixPreview {
         rule_id: rule_id.to_string(),
         targets,
-        requires_restart: supports_namespace_fix(rule_id) || supports_privileged_fix(rule_id),
-        requires_elevation: supports_audit_rule_fix(rule_id),
+        requires_restart: supports_namespace_fix(rule_id)
+            || supports_privileged_fix(rule_id)
+            || supports_userns_remap_fix(rule_id),
+        requires_elevation: supports_audit_rule_fix(rule_id) || supports_userns_remap_fix(rule_id),
         steps: fix_steps(rule_id),
     })
 }

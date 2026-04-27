@@ -114,7 +114,7 @@ function ConfirmStep({
                             Destructive — Docker daemon will restart
                         </p>
                         <p className="text-xs text-red-400/70 leading-relaxed">
-                            All running containers will be stopped immediately. Containers created before userns-remap was enabled will become inaccessible and must be recreated manually. Volume data is preserved, but container configurations must be reapplied.
+                            Dokuru will snapshot containers first, migrate Docker volumes into the remapped storage root, chown safe bind mounts, and restart recovered Compose stacks. Docker socket mounts and other system paths are skipped and may still need manual handling.
                         </p>
                     </div>
                 </div>
