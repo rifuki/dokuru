@@ -25,6 +25,8 @@ mod tests {
             remediation_kind: RemediationKind::Manual,
             audit_command: None,
             raw_output: None,
+            command_stderr: None,
+            command_exit_code: None,
             references: None,
             rationale: None,
             impact: None,

@@ -361,4 +361,19 @@ mod tests {
         assert_eq!(section_name(5), "Container Runtime");
         assert_eq!(section_name(99), "Unknown");
     }
+
+    #[test]
+    fn all_registered_rules_have_audit_commands() {
+        let registry = RuleRegistry::new();
+
+        for rule in registry.all() {
+            assert!(
+                rule.audit_command
+                    .as_deref()
+                    .is_some_and(|command| !command.trim().is_empty()),
+                "rule {} is missing an audit command",
+                rule.id
+            );
+        }
+    }
 }

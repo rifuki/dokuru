@@ -66,6 +66,15 @@ function StatusIcon({ status }: { status: "Pass" | "Fail" | "Error" }) {
     return <Shield className="h-5 w-5 text-orange-500 shrink-0" />;
 }
 
+async function copyCommand(command: string) {
+    try {
+        await navigator.clipboard.writeText(command);
+        toast.success("Command copied");
+    } catch {
+        toast.error("Failed to copy command");
+    }
+}
+
 // ── Fix Panel ────────────────────────────────────────────────────────────────
 
 function FixPanel({ outcome, onDismiss }: { outcome: FixOutcome; onDismiss: () => void }) {
@@ -217,7 +226,7 @@ function RuleCard({ result, agentId, agentUrl, agentAccessMode, token, container
     const [fixStepIndex, setFixStepIndex] = useState(0);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    const { rule, status, message, affected, audit_command, raw_output, references, rationale, impact, remediation_kind } = result;
+    const { rule, status, message, affected, audit_command, raw_output, command_stderr, command_exit_code, references, rationale, impact, remediation_kind } = result;
     const meta = sectionMeta(rule.section);
     const steps = getFixSteps(rule.id);
     const needsRestart = requiresDockerRestart(rule.id);
@@ -355,7 +364,12 @@ function RuleCard({ result, agentId, agentUrl, agentAccessMode, token, container
                     
                     {audit_command && (
                         <div>
-                            <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-2">Verify with</h5>
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                                <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Verify with</h5>
+                                <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => void copyCommand(audit_command)}>
+                                    Copy
+                                </Button>
+                            </div>
                             <code className="block text-xs bg-zinc-900 dark:bg-zinc-950 text-green-400 p-3 rounded-lg overflow-x-auto font-mono">
                                 $ {audit_command}
                             </code>
@@ -539,22 +553,38 @@ function RuleCard({ result, agentId, agentUrl, agentAccessMode, token, container
                     {/* Audit Command */}
                     {audit_command && (
                         <div>
-                            <h5 className="flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1.5">
-                                <Terminal className="h-3.5 w-3.5" /> Audit Command
-                            </h5>
+                            <div className="mb-1.5 flex items-center justify-between gap-2">
+                                <h5 className="flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">
+                                    <Terminal className="h-3.5 w-3.5" /> Registered Audit Command
+                                </h5>
+                                <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => void copyCommand(audit_command)}>
+                                    Copy
+                                </Button>
+                            </div>
                             <code className="block text-xs bg-zinc-900 dark:bg-zinc-950 text-green-400 p-3 rounded-lg overflow-x-auto font-mono">
                                 $ {audit_command}
                             </code>
                         </div>
                     )}
 
-                    {/* Raw Output */}
-                    {raw_output && (
-                        <div>
-                            <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground mb-1.5">Raw Output</h5>
+                    {(raw_output !== undefined || command_stderr || typeof command_exit_code === "number") && (
+                        <div className="space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <h5 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Real Shell Output</h5>
+                                {typeof command_exit_code === "number" && (
+                                    <span className="rounded border border-border bg-muted/40 px-2 py-0.5 text-[10px] font-mono text-muted-foreground">
+                                        exit {command_exit_code}
+                                    </span>
+                                )}
+                            </div>
                             <pre className="text-xs bg-muted/50 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap font-mono text-muted-foreground">
-                                {raw_output}
+                                {raw_output || "(no stdout)"}
                             </pre>
+                            {command_stderr && (
+                                <pre className="text-xs bg-red-500/10 border border-red-500/20 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap font-mono text-red-300">
+                                    {command_stderr}
+                                </pre>
+                            )}
                         </div>
                     )}
 
