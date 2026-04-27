@@ -60,6 +60,10 @@ pub struct CheckResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_output: Option<String>, // Raw command output
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub command_stderr: Option<String>, // Raw command stderr
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub command_exit_code: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub references: Option<Vec<String>>, // External reference links
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub rationale: Option<String>, // Why this rule matters
@@ -89,6 +93,8 @@ impl Default for CheckResult {
             remediation_kind: RemediationKind::Manual,
             audit_command: None,
             raw_output: None,
+            command_stderr: None,
+            command_exit_code: None,
             references: None,
             rationale: None,
             impact: None,

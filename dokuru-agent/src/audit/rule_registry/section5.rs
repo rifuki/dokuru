@@ -27,6 +27,12 @@ impl Section5 {
 
     // ── Helper ────────────────────────────────────────────────────────────────
 
+    fn inspect_command(field: &str, label: &str) -> String {
+        format!(
+            r#"docker ps --format "{{{{.ID}}}} {{{{.Names}}}}" | while read -r id name; do value=$(docker inspect --format "{{{{ {field} }}}}" "$id"); printf "%s: {label}=%s\n" "$name" "$value"; done"#,
+        )
+    }
+
     fn container_name(names: Option<&Vec<String>>, id: &str) -> String {
         names.and_then(|n| n.first()).map_or_else(
             || id.chars().take(12).collect(),
@@ -48,7 +54,7 @@ impl Section5 {
             severity: Severity::High,
             scored: true,
 
-            audit_command: Some("docker ps --quiet | xargs docker inspect --format '{{ .Id }}: Privileged={{ .HostConfig.Privileged }}'".into()),
+            audit_command: Some(Self::inspect_command(".HostConfig.Privileged", "Privileged")),
             check_fn: |docker, containers| {
                 let docker = docker.clone();
                 let containers = containers.to_vec();
@@ -119,7 +125,7 @@ impl Section5 {
                         },
                         affected: failing,
                         remediation_kind: RemediationKind::Auto,
-                        audit_command: Some("docker inspect --format '{{ .HostConfig.Privileged }}' <container>".into()),
+                        audit_command: Some(Self::inspect_command(".HostConfig.Privileged", "Privileged")),
                         raw_output: Some(raw_lines.join("\n")),
                         references: None,
                         rationale: None,
@@ -173,7 +179,7 @@ If specific kernel capabilities are required, grant only the minimum capability 
             severity: Severity::High,
             scored: true,
 
-            audit_command: Some("docker ps --quiet | xargs docker inspect --format '{{ .Id }}: NetworkMode={{ .HostConfig.NetworkMode }}'".into()),
+            audit_command: Some(Self::inspect_command(".HostConfig.NetworkMode", "NetworkMode")),
             check_fn: |docker, containers| {
                 let docker = docker.clone();
                 let containers = containers.to_vec();
@@ -240,7 +246,7 @@ If specific kernel capabilities are required, grant only the minimum capability 
                         },
                         affected: failing,
                         remediation_kind: RemediationKind::Manual,
-                        audit_command: Some("docker inspect --format '{{ .HostConfig.NetworkMode }}' <container>".into()),
+                        audit_command: Some(Self::inspect_command(".HostConfig.NetworkMode", "NetworkMode")),
                         raw_output: Some(raw_lines.join("\n")),
                         references: None,
                         rationale: None,
@@ -294,7 +300,7 @@ Example (incorrect — avoid):
             severity: Severity::High,
             scored: true,
 
-            audit_command: Some("docker ps --quiet | xargs docker inspect --format '{{ .Id }}: Memory={{ .HostConfig.Memory }}'".into()),
+            audit_command: Some(Self::inspect_command(".HostConfig.Memory", "Memory")),
             check_fn: |docker, containers| {
                 let docker = docker.clone();
                 let containers = containers.to_vec();
@@ -361,7 +367,7 @@ Example (incorrect — avoid):
                         },
                         affected: failing,
                         remediation_kind: RemediationKind::Manual,
-                        audit_command: Some("docker inspect --format '{{ .HostConfig.Memory }}' <container>".into()),
+                        audit_command: Some(Self::inspect_command(".HostConfig.Memory", "Memory")),
                         raw_output: Some(raw_lines.join("\n")),
                         references: None,
                         rationale: None,
@@ -418,7 +424,7 @@ Or in docker-compose.yml:
             severity: Severity::Medium,
             scored: true,
 
-            audit_command: Some("docker ps --quiet | xargs docker inspect --format '{{ .Id }}: CpuShares={{ .HostConfig.CpuShares }}'".into()),
+            audit_command: Some(Self::inspect_command(".HostConfig.CpuShares", "CpuShares")),
             check_fn: |docker, containers| {
                 let docker = docker.clone();
                 let containers = containers.to_vec();
@@ -486,7 +492,7 @@ Or in docker-compose.yml:
                         },
                         affected: failing,
                         remediation_kind: RemediationKind::Manual,
-                        audit_command: Some("docker inspect --format '{{ .HostConfig.CpuShares }}' <container>".into()),
+                        audit_command: Some(Self::inspect_command(".HostConfig.CpuShares", "CpuShares")),
                         raw_output: Some(raw_lines.join("\n")),
                         references: None,
                         rationale: None,
@@ -546,7 +552,7 @@ Or in docker-compose.yml:
             severity: Severity::High,
             scored: true,
 
-            audit_command: Some("docker ps --quiet | xargs docker inspect --format '{{ .Id }}: PidMode={{ .HostConfig.PidMode }}'".into()),
+            audit_command: Some(Self::inspect_command(".HostConfig.PidMode", "PidMode")),
             check_fn: |docker, containers| {
                 let docker = docker.clone();
                 let containers = containers.to_vec();
@@ -613,7 +619,7 @@ Or in docker-compose.yml:
                         },
                         affected: failing,
                         remediation_kind: RemediationKind::Manual,
-                        audit_command: Some("docker inspect --format '{{ .HostConfig.PidMode }}' <container>".into()),
+                        audit_command: Some(Self::inspect_command(".HostConfig.PidMode", "PidMode")),
                         raw_output: Some(raw_lines.join("\n")),
                         references: None,
                         rationale: None,
@@ -667,7 +673,7 @@ To inspect processes in a container, use docker exec instead:
             severity: Severity::High,
             scored: true,
 
-            audit_command: Some("docker ps --quiet | xargs docker inspect --format '{{ .Id }}: IpcMode={{ .HostConfig.IpcMode }}'".into()),
+            audit_command: Some(Self::inspect_command(".HostConfig.IpcMode", "IpcMode")),
             check_fn: |docker, containers| {
                 let docker = docker.clone();
                 let containers = containers.to_vec();
@@ -734,7 +740,7 @@ To inspect processes in a container, use docker exec instead:
                         },
                         affected: failing,
                         remediation_kind: RemediationKind::Manual,
-                        audit_command: Some("docker inspect --format '{{ .HostConfig.IpcMode }}' <container>".into()),
+                        audit_command: Some(Self::inspect_command(".HostConfig.IpcMode", "IpcMode")),
                         raw_output: Some(raw_lines.join("\n")),
                         references: None,
                         rationale: None,
@@ -789,7 +795,7 @@ Example (acceptable for inter-container sharing):
             severity: Severity::Medium,
             scored: true,
 
-            audit_command: Some("docker ps --quiet | xargs docker inspect --format '{{ .Id }}: UTSMode={{ .HostConfig.UTSMode }}'".into()),
+            audit_command: Some(Self::inspect_command(".HostConfig.UTSMode", "UTSMode")),
             check_fn: |docker, containers| {
                 let docker = docker.clone();
                 let containers = containers.to_vec();
@@ -856,7 +862,7 @@ Example (acceptable for inter-container sharing):
                         },
                         affected: failing,
                         remediation_kind: RemediationKind::Manual,
-                        audit_command: Some("docker inspect --format '{{ .HostConfig.UTSMode }}' <container>".into()),
+                        audit_command: Some(Self::inspect_command(".HostConfig.UTSMode", "UTSMode")),
                         raw_output: Some(raw_lines.join("\n")),
                         references: None,
                         rationale: None,
@@ -908,7 +914,7 @@ By default, each container gets its own UTS namespace with an isolated hostname.
             severity: Severity::Medium,
             scored: false,
 
-            audit_command: Some("docker ps --quiet | xargs docker inspect --format '{{ .Id }}: CgroupParent={{ .HostConfig.CgroupParent }}'".into()),
+            audit_command: Some(Self::inspect_command(".HostConfig.CgroupParent", "CgroupParent")),
             check_fn: |docker, containers| {
                 let docker = docker.clone();
                 let containers = containers.to_vec();
@@ -987,7 +993,7 @@ By default, each container gets its own UTS namespace with an isolated hostname.
                         },
                         affected: failing,
                         remediation_kind: RemediationKind::Manual,
-                        audit_command: Some("docker inspect --format '{{ .HostConfig.CgroupParent }}' <container>".into()),
+                        audit_command: Some(Self::inspect_command(".HostConfig.CgroupParent", "CgroupParent")),
                         raw_output: Some(raw_lines.join("\n")),
                         references: None,
                         rationale: None,
@@ -1032,7 +1038,7 @@ Example:
             severity: Severity::Medium,
             scored: true,
 
-            audit_command: Some("docker ps --quiet | xargs docker inspect --format '{{ .Id }}: PidsLimit={{ .HostConfig.PidsLimit }}'".into()),
+            audit_command: Some(Self::inspect_command(".HostConfig.PidsLimit", "PidsLimit")),
             check_fn: |docker, containers| {
                 let docker = docker.clone();
                 let containers = containers.to_vec();
@@ -1100,7 +1106,7 @@ Example:
                         },
                         affected: failing,
                         remediation_kind: RemediationKind::Manual,
-                        audit_command: Some("docker inspect --format '{{ .HostConfig.PidsLimit }}' <container>".into()),
+                        audit_command: Some(Self::inspect_command(".HostConfig.PidsLimit", "PidsLimit")),
                         raw_output: Some(raw_lines.join("\n")),
                         references: None,
                         rationale: None,
@@ -1158,7 +1164,7 @@ A reasonable value for most workloads is 50-200."#.into(),
             severity: Severity::High,
             scored: true,
 
-            audit_command: Some("docker ps --quiet | xargs docker inspect --format '{{ .Id }}: UsernsMode={{ .HostConfig.UsernsMode }}'".into()),
+            audit_command: Some(Self::inspect_command(".HostConfig.UsernsMode", "UsernsMode")),
             check_fn: |docker, containers| {
                 let docker = docker.clone();
                 let containers = containers.to_vec();
@@ -1225,7 +1231,7 @@ A reasonable value for most workloads is 50-200."#.into(),
                         },
                         affected: failing,
                         remediation_kind: RemediationKind::Manual,
-                        audit_command: Some("docker inspect --format '{{ .HostConfig.UsernsMode }}' <container>".into()),
+                        audit_command: Some(Self::inspect_command(".HostConfig.UsernsMode", "UsernsMode")),
                         raw_output: Some(raw_lines.join("\n")),
                         references: None,
                         rationale: None,

@@ -81,6 +81,42 @@ function StatusIcon({ status }: { status: "Pass" | "Fail" | "Error" }) {
   return <Shield className="h-5 w-5 text-orange-500 shrink-0" />;
 }
 
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success("Command copied");
+  } catch {
+    toast.error("Failed to copy command");
+  }
+}
+
+function AuditCommandBlock({ label, command }: { label: string; command: string }) {
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">{label}</p>
+        <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => void copyText(command)}>
+          Copy
+        </Button>
+      </div>
+      <code className="block rounded border border-border/50 bg-zinc-950 p-3 font-mono text-xs text-emerald-400 overflow-x-auto whitespace-pre-wrap">
+        $ {command}
+      </code>
+    </div>
+  );
+}
+
+function CommandOutputBlock({ label, output }: { label: string; output?: string }) {
+  return (
+    <div>
+      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">{label}</p>
+      <pre className="rounded border border-border/50 bg-zinc-950 p-3 font-mono text-xs text-zinc-300 whitespace-pre-wrap overflow-x-auto">
+        {output || "(no output)"}
+      </pre>
+    </div>
+  );
+}
+
 // ── Rule Card ────────────────────────────────────────────────────────────────
 
 function AgentVerificationPanel({
@@ -89,12 +125,14 @@ function AgentVerificationPanel({
   agentAccessMode,
   token,
   ruleId,
+  auditCommand,
 }: {
   agentId: string;
   agentUrl: string;
   agentAccessMode?: string;
   token?: string;
   ruleId: string;
+  auditCommand?: string;
 }) {
   const [result, setResult] = useState<AuditResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -102,6 +140,7 @@ function AgentVerificationPanel({
   const [loading, setLoading] = useState(false);
 
   const canRun = agentAccessMode === "relay" || !!agentUrl;
+  const command = result?.audit_command ?? auditCommand;
 
   const runVerification = async () => {
     if (!canRun) return;
@@ -122,25 +161,16 @@ function AgentVerificationPanel({
     }
   };
 
-  const copyCommand = async (command: string) => {
-    try {
-      await navigator.clipboard.writeText(command);
-      toast.success("Command copied");
-    } catch {
-      toast.error("Failed to copy command");
-    }
-  };
-
   return (
     <div className="rounded-lg border border-[#2496ED]/20 bg-[#2496ED]/5 overflow-hidden">
       <div className="flex items-center justify-between gap-3 border-b border-[#2496ED]/10 px-3 py-2">
         <div className="flex items-center gap-2 min-w-0">
-          <Terminal className="h-3.5 w-3.5 text-[#2496ED] shrink-0" />
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-[#2496ED]">Agent Verify</p>
-            <p className="text-[11px] text-muted-foreground truncate">Run this rule check through dokuru-agent now.</p>
+            <Terminal className="h-3.5 w-3.5 text-[#2496ED] shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#2496ED]">Agent Verify</p>
+              <p className="text-[11px] text-muted-foreground truncate">Run the registered audit command on the remote host now.</p>
+            </div>
           </div>
-        </div>
         <Button size="sm" variant="outline" disabled={!canRun || loading} onClick={() => void runVerification()} className="h-8 shrink-0">
           {loading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Terminal className="mr-1.5 h-3.5 w-3.5" />}
           Run Verify
@@ -150,9 +180,11 @@ function AgentVerificationPanel({
       <div className="space-y-3 p-3">
         {!result && !error && (
           <p className="text-xs text-muted-foreground/70">
-            This is not a free VPS shell. It safely re-runs the registered audit check for rule {ruleId} through dokuru-agent.
+            Dokuru only executes the whitelisted audit command for rule {ruleId}, then returns real stdout, stderr, and exit code from the agent host.
           </p>
         )}
+
+        {command && <AuditCommandBlock label="Registered Audit Command" command={command} />}
 
         {error && (
           <div className="rounded border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-400">
@@ -174,34 +206,15 @@ function AgentVerificationPanel({
               </span>
               <span className="text-xs text-muted-foreground">{result.message}</span>
               {verifiedAt && <span className="text-[11px] text-muted-foreground/60">Verified at {verifiedAt}</span>}
+              {typeof result.command_exit_code === "number" && (
+                <span className="rounded border border-border/50 bg-background/40 px-2 py-0.5 text-[10px] font-mono text-muted-foreground">
+                  exit {result.command_exit_code}
+                </span>
+              )}
             </div>
 
-            <div className="rounded border border-border/50 bg-background/40 px-3 py-2 text-[11px] text-muted-foreground">
-              Dokuru verified this with the agent's Docker API. The command below is an equivalent manual check for cross-checking, not captured shell stdout.
-            </div>
-
-            {result.audit_command && (
-              <div>
-                <div className="mb-1.5 flex items-center justify-between gap-2">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">Equivalent Manual Command</p>
-                  <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => void copyCommand(result.audit_command!)}>
-                    Copy
-                  </Button>
-                </div>
-                <code className="block rounded border border-border/50 bg-zinc-950 p-3 font-mono text-xs text-emerald-400 overflow-x-auto">
-                  $ {result.audit_command}
-                </code>
-              </div>
-            )}
-
-            {result.raw_output && (
-              <div>
-                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">Current Output</p>
-                <pre className="rounded border border-border/50 bg-zinc-950 p-3 font-mono text-xs text-zinc-300 whitespace-pre-wrap overflow-x-auto">
-                  {result.raw_output}
-                </pre>
-              </div>
-            )}
+            <CommandOutputBlock label="Shell stdout" output={result.raw_output} />
+            {result.command_stderr && <CommandOutputBlock label="Shell stderr" output={result.command_stderr} />}
           </div>
         )}
       </div>
@@ -220,7 +233,7 @@ function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, 
   focusedRuleId?: string;
   onOpenWizard: (result: AuditResult) => void;
 }) {
-  const { rule, status, message, affected, audit_command, raw_output, references, rationale, impact, remediation_kind, remediation_guide } = result;
+  const { rule, status, message, affected, audit_command, raw_output, command_stderr, command_exit_code, references, rationale, impact, remediation_kind, remediation_guide } = result;
   const isFocused = focusedRuleId === rule.id;
   const cardRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(isFocused);
@@ -246,7 +259,7 @@ function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, 
   const PillarIcon = pillarMeta.icon;
 
   const hasFix = status === "Fail" && !!(rule.remediation || remediation_guide || affected.length > 0);
-  const hasDebug = !!(audit_command || raw_output || (references && references.length > 0));
+  const hasDebug = !!(audit_command || raw_output !== undefined || command_stderr || typeof command_exit_code === "number" || (references && references.length > 0));
   const tabs = [
     { id: "overview" as const, label: "Overview", show: true },
     { id: "fix" as const, label: "Fix", show: hasFix },
@@ -394,21 +407,20 @@ function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, 
                   agentAccessMode={agentAccessMode}
                   token={token}
                   ruleId={rule.id}
+                  auditCommand={audit_command}
                 />
-                {audit_command && (
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-2">Audit Command</p>
-                    <code className="block text-xs bg-zinc-950 text-emerald-400 p-3 rounded-lg font-mono border border-border/50">
-                      $ {audit_command}
-                    </code>
-                  </div>
-                )}
-                {raw_output && (
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-2">Raw Output</p>
-                    <pre className="text-xs bg-muted/20 rounded-lg p-3 font-mono text-muted-foreground border border-border whitespace-pre-wrap max-h-36 overflow-y-auto">
-                      {raw_output}
-                    </pre>
+                {(raw_output !== undefined || command_stderr || typeof command_exit_code === "number") && (
+                  <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">Saved Audit Run</p>
+                      {typeof command_exit_code === "number" && (
+                        <span className="rounded border border-border/50 bg-background/40 px-2 py-0.5 text-[10px] font-mono text-muted-foreground">
+                          exit {command_exit_code}
+                        </span>
+                      )}
+                    </div>
+                    <CommandOutputBlock label="Saved shell stdout" output={raw_output} />
+                    {command_stderr && <CommandOutputBlock label="Saved shell stderr" output={command_stderr} />}
                   </div>
                 )}
                 {references && references.length > 0 && (

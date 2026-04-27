@@ -14,6 +14,12 @@ impl Section4 {
         vec![Self::rule_4_1(), Self::rule_4_6()]
     }
 
+    fn inspect_command(field: &str, label: &str) -> String {
+        format!(
+            r#"docker ps --format "{{{{.ID}}}} {{{{.Names}}}}" | while read -r id name; do value=$(docker inspect --format "{{{{ {field} }}}}" "$id"); printf "%s: {label}=%s\n" "$name" "$value"; done"#,
+        )
+    }
+
     fn container_name(names: Option<&Vec<String>>, id: &str) -> String {
         names.and_then(|n| n.first()).map_or_else(
             || id.chars().take(12).collect(),
@@ -63,7 +69,7 @@ impl Section4 {
             category: RuleCategory::Namespace,
             severity: Severity::High,
             scored: true,
-            audit_command: Some("docker ps --quiet | xargs docker inspect --format '{{ .Id }}: User={{ .Config.User }}'".into()),
+            audit_command: Some(Self::inspect_command(".Config.User", "User")),
             check_fn: |docker, containers| {
                 let docker = docker.clone();
                 let containers = containers.to_vec();
@@ -115,7 +121,7 @@ impl Section4 {
                         },
                         affected: failing,
                         remediation_kind: RemediationKind::Manual,
-                        audit_command: Some("docker inspect --format '{{ .Config.User }}' <container>".into()),
+                        audit_command: Some(Self::inspect_command(".Config.User", "User")),
                         raw_output: Some(raw_lines.join("\n")),
                         references: None,
                         rationale: None,

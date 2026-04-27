@@ -44,6 +44,8 @@ export interface AuditResult {
   remediation_kind: "auto" | "guided" | "manual";
   audit_command?: string;
   raw_output?: string;
+  command_stderr?: string;
+  command_exit_code?: number;
   references?: string[];
   rationale?: string;
   impact?: string;

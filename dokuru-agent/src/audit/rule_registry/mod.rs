@@ -9,12 +9,16 @@ use eyre::Result;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
+use tokio::process::Command;
+use tokio::time::{Duration, timeout};
 
 mod section1;
 mod section2;
 mod section3;
 mod section4;
 mod section5;
+
+const AUDIT_COMMAND_TIMEOUT: Duration = Duration::from_secs(15);
 
 // ── Rule Definition ──────────────────────────────────────────────────────────
 
@@ -57,6 +61,46 @@ pub struct RuleDefinition {
     pub tags: Vec<String>,
 }
 
+struct AuditCommandCapture {
+    stdout: String,
+    stderr: String,
+    exit_code: i32,
+}
+
+fn decode_command_output(bytes: &[u8]) -> String {
+    String::from_utf8_lossy(bytes)
+        .trim_end_matches(['\r', '\n'])
+        .to_string()
+}
+
+async fn capture_audit_command(command: &str) -> AuditCommandCapture {
+    match timeout(
+        AUDIT_COMMAND_TIMEOUT,
+        Command::new("/bin/sh").arg("-c").arg(command).output(),
+    )
+    .await
+    {
+        Ok(Ok(output)) => AuditCommandCapture {
+            stdout: decode_command_output(&output.stdout),
+            stderr: decode_command_output(&output.stderr),
+            exit_code: output.status.code().unwrap_or(-1),
+        },
+        Ok(Err(error)) => AuditCommandCapture {
+            stdout: String::new(),
+            stderr: format!("failed to execute audit command: {error}"),
+            exit_code: -1,
+        },
+        Err(_) => AuditCommandCapture {
+            stdout: String::new(),
+            stderr: format!(
+                "audit command timed out after {} seconds",
+                AUDIT_COMMAND_TIMEOUT.as_secs()
+            ),
+            exit_code: -1,
+        },
+    }
+}
+
 impl RuleDefinition {
     /// Execute check for this rule
     pub async fn check(
@@ -81,6 +125,13 @@ impl RuleDefinition {
         // Always use definition-level remediation_kind so FE knows if auto-fix is available
         result.remediation_kind = self.remediation_kind.clone();
         result.remediation_guide = Some(self.remediation_guide.clone());
+
+        if let Some(command) = result.audit_command.as_deref() {
+            let capture = capture_audit_command(command).await;
+            result.raw_output = Some(capture.stdout);
+            result.command_stderr = (!capture.stderr.is_empty()).then_some(capture.stderr);
+            result.command_exit_code = Some(capture.exit_code);
+        }
 
         Ok(result)
     }
