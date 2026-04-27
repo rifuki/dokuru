@@ -61,6 +61,12 @@ import {
     SquareStack,
     Trash2,
     Zap,
+    Monitor,
+    Microchip,
+    MemoryStick,
+    Cpu,
+    Box,
+    Folder,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -1220,26 +1226,32 @@ function FailingRuleRow({
 
 function HostFacts({ dockerInfo }: { dockerInfo: DockerInfo }) {
     const infoRows = [
-        ["OS", dockerInfo.os ?? "-"],
-        ["Kernel", dockerInfo.kernel_version ?? "-"],
-        ["Arch", dockerInfo.architecture ?? "-"],
-        ["CPU", `${dockerInfo.cpu_count} cores`],
-        ["RAM", fmtMemory(dockerInfo.memory_total)],
-        ["Docker", `v${dockerInfo.docker_version.replace(/^v/, "")}`],
-        ["API", dockerInfo.api_version ?? "-"],
-        ["Storage", dockerInfo.storage_driver ?? "-"],
-        ["Root Dir", dockerInfo.docker_root_dir ?? "-"],
+        { label: "OS", value: dockerInfo.os ?? "-", icon: Monitor },
+        { label: "Kernel", value: dockerInfo.kernel_version ?? "-", icon: GitBranch },
+        { label: "Arch", value: dockerInfo.architecture ?? "-", icon: Microchip },
+        { label: "CPU", value: `${dockerInfo.cpu_count} cores`, icon: Cpu },
+        { label: "RAM", value: fmtMemory(dockerInfo.memory_total), icon: MemoryStick },
+        { label: "Docker", value: `v${dockerInfo.docker_version.replace(/^v/, "")}`, icon: Box },
+        { label: "API", value: dockerInfo.api_version ?? "-", icon: Network },
+        { label: "Storage", value: dockerInfo.storage_driver ?? "-", icon: HardDrive },
+        { label: "Root Dir", value: dockerInfo.docker_root_dir ?? "-", icon: Folder },
     ];
 
     return (
         <SectionCard title="Host Facts">
             <div className="grid grid-cols-2 gap-y-3 lg:grid-cols-1">
-                {infoRows.map(([label, value]) => (
-                    <div key={label} className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between text-sm">
-                        <span className="text-muted-foreground">{label}</span>
-                        <span className="font-mono text-xs font-medium">{value}</span>
-                    </div>
-                ))}
+                {infoRows.map((row) => {
+                    const Icon = row.icon;
+                    return (
+                        <div key={row.label} className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between text-sm transition-colors hover:bg-muted/30 p-2 -mx-2 rounded-lg">
+                            <span className="text-muted-foreground flex items-center gap-2">
+                                <Icon className="h-4 w-4" />
+                                {row.label}
+                            </span>
+                            <span className="font-mono text-xs font-medium">{row.value}</span>
+                        </div>
+                    );
+                })}
             </div>
         </SectionCard>
     );
