@@ -117,7 +117,7 @@ pub fn fix_steps(rule_id: &str) -> Vec<String> {
     if supports_cgroup_resource_fix(rule_id) {
         return vec![
             "Inspect current cgroup limits".to_string(),
-            "Apply docker update".to_string(),
+            "Apply selected Docker or Compose update".to_string(),
             "Verify cgroup limits".to_string(),
         ];
     }
@@ -1487,7 +1487,9 @@ fn preview_target_from_inspect(
     let suggestion = suggest_resource_limits(&name, &image);
     let host_config = inspect.host_config.as_ref();
     let compose = compose_context_from_inspect(inspect);
-    let strategy = if supports_cgroup_resource_fix(rule_id) {
+    let strategy = if supports_cgroup_resource_fix(rule_id) && compose.is_some() {
+        "compose_update"
+    } else if supports_cgroup_resource_fix(rule_id) {
         "docker_update"
     } else if compose.is_some() {
         "compose_update"
@@ -1505,7 +1507,7 @@ fn preview_target_from_inspect(
         suggestion,
         strategy: strategy.to_string(),
         compose_project: compose.as_ref().map(|ctx| ctx.project.clone()),
-        compose_service: compose.map(|ctx| ctx.service),
+        compose_service: compose.as_ref().map(|ctx| ctx.service.clone()),
     }
 }
 
@@ -1586,6 +1588,11 @@ async fn default_target_for_rule(
     if !needs_update {
         return None;
     }
+    let strategy = if compose_context_from_inspect(&inspect).is_some() {
+        "compose_update"
+    } else {
+        "docker_update"
+    };
 
     Some(FixTarget {
         container_id: id.to_string(),
@@ -1595,7 +1602,7 @@ async fn default_target_for_rule(
             .then_some(DEFAULT_CPU_SHARES),
         pids_limit: (matches!(rule_id, "5.29" | "cgroup_all") && pids_limit <= 0)
             .then_some(DEFAULT_PIDS_LIMIT),
-        strategy: None,
+        strategy: Some(strategy.to_string()),
     })
 }
 
@@ -1635,9 +1642,37 @@ pub async fn apply_cgroup_resource_fix_with_progress(
 
     let mut updated = Vec::new();
     let mut failed = Vec::new();
+    let mut compose_services = HashSet::<String>::new();
 
     for target in targets {
         let container_label = container_label(docker, &target.container_id).await;
+        if target.strategy.as_deref() == Some("compose_update") {
+            let inspect = match docker.inspect_container(&target.container_id, None).await {
+                Ok(inspect) => inspect,
+                Err(error) => {
+                    failed.push(format!("{container_label}: inspect failed: {error}"));
+                    continue;
+                }
+            };
+            let Some(ctx) = compose_context_from_inspect(&inspect) else {
+                failed.push(format!(
+                    "{container_label}: compose_update requested but container has no Compose metadata"
+                ));
+                continue;
+            };
+            if !compose_services.insert(ctx.key()) {
+                continue;
+            }
+
+            match apply_compose_cgroup_resource_fix(docker, rule_id, target, &ctx, progress).await {
+                Ok(label) => updated.push(label),
+                Err(error) => {
+                    failed.push(format!("{container_label}: compose update failed: {error}"));
+                }
+            }
+            continue;
+        }
+
         emit_progress(
             progress,
             rule_id,
@@ -1666,45 +1701,68 @@ pub async fn apply_cgroup_resource_fix_with_progress(
             }
         };
 
-        emit_progress(
+        let update_command = docker_update_command(rule_id, target, &container_label);
+        send_progress(
             progress,
-            rule_id,
-            &container_label,
-            2,
-            3,
-            "docker_update",
-            "in_progress",
-            Some(cgroup_update_detail(rule_id, target)),
+            FixProgress {
+                rule_id: rule_id.to_string(),
+                container_name: container_label.clone(),
+                step: 2,
+                total_steps: 3,
+                action: "docker_update".to_string(),
+                status: "in_progress".to_string(),
+                detail: Some(cgroup_update_detail(rule_id, target)),
+                command: Some(update_command.clone()),
+                stdout: None,
+                stderr: None,
+            },
         );
         match docker.update_container(&target.container_id, options).await {
-            Ok(()) => match verify_cgroup_update(docker, rule_id, target).await {
-                Ok(()) => {
-                    emit_progress(
-                        progress,
-                        rule_id,
-                        &container_label,
-                        3,
-                        3,
-                        "verify_cgroup",
-                        "done",
-                        Some("Container cgroup limits updated and verified".to_string()),
-                    );
-                    updated.push(container_label);
+            Ok(()) => {
+                send_progress(
+                    progress,
+                    FixProgress {
+                        rule_id: rule_id.to_string(),
+                        container_name: container_label.clone(),
+                        step: 2,
+                        total_steps: 3,
+                        action: "docker_update".to_string(),
+                        status: "done".to_string(),
+                        detail: Some(cgroup_update_detail(rule_id, target)),
+                        command: Some(update_command),
+                        stdout: Some(target.container_id.clone()),
+                        stderr: None,
+                    },
+                );
+                match verify_cgroup_update(docker, rule_id, target).await {
+                    Ok(()) => {
+                        emit_progress(
+                            progress,
+                            rule_id,
+                            &container_label,
+                            3,
+                            3,
+                            "verify_cgroup",
+                            "done",
+                            Some("Container cgroup limits updated and verified".to_string()),
+                        );
+                        updated.push(container_label);
+                    }
+                    Err(error) => {
+                        emit_progress(
+                            progress,
+                            rule_id,
+                            &container_label,
+                            3,
+                            3,
+                            "verify_cgroup",
+                            "error",
+                            Some(error.to_string()),
+                        );
+                        failed.push(format!("{container_label}: verification failed: {error}"));
+                    }
                 }
-                Err(error) => {
-                    emit_progress(
-                        progress,
-                        rule_id,
-                        &container_label,
-                        3,
-                        3,
-                        "verify_cgroup",
-                        "error",
-                        Some(error.to_string()),
-                    );
-                    failed.push(format!("{container_label}: verification failed: {error}"));
-                }
-            },
+            }
             Err(error) => {
                 emit_progress(
                     progress,
@@ -1743,6 +1801,213 @@ pub async fn apply_cgroup_resource_fix_with_progress(
     })
 }
 
+async fn apply_compose_cgroup_resource_fix(
+    docker: &Docker,
+    rule_id: &str,
+    target: &FixTarget,
+    ctx: &ComposeContext,
+    progress: Option<&ProgressSender>,
+) -> eyre::Result<String> {
+    let label = format!("{}:{}", ctx.project, ctx.service);
+    emit_progress(
+        progress,
+        rule_id,
+        &label,
+        1,
+        3,
+        "inspect_current_cgroup",
+        "done",
+        Some("Detected Compose-managed container resource limits".to_string()),
+    );
+
+    let update = prepare_compose_cgroup_update(ctx, rule_id, target).await?;
+    let backup_path =
+        write_compose_cgroup_update(rule_id, target, &label, &update, progress).await?;
+    run_compose_cgroup_update(ctx, &label, &update, &backup_path, rule_id, progress).await?;
+
+    verify_compose_cgroup_service(docker, rule_id, target, ctx).await?;
+    emit_progress(
+        progress,
+        rule_id,
+        &format!("{}:{}", ctx.project, ctx.service),
+        3,
+        3,
+        "verify_cgroup",
+        "done",
+        Some("Compose service cgroup limits updated and verified".to_string()),
+    );
+
+    Ok(format!("{}:{} (compose)", ctx.project, ctx.service))
+}
+
+struct ComposeCgroupUpdate {
+    compose_paths: Vec<PathBuf>,
+    compose_path: PathBuf,
+    document: Value,
+}
+
+async fn prepare_compose_cgroup_update(
+    ctx: &ComposeContext,
+    rule_id: &str,
+    target: &FixTarget,
+) -> eyre::Result<ComposeCgroupUpdate> {
+    let compose_paths = resolve_compose_files(ctx).await?;
+    let mut skipped = Vec::new();
+
+    for compose_path in compose_paths.clone() {
+        let content = tokio::fs::read_to_string(&compose_path).await?;
+        let mut document: Value = serde_yaml::from_str(&content)?;
+        match update_compose_document(&mut document, &ctx.service, rule_id, Some(target)) {
+            Ok(true) => {
+                return Ok(ComposeCgroupUpdate {
+                    compose_paths,
+                    compose_path,
+                    document,
+                });
+            }
+            Ok(false) => skipped.push(format!(
+                "{}: resource values already match",
+                compose_path.display()
+            )),
+            Err(error) => skipped.push(format!("{}: {error}", compose_path.display())),
+        }
+    }
+
+    Err(eyre::eyre!(
+        "compose service '{}' could not be updated for rule {} ({})",
+        ctx.service,
+        rule_id,
+        skipped.join("; ")
+    ))
+}
+
+async fn write_compose_cgroup_update(
+    rule_id: &str,
+    target: &FixTarget,
+    label: &str,
+    update: &ComposeCgroupUpdate,
+    progress: Option<&ProgressSender>,
+) -> eyre::Result<PathBuf> {
+    let backup_path = compose_backup_path(&update.compose_path);
+    tokio::fs::copy(&update.compose_path, &backup_path).await?;
+    tokio::fs::write(
+        &update.compose_path,
+        serde_yaml::to_string(&update.document)?,
+    )
+    .await?;
+    send_progress(
+        progress,
+        FixProgress {
+            rule_id: rule_id.to_string(),
+            container_name: label.to_string(),
+            step: 2,
+            total_steps: 3,
+            action: "update_compose_yaml".to_string(),
+            status: "done".to_string(),
+            detail: Some(format!(
+                "Persisted {} in {}",
+                cgroup_update_detail(rule_id, target),
+                update.compose_path.display()
+            )),
+            command: Some(format!("write {}", update.compose_path.display())),
+            stdout: None,
+            stderr: None,
+        },
+    );
+    Ok(backup_path)
+}
+
+async fn run_compose_cgroup_update(
+    ctx: &ComposeContext,
+    label: &str,
+    update: &ComposeCgroupUpdate,
+    backup_path: &Path,
+    rule_id: &str,
+    progress: Option<&ProgressSender>,
+) -> eyre::Result<()> {
+    let command = compose_up_command_text(ctx, &update.compose_paths);
+    emit_compose_up_progress(
+        rule_id,
+        label,
+        progress,
+        ComposeUpProgress {
+            status: "in_progress",
+            detail: Some("Recreating Compose service with persisted cgroup limits".to_string()),
+            command: Some(command.clone()),
+            stdout: None,
+            stderr: None,
+        },
+    );
+
+    match run_compose_up_capture(ctx, &update.compose_paths).await {
+        Ok((stdout, stderr)) => {
+            emit_compose_up_progress(
+                rule_id,
+                label,
+                progress,
+                ComposeUpProgress {
+                    status: "done",
+                    detail: Some("Compose service recreated".to_string()),
+                    command: Some(command),
+                    stdout: Some(stdout),
+                    stderr: Some(stderr),
+                },
+            );
+            Ok(())
+        }
+        Err(error) => {
+            let _ = tokio::fs::copy(backup_path, &update.compose_path).await;
+            emit_compose_up_progress(
+                rule_id,
+                label,
+                progress,
+                ComposeUpProgress {
+                    status: "error",
+                    detail: Some(error.to_string()),
+                    command: Some(command),
+                    stdout: None,
+                    stderr: Some(format!("{error}")),
+                },
+            );
+            Err(eyre::eyre!(
+                "{error}; compose file was restored from {}",
+                backup_path.display()
+            ))
+        }
+    }
+}
+
+struct ComposeUpProgress {
+    status: &'static str,
+    detail: Option<String>,
+    command: Option<String>,
+    stdout: Option<String>,
+    stderr: Option<String>,
+}
+
+fn emit_compose_up_progress(
+    rule_id: &str,
+    label: &str,
+    progress: Option<&ProgressSender>,
+    event: ComposeUpProgress,
+) {
+    send_progress(
+        progress,
+        FixProgress {
+            rule_id: rule_id.to_string(),
+            container_name: label.to_string(),
+            step: 2,
+            total_steps: 3,
+            action: "docker_compose_up".to_string(),
+            status: event.status.to_string(),
+            detail: event.detail,
+            command: event.command,
+            stdout: event.stdout.filter(|value| !value.trim().is_empty()),
+            stderr: event.stderr.filter(|value| !value.trim().is_empty()),
+        },
+    );
+}
+
 fn cgroup_update_detail(rule_id: &str, target: &FixTarget) -> String {
     match rule_id {
         "5.11" => format!(
@@ -1764,6 +2029,39 @@ fn cgroup_update_detail(rule_id: &str, target: &FixTarget) -> String {
             target.pids_limit.unwrap_or(DEFAULT_PIDS_LIMIT)
         ),
         _ => "resource update".to_string(),
+    }
+}
+
+fn docker_update_command(rule_id: &str, target: &FixTarget, container: &str) -> String {
+    match rule_id {
+        "5.11" => format!(
+            "docker update --memory={} --memory-swap=-1 {container}",
+            compose_memory_value(target.memory.unwrap_or(DEFAULT_MEMORY_BYTES))
+        ),
+        "5.12" => format!(
+            "docker update --cpu-shares={} {container}",
+            target.cpu_shares.unwrap_or(DEFAULT_CPU_SHARES)
+        ),
+        "5.29" => format!(
+            "docker update --pids-limit={} {container}",
+            target.pids_limit.unwrap_or(DEFAULT_PIDS_LIMIT)
+        ),
+        "cgroup_all" => format!(
+            "docker update --memory={} --memory-swap=-1 --cpu-shares={} --pids-limit={} {container}",
+            compose_memory_value(target.memory.unwrap_or(DEFAULT_MEMORY_BYTES)),
+            target.cpu_shares.unwrap_or(DEFAULT_CPU_SHARES),
+            target.pids_limit.unwrap_or(DEFAULT_PIDS_LIMIT)
+        ),
+        _ => format!("docker update {container}"),
+    }
+}
+
+fn compose_memory_value(bytes: i64) -> String {
+    let mib = 1024 * 1024;
+    if bytes > 0 && bytes % mib == 0 {
+        format!("{}m", bytes / mib)
+    } else {
+        bytes.to_string()
     }
 }
 
@@ -1826,6 +2124,14 @@ async fn verify_cgroup_update(
         .host_config
         .ok_or_else(|| eyre::eyre!("missing host_config"))?;
 
+    verify_cgroup_host_config(rule_id, target, &host_config)
+}
+
+fn verify_cgroup_host_config(
+    rule_id: &str,
+    target: &FixTarget,
+    host_config: &bollard::models::HostConfig,
+) -> eyre::Result<()> {
     if matches!(rule_id, "5.11" | "cgroup_all") {
         let expected = target.memory.unwrap_or(DEFAULT_MEMORY_BYTES);
         if host_config.memory.unwrap_or(0) != expected {
@@ -2544,7 +2850,7 @@ async fn apply_compose_service_fix(
         let content = tokio::fs::read_to_string(compose_path).await?;
         let mut document: Value = serde_yaml::from_str(&content)?;
 
-        match update_compose_document(&mut document, &ctx.service, rule_id) {
+        match update_compose_document(&mut document, &ctx.service, rule_id, None) {
             Ok(true) => {
                 update = Some((compose_path.clone(), document));
                 break;
@@ -2724,6 +3030,7 @@ fn update_compose_document(
     document: &mut Value,
     service: &str,
     rule_id: &str,
+    target: Option<&FixTarget>,
 ) -> eyre::Result<bool> {
     let Value::Mapping(root) = document else {
         return Err(eyre::eyre!("compose document root must be a mapping"));
@@ -2748,6 +3055,51 @@ fn update_compose_document(
         "5.31" => {
             remove_service_key(service_config, "userns_mode")
                 | remove_service_key(service_config, "userns")
+        }
+        "5.11" => set_service_value(
+            service_config,
+            "mem_limit",
+            Value::String(compose_memory_value(
+                target
+                    .and_then(|target| target.memory)
+                    .unwrap_or(DEFAULT_MEMORY_BYTES),
+            )),
+        ),
+        "5.12" => set_service_i64(
+            service_config,
+            "cpu_shares",
+            target
+                .and_then(|target| target.cpu_shares)
+                .unwrap_or(DEFAULT_CPU_SHARES),
+        ),
+        "5.29" => set_service_i64(
+            service_config,
+            "pids_limit",
+            target
+                .and_then(|target| target.pids_limit)
+                .unwrap_or(DEFAULT_PIDS_LIMIT),
+        ),
+        "cgroup_all" => {
+            let target = target
+                .ok_or_else(|| eyre::eyre!("cgroup_all compose update needs target values"))?;
+            let memory_changed = set_service_value(
+                service_config,
+                "mem_limit",
+                Value::String(compose_memory_value(
+                    target.memory.unwrap_or(DEFAULT_MEMORY_BYTES),
+                )),
+            );
+            let cpu_changed = set_service_i64(
+                service_config,
+                "cpu_shares",
+                target.cpu_shares.unwrap_or(DEFAULT_CPU_SHARES),
+            );
+            let pids_changed = set_service_i64(
+                service_config,
+                "pids_limit",
+                target.pids_limit.unwrap_or(DEFAULT_PIDS_LIMIT),
+            );
+            memory_changed | cpu_changed | pids_changed
         }
         _ => false,
     };
@@ -2775,7 +3127,35 @@ fn set_service_bool(mapping: &mut Mapping, key: &str, value: bool) -> bool {
     false
 }
 
-async fn run_compose_up(ctx: &ComposeContext, compose_paths: &[PathBuf]) -> eyre::Result<()> {
+fn set_service_i64(mapping: &mut Mapping, key: &str, value: i64) -> bool {
+    set_service_value(mapping, key, Value::Number(serde_yaml::Number::from(value)))
+}
+
+fn set_service_value(mapping: &mut Mapping, key: &str, value: Value) -> bool {
+    let yaml_key = Value::String(key.to_string());
+    if mapping.get(&yaml_key) == Some(&value) {
+        return false;
+    }
+    mapping.insert(yaml_key, value);
+    true
+}
+
+fn compose_up_command_text(ctx: &ComposeContext, compose_paths: &[PathBuf]) -> String {
+    let mut parts = vec!["docker".to_string(), "compose".to_string()];
+    for compose_path in compose_paths {
+        parts.push("-f".to_string());
+        parts.push(compose_path.display().to_string());
+    }
+    parts.push("up".to_string());
+    parts.push("-d".to_string());
+    parts.push(ctx.service.clone());
+    parts.join(" ")
+}
+
+async fn run_compose_up_capture(
+    ctx: &ComposeContext,
+    compose_paths: &[PathBuf],
+) -> eyre::Result<(String, String)> {
     let mut command = Command::new("docker");
     command.arg("compose");
     for compose_path in compose_paths {
@@ -2788,16 +3168,20 @@ async fn run_compose_up(ctx: &ComposeContext, compose_paths: &[PathBuf]) -> eyre
     }
 
     let output = command.output().await?;
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     if output.status.success() {
-        return Ok(());
+        return Ok((stdout, stderr));
     }
 
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     Err(eyre::eyre!(
         "docker compose up failed: {}",
         if stderr.is_empty() { stdout } else { stderr }
     ))
+}
+
+async fn run_compose_up(ctx: &ComposeContext, compose_paths: &[PathBuf]) -> eyre::Result<()> {
+    run_compose_up_capture(ctx, compose_paths).await.map(|_| ())
 }
 
 async fn verify_compose_service(
@@ -2842,6 +3226,58 @@ async fn verify_compose_service(
             "compose service still violates rule {}: {}",
             rule_id,
             still_violating.join(", ")
+        ));
+    }
+
+    Ok(())
+}
+
+async fn verify_compose_cgroup_service(
+    docker: &Docker,
+    rule_id: &str,
+    target: &FixTarget,
+    ctx: &ComposeContext,
+) -> eyre::Result<()> {
+    let containers = docker.list_containers::<String>(None).await?;
+    let mut found = false;
+    let mut failures = Vec::new();
+
+    for container in &containers {
+        let Some(labels) = container.labels.as_ref() else {
+            continue;
+        };
+        if labels.get("com.docker.compose.project") != Some(&ctx.project)
+            || labels.get("com.docker.compose.service") != Some(&ctx.service)
+        {
+            continue;
+        }
+
+        found = true;
+        let Some(id) = container.id.as_deref() else {
+            continue;
+        };
+        let inspect = docker.inspect_container(id, None).await?;
+        let host_config = inspect
+            .host_config
+            .ok_or_else(|| eyre::eyre!("missing host_config"))?;
+
+        if let Err(error) = verify_cgroup_host_config(rule_id, target, &host_config) {
+            failures.push(format!("{}: {error}", container_label(docker, id).await));
+        }
+    }
+
+    if !found {
+        return Err(eyre::eyre!(
+            "compose service '{}:{}' was not running after compose up",
+            ctx.project,
+            ctx.service
+        ));
+    }
+
+    if !failures.is_empty() {
+        return Err(eyre::eyre!(
+            "compose service cgroup verification failed: {}",
+            failures.join(", ")
         ));
     }
 
@@ -3048,7 +3484,7 @@ services:
         )
         .unwrap();
 
-        assert!(update_compose_document(&mut doc, "web", "5.10").unwrap());
+        assert!(update_compose_document(&mut doc, "web", "5.10", None).unwrap());
 
         let rendered = serde_yaml::to_string(&doc).unwrap();
         assert!(!rendered.contains("network_mode"));
@@ -3067,9 +3503,35 @@ services:
         )
         .unwrap();
 
-        assert!(update_compose_document(&mut doc, "worker", "5.5").unwrap());
+        assert!(update_compose_document(&mut doc, "worker", "5.5", None).unwrap());
 
         let rendered = serde_yaml::to_string(&doc).unwrap();
         assert!(rendered.contains("privileged: false"));
+    }
+
+    #[test]
+    fn update_compose_document_sets_cgroup_limits() {
+        let mut doc: Value = serde_yaml::from_str(
+            r#"
+services:
+  web:
+    image: nginx
+"#,
+        )
+        .unwrap();
+        let target = FixTarget {
+            container_id: "abc".to_string(),
+            memory: Some(512 * 1024 * 1024),
+            cpu_shares: Some(1024),
+            pids_limit: Some(200),
+            strategy: Some("compose_update".to_string()),
+        };
+
+        assert!(update_compose_document(&mut doc, "web", "cgroup_all", Some(&target)).unwrap());
+
+        let rendered = serde_yaml::to_string(&doc).unwrap();
+        assert!(rendered.contains("mem_limit: 512m"));
+        assert!(rendered.contains("cpu_shares: 1024"));
+        assert!(rendered.contains("pids_limit: 200"));
     }
 }

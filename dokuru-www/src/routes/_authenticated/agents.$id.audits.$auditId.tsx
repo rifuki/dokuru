@@ -1466,6 +1466,9 @@ function AuditDetailPage() {
         targetConfig={wizardTargetConfig}
         progressEvents={wizardProgressEvents}
         stepIndex={wizardStepIndex}
+        agentId={id}
+        containers={containers}
+        auditId={auditId}
         onConfirm={() => void applyFix()}
         onClose={closeWizard}
         onTargetChange={updateTargetConfig}

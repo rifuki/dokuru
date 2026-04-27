@@ -58,17 +58,17 @@ export function getFixSteps(ruleId: string): string[] {
     ];
     if (ruleId === "5.11") return [
         "Finding containers without memory limits…",
-        "Applying docker update --memory=256m…",
+        "Applying selected Docker/Compose memory limit…",
         "Verifying memory cgroup limits…",
     ];
     if (ruleId === "5.12") return [
         "Finding containers without CPU shares…",
-        "Applying docker update --cpu-shares=512…",
+        "Applying selected Docker/Compose CPU shares…",
         "Verifying CPU cgroup shares…",
     ];
     if (ruleId === "5.29") return [
         "Finding containers without PIDs limits…",
-        "Applying docker update --pids-limit=100…",
+        "Applying selected Docker/Compose PIDs limit…",
         "Verifying PIDs cgroup limits…",
     ];
     if (ruleId === "2.10") return [
@@ -144,6 +144,7 @@ export type TargetConfig = {
     memoryMb: number;
     cpuShares: number;
     pidsLimit: number;
+    strategy: "docker_update" | "compose_update";
 };
 
 type FixStreamMessage =
@@ -195,6 +196,7 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
                         memoryMb: Math.round(target.suggestion.memory / 1024 / 1024),
                         cpuShares: target.suggestion.cpu_shares,
                         pidsLimit: target.suggestion.pids_limit,
+                        strategy: target.strategy === "compose_update" ? "compose_update" : "docker_update",
                     },
                 ])));
             })
@@ -229,7 +231,7 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
             const config = targetConfig[target.container_id];
             const base: FixTarget = {
                 container_id: target.container_id,
-                strategy: target.strategy,
+                strategy: config?.strategy ?? target.strategy,
             };
             if (ruleId === "5.11") base.memory = Math.max(1, config?.memoryMb ?? 256) * 1024 * 1024;
             if (ruleId === "5.12") base.cpu_shares = Math.max(2, config?.cpuShares ?? 512);

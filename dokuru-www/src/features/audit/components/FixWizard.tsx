@@ -5,10 +5,12 @@ import {
 import {
     AlertTriangle, CheckCircle2, Loader2, RotateCcw, Server,
     ShieldAlert, XCircle, Zap, ChevronRight, Terminal, Copy, Check,
-    RefreshCw,
+    RefreshCw, FileCode2, Activity, ArrowRight, Box,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AffectedItems } from "@/features/audit/components/AffectedItems";
 import type { AuditResult, FixOutcome, FixPreview, FixProgress } from "@/lib/api/agent-direct";
+import type { Container as DockerContainer } from "@/services/docker-api";
 import {
     getFixSteps, isNamespaceRecreateRule, isCgroupRule,
     type TargetConfig, type WizardStep,
@@ -22,38 +24,43 @@ const WIZARD_STEPS: { key: WizardStep; label: string }[] = [
     { key: "result",   label: "Result"   },
 ];
 
-function StepIndicator({ current }: { current: WizardStep }) {
+function StepIndicator({ current, complete = false }: { current: WizardStep; complete?: boolean }) {
     const idx = WIZARD_STEPS.findIndex(s => s.key === current);
     return (
         <div className="flex items-center gap-0">
-            {WIZARD_STEPS.map((s, i) => (
-                <div key={s.key} className="flex items-center">
-                    <div className="flex flex-col items-center gap-1.5">
-                        <div className={cn(
-                            "w-6 h-6 rounded-full border flex items-center justify-center text-[10px] font-mono font-bold transition-all",
-                            i < idx
-                                ? "bg-[#2496ED] border-[#2496ED] text-white"
-                                : i === idx
-                                ? "border-[#2496ED] text-[#2496ED] bg-[#2496ED]/10"
-                                : "border-white/15 text-white/20 bg-transparent"
-                        )}>
-                            {i < idx ? <Check size={10} strokeWidth={3} /> : i + 1}
+            {WIZARD_STEPS.map((s, i) => {
+                const done = i < idx || (complete && i === idx);
+                const active = i === idx && !done;
+
+                return (
+                    <div key={s.key} className="flex items-center">
+                        <div className="flex flex-col items-center gap-1.5">
+                            <div className={cn(
+                                "w-6 h-6 rounded-full border flex items-center justify-center text-[10px] font-mono font-bold transition-all",
+                                done
+                                    ? "bg-[#2496ED] border-[#2496ED] text-white"
+                                    : active
+                                    ? "border-[#2496ED] text-[#2496ED] bg-[#2496ED]/10"
+                                    : "border-white/15 text-white/20 bg-transparent"
+                            )}>
+                                {done ? <Check size={10} strokeWidth={3} /> : i + 1}
+                            </div>
+                            <span className={cn(
+                                "text-[9px] uppercase tracking-[0.18em] font-mono whitespace-nowrap",
+                                active ? "text-[#2496ED]" : done ? "text-white/50" : "text-white/20"
+                            )}>
+                                {s.label}
+                            </span>
                         </div>
-                        <span className={cn(
-                            "text-[9px] uppercase tracking-[0.18em] font-mono whitespace-nowrap",
-                            i === idx ? "text-[#2496ED]" : i < idx ? "text-white/50" : "text-white/20"
-                        )}>
-                            {s.label}
-                        </span>
+                        {i < WIZARD_STEPS.length - 1 && (
+                            <div className={cn(
+                                "w-10 h-px mx-1 mb-4 transition-all",
+                                i < idx ? "bg-[#2496ED]/60" : "bg-white/10"
+                            )} />
+                        )}
                     </div>
-                    {i < WIZARD_STEPS.length - 1 && (
-                        <div className={cn(
-                            "w-10 h-px mx-1 mb-4 transition-all",
-                            i < idx ? "bg-[#2496ED]/60" : "bg-white/10"
-                        )} />
-                    )}
-                </div>
-            ))}
+                );
+            })}
         </div>
     );
 }
@@ -76,6 +83,24 @@ function CopyButton({ text }: { text: string }) {
             {copied ? "copied" : "copy"}
         </button>
     );
+}
+
+function formatBytesAsMb(bytes?: number | null) {
+    if (!bytes || bytes <= 0) return "unlimited";
+    return `${Math.round(bytes / 1024 / 1024)} MB`;
+}
+
+function currentValueLabel(ruleId: string, target: FixPreview["targets"][number]) {
+    if (ruleId === "5.11") return formatBytesAsMb(target.current_memory);
+    if (ruleId === "5.12") return target.current_cpu_shares ? `${target.current_cpu_shares} shares` : "unset";
+    if (ruleId === "5.29") return target.current_pids_limit && target.current_pids_limit > 0 ? `${target.current_pids_limit} PIDs` : "unset";
+    return "current";
+}
+
+function valueMeta(ruleId: string) {
+    if (ruleId === "5.11") return { label: "Memory", unit: "MB", key: "memoryMb" as const, min: 1 };
+    if (ruleId === "5.12") return { label: "CPU shares", unit: "shares", key: "cpuShares" as const, min: 2 };
+    return { label: "PIDs limit", unit: "PIDs", key: "pidsLimit" as const, min: 1 };
 }
 
 // ── Step 1: Confirm ───────────────────────────────────────────────────────────
@@ -143,8 +168,8 @@ function ConfirmStep({
             )}
 
             {targets.length > 0 ? (
-                <div>
-                    <div className="flex items-center justify-between mb-2">
+                <div className="space-y-2.5">
+                    <div className="flex items-center justify-between gap-3">
                         <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/40">
                             Agent preview ({targets.length})
                         </p>
@@ -154,73 +179,107 @@ function ConfirmStep({
                             </p>
                         )}
                     </div>
-                    <div className="rounded-lg border border-white/8 bg-white/[0.02] overflow-hidden">
+
+                    {isCgroup && targets.some(target => target.compose_project) && (
+                        <div className="rounded-xl border border-[#2496ED]/20 bg-[#2496ED]/7 px-3.5 py-3 text-xs text-[#2496ED]/80">
+                            <div className="flex items-start gap-2.5">
+                                <FileCode2 className="mt-0.5 h-4 w-4 shrink-0" />
+                                <p className="leading-relaxed">
+                                    Compose-managed containers default to <span className="font-semibold text-[#2496ED]">Persist in Compose</span> so the score does not regress after <code className="font-mono">docker compose restart</code>. Switch to Live only if you need a temporary Docker update.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="overflow-hidden rounded-xl border border-white/8 bg-white/[0.025]">
+                        {isCgroup && (
+                            <div className="hidden border-b border-white/6 bg-white/[0.025] px-4 py-2.5 text-[9px] font-mono uppercase tracking-[0.16em] text-white/30 sm:grid sm:grid-cols-[minmax(0,1.25fr)_minmax(116px,.7fr)_148px_150px] sm:gap-4">
+                                <span>Container</span>
+                                <span>Source</span>
+                                <span>Apply via</span>
+                                <span className="text-right">Value</span>
+                            </div>
+                        )}
                         {targets.map((target, i) => {
                             const config = targetConfig[target.container_id];
+                            const canCompose = Boolean(target.compose_project && target.compose_service);
+                            const strategy = config?.strategy ?? (target.strategy === "compose_update" ? "compose_update" : "docker_update");
+                            const meta = valueMeta(rule.id);
+                            const value = config?.[meta.key] ?? 0;
+
                             return (
                                 <div
                                     key={target.container_id}
                                     className={cn(
-                                        "flex flex-col gap-2 px-3 py-2 text-xs font-mono sm:flex-row sm:items-center sm:justify-between",
-                                        i < targets.length - 1 && "border-b border-white/5"
+                                        "grid gap-3 px-4 py-3 text-xs font-mono sm:items-center",
+                                        isCgroup ? "sm:grid-cols-[minmax(0,1.25fr)_minmax(116px,.7fr)_148px_150px] sm:gap-4" : "sm:grid-cols-[minmax(0,1fr)_auto]",
+                                        i < targets.length - 1 && "border-b border-white/6"
                                     )}
                                 >
-                                    <div className="flex items-center gap-2.5 min-w-0">
-                                        <Server className="h-3 w-3 text-white/30 shrink-0" />
+                                    <div className="flex min-w-0 items-center gap-2.5">
+                                        <Server className="h-3.5 w-3.5 shrink-0 text-white/32" />
                                         <div className="min-w-0">
-                                            <span className="text-white/70 truncate block">{target.container_name}</span>
-                                            <span className="text-white/25 text-[10px] truncate block">
-                                                {target.strategy}{target.compose_project ? ` · ${target.compose_project}/${target.compose_service}` : ""}
-                                            </span>
+                                            <span className="block truncate text-[13px] font-semibold text-white/75">{target.container_name}</span>
+                                            <span className="block truncate text-[10px] text-white/28">current: {currentValueLabel(rule.id, target)}</span>
                                         </div>
                                     </div>
-                                    {isCgroup && config && (
-                                        <div className="grid grid-cols-3 gap-1.5 sm:w-[230px]">
-                                            {rule.id === "5.11" && (
-                                                <label className="col-span-3 text-[10px] text-white/35">
-                                                    Memory MB
-                                                    <input
-                                                        type="number"
-                                                        min={1}
-                                                        value={config.memoryMb}
-                                                        onChange={(e) => onTargetChange(target.container_id, { memoryMb: Number(e.target.value) })}
-                                                        className="mt-1 w-full rounded border border-white/10 bg-black/30 px-2 py-1 text-xs text-white/80 outline-none focus:border-[#2496ED]/60"
-                                                    />
-                                                </label>
-                                            )}
-                                            {rule.id === "5.12" && (
-                                                <label className="col-span-3 text-[10px] text-white/35">
-                                                    CPU shares
-                                                    <input
-                                                        type="number"
-                                                        min={2}
-                                                        value={config.cpuShares}
-                                                        onChange={(e) => onTargetChange(target.container_id, { cpuShares: Number(e.target.value) })}
-                                                        className="mt-1 w-full rounded border border-white/10 bg-black/30 px-2 py-1 text-xs text-white/80 outline-none focus:border-[#2496ED]/60"
-                                                    />
-                                                </label>
-                                            )}
-                                            {rule.id === "5.29" && (
-                                                <label className="col-span-3 text-[10px] text-white/35">
-                                                    PIDs limit
-                                                    <input
-                                                        type="number"
-                                                        min={1}
-                                                        value={config.pidsLimit}
-                                                        onChange={(e) => onTargetChange(target.container_id, { pidsLimit: Number(e.target.value) })}
-                                                        className="mt-1 w-full rounded border border-white/10 bg-black/30 px-2 py-1 text-xs text-white/80 outline-none focus:border-[#2496ED]/60"
-                                                    />
-                                                </label>
-                                            )}
+
+                                    {isCgroup && (
+                                        <div className="flex min-w-0 items-center gap-2 rounded-lg border border-white/8 bg-black/20 px-2.5 py-2">
+                                            {canCompose ? <FileCode2 className="h-3.5 w-3.5 shrink-0 text-[#2496ED]" /> : <Box className="h-3.5 w-3.5 shrink-0 text-white/35" />}
+                                            <div className="min-w-0">
+                                                <span className={cn("block truncate text-[10px] uppercase tracking-[0.12em]", canCompose ? "text-[#2496ED]/80" : "text-white/35")}>{canCompose ? "compose" : "runtime"}</span>
+                                                <span className="block truncate text-[10px] text-white/30">{canCompose ? `${target.compose_project}/${target.compose_service}` : "standalone"}</span>
+                                            </div>
                                         </div>
+                                    )}
+
+                                    {isCgroup && config && (
+                                        <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-white/10 bg-black/25 p-0.5">
+                                            <button
+                                                type="button"
+                                                disabled={!canCompose}
+                                                onClick={() => onTargetChange(target.container_id, { strategy: "compose_update" })}
+                                                className={cn(
+                                                    "rounded-md px-2 py-1.5 text-[10px] font-semibold transition-colors",
+                                                    strategy === "compose_update" && canCompose ? "bg-[#2496ED] text-white" : "text-white/38 hover:text-white/70",
+                                                    !canCompose && "cursor-not-allowed opacity-35 hover:text-white/38"
+                                                )}
+                                            >
+                                                Compose
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => onTargetChange(target.container_id, { strategy: "docker_update" })}
+                                                className={cn(
+                                                    "rounded-md px-2 py-1.5 text-[10px] font-semibold transition-colors",
+                                                    strategy === "docker_update" ? "bg-white/12 text-white" : "text-white/38 hover:text-white/70"
+                                                )}
+                                            >
+                                                Live only
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {isCgroup && config && (
+                                        <label className="block text-[10px] text-white/35 sm:text-right">
+                                            <span className="mb-1 block uppercase tracking-[0.12em]">{meta.label} <span className="text-white/20">{meta.unit}</span></span>
+                                            <input
+                                                type="number"
+                                                min={meta.min}
+                                                value={value}
+                                                onChange={(e) => onTargetChange(target.container_id, { [meta.key]: Number(e.target.value) })}
+                                                className="h-9 w-full rounded-lg border border-white/10 bg-black/35 px-3 text-right text-[13px] font-semibold text-white/85 outline-none transition-colors focus:border-[#2496ED]/60 focus:bg-black/50"
+                                            />
+                                        </label>
                                     )}
                                 </div>
                             );
                         })}
                     </div>
                     {isCgroup && (
-                        <p className="text-[10px] text-white/25 font-mono mt-1.5 pl-1">
-                            Suggested values come from the agent preview and can be edited per container before apply.
+                        <p className="px-1 text-[10px] text-white/25 font-mono">
+                            Rows are aligned by container, source, apply method, and value. Compose mode edits the compose YAML then runs <code>docker compose up -d</code>; Live only uses Docker update for the current container instance.
                         </p>
                     )}
                 </div>
@@ -276,7 +335,7 @@ function ConfirmStep({
 
 function ProgressEventsPanel({
     progressEvents,
-    title = "real-time command evidence",
+    title = "live terminal transcript",
 }: {
     progressEvents: FixProgress[];
     title?: string;
@@ -284,46 +343,60 @@ function ProgressEventsPanel({
     if (progressEvents.length === 0) return null;
 
     return (
-        <div className="rounded-lg border border-white/8 bg-white/[0.02] overflow-hidden">
-            <div className="px-3 py-2 border-b border-white/5 text-[10px] font-mono uppercase tracking-[0.15em] text-white/30">
-                {title}
+        <div className="overflow-hidden rounded-xl border border-white/10 bg-[#030507] shadow-[0_0_40px_-24px_rgba(36,150,237,0.7)]">
+            <div className="flex items-center gap-2 border-b border-white/8 bg-white/[0.025] px-3 py-2.5">
+                <div className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f56]" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#ffbd2e]" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#27c93f]" />
+                </div>
+                <Terminal className="ml-1 h-3.5 w-3.5 text-[#2496ED]" />
+                <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/42">{title}</span>
+                <span className="ml-auto rounded border border-white/8 bg-white/[0.03] px-1.5 py-0.5 font-mono text-[9px] text-white/35">
+                    {progressEvents.length} events
+                </span>
             </div>
-            <div className="max-h-64 overflow-y-auto p-3 space-y-3">
-                {progressEvents.slice(-16).map((event, i) => (
-                    <div key={`${event.container_name}-${event.action}-${event.step}-${i}`} className="space-y-1.5 text-[11px] font-mono">
-                        <div className="text-white/50">
-                            <span className={cn(
-                                "mr-2 uppercase",
-                                event.status === "done" ? "text-emerald-400" : event.status === "error" ? "text-rose-400" : "text-[#2496ED]"
-                            )}>{event.status}</span>
-                            <span className="text-white/70">{event.container_name}</span>
-                            <span className="text-white/25"> · {event.action}</span>
-                            {event.detail && <span className="text-white/35"> · {event.detail}</span>}
-                        </div>
-                        {event.command && (
-                            <pre className="rounded border border-white/8 bg-black/40 px-3 py-2 text-[10px] text-[#2496ED] whitespace-pre-wrap break-words">
-                                <span className="text-white/30 select-none">$ </span>
-                                {event.command}
-                            </pre>
-                        )}
-                        {(event.stdout || event.stderr) && (
-                            <div className="rounded border border-white/8 bg-[#050507] overflow-hidden">
-                                {event.stdout && (
-                                    <pre className="px-3 py-2 text-[10px] text-emerald-300/80 whitespace-pre-wrap break-words">
-                                        <span className="text-white/30 select-none">stdout\n</span>
-                                        {event.stdout}
+            <div className="max-h-72 overflow-y-auto p-3 font-mono text-[11px] leading-relaxed">
+                {progressEvents.map((event, i) => {
+                    const tone = event.status === "done"
+                        ? "text-emerald-400"
+                        : event.status === "error"
+                        ? "text-rose-400"
+                        : "text-[#2496ED]";
+
+                    return (
+                        <div key={`${event.container_name}-${event.action}-${event.step}-${i}`} className="grid grid-cols-[82px_minmax(0,1fr)] gap-2 border-b border-white/5 py-2 last:border-b-0 first:pt-0 last:pb-0">
+                            <span className={cn("pt-0.5 text-[10px] uppercase tracking-[0.08em]", tone)}>{event.status}</span>
+                            <div className="min-w-0 space-y-1.5">
+                                <div className="flex min-w-0 items-center gap-1.5 text-white/52">
+                                    <span className="truncate font-semibold text-white/75">{event.container_name}</span>
+                                    <ArrowRight className="h-3 w-3 shrink-0 text-white/16" />
+                                    <span className="shrink-0 text-white/38">{event.action}</span>
+                                    {event.detail && <span className="truncate text-white/28">{event.detail}</span>}
+                                </div>
+                                {event.command && (
+                                    <pre className="overflow-x-auto rounded-lg border border-[#2496ED]/15 bg-[#06111a] px-3 py-2 text-[10px] text-[#58b8ff]">
+                                        <span className="select-none text-white/28">$ </span>{event.command}
                                     </pre>
                                 )}
-                                {event.stderr && (
-                                    <pre className="px-3 py-2 text-[10px] text-rose-300/80 whitespace-pre-wrap break-words border-t border-white/5">
-                                        <span className="text-white/30 select-none">stderr\n</span>
-                                        {event.stderr}
-                                    </pre>
+                                {(event.stdout || event.stderr) && (
+                                    <div className="overflow-hidden rounded-lg border border-white/8 bg-black/45">
+                                        {event.stdout && (
+                                            <pre className="whitespace-pre-wrap break-words px-3 py-2 text-[10px] text-emerald-300/80">
+                                                <span className="select-none text-white/28">stdout\n</span>{event.stdout}
+                                            </pre>
+                                        )}
+                                        {event.stderr && (
+                                            <pre className="whitespace-pre-wrap break-words border-t border-white/5 px-3 py-2 text-[10px] text-rose-300/80">
+                                                <span className="select-none text-white/28">stderr\n</span>{event.stderr}
+                                            </pre>
+                                        )}
+                                    </div>
                                 )}
                             </div>
-                        )}
-                    </div>
-                ))}
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );
@@ -395,52 +468,64 @@ function ApplyingStep({ ruleId, stepIndex, progressEvents }: { ruleId: string; s
 
 function ResultStep({
     outcome,
+    result,
     progressEvents,
+    agentId,
+    containers,
+    auditId,
     onRerunAudit,
     onClose,
 }: {
     outcome: FixOutcome;
+    result: AuditResult;
     progressEvents: FixProgress[];
+    agentId: string;
+    containers: DockerContainer[];
+    auditId?: string;
     onRerunAudit: () => void;
     onClose: () => void;
 }) {
     const isApplied = outcome.status === "Applied";
     const isBlocked = outcome.status === "Blocked";
+    const affectedItems = result.affected.length > 0
+        ? result.affected
+        : Array.from(new Set(progressEvents.map(event => event.container_name).filter(Boolean)));
 
     return (
         <div className="flex flex-col gap-5">
-            {/* Status badge */}
-            <div className={cn(
-                "flex items-center gap-3 rounded-lg border px-4 py-3.5",
-                isApplied
-                    ? "bg-emerald-500/8 border-emerald-500/25"
-                    : isBlocked
-                    ? "bg-rose-500/8 border-rose-500/25"
-                    : "bg-amber-500/8 border-amber-500/25"
-            )}>
-                {isApplied
-                    ? <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
-                    : isBlocked
-                    ? <XCircle className="h-5 w-5 text-rose-400 shrink-0" />
-                    : <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0" />
-                }
-                <div>
-                    <p className={cn(
-                        "text-sm font-semibold",
-                        isApplied ? "text-emerald-400"
-                        : isBlocked ? "text-rose-400"
-                        : "text-amber-400"
+            <div className="rounded-2xl border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(36,150,237,0.18),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.055),rgba(255,255,255,0.018))] p-4">
+                <div className="flex items-start gap-3">
+                    <div className={cn(
+                        "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border",
+                        isApplied ? "border-emerald-400/25 bg-emerald-500/12 text-emerald-300" : isBlocked ? "border-rose-400/25 bg-rose-500/12 text-rose-300" : "border-amber-400/25 bg-amber-500/12 text-amber-300"
                     )}>
-                        {isApplied ? "Fix Applied Successfully" : isBlocked ? "Fix Blocked" : "Guided Remediation"}
-                    </p>
-                    <p className={cn(
-                        "text-xs mt-0.5 leading-relaxed",
-                        isApplied ? "text-emerald-400/70"
-                        : isBlocked ? "text-rose-400/70"
-                        : "text-amber-400/70"
-                    )}>
-                        {outcome.message}
-                    </p>
+                        {isApplied ? <CheckCircle2 className="h-5 w-5" /> : isBlocked ? <XCircle className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-semibold text-white">{isApplied ? "Remediation complete" : isBlocked ? "Remediation blocked" : "Manual follow-up required"}</p>
+                            <span className={cn(
+                                "rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em]",
+                                isApplied ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-300" : isBlocked ? "border-rose-400/20 bg-rose-500/10 text-rose-300" : "border-amber-400/20 bg-amber-500/10 text-amber-300"
+                            )}>{outcome.status}</span>
+                        </div>
+                        <p className="mt-1 text-xs leading-relaxed text-white/48">Rule {result.rule.id} finished on the agent. Review the affected targets and terminal transcript before re-running the audit.</p>
+                    </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                    <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
+                        <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/28">events</p>
+                        <p className="mt-1 text-lg font-bold text-white">{progressEvents.length}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
+                        <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/28">affected</p>
+                        <p className="mt-1 text-lg font-bold text-white">{affectedItems.length}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
+                        <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/28">mode</p>
+                        <p className="mt-1 truncate text-sm font-semibold text-[#2496ED]">{progressEvents.some(event => event.action.includes("compose")) ? "Compose" : "Live"}</p>
+                    </div>
                 </div>
             </div>
 
@@ -462,7 +547,26 @@ function ResultStep({
                 </div>
             )}
 
-            <ProgressEventsPanel progressEvents={progressEvents} title="executed command evidence" />
+            {affectedItems.length > 0 && (
+                <div className="rounded-xl border border-white/8 bg-white/[0.02] p-3.5">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                            <Activity className="h-3.5 w-3.5 text-[#2496ED]" />
+                            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/38">Affected targets</p>
+                        </div>
+                        <span className="font-mono text-[10px] text-white/25">click to inspect</span>
+                    </div>
+                    <AffectedItems
+                        items={affectedItems}
+                        containers={containers}
+                        agentId={agentId}
+                        returnTo={{ source: "audit", auditId, ruleId: result.rule.id }}
+                        chipClassName="rounded-lg bg-[#2496ED]/8 border-[#2496ED]/25 px-2.5 py-1.5"
+                    />
+                </div>
+            )}
+
+            <ProgressEventsPanel progressEvents={progressEvents} title="terminal transcript" />
 
             {/* Restart command */}
             {outcome.restart_command && (
@@ -517,6 +621,9 @@ interface FixWizardProps {
     targetConfig: Record<string, TargetConfig>;
     progressEvents: FixProgress[];
     stepIndex: number;
+    agentId: string;
+    containers: DockerContainer[];
+    auditId?: string;
     onConfirm: () => void;
     onClose: () => void;
     onRerunAudit: () => void;
@@ -525,7 +632,7 @@ interface FixWizardProps {
 
 export function FixWizard({
     open, step, result, outcome, preview, previewLoading, targetConfig, progressEvents, stepIndex,
-    onConfirm, onClose, onRerunAudit, onTargetChange,
+    agentId, containers, auditId, onConfirm, onClose, onRerunAudit, onTargetChange,
 }: FixWizardProps) {
     if (!result) return null;
     const { rule } = result;
@@ -534,7 +641,7 @@ export function FixWizard({
         <Sheet open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
             <SheetContent
                 side="right"
-                className="w-full sm:max-w-[480px] bg-[#09090B] border-l border-white/8 p-0 flex flex-col gap-0 overflow-hidden"
+                className="w-full sm:max-w-[680px] bg-[#09090B] border-l border-white/8 p-0 flex flex-col gap-0 overflow-hidden"
             >
                 {/* ── Header ── */}
                 <SheetHeader className="px-6 pt-6 pb-5 border-b border-white/8 space-y-4">
@@ -555,7 +662,7 @@ export function FixWizard({
                     </div>
 
                     {/* Step indicator */}
-                    <StepIndicator current={step} />
+                    <StepIndicator current={step} complete={step === "result" && outcome?.status === "Applied"} />
                 </SheetHeader>
 
                 {/* ── Body ── */}
@@ -577,7 +684,11 @@ export function FixWizard({
                     {step === "result" && outcome && (
                         <ResultStep
                             outcome={outcome}
+                            result={result}
                             progressEvents={progressEvents}
+                            agentId={agentId}
+                            containers={containers}
+                            auditId={auditId}
                             onRerunAudit={onRerunAudit}
                             onClose={onClose}
                         />
