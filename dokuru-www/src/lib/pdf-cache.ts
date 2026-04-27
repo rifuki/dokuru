@@ -3,12 +3,12 @@ import { useAuthStore } from "@/stores/use-auth-store";
 
 const CACHE_NAME = "dokuru-pdf-v1";
 
-async function fetchFromServer(): Promise<Blob> {
+async function fetchFromServer(endpoint: string): Promise<Blob> {
   const token = useAuthStore.getState().accessToken;
   const headers: Record<string, string> = {};
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const response = await fetch(`${httpApiUrl}/admin/documents/file`, {
+  const response = await fetch(`${httpApiUrl}${endpoint}`, {
     headers,
     credentials: "include",
   });
@@ -22,7 +22,10 @@ async function fetchFromServer(): Promise<Blob> {
  * Checks Cache API first — if cached, returns instantly without a network request.
  * Falls back to a direct server fetch if Cache API is unavailable (e.g. private mode).
  */
-export async function getOrFetchPdfBlob(docId: string): Promise<Blob> {
+export async function getOrFetchPdfBlob(
+  docId: string,
+  fileEndpoint = "/admin/documents/file",
+): Promise<Blob> {
   const cacheKey = `/dokuru-cache/pdf-${docId}`;
 
   if ("caches" in window) {
@@ -31,7 +34,7 @@ export async function getOrFetchPdfBlob(docId: string): Promise<Blob> {
       const cached = await cache.match(cacheKey);
       if (cached) return cached.blob();
 
-      const blob = await fetchFromServer();
+      const blob = await fetchFromServer(fileEndpoint);
       // Store a clone — the original blob is still returned to the caller
       await cache.put(
         cacheKey,
@@ -45,7 +48,7 @@ export async function getOrFetchPdfBlob(docId: string): Promise<Blob> {
     }
   }
 
-  return fetchFromServer();
+  return fetchFromServer(fileEndpoint);
 }
 
 /**

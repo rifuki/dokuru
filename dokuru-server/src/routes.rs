@@ -40,6 +40,7 @@ pub fn app_routes(state: AppState) -> Router {
         .nest("/admin", admin::routes::admin_routes())
         .nest("/admin/api-keys", admin::api_key::api_key_routes())
         .nest("/admin/documents", document::document_routes())
+        .nest("/documents", document::document_user_routes())
         .layer(Extension(blacklist)) // Inject blacklist for auth middleware
         .layer(from_fn(rate_limit_middleware))
         .layer(Extension(global_limiter));

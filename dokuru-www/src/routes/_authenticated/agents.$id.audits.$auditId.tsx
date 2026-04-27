@@ -1,21 +1,25 @@
 import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { agentApi } from "@/lib/api/agent";
-import { type AuditReportResponse, type AuditResponse, type AuditResult } from "@/lib/api/agent-direct";
+import { agentDirectApi, type AuditReportResponse, type AuditResponse, type AuditResult } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
 import { dockerApi, dockerCredential, type Container as DockerContainer } from "@/services/docker-api";
 import { getAgentToken } from "@/stores/use-agent-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog";
 import {
   Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
   Terminal, Wrench, AlertTriangle, Server,
   ArrowLeft, Clock, Cpu, Container, Zap, BookOpen,
-  Search, X, Layers, ArrowLeftRight, Link,
+  Search, X, Layers, ArrowLeftRight, Link, FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { PILLAR_META, getRulePillar, type SecurityPillar } from "@/lib/audit-pillars";
+import { userDocumentApi } from "@/lib/api/document";
+import { getOrFetchPdfBlob } from "@/lib/pdf-cache";
 import { FixWizard } from "@/features/audit/components/FixWizard";
 import { FixAllWizard } from "@/features/audit/components/FixAllWizard";
 import { FixHistoryPanel } from "@/features/audit/components/FixHistoryPanel";
@@ -79,7 +83,111 @@ function StatusIcon({ status }: { status: "Pass" | "Fail" | "Error" }) {
 
 // ── Rule Card ────────────────────────────────────────────────────────────────
 
-function RuleCard({ result, agentId, auditId, containers, focusedRuleId, onOpenWizard }: {
+function AgentVerificationPanel({
+  agentId,
+  agentUrl,
+  agentAccessMode,
+  token,
+  ruleId,
+}: {
+  agentId: string;
+  agentUrl: string;
+  agentAccessMode?: string;
+  token?: string;
+  ruleId: string;
+}) {
+  const [result, setResult] = useState<AuditResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const canRun = agentAccessMode === "relay" || !!agentUrl;
+
+  const runVerification = async () => {
+    if (!canRun) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const nextResult = agentAccessMode === "relay"
+        ? await agentApi.verifyFix(agentId, ruleId)
+        : await agentDirectApi.verifyFix(agentUrl, ruleId, token);
+      setResult(nextResult);
+    } catch (verifyError) {
+      setResult(null);
+      setError(verifyError instanceof Error ? verifyError.message : "Failed to run verification on agent");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-[#2496ED]/20 bg-[#2496ED]/5 overflow-hidden">
+      <div className="flex items-center justify-between gap-3 border-b border-[#2496ED]/10 px-3 py-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <Terminal className="h-3.5 w-3.5 text-[#2496ED] shrink-0" />
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#2496ED]">Agent Verify</p>
+            <p className="text-[11px] text-muted-foreground truncate">Run this rule check on the remote agent now.</p>
+          </div>
+        </div>
+        <Button size="sm" variant="outline" disabled={!canRun || loading} onClick={() => void runVerification()} className="h-8 shrink-0">
+          {loading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Terminal className="mr-1.5 h-3.5 w-3.5" />}
+          Run Verify
+        </Button>
+      </div>
+
+      <div className="space-y-3 p-3">
+        {!result && !error && (
+          <p className="text-xs text-muted-foreground/70">
+            This is not a free VPS shell. It safely re-runs the registered audit check for rule {ruleId} through dokuru-agent.
+          </p>
+        )}
+
+        {error && (
+          <div className="rounded border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-400">
+            {error}
+          </div>
+        )}
+
+        {result && (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <SeverityBadge severity={result.rule.severity} />
+              <span className={cn(
+                "inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-bold uppercase",
+                result.status === "Pass" ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+                : result.status === "Fail" ? "border-rose-500/20 bg-rose-500/10 text-rose-400"
+                : "border-amber-500/20 bg-amber-500/10 text-amber-400"
+              )}>
+                {result.status}
+              </span>
+              <span className="text-xs text-muted-foreground">{result.message}</span>
+            </div>
+
+            {result.audit_command && (
+              <div>
+                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">Command</p>
+                <code className="block rounded border border-border/50 bg-zinc-950 p-3 font-mono text-xs text-emerald-400 overflow-x-auto">
+                  $ {result.audit_command}
+                </code>
+              </div>
+            )}
+
+            {result.raw_output && (
+              <div>
+                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">Current Output</p>
+                <pre className="rounded border border-border/50 bg-zinc-950 p-3 font-mono text-xs text-zinc-300 whitespace-pre-wrap overflow-x-auto">
+                  {result.raw_output}
+                </pre>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, containers, focusedRuleId, onOpenWizard }: {
   result: AuditResult;
   agentId: string;
   auditId: string;
@@ -95,6 +203,7 @@ function RuleCard({ result, agentId, auditId, containers, focusedRuleId, onOpenW
   const cardRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(isFocused);
   const [activeTab, setActiveTab] = useState<"overview" | "fix" | "debug">(isFocused ? "fix" : "overview");
+  const [cisDialogOpen, setCisDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!isFocused) return;
@@ -257,6 +366,13 @@ function RuleCard({ result, agentId, auditId, containers, focusedRuleId, onOpenW
             {/* Debug: audit command + raw output + references */}
             {activeTab === "debug" && (
               <div className="space-y-3">
+                <AgentVerificationPanel
+                  agentId={agentId}
+                  agentUrl={agentUrl}
+                  agentAccessMode={agentAccessMode}
+                  token={token}
+                  ruleId={rule.id}
+                />
                 {audit_command && (
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-2">Audit Command</p>
@@ -283,7 +399,7 @@ function RuleCard({ result, agentId, auditId, containers, focusedRuleId, onOpenW
                           return (
                             <button
                               key={i}
-                              onClick={() => toast.info("📄 CIS PDF viewer coming soon!", { description: "Upload PDF to backend and view inline" })}
+                              onClick={() => setCisDialogOpen(true)}
                               className="flex items-center gap-1.5 text-xs text-[#2496ED] hover:underline w-full text-left"
                             >
                               <BookOpen className="h-3 w-3 shrink-0" />
@@ -308,6 +424,7 @@ function RuleCard({ result, agentId, auditId, containers, focusedRuleId, onOpenW
           </div>
         </div>
       )}
+      <CisPdfDialog open={cisDialogOpen} onClose={() => setCisDialogOpen(false)} />
     </div>
   );
 }
@@ -451,11 +568,11 @@ function BeforeAfterComparison({
                     </div>
                   ))}
                   {fixedRules.length > 5 && (
-                    <p className="text-xs text-muted-foreground">+{fixedRules.length - 5} fixed rules lainnya.</p>
+                    <p className="text-xs text-muted-foreground">+{fixedRules.length - 5} more fixed rules.</p>
                   )}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">Belum ada rule yang berubah dari fail ke pass.</p>
+                <p className="text-sm text-muted-foreground">No rules have been fixed yet.</p>
               )}
             </div>
 
@@ -481,6 +598,99 @@ function BeforeAfterComparison({
         )}
       </div>
     </div>
+  );
+}
+
+// ── CIS PDF Viewer ───────────────────────────────────────────────────────────
+
+type PdfState = { blobUrl: string | null; isLoading: boolean };
+type PdfAction = { type: "start" } | { type: "done"; url: string } | { type: "fail" };
+
+function pdfReducer(_: PdfState, action: PdfAction): PdfState {
+  if (action.type === "start") return { blobUrl: null, isLoading: true };
+  if (action.type === "done") return { blobUrl: action.url, isLoading: false };
+  return { blobUrl: null, isLoading: false };
+}
+
+function usePdfBlobUser(docId: string | undefined) {
+  const [{ blobUrl, isLoading }, dispatch] = useReducer(pdfReducer, {
+    blobUrl: null,
+    isLoading: false,
+  });
+
+  useEffect(() => {
+    if (!docId) return;
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    dispatch({ type: "start" });
+    getOrFetchPdfBlob(docId, "/documents/file")
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        dispatch({ type: "done", url: objectUrl });
+      })
+      .catch(() => { if (!cancelled) dispatch({ type: "fail" }); });
+    return () => {
+      cancelled = true;
+      setTimeout(() => { if (objectUrl) URL.revokeObjectURL(objectUrl); }, 2000);
+    };
+  }, [docId]);
+
+  return { blobUrl, isLoading };
+}
+
+function CisPdfDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { data: doc, isLoading: isDocLoading } = useQuery({
+    queryKey: ["user-document"],
+    queryFn: userDocumentApi.getCurrent,
+    enabled: open,
+  });
+
+  const { blobUrl, isLoading: isPdfLoading } = usePdfBlobUser(open && doc?.id ? doc.id : undefined);
+
+  const fmtSize = (b: number) =>
+    b >= 1048576 ? `${(b / 1048576).toFixed(2)} MB` : `${(b / 1024).toFixed(1)} KB`;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-5xl w-full h-[85vh] p-0 flex flex-col gap-0" showCloseButton={false}>
+        <div className="h-9 border-b bg-muted/30 px-3 flex items-center gap-2 shrink-0 rounded-t-lg">
+          <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
+          <span className="text-xs text-muted-foreground truncate flex-1 min-w-0">
+            {doc?.name ?? "CIS Docker Benchmark"}
+          </span>
+          {doc && (
+            <span className="text-[10px] font-medium text-muted-foreground/60 bg-muted px-2 py-0.5 rounded-full shrink-0">
+              {fmtSize(doc.file_size)}
+            </span>
+          )}
+          <DialogClose className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0">
+            <X className="h-3.5 w-3.5" />
+          </DialogClose>
+        </div>
+        <div className="flex-1 min-h-0">
+          {isDocLoading || isPdfLoading ? (
+            <div className="h-full flex flex-col items-center justify-center gap-3 text-muted-foreground">
+              <Loader2 className="h-7 w-7 animate-spin" />
+              <span className="text-sm">Loading document…</span>
+            </div>
+          ) : !doc ? (
+            <div className="h-full flex flex-col items-center justify-center gap-3 text-muted-foreground">
+              <FileText className="h-10 w-10 opacity-30" />
+              <p className="text-sm">No CIS document available</p>
+              <p className="text-xs text-muted-foreground/60">Ask admin to upload the CIS Docker Benchmark PDF</p>
+            </div>
+          ) : blobUrl ? (
+            <iframe src={blobUrl} className="w-full h-full border-0 rounded-b-lg" title={doc.name} />
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center gap-3 text-muted-foreground">
+              <FileText className="h-10 w-10 opacity-30" />
+              <span className="text-sm">Preview unavailable</span>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

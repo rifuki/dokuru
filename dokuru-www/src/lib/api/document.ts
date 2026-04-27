@@ -48,3 +48,10 @@ export const documentApi = {
     await apiClient.delete(`/admin/documents/${id}`);
   },
 };
+
+export const userDocumentApi = {
+  getCurrent: async (): Promise<Document | null> => {
+    const response = await apiClient.get("/documents");
+    return response.data.data;
+  },
+};

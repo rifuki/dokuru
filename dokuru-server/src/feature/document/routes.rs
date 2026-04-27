@@ -20,3 +20,10 @@ pub fn document_routes() -> Router<AppState> {
         .route_layer(middleware::from_fn(admin_middleware))
         .route_layer(middleware::from_fn(auth_middleware))
 }
+
+pub fn document_user_routes() -> Router<AppState> {
+    Router::new()
+        .route("/", get(handlers::get_current_document))
+        .route("/file", get(handlers::serve_document_file))
+        .route_layer(middleware::from_fn(auth_middleware))
+}
