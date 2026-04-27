@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useAuthUser } from "@/stores/use-auth-store";
 import { useAgentStore, getAgentToken, type AgentInfoEntry } from "@/stores/use-agent-store";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -31,8 +32,23 @@ type SortField        = "name" | "status" | "connection";
 type SortDir          = "asc" | "desc";
 
 export const Route = createFileRoute("/_authenticated/agents/")({
-  component: AgentsList,
+  component: AgentsPage,
 });
+
+function AgentsPage() {
+  const navigate = useNavigate();
+  const user = useAuthUser();
+
+  useEffect(() => {
+    if (user?.role === "admin") {
+      void navigate({ to: "/admin", replace: true });
+    }
+  }, [user?.role, navigate]);
+
+  if (user?.role === "admin") return null;
+
+  return <AgentsList />;
+}
 
 type AgentWithInfo = {
   agent: Agent;
