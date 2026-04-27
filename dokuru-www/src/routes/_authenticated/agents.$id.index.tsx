@@ -9,7 +9,7 @@ import {
     type AuditResult,
     type DockerInfo,
 } from "@/lib/api/agent-direct";
-import { PILLAR_META, type SecurityPillar } from "@/lib/audit-pillars";
+import { PILLAR_META, getRulePillar, type SecurityPillar } from "@/lib/audit-pillars";
 import {
     dockerApi,
     type Container as DockerContainer,
@@ -43,9 +43,6 @@ import {
     Activity,
     AlertTriangle,
     ArrowUpRight,
-    Bot,
-    Boxes,
-    CheckCircle2,
     Clock3,
     Container as ContainerIcon,
     Edit,
@@ -53,13 +50,12 @@ import {
     EyeOff,
     Gauge,
     GitBranch,
+    HardDrive,
     Layers,
     Loader2,
     Network,
     RefreshCw,
-    Route as RouteIcon,
     Server,
-    ShieldAlert,
     ShieldCheck,
     ShieldX,
     SquareStack,
@@ -93,17 +89,7 @@ function fmtMemory(bytes: number | null | undefined) {
     return gb >= 1 ? `${gb.toFixed(2)} GB` : `${(bytes / 1024 / 1024).toFixed(0)} MB`;
 }
 
-function fmtDate(value: string | null | undefined) {
-    if (!value) return "Never";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return new Intl.DateTimeFormat("en-US", {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-    }).format(date);
-}
+
 
 function fmtFullDate(value: string | null | undefined) {
     if (!value) return "-";
@@ -147,30 +133,7 @@ function scoreBand(score: number): keyof typeof SCORE_COPY {
     return "critical";
 }
 
-function scoreTone(score: number) {
-    if (score >= 80) {
-        return {
-            text: "text-emerald-400",
-            bg: "bg-emerald-500/10",
-            border: "border-emerald-500/20",
-            progress: "[&>div]:bg-emerald-500",
-        };
-    }
-    if (score >= 60) {
-        return {
-            text: "text-amber-400",
-            bg: "bg-amber-500/10",
-            border: "border-amber-500/20",
-            progress: "[&>div]:bg-amber-500",
-        };
-    }
-    return {
-        text: "text-rose-400",
-        bg: "bg-rose-500/10",
-        border: "border-rose-500/20",
-        progress: "[&>div]:bg-rose-500",
-    };
-}
+
 
 function severityWeight(result: AuditResult) {
     if (result.rule.severity === "High") return 3;
@@ -190,63 +153,18 @@ function statusClass(state: string) {
 
 function toneClasses(tone: DashboardTone) {
     const map: Record<DashboardTone, { icon: string; bg: string; border: string; text: string; progress: string }> = {
-        green: {
-            icon: "text-emerald-400",
-            bg: "bg-emerald-500/10",
-            border: "border-emerald-500/20",
-            text: "text-emerald-400",
-            progress: "[&>div]:bg-emerald-500",
-        },
-        amber: {
-            icon: "text-amber-400",
-            bg: "bg-amber-500/10",
-            border: "border-amber-500/20",
-            text: "text-amber-400",
-            progress: "[&>div]:bg-amber-500",
-        },
-        red: {
-            icon: "text-rose-400",
-            bg: "bg-rose-500/10",
-            border: "border-rose-500/20",
-            text: "text-rose-400",
-            progress: "[&>div]:bg-rose-500",
-        },
-        blue: {
-            icon: "text-[#2496ED]",
-            bg: "bg-[#2496ED]/10",
-            border: "border-[#2496ED]/20",
-            text: "text-[#2496ED]",
-            progress: "[&>div]:bg-[#2496ED]",
-        },
-        violet: {
-            icon: "text-violet-400",
-            bg: "bg-violet-500/10",
-            border: "border-violet-500/20",
-            text: "text-violet-400",
-            progress: "[&>div]:bg-violet-500",
-        },
-        cyan: {
-            icon: "text-cyan-400",
-            bg: "bg-cyan-500/10",
-            border: "border-cyan-500/20",
-            text: "text-cyan-400",
-            progress: "[&>div]:bg-cyan-500",
-        },
-        zinc: {
-            icon: "text-muted-foreground",
-            bg: "bg-muted/40",
-            border: "border-border",
-            text: "text-foreground",
-            progress: "[&>div]:bg-muted-foreground",
-        },
+        green: { icon: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/20", text: "text-emerald-500", progress: "[&>div]:bg-emerald-500" },
+        amber: { icon: "text-amber-500", bg: "bg-amber-500/10", border: "border-amber-500/20", text: "text-amber-500", progress: "[&>div]:bg-amber-500" },
+        red: { icon: "text-rose-500", bg: "bg-rose-500/10", border: "border-rose-500/20", text: "text-rose-500", progress: "[&>div]:bg-rose-500" },
+        blue: { icon: "text-blue-500", bg: "bg-blue-500/10", border: "border-blue-500/20", text: "text-blue-500", progress: "[&>div]:bg-blue-500" },
+        violet: { icon: "text-violet-500", bg: "bg-violet-500/10", border: "border-violet-500/20", text: "text-violet-500", progress: "[&>div]:bg-violet-500" },
+        cyan: { icon: "text-cyan-500", bg: "bg-cyan-500/10", border: "border-cyan-500/20", text: "text-cyan-500", progress: "[&>div]:bg-cyan-500" },
+        zinc: { icon: "text-muted-foreground", bg: "bg-muted/10", border: "border-border", text: "text-foreground", progress: "[&>div]:bg-muted-foreground" },
     };
     return map[tone];
 }
 
-function iconBoxClass(tone: DashboardTone) {
-    const toneClass = toneClasses(tone);
-    return cn("flex size-10 items-center justify-center rounded-xl border", toneClass.bg, toneClass.border, toneClass.icon);
-}
+
 
 function AgentDashboard() {
     const { id } = Route.useParams();
@@ -289,7 +207,6 @@ function AgentDashboard() {
 
     const sortedAudits = [...(auditsQuery.data ?? [])].sort(auditSortDesc);
     const latestAudit = sortedAudits[0] ?? null;
-    const previousAudit = sortedAudits[1] ?? null;
 
     const reportQuery = useQuery({
         queryKey: ["audit-report", id, latestAudit?.id],
@@ -399,7 +316,7 @@ function AgentDashboard() {
     }
 
     return (
-        <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-5 pb-10">
+        <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-5 pb-10">
             <AgentDialogs
                 agent={agent}
                 deleteDialogOpen={deleteDialogOpen}
@@ -440,7 +357,6 @@ function AgentDashboard() {
                     agent={agent}
                     dockerInfo={dockerInfo}
                     latestAudit={latestAudit}
-                    previousAudit={previousAudit}
                     auditReport={reportQuery.data ?? null}
                     auditHistoryCount={sortedAudits.length}
                     containers={containers}
@@ -592,68 +508,46 @@ function AgentHero({
     onDelete: () => void;
 }) {
     return (
-        <section className="overflow-hidden rounded-3xl border bg-card shadow-sm">
-            <div className="relative">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(36,150,237,0.18),transparent_32%),linear-gradient(135deg,rgba(36,150,237,0.08),transparent_45%)]" />
-                <div className="relative grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:p-6">
-                    <div className="flex min-w-0 items-start gap-4">
-                        <div className="relative shrink-0">
-                            <div className="flex size-14 items-center justify-center rounded-2xl border border-[#2496ED]/25 bg-[#2496ED]/10 text-[#2496ED] shadow-[0_18px_45px_-24px_rgba(36,150,237,0.9)]">
-                                <Bot className="h-7 w-7" />
-                            </div>
-                            <span className={cn("absolute -bottom-1 -right-1 size-4 rounded-full border-2 border-card", isOnline ? "bg-emerald-500" : "bg-zinc-500")}> 
-                                {isOnline ? <span className="absolute inset-0 rounded-full bg-emerald-400 opacity-70 animate-ping" /> : null}
-                            </span>
-                        </div>
-
-                        <div className="min-w-0 space-y-3">
-                            <div className="flex flex-wrap items-center gap-2">
-                                <h1 className="truncate text-2xl font-bold tracking-tight md:text-3xl">{agent.name}</h1>
-                                <Badge variant="outline" className={cn("gap-1.5 px-2.5 py-1 font-semibold", isOnline ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-400" : "border-zinc-500/25 bg-zinc-500/10 text-zinc-400")}>
-                                    <span className="size-1.5 rounded-full bg-current" />
-                                    {isOnline ? "Online" : "Offline"}
-                                </Badge>
-                                {dockerInfo?.docker_version ? (
-                                    <Badge variant="outline" className="border-[#2496ED]/25 bg-[#2496ED]/10 text-[#2496ED]">
-                                        <Zap className="h-3 w-3" /> Docker {dockerInfo.docker_version}
-                                    </Badge>
-                                ) : null}
-                            </div>
-
-                            <div className="grid gap-2 text-sm text-muted-foreground md:grid-cols-[minmax(0,1.35fr)_auto_auto] md:items-center">
-                                <span className="min-w-0 truncate font-mono text-xs">{agent.url}</span>
-                                <span className="inline-flex items-center gap-1.5 text-xs">
-                                    <GitBranch className="h-3.5 w-3.5" />
-                                    {agent.access_mode}
-                                </span>
-                                <span className="inline-flex items-center gap-1.5 text-xs">
-                                    <Clock3 className="h-3.5 w-3.5" />
-                                    Added {fmtFullDate(agent.created_at)}
-                                </span>
-                            </div>
-
-                            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                                <span className="rounded-full border bg-background/60 px-3 py-1">Last seen: {relativeTime(agent.last_seen)}</span>
-                                <span className="rounded-full border bg-background/60 px-3 py-1">Host: {dockerInfo?.hostname ?? "unknown"}</span>
-                                <span className="rounded-full border bg-background/60 px-3 py-1">OS: {dockerInfo?.os ?? "not connected"}</span>
-                            </div>
-                        </div>
+        <section className="rounded-lg border bg-card p-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex min-w-0 items-center gap-4">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border bg-muted/30">
+                        <Server className="h-5 w-5 text-muted-foreground" />
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                        <Button variant="outline" onClick={onRefresh} disabled={isRefreshing}>
-                            <RefreshCw className={cn("mr-2 h-4 w-4", isRefreshing && "animate-spin")} />
-                            Refresh
-                        </Button>
-                        <Button variant="outline" onClick={onEdit}>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Edit
-                        </Button>
-                        <Button variant="destructive" onClick={onDelete}>
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
-                        </Button>
+                    <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                            <h1 className="truncate text-xl font-bold tracking-tight">{agent.name}</h1>
+                            <div className="flex items-center gap-1.5 text-xs font-medium">
+                                <span className={cn("h-2 w-2 rounded-full", isOnline ? "bg-emerald-500" : "bg-muted-foreground")} />
+                                <span className="text-muted-foreground">{isOnline ? "Online" : "Offline"}</span>
+                            </div>
+                        </div>
+
+                        <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                            <span className="truncate font-mono text-xs">{agent.url}</span>
+                            <span className="flex items-center gap-1.5"><GitBranch className="h-3.5 w-3.5" />{agent.access_mode}</span>
+                            {dockerInfo?.docker_version && (
+                                <span className="flex items-center gap-1.5"><Zap className="h-3.5 w-3.5" />Docker {dockerInfo.docker_version}</span>
+                            )}
+                            <span className="flex items-center gap-1.5"><Clock3 className="h-3.5 w-3.5" />Added {fmtFullDate(agent.created_at)}</span>
+                        </div>
                     </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
+                    <Button size="sm" variant="outline" onClick={onRefresh} disabled={isRefreshing} className="h-8">
+                        <RefreshCw className={cn("mr-2 h-3.5 w-3.5", isRefreshing && "animate-spin")} />
+                        Refresh
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={onEdit} className="h-8">
+                        <Edit className="mr-2 h-3.5 w-3.5" />
+                        Edit
+                    </Button>
+                    <Button size="sm" variant="destructive" onClick={onDelete} className="h-8">
+                        <Trash2 className="mr-2 h-3.5 w-3.5" />
+                        Delete
+                    </Button>
                 </div>
             </div>
         </section>
@@ -665,7 +559,6 @@ function DashboardContent({
     agent,
     dockerInfo,
     latestAudit,
-    previousAudit,
     auditReport,
     auditHistoryCount,
     containers,
@@ -677,7 +570,6 @@ function DashboardContent({
     agent: Agent;
     dockerInfo: DockerInfo;
     latestAudit: AuditResponse | null;
-    previousAudit: AuditResponse | null;
     auditReport: AuditReportResponse | null;
     auditHistoryCount: number;
     containers: DockerContainer[];
@@ -690,8 +582,6 @@ function DashboardContent({
     const unhealthyContainers = containers.filter((container) => container.status.toLowerCase().includes("unhealthy"));
     const recentContainers = [...containers].sort((a, b) => b.created - a.created).slice(0, 5);
     const topStacks = [...stacks].sort((a, b) => b.total - a.total).slice(0, 4);
-    const latestScore = latestAudit?.summary.score ?? 0;
-    const scoreDelta = latestAudit && previousAudit ? latestAudit.summary.score - previousAudit.summary.score : null;
     const failedResults = [...(latestAudit?.results ?? [])]
         .filter((result) => result.status === "Fail")
         .sort((a, b) => severityWeight(b) - severityWeight(a) || a.rule.id.localeCompare(b.rule.id, undefined, { numeric: true }));
@@ -700,28 +590,44 @@ function DashboardContent({
     const quickWins = auditReport?.report.remediation.quick_wins ?? autoFixable;
 
     return (
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
-            <div className="space-y-5">
-                <ResourceOverview
-                    id={id}
-                    dockerInfo={dockerInfo}
-                    runningContainers={runningContainers.length}
-                    stoppedContainers={stoppedContainers.length}
-                    unhealthyContainers={unhealthyContainers.length}
-                    stacks={stacks}
-                />
+        <div className="space-y-5">
+            <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_360px]">
+                <div className="space-y-5">
+                    <SecurityOverview
+                        id={id}
+                        latestAudit={latestAudit}
+                        auditReport={auditReport}
+                        auditHistoryCount={auditHistoryCount}
+                        highRiskFailures={highRiskFailures}
+                        autoFixable={autoFixable}
+                        quickWins={quickWins}
+                    />
 
-                <SecurityOverview
-                    id={id}
-                    latestAudit={latestAudit}
-                    previousAudit={previousAudit}
-                    auditReport={auditReport}
-                    auditHistoryCount={auditHistoryCount}
-                    scoreDelta={scoreDelta}
-                    highRiskFailures={highRiskFailures}
-                    autoFixable={autoFixable}
-                    quickWins={quickWins}
-                />
+                    <ResourceOverview
+                        id={id}
+                        dockerInfo={dockerInfo}
+                        runningContainers={runningContainers.length}
+                        stoppedContainers={stoppedContainers.length}
+                        unhealthyContainers={unhealthyContainers.length}
+                        stacks={stacks}
+                    />
+                </div>
+
+                <aside className="grid gap-5 xl:grid-cols-2 2xl:grid-cols-1 2xl:self-start">
+                    <ActionPanel id={id} agent={agent} latestAudit={latestAudit} />
+                    <HostFacts dockerInfo={dockerInfo} />
+                </aside>
+            </div>
+
+            <div className="space-y-5">
+                {latestAudit && failedResults.length > 0 ? (
+                    <FailingRules
+                        id={id}
+                        failedResults={failedResults}
+                        autoFixable={autoFixable}
+                        latestAuditId={latestAudit.id}
+                    />
+                ) : null}
 
                 <WorkloadOverview
                     id={id}
@@ -732,18 +638,6 @@ function DashboardContent({
                     isStacksLoading={isStacksLoading}
                 />
             </div>
-
-            <aside className="space-y-5">
-                <ActionPanel id={id} agent={agent} latestAudit={latestAudit} />
-                <AttentionPanel
-                    id={id}
-                    failedResults={failedResults}
-                    unhealthyContainers={unhealthyContainers}
-                    stoppedContainers={stoppedContainers}
-                    latestScore={latestScore}
-                />
-                <HostFacts dockerInfo={dockerInfo} agent={agent} />
-            </aside>
         </div>
     );
 }
@@ -770,11 +664,11 @@ function ResourceOverview({
 
     return (
         <SectionCard
-            title="Operations Overview"
-            description="Live Docker inventory and workload health from this agent."
+            title="Docker Fleet"
+            description="Live inventory, running capacity, and storage surfaces from this host."
             action={<Button size="sm" variant="outline" asChild><Link to="/agents/$id/containers" params={{ id }}>Open Inventory</Link></Button>}
         >
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                 <MetricCard
                     icon={ContainerIcon}
                     label="Containers"
@@ -805,10 +699,19 @@ function ResourceOverview({
                     id={id}
                 />
                 <MetricCard
+                    icon={HardDrive}
+                    label="Volumes"
+                    value={dockerInfo.volumes}
+                    detail="Persistent Docker storage"
+                    tone="amber"
+                    to="/agents/$id/volumes"
+                    id={id}
+                />
+                <MetricCard
                     icon={Network}
                     label="Networks"
                     value={dockerInfo.networks}
-                    detail={`${dockerInfo.volumes} volumes attached`}
+                    detail="Docker network surfaces"
                     tone="green"
                     to="/agents/$id/networks"
                     id={id}
@@ -834,7 +737,7 @@ function MetricCard({
     detail: string;
     tone: DashboardTone;
     progress?: number;
-    to: "/agents/$id/containers" | "/agents/$id/stacks" | "/agents/$id/images" | "/agents/$id/networks";
+    to: "/agents/$id/containers" | "/agents/$id/stacks" | "/agents/$id/images" | "/agents/$id/networks" | "/agents/$id/volumes";
     id: string;
 }) {
     const toneClass = toneClasses(tone);
@@ -842,23 +745,18 @@ function MetricCard({
         <Link
             to={to}
             params={{ id }}
-            className="group rounded-2xl border bg-background/50 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:bg-muted/20 hover:shadow-lg hover:shadow-black/5"
+            className="group flex flex-col justify-between rounded-lg border bg-background p-3 transition-colors hover:border-primary/50"
         >
-            <div className="flex items-start justify-between gap-3">
-                <div className={iconBoxClass(tone)}>
-                    <Icon className="h-5 w-5" />
-                </div>
-                <ArrowUpRight className="h-4 w-4 text-muted-foreground/40 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-primary" />
+            <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold">{label}</span>
+                <Icon className={cn("h-4 w-4", toneClass.text)} />
             </div>
-            <div className="mt-4">
-                <div className="flex items-end gap-2">
-                    <span className={cn("text-3xl font-black tabular-nums leading-none", toneClass.text)}>{value}</span>
-                    <span className="pb-1 text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">{label}</span>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+            <div className="mt-2">
+                <span className="text-2xl font-bold tabular-nums leading-none">{value}</span>
+                <p className="mt-1 truncate text-xs text-muted-foreground">{detail}</p>
             </div>
             {typeof progress === "number" ? (
-                <Progress value={progress} className={cn("mt-4 h-1.5 bg-muted/50", toneClass.progress)} />
+                <Progress value={progress} className={cn("mt-4 h-1.5", toneClass.progress)} />
             ) : null}
         </Link>
     );
@@ -867,20 +765,16 @@ function MetricCard({
 function SecurityOverview({
     id,
     latestAudit,
-    previousAudit,
     auditReport,
     auditHistoryCount,
-    scoreDelta,
     highRiskFailures,
     autoFixable,
     quickWins,
 }: {
     id: string;
     latestAudit: AuditResponse | null;
-    previousAudit: AuditResponse | null;
     auditReport: AuditReportResponse | null;
     auditHistoryCount: number;
-    scoreDelta: number | null;
     highRiskFailures: number;
     autoFixable: number;
     quickWins: number;
@@ -888,15 +782,10 @@ function SecurityOverview({
     if (!latestAudit) {
         return (
             <SectionCard title="Security Posture" description="No CIS benchmark has been captured for this agent yet.">
-                <div className="grid gap-4 rounded-2xl border border-dashed bg-muted/10 p-8 md:grid-cols-[auto_1fr_auto] md:items-center">
-                    <div className="flex size-14 items-center justify-center rounded-2xl border border-[#2496ED]/20 bg-[#2496ED]/10 text-[#2496ED]">
-                        <ShieldCheck className="h-7 w-7" />
-                    </div>
+                <div className="flex items-center justify-between rounded-lg border border-dashed bg-muted/10 p-6">
                     <div>
-                        <h3 className="text-lg font-semibold">Start with a baseline audit</h3>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                            Run the CIS Docker Benchmark once to unlock score history, failing rules, and remediation priorities.
-                        </p>
+                        <h3 className="text-base font-semibold">Start with a baseline audit</h3>
+                        <p className="text-sm text-muted-foreground">Run the CIS Docker Benchmark once to unlock score history, failing rules, and remediation priorities.</p>
                     </div>
                     <Button asChild>
                         <Link to="/agents/$id/audit" params={{ id }}>
@@ -909,7 +798,6 @@ function SecurityOverview({
         );
     }
 
-    const tone = scoreTone(latestAudit.summary.score);
     const band = scoreBand(latestAudit.summary.score);
     const passRate = latestAudit.summary.total > 0 ? Math.round((latestAudit.summary.passed / latestAudit.summary.total) * 100) : 0;
     const report = auditReport?.report;
@@ -917,71 +805,65 @@ function SecurityOverview({
 
     return (
         <SectionCard
-            title="Security Posture"
-            description="Prioritized CIS benchmark status for the latest audit run."
+            title="Security Flight Deck"
+            description="CIS posture, weak zones, and remediation signals at a glance."
             action={<Button size="sm" asChild><Link to="/agents/$id/audit" params={{ id }}>Run Audit</Link></Button>}
         >
-            <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-                <div className={cn("rounded-2xl border p-5", tone.bg, tone.border)}>
-                    <div className="flex items-start justify-between gap-3">
-                        <div>
-                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Score</p>
-                            <div className="mt-4 flex items-end gap-2">
-                                <span className={cn("text-6xl font-black tabular-nums leading-none", tone.text)}>{latestAudit.summary.score}</span>
-                                <span className="pb-1.5 text-xl font-bold text-muted-foreground/50">/100</span>
-                            </div>
-                        </div>
-                        <Badge variant="outline" className={cn("px-2.5 py-1", tone.bg, tone.border, tone.text)}>
+            <div className="grid gap-4 xl:grid-cols-[1fr_minmax(0,2fr)]">
+                {/* Score Section */}
+                <div className="flex flex-col justify-between rounded-lg border bg-background p-4">
+                    <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold">CIS Score</span>
+                        <Badge variant="outline" className={cn(
+                            SCORE_COPY[band] === "Healthy posture" ? "text-emerald-500 border-emerald-500/20" :
+                            SCORE_COPY[band] === "Needs attention" ? "text-amber-500 border-amber-500/20" : "text-rose-500 border-rose-500/20"
+                        )}>
                             {SCORE_COPY[band]}
                         </Badge>
                     </div>
-                    <Progress value={latestAudit.summary.score} className={cn("mt-5 h-2 bg-background/60", tone.progress)} />
-                    <div className="mt-5 grid grid-cols-3 gap-2">
-                        <MiniStat label="Passed" value={latestAudit.summary.passed} tone="green" />
-                        <MiniStat label="Failed" value={latestAudit.summary.failed} tone="red" />
-                        <MiniStat label="Rules" value={latestAudit.summary.total} tone="zinc" />
+                    <div className="mt-4 flex items-baseline gap-1">
+                        <span className="text-5xl font-black tabular-nums">{latestAudit.summary.score}</span>
+                        <span className="text-muted-foreground">/100</span>
                     </div>
-                    <div className="mt-4 flex items-center justify-between rounded-xl border bg-background/50 px-3 py-2 text-xs text-muted-foreground">
-                        <span>Latest audit</span>
-                        <span className="font-mono">{fmtDate(latestAudit.timestamp)}</span>
-                    </div>
-                    <div className="mt-2 flex items-center justify-between rounded-xl border bg-background/50 px-3 py-2 text-xs text-muted-foreground">
-                        <span>Score delta</span>
-                        <span className={cn("font-mono font-semibold", scoreDelta === null ? "text-muted-foreground" : scoreDelta >= 0 ? "text-emerald-400" : "text-rose-400")}>
-                            {scoreDelta === null ? "No previous run" : `${scoreDelta > 0 ? "+" : ""}${scoreDelta}`}
-                        </span>
+                    <Progress value={latestAudit.summary.score} className="mt-4 h-2" />
+                    <div className="mt-4 grid grid-cols-3 gap-2 border-t pt-4 text-center">
+                        <div>
+                            <span className="text-lg font-bold text-emerald-500">{latestAudit.summary.passed}</span>
+                            <p className="text-xs text-muted-foreground">Passed</p>
+                        </div>
+                        <div className="border-l">
+                            <span className="text-lg font-bold text-rose-500">{latestAudit.summary.failed}</span>
+                            <p className="text-xs text-muted-foreground">Failed</p>
+                        </div>
+                        <div className="border-l">
+                            <span className="text-lg font-bold">{latestAudit.summary.total}</span>
+                            <p className="text-xs text-muted-foreground">Total</p>
+                        </div>
                     </div>
                 </div>
 
-                <div className="grid gap-4">
-                    <div className="grid gap-3 sm:grid-cols-4">
-                        <SignalCard icon={ShieldX} label="High risk" value={highRiskFailures} detail="high severity failures" tone={highRiskFailures > 0 ? "red" : "green"} />
-                        <SignalCard icon={Zap} label="Auto-fix" value={autoFixable} detail="supported fixes" tone={autoFixable > 0 ? "blue" : "zinc"} />
-                        <SignalCard icon={Gauge} label="Quick wins" value={quickWins} detail="low effort actions" tone={quickWins > 0 ? "green" : "zinc"} />
-                        <SignalCard icon={Clock3} label="History" value={auditHistoryCount} detail="stored reports" tone="violet" />
+                <div className="flex flex-col gap-4">
+                    {/* Metrics Row */}
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                        <SignalCard icon={ShieldX} label="High risk" value={highRiskFailures} detail="fail" tone={highRiskFailures > 0 ? "red" : "green"} />
+                        <SignalCard icon={Zap} label="Auto-fix" value={autoFixable} detail="fixes" tone={autoFixable > 0 ? "blue" : "zinc"} />
+                        <SignalCard icon={Gauge} label="Quick wins" value={quickWins} detail="actions" tone={quickWins > 0 ? "green" : "zinc"} />
+                        <SignalCard icon={Clock3} label="History" value={auditHistoryCount} detail="reports" tone="violet" />
                     </div>
 
-                    <div className="rounded-2xl border bg-background/50 p-4">
-                        <div className="mb-4 flex items-center justify-between gap-3">
-                            <div>
-                                <h3 className="text-sm font-semibold">Security Pillars</h3>
-                                <p className="text-xs text-muted-foreground">Worst areas appear clearly for remediation planning.</p>
-                            </div>
-                            <Badge variant="outline" className="font-mono">{passRate}% pass</Badge>
+                    {/* Pillars List */}
+                    <div className="rounded-lg border bg-background p-4">
+                        <div className="mb-3 flex items-center justify-between">
+                            <h3 className="text-sm font-semibold">Security Pillars</h3>
+                            <span className="text-xs font-mono">{passRate}% pass overall</span>
                         </div>
                         {pillars.length > 0 ? (
-                            <div className="grid gap-3 md:grid-cols-2">
+                            <div className="grid gap-2 lg:grid-cols-2">
                                 {pillars.map((pillar) => (
                                     <PillarRow key={pillar.key} pillar={pillar} />
                                 ))}
                             </div>
-                        ) : (
-                            <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-3">
-                                <span className="rounded-xl border bg-muted/20 px-3 py-2">Passed {latestAudit.summary.passed}</span>
-                                <span className="rounded-xl border bg-muted/20 px-3 py-2">Failed {latestAudit.summary.failed}</span>
-                                <span className="rounded-xl border bg-muted/20 px-3 py-2">Previous {previousAudit?.summary.score ?? "-"}</span>
-                            </div>
-                        )}
+                        ) : null}
                     </div>
                 </div>
             </div>
@@ -994,32 +876,19 @@ function PillarRow({ pillar }: { pillar: AuditReportResponse["report"]["pillars"
     const meta = PILLAR_META[key];
     const Icon = meta?.icon ?? ShieldCheck;
     const percent = pillar.percent ?? 0;
-    const progressTone = percent >= 80 ? "[&>div]:bg-emerald-500" : percent >= 60 ? "[&>div]:bg-amber-500" : "[&>div]:bg-rose-500";
 
     return (
-        <div className="rounded-xl border bg-card/50 p-3">
-            <div className="flex items-center gap-3">
-                <div className="flex size-8 items-center justify-center rounded-lg border bg-muted/30 text-muted-foreground">
-                    <Icon className={cn("h-4 w-4", meta?.color)} />
-                </div>
-                <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-3">
-                        <p className="truncate text-sm font-semibold">{meta?.name ?? pillar.label}</p>
-                        <span className="font-mono text-xs text-muted-foreground">{pillar.passed}/{pillar.total}</span>
-                    </div>
-                    <Progress value={percent} className={cn("mt-2 h-1.5 bg-muted/50", progressTone)} />
-                </div>
+        <div className="flex items-center justify-between rounded border p-2 text-sm">
+            <div className="flex items-center gap-2">
+                <Icon className={cn("h-4 w-4 text-muted-foreground", meta?.color)} />
+                <span className="font-medium">{meta?.name ?? pillar.label}</span>
             </div>
-        </div>
-    );
-}
-
-function MiniStat({ label, value, tone }: { label: string; value: number; tone: DashboardTone }) {
-    const toneClass = toneClasses(tone);
-    return (
-        <div className="rounded-xl border bg-background/60 px-3 py-2 text-center">
-            <p className={cn("text-xl font-black tabular-nums", toneClass.text)}>{value}</p>
-            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
+            <div className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground">{pillar.passed}/{pillar.total} pass</span>
+                <span className={cn("font-bold tabular-nums", percent >= 80 ? "text-emerald-500" : percent >= 60 ? "text-amber-500" : "text-rose-500")}>
+                    {percent}%
+                </span>
+            </div>
         </div>
     );
 }
@@ -1039,15 +908,15 @@ function SignalCard({
 }) {
     const toneClass = toneClasses(tone);
     return (
-        <div className="rounded-2xl border bg-background/50 p-4">
-            <div className="flex items-center justify-between gap-3">
-                <div className={cn("flex size-9 items-center justify-center rounded-xl border", toneClass.bg, toneClass.border, toneClass.icon)}>
-                    <Icon className="h-4 w-4" />
-                </div>
-                <span className={cn("text-2xl font-black tabular-nums", toneClass.text)}>{value}</span>
+        <div className="rounded-lg border bg-background p-3">
+            <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground uppercase">{label}</span>
+                <Icon className={cn("h-3.5 w-3.5", toneClass.text)} />
             </div>
-            <p className="mt-3 text-xs font-bold uppercase tracking-[0.15em] text-muted-foreground">{label}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+            <div className="mt-2 flex items-end gap-1">
+                <span className={cn("text-xl font-bold leading-none", toneClass.text)}>{value}</span>
+                <span className="text-[10px] text-muted-foreground">{detail}</span>
+            </div>
         </div>
     );
 }
@@ -1081,16 +950,16 @@ function WorkloadOverview({
                                     key={container.id}
                                     to="/agents/$id/containers/$containerId"
                                     params={{ id, containerId: container.id }}
-                                    className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/30"
+                                    className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50"
                                 >
-                                    <span className="flex size-9 items-center justify-center rounded-xl border bg-muted/30 text-muted-foreground">
+                                    <span className="flex size-8 items-center justify-center rounded-md border bg-muted/10 text-muted-foreground">
                                         <ContainerIcon className="h-4 w-4" />
                                     </span>
                                     <div className="min-w-0 flex-1">
                                         <p className="truncate text-sm font-semibold">{container.names[0]?.replace("/", "") || container.id.slice(0, 12)}</p>
-                                        <p className="truncate font-mono text-xs text-muted-foreground">{container.image}</p>
+                                        <p className="truncate font-mono text-[10px] text-muted-foreground">{container.image}</p>
                                     </div>
-                                    <Badge variant="outline" className={cn("capitalize", statusClass(container.state))}>{container.state}</Badge>
+                                    <Badge variant="outline" className={cn("text-[10px]", statusClass(container.state))}>{container.state}</Badge>
                                 </Link>
                             ))
                         ) : (
@@ -1110,8 +979,8 @@ function WorkloadOverview({
                                 return (
                                     <Link
                                         key={stack.name}
-                                        to="/agents/$id/stacks/$stackName"
-                                        params={{ id, stackName: stack.name }}
+                                        to="/agents/$id/stacks"
+                                        params={{ id }}
                                         className="block px-4 py-3 transition-colors hover:bg-muted/30"
                                     >
                                         <div className="flex items-center justify-between gap-3">
@@ -1137,188 +1006,209 @@ function WorkloadOverview({
 
 function ActionPanel({ id, agent, latestAudit }: { id: string; agent: Agent; latestAudit: AuditResponse | null }) {
     return (
-        <SectionCard title="Next Actions" description="Common tasks for this agent.">
+        <SectionCard title="Control Dock" description="Fast actions for this host.">
             <div className="grid gap-2">
-                <Button asChild className="justify-between">
+                <Button className="w-full justify-between" asChild>
                     <Link to="/agents/$id/audit" params={{ id }}>
                         <span className="inline-flex items-center gap-2"><ShieldCheck className="h-4 w-4" />Run CIS Audit</span>
                         <ArrowUpRight className="h-4 w-4" />
                     </Link>
                 </Button>
-                <Button variant="outline" asChild className="justify-between">
-                    <Link to="/agents/$id/containers" params={{ id }}>
-                        <span className="inline-flex items-center gap-2"><ContainerIcon className="h-4 w-4" />Manage Containers</span>
-                        <ArrowUpRight className="h-4 w-4" />
-                    </Link>
-                </Button>
-                <Button variant="outline" asChild className="justify-between">
-                    <Link to="/agents/$id/audits" params={{ id }}>
-                        <span className="inline-flex items-center gap-2"><Activity className="h-4 w-4" />Audit Reports</span>
-                        <Badge variant="outline" className="font-mono">{latestAudit ? latestAudit.summary.score : "-"}</Badge>
-                    </Link>
-                </Button>
+                
+                <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-1">
+                    <Button variant="outline" className="w-full justify-between" asChild>
+                        <Link to="/agents/$id/containers" params={{ id }}>
+                            <span className="inline-flex items-center gap-2"><ContainerIcon className="h-4 w-4" />Manage Containers</span>
+                            <ArrowUpRight className="h-4 w-4" />
+                        </Link>
+                    </Button>
+                    <Button variant="outline" className="w-full justify-between" asChild>
+                        <Link to="/agents/$id/audits" params={{ id }}>
+                            <span className="inline-flex items-center gap-2"><Activity className="h-4 w-4" />Audit Reports</span>
+                            <Badge variant="outline" className="font-mono">{latestAudit ? latestAudit.summary.score : "-"}</Badge>
+                        </Link>
+                    </Button>
+                </div>
             </div>
-            <div className="mt-4 rounded-2xl border bg-muted/10 p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">Connection</p>
-                <div className="mt-3 space-y-2 text-sm">
-                    <FactLine label="Mode" value={agent.access_mode} />
-                    <FactLine label="Status" value={agent.status} />
-                    <FactLine label="Last seen" value={relativeTime(agent.last_seen)} />
+            <div className="mt-4 flex flex-col gap-2 rounded-lg border bg-muted/10 p-3">
+                <span className="text-xs font-semibold uppercase text-muted-foreground">Connection Status</span>
+                <div className="flex flex-col gap-1 text-sm">
+                    <div className="flex justify-between">
+                        <span className="text-muted-foreground">Mode</span>
+                        <span className="font-mono">{agent.access_mode}</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span className="text-muted-foreground">Status</span>
+                        <span className="font-mono">{agent.status}</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span className="text-muted-foreground">Last Seen</span>
+                        <span className="font-mono">{relativeTime(agent.last_seen)}</span>
+                    </div>
                 </div>
             </div>
         </SectionCard>
     );
 }
 
-function AttentionPanel({
+function FailingRules({
     id,
     failedResults,
-    unhealthyContainers,
-    stoppedContainers,
-    latestScore,
+    autoFixable,
+    latestAuditId,
 }: {
     id: string;
     failedResults: AuditResult[];
-    unhealthyContainers: DockerContainer[];
-    stoppedContainers: DockerContainer[];
-    latestScore: number;
+    autoFixable: number;
+    latestAuditId?: string;
 }) {
-    const topFailures = failedResults.slice(0, 4);
-    const needsAttention = topFailures.length > 0 || unhealthyContainers.length > 0 || latestScore < 60;
+    const visibleResults = failedResults.slice(0, 10);
+    const highCount = failedResults.filter((result) => result.rule.severity === "High").length;
+    const mediumCount = failedResults.filter((result) => result.rule.severity === "Medium").length;
+    const lowCount = failedResults.filter((result) => result.rule.severity === "Low").length;
 
     return (
-        <SectionCard title="Attention Queue" description="Things worth fixing first.">
-            <div className="space-y-3">
-                {!needsAttention ? (
-                    <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-400">
-                        <div className="flex items-center gap-2 font-semibold">
-                            <CheckCircle2 className="h-4 w-4" />
-                            No urgent security or workload issues.
-                        </div>
-                    </div>
-                ) : null}
+        <SectionCard
+            title="Risk Queue"
+            description={`Top ${visibleResults.length} failing CIS rules, ranked by severity.`}
+            action={
+                <Badge variant="outline" className="px-2 py-1">
+                    <Zap className="mr-1 h-3.5 w-3.5" />
+                    {autoFixable} auto-fixable
+                </Badge>
+            }
+        >
+            <div className="mb-4 flex flex-wrap gap-2 text-sm">
+                <Badge variant="destructive" className="bg-rose-500/10 text-rose-500 border-none hover:bg-rose-500/20">{highCount} High Risks</Badge>
+                <Badge variant="secondary" className="bg-amber-500/10 text-amber-500 border-none hover:bg-amber-500/20">{mediumCount} Medium Risks</Badge>
+                <Badge variant="outline">{lowCount} Low Risks</Badge>
+            </div>
 
-                {latestScore > 0 && latestScore < 60 ? (
-                    <AttentionItem
-                        icon={ShieldAlert}
-                        tone="red"
-                        title="Security score is critical"
-                        description={`Latest audit score is ${latestScore}/100. Prioritize high severity failed rules.`}
-                        action={<Link to="/agents/$id/audits" params={{ id }} className="text-xs font-semibold text-primary hover:underline">Open reports</Link>}
-                    />
-                ) : null}
-
-                {unhealthyContainers.length > 0 ? (
-                    <AttentionItem
-                        icon={AlertTriangle}
-                        tone="amber"
-                        title={`${unhealthyContainers.length} unhealthy container${unhealthyContainers.length > 1 ? "s" : ""}`}
-                        description={unhealthyContainers.slice(0, 2).map((container) => container.names[0]?.replace("/", "") || container.id.slice(0, 12)).join(", ")}
-                        action={<Link to="/agents/$id/containers" params={{ id }} className="text-xs font-semibold text-primary hover:underline">Inspect</Link>}
-                    />
-                ) : null}
-
-                {topFailures.map((result) => (
-                    <AttentionItem
+            <div className="grid gap-2">
+                {visibleResults.map((result) => (
+                    <FailingRuleRow
                         key={result.rule.id}
-                        icon={result.remediation_kind === "auto" ? Zap : ShieldX}
-                        tone={result.rule.severity === "High" ? "red" : result.rule.severity === "Medium" ? "amber" : "zinc"}
-                        title={`${result.rule.id} · ${result.rule.title}`}
-                        description={`${result.rule.severity} severity · ${result.affected.length} affected · ${result.remediation_kind} remediation`}
-                        action={
-                            <Link
-                                to="/agents/$id/audits/$auditId"
-                                params={{ id, auditId: "" }}
-                                search={{ ruleId: result.rule.id }}
-                                className="hidden"
-                            />
-                        }
+                        id={id}
+                        latestAuditId={latestAuditId}
+                        result={result}
                     />
                 ))}
-
-                {stoppedContainers.length > 0 ? (
-                    <div className="rounded-2xl border bg-muted/10 p-4 text-xs text-muted-foreground">
-                        {stoppedContainers.length} stopped container{stoppedContainers.length > 1 ? "s" : ""} are present. This may be expected, but review if the workload should be active.
-                    </div>
-                ) : null}
             </div>
+
+            {failedResults.length > visibleResults.length ? (
+                <div className="mt-3 text-center">
+                    {latestAuditId ? (
+                        <Link
+                            to="/agents/$id/audits/$auditId"
+                            params={{ id, auditId: latestAuditId }}
+                            className="text-sm font-medium text-primary hover:underline"
+                        >
+                            View all {failedResults.length} failing rules →
+                        </Link>
+                    ) : (
+                        <Link
+                            to="/agents/$id/audits"
+                            params={{ id }}
+                            className="text-sm font-medium text-primary hover:underline"
+                        >
+                            View all reports →
+                        </Link>
+                    )}
+                </div>
+            ) : null}
         </SectionCard>
     );
 }
 
-function AttentionItem({
-    icon: Icon,
-    tone,
-    title,
-    description,
-    action,
+function FailingRuleRow({
+    id,
+    latestAuditId,
+    result,
 }: {
-    icon: React.ComponentType<{ className?: string }>;
-    tone: DashboardTone;
-    title: string;
-    description: string;
-    action?: React.ReactNode;
+    id: string;
+    latestAuditId?: string;
+    result: AuditResult;
 }) {
-    return (
-        <div className="rounded-2xl border bg-background/50 p-4">
-            <div className="flex gap-3">
-                <div className={cn(iconBoxClass(tone), "size-9 rounded-xl")}>
-                    <Icon className="h-4 w-4" />
+    const pillar = getRulePillar(result.rule.id);
+    const pillarMeta = PILLAR_META[pillar];
+    const PillarIcon = pillarMeta.icon;
+    const severityClass = result.rule.severity === "High"
+        ? "text-rose-500"
+        : result.rule.severity === "Medium"
+            ? "text-amber-500"
+            : "text-muted-foreground";
+    const remediationLabel = result.remediation_kind === "auto" ? "Auto-fix" : result.remediation_kind;
+    const rowClassName = "group block rounded-lg border bg-card p-3 transition-colors hover:border-primary/50 hover:bg-muted/10";
+    const content = (
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-sm font-bold">{result.rule.id}</span>
+                    <Badge variant="outline" className={cn("px-1.5 py-0 text-xs font-semibold", severityClass)}>{result.rule.severity}</Badge>
+                    <Badge variant="outline" className="px-1.5 py-0 text-xs text-muted-foreground capitalize">{remediationLabel}</Badge>
                 </div>
-                <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 text-sm font-semibold">{title}</p>
-                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{description}</p>
-                    {action ? <div className="mt-2">{action}</div> : null}
+                <h3 className="mt-1 text-sm font-semibold leading-snug group-hover:text-primary">
+                    {result.rule.title}
+                </h3>
+            </div>
+            
+            <div className="flex shrink-0 flex-wrap items-center gap-4 text-xs md:flex-col md:items-end md:gap-1">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <PillarIcon className="h-3.5 w-3.5" />
+                    <span>{pillarMeta.name}</span>
+                </div>
+                <div className="flex items-center gap-1 font-mono text-muted-foreground">
+                    <AlertTriangle className={cn("h-3.5 w-3.5", result.affected.length > 0 ? "text-amber-500" : "")} />
+                    {result.affected.length > 0 ? `${result.affected.length} affected` : "No entity"}
                 </div>
             </div>
         </div>
     );
+
+    return latestAuditId ? (
+        <Link
+            to="/agents/$id/audits/$auditId"
+            params={{ id, auditId: latestAuditId }}
+            search={{ ruleId: result.rule.id }}
+            className={rowClassName}
+            aria-label={`Open rule ${result.rule.id}`}
+        >
+            {content}
+        </Link>
+    ) : (
+        <Link
+            to="/agents/$id/audits"
+            params={{ id }}
+            className={rowClassName}
+            aria-label="Open audit reports"
+        >
+            {content}
+        </Link>
+    );
 }
 
-function HostFacts({ dockerInfo, agent }: { dockerInfo: DockerInfo; agent: Agent }) {
+function HostFacts({ dockerInfo }: { dockerInfo: DockerInfo }) {
+    const infoRows = [
+        ["OS", dockerInfo.os ?? "-"],
+        ["Kernel", dockerInfo.kernel_version ?? "-"],
+        ["Arch", dockerInfo.architecture ?? "-"],
+        ["CPU", `${dockerInfo.cpu_count} cores`],
+        ["RAM", fmtMemory(dockerInfo.memory_total)],
+        ["Docker", `v${dockerInfo.docker_version.replace(/^v/, "")}`],
+        ["API", dockerInfo.api_version ?? "-"],
+        ["Storage", dockerInfo.storage_driver ?? "-"],
+        ["Root Dir", dockerInfo.docker_root_dir ?? "-"],
+    ];
+
     return (
-        <SectionCard title="Host Facts" description="System and Docker engine metadata.">
-            <div className="space-y-4">
-                <div className="rounded-2xl border bg-background/50 p-4">
-                    <div className="mb-3 flex items-center gap-2">
-                        <Server className="h-4 w-4 text-violet-400" />
-                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">System</p>
+        <SectionCard title="Host Facts">
+            <div className="grid grid-cols-2 gap-y-3 lg:grid-cols-1">
+                {infoRows.map(([label, value]) => (
+                    <div key={label} className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between text-sm">
+                        <span className="text-muted-foreground">{label}</span>
+                        <span className="font-mono text-xs font-medium">{value}</span>
                     </div>
-                    <div className="space-y-2 text-sm">
-                        <FactLine label="Hostname" value={dockerInfo.hostname ?? "-"} />
-                        <FactLine label="OS" value={dockerInfo.os} />
-                        <FactLine label="Architecture" value={dockerInfo.architecture} />
-                        <FactLine label="Kernel" value={dockerInfo.kernel_version ?? "-"} />
-                        <FactLine label="CPU" value={`${dockerInfo.cpu_count} cores`} />
-                        <FactLine label="Memory" value={fmtMemory(dockerInfo.memory_total)} />
-                    </div>
-                </div>
-
-                <div className="rounded-2xl border bg-background/50 p-4">
-                    <div className="mb-3 flex items-center gap-2">
-                        <Boxes className="h-4 w-4 text-[#2496ED]" />
-                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">Docker Engine</p>
-                    </div>
-                    <div className="space-y-2 text-sm">
-                        <FactLine label="Version" value={dockerInfo.docker_version} />
-                        <FactLine label="API" value={dockerInfo.api_version ?? "-"} />
-                        <FactLine label="Storage" value={dockerInfo.storage_driver ?? "-"} />
-                        <FactLine label="Logging" value={dockerInfo.logging_driver ?? "-"} />
-                        <FactLine label="Root Dir" value={dockerInfo.docker_root_dir ?? "-"} />
-                    </div>
-                </div>
-
-                <div className="rounded-2xl border bg-background/50 p-4">
-                    <div className="mb-3 flex items-center gap-2">
-                        <RouteIcon className="h-4 w-4 text-cyan-400" />
-                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">Agent</p>
-                    </div>
-                    <div className="space-y-2 text-sm">
-                        <FactLine label="Access" value={agent.access_mode} />
-                        <FactLine label="Created" value={fmtFullDate(agent.created_at)} />
-                        <FactLine label="Updated" value={fmtDate(agent.updated_at)} />
-                    </div>
-                </div>
+                ))}
             </div>
         </SectionCard>
     );
@@ -1336,11 +1226,11 @@ function SectionCard({
     children: React.ReactNode;
 }) {
     return (
-        <section className="rounded-3xl border bg-card p-5 shadow-sm">
-            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <section className="rounded-lg border bg-card p-4">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h2 className="text-base font-bold tracking-tight">{title}</h2>
-                    {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
+                    <h2 className="text-base font-semibold">{title}</h2>
+                    {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
                 </div>
                 {action ? <div className="shrink-0">{action}</div> : null}
             </div>
@@ -1357,15 +1247,6 @@ function ListHeader({ icon: Icon, title, action }: { icon: React.ComponentType<{
                 <p className="text-sm font-semibold">{title}</p>
             </div>
             {action}
-        </div>
-    );
-}
-
-function FactLine({ label, value }: { label: string; value: string | number }) {
-    return (
-        <div className="grid grid-cols-[96px_minmax(0,1fr)] items-start gap-3">
-            <span className="text-xs text-muted-foreground">{label}</span>
-            <span className="min-w-0 truncate font-mono text-xs text-foreground/85">{value}</span>
         </div>
     );
 }
@@ -1440,7 +1321,7 @@ function EmptyState({
 
 function DashboardSkeleton() {
     return (
-        <div className="mx-auto w-full max-w-[1500px] space-y-5">
+        <div className="mx-auto w-full max-w-[1680px] space-y-5">
             <div className="h-40 animate-pulse rounded-3xl border bg-card" />
             <DashboardContentSkeleton />
         </div>
@@ -1449,7 +1330,7 @@ function DashboardSkeleton() {
 
 function DashboardContentSkeleton() {
     return (
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_360px]">
             <div className="space-y-5">
                 <div className="h-56 animate-pulse rounded-3xl border bg-card" />
                 <div className="h-80 animate-pulse rounded-3xl border bg-card" />
