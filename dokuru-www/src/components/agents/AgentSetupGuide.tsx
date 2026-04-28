@@ -28,16 +28,16 @@ export function AgentSetupGuide({ className = "" }: AgentSetupGuideProps) {
     return (
         <div className={`rounded-xl border border-primary/20 bg-primary/5 p-4 ${className}`}>
             <div className="grid gap-4 lg:grid-cols-[1fr_1.25fr] lg:items-center">
-                <div className="flex items-start gap-3">
+                <div className="flex items-center gap-3">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/30 bg-primary/10 text-primary">
                         <Terminal className="h-4 w-4" />
                     </span>
-                        <div className="min-w-0">
-                            <div className="text-sm font-semibold text-foreground">Install agent on the Docker host</div>
-                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    <div className="min-w-0">
+                        <div className="text-sm font-semibold text-foreground">Install agent on the Docker host</div>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
                             The agent prints the URL and token you paste into Dokuru.
-                            </p>
-                        </div>
+                        </p>
+                    </div>
                 </div>
 
                 <AgentInstallCommand />
@@ -115,7 +115,7 @@ function AgentInstallCommand() {
     return (
         <div className="group flex min-w-0 items-center gap-3 rounded-lg border border-border bg-black/50 p-2 pl-3 font-mono text-sm shadow-inner">
             <span className="select-none text-primary">$</span>
-            <div className="min-w-0 flex-1 overflow-x-auto pb-1 [scrollbar-width:thin]">
+            <div className="flex min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <code className="block w-max whitespace-nowrap pr-2 text-foreground/90">
                     {AGENT_INSTALL_COMMAND}
                 </code>
@@ -125,7 +125,7 @@ function AgentInstallCommand() {
                 variant="outline"
                 size="sm"
                 onClick={() => void copyCommand()}
-                className="shrink-0 border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
+                className="h-9 shrink-0 border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
             >
                 {copied ? <Check className="mr-2 h-3.5 w-3.5" /> : <Copy className="mr-2 h-3.5 w-3.5" />}
                 {copied ? "Copied" : "Copy"}
