@@ -5,6 +5,7 @@ use super::super::helpers::{
     verify_download_checksum,
 };
 use super::super::types::UpdateArgs;
+use super::version::{build_git_sha, fetch_latest_version, is_known_sha, short_sha};
 use cliclack::{intro, log, note, outro, outro_cancel};
 use eyre::{Result, bail};
 
@@ -13,6 +14,30 @@ pub fn run_update(args: &UpdateArgs) -> Result<()> {
     let preflight = collect_preflight(&config);
 
     intro("🐳 Dokuru  rolling latest updater")?;
+
+    match fetch_latest_version() {
+        Ok(latest) => {
+            note(
+                "Latest release",
+                format!(
+                    "Local commit:  {}\nLatest commit: {}",
+                    short_sha(build_git_sha()),
+                    short_sha(&latest.git_sha)
+                ),
+            )?;
+            if !args.force && latest.git_sha == build_git_sha() && is_known_sha(build_git_sha()) {
+                outro(format!(
+                    "Already up to date ({})",
+                    short_sha(build_git_sha())
+                ))?;
+                return Ok(());
+            }
+        }
+        Err(error) => note(
+            "Latest release",
+            format!("Unable to check version metadata: {error}. Downloading anyway."),
+        )?,
+    }
 
     if !preflight.running_as_root() {
         outro_cancel("Root privileges required. Re-run with: sudo dokuru update")?;

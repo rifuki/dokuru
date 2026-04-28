@@ -64,8 +64,32 @@ pub fn print_version(offline: bool) {
     }
 }
 
-pub fn update_binary() -> Result<()> {
+pub fn update_binary(force: bool) -> Result<()> {
     intro("Dokuru Deploy Update")?;
+
+    match fetch_latest_version() {
+        Ok(latest) => {
+            note(
+                "Latest release",
+                format!(
+                    "Local commit:  {}\nLatest commit: {}",
+                    short_sha(build_git_sha()),
+                    short_sha(&latest.git_sha)
+                ),
+            )?;
+            if !force && latest.git_sha == build_git_sha() && is_known_sha(build_git_sha()) {
+                outro(format!(
+                    "Already up to date ({})",
+                    short_sha(build_git_sha())
+                ))?;
+                return Ok(());
+            }
+        }
+        Err(error) => note(
+            "Latest release",
+            format!("Unable to check version metadata: {error}. Downloading anyway."),
+        )?,
+    }
 
     let install_dir = install_dir()?;
     let install_path = install_dir.join(BINARY_NAME);
@@ -161,11 +185,20 @@ fn print_version_status(latest: &VersionManifest) {
     if !is_known_sha(local_sha) {
         println!("  Local binary has no embedded Git SHA; latest check is informational.");
     } else if latest.git_sha == local_sha {
-        println!("  Up to date ({})", short_sha(local_sha));
-    } else {
         println!(
-            "  Update available: local {} -> latest {}",
-            short_sha(local_sha),
+            "  Up to date: local commit {} matches the latest release",
+            short_sha(local_sha)
+        );
+    } else {
+        println!("  New release available");
+        println!(
+            "  Local:  {} ({})",
+            env!("CARGO_PKG_VERSION"),
+            short_sha(local_sha)
+        );
+        println!(
+            "  Latest: {} ({})",
+            latest.version,
             short_sha(&latest.git_sha)
         );
         println!("  Run: dokuru-deploy update");

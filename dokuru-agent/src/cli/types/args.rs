@@ -69,6 +69,10 @@ pub struct DoctorArgs {
 pub struct UpdateArgs {
     #[command(flatten)]
     pub shared: SharedArgs,
+
+    /// Re-download even when the local binary is up to date
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Args, Debug, Clone, Default)]

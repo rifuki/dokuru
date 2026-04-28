@@ -85,7 +85,11 @@ enum Commands {
         offline: bool,
     },
     /// Download and install the latest dokuru-deploy binary
-    Update,
+    Update {
+        /// Re-download even when the local binary is up to date
+        #[arg(long)]
+        force: bool,
+    },
     /// Edit generated config, env, and secrets files
     Configure(ProjectArgs),
     /// Repair obviously invalid generated config values
@@ -321,7 +325,7 @@ fn main() -> Result<()> {
             release::print_version(offline);
             Ok(())
         }
-        Commands::Update => release::update_binary(),
+        Commands::Update { force } => release::update_binary(force),
         Commands::Configure(args) => run_configure(&args),
         Commands::Repair(args) => run_repair(&args),
         Commands::Export(args) => run_export(&args),

@@ -3,9 +3,9 @@ use eyre::Result;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
-struct VersionManifest {
-    version: String,
-    git_sha: String,
+pub(super) struct VersionManifest {
+    pub(super) version: String,
+    pub(super) git_sha: String,
     git_ref: Option<String>,
     build_time: Option<String>,
     target: Option<String>,
@@ -55,7 +55,7 @@ pub fn run_version(offline: bool) {
     }
 }
 
-fn fetch_latest_version() -> Result<VersionManifest> {
+pub(super) fn fetch_latest_version() -> Result<VersionManifest> {
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()?;
@@ -71,18 +71,27 @@ fn print_version_status(latest: &VersionManifest) {
     if !is_known_sha(local_sha) {
         println!("  Local binary has no embedded Git SHA; latest check is informational.");
     } else if latest.git_sha == local_sha {
-        println!("  Up to date ({})", short_sha(local_sha));
-    } else {
         println!(
-            "  Update available: local {} -> latest {}",
-            short_sha(local_sha),
+            "  Up to date: local commit {} matches the latest release",
+            short_sha(local_sha)
+        );
+    } else {
+        println!("  New release available");
+        println!(
+            "  Local:  {} ({})",
+            env!("CARGO_PKG_VERSION"),
+            short_sha(local_sha)
+        );
+        println!(
+            "  Latest: {} ({})",
+            latest.version,
             short_sha(&latest.git_sha)
         );
         println!("  Run: sudo dokuru update");
     }
 }
 
-const fn build_git_sha() -> &'static str {
+pub(super) const fn build_git_sha() -> &'static str {
     env!("DOKURU_AGENT_GIT_SHA")
 }
 
@@ -98,10 +107,10 @@ const fn build_target() -> &'static str {
     env!("DOKURU_AGENT_TARGET")
 }
 
-fn is_known_sha(sha: &str) -> bool {
+pub(super) fn is_known_sha(sha: &str) -> bool {
     !sha.is_empty() && sha != "unknown" && sha != "dev"
 }
 
-fn short_sha(sha: &str) -> &str {
+pub(super) fn short_sha(sha: &str) -> &str {
     sha.get(..12).unwrap_or(sha)
 }
