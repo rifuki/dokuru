@@ -18,12 +18,15 @@ use generator::{
 use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
-#[command(name = "dokuru-deploy")]
+#[command(name = "dokuru-deploy", bin_name = "dokuru-deploy")]
 #[command(about = "Dokuru deployment configuration tool", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
+}
 
+#[derive(Args, Clone)]
+struct InitArgs {
     /// Base domain (e.g., dokuru.rifuki.dev)
     #[arg(long)]
     domain: Option<String>,
@@ -59,53 +62,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Generate production config files and compose overrides
-    Init {
-        #[arg(long)]
-        domain: Option<String>,
-        #[arg(long)]
-        db_name: Option<String>,
-        #[arg(long)]
-        db_user: Option<String>,
-        #[arg(long)]
-        db_password: Option<String>,
-        #[arg(long)]
-        resend_key: Option<String>,
-        #[arg(long)]
-        output: Option<PathBuf>,
-        #[arg(long)]
-        clone_if_missing: bool,
-        #[arg(long)]
-        repo_url: Option<String>,
-    },
-    /// Show local build metadata and latest release metadata
-    Version {
-        /// Skip checking the public latest release
-        #[arg(long)]
-        offline: bool,
-    },
-    /// Download and install the latest dokuru-deploy binary
-    Update {
-        /// Re-download even when the local binary is up to date
-        #[arg(long)]
-        force: bool,
-    },
-    /// Edit generated config, env, and secrets files
-    Configure(ProjectArgs),
-    /// Repair obviously invalid generated config values
-    Repair(ProjectArgs),
-    /// Export generated config, env, secrets, and compose override files
-    Export(ExportArgs),
-    /// Import generated config, env, secrets, and compose override files
-    Import(ImportArgs),
-    /// Validate local prerequisites and Dokuru config files
-    Doctor(ProjectArgs),
-    /// Print generated deployment config
-    Config(ConfigArgs),
-    /// Show Docker Compose service status
-    Status(ServiceArgs),
-    /// Run the server container healthcheck
-    Health(HealthArgs),
+    /// Generate deployment config with guided prompts
+    Init(InitArgs),
     /// Pull images, start infrastructure, run migrations, and roll out apps
     Deploy(DeployArgs),
     /// Start Compose services without running migrations
@@ -114,12 +72,69 @@ enum Commands {
     Pull(ServiceArgs),
     /// Run database migrations through the migration image
     Migrate(RunArgs),
-    /// Restart Compose services
-    Restart(ServiceArgs),
-    /// Show Docker Compose service logs
-    Logs(LogsArgs),
     /// Stop Compose services
     Down(DownArgs),
+    /// Restart Compose services
+    Restart(ServiceArgs),
+    /// Show Docker Compose service status
+    Status(ServiceArgs),
+    /// Show Docker Compose service logs
+    Logs(LogsArgs),
+    /// Run the server container healthcheck
+    Health(HealthArgs),
+    /// Validate local prerequisites and Dokuru config files
+    Doctor(ProjectArgs),
+    /// Manage deployment config, secrets, and backups
+    Config(ConfigCommandArgs),
+    /// Download and install the latest dokuru-deploy binary
+    Update {
+        /// Re-download even when the local binary is up to date
+        #[arg(long)]
+        force: bool,
+    },
+    /// Show local build metadata and latest release metadata
+    Version {
+        /// Skip checking the public latest release
+        #[arg(long)]
+        offline: bool,
+    },
+    /// Edit generated config, env, and secrets files
+    #[command(hide = true)]
+    Configure(ProjectArgs),
+    /// Repair obviously invalid generated config values
+    #[command(hide = true)]
+    Repair(ProjectArgs),
+    /// Export generated config, env, secrets, and compose override files
+    #[command(hide = true)]
+    Export(ExportArgs),
+    /// Import generated config, env, secrets, and compose override files
+    #[command(hide = true)]
+    Import(ImportArgs),
+}
+
+#[derive(Args, Clone)]
+struct ConfigCommandArgs {
+    #[command(subcommand)]
+    subcommand: Option<ConfigCommands>,
+
+    #[command(flatten)]
+    show: ConfigArgs,
+}
+
+#[derive(Subcommand, Clone)]
+enum ConfigCommands {
+    /// Print generated deployment config
+    Show(ConfigArgs),
+    /// Edit generated config, env, and secrets files
+    Edit(ProjectArgs),
+    /// Repair obviously invalid generated config values
+    Repair(ProjectArgs),
+    /// Export generated config, env, secrets, and compose override files
+    #[command(alias = "backup")]
+    Export(ExportArgs),
+    /// Import generated config, env, secrets, and compose override files
+    #[command(alias = "restore")]
+    Import(ImportArgs),
 }
 
 #[derive(Args, Clone)]
@@ -191,7 +206,7 @@ struct ExportArgs {
 
 #[derive(Args, Clone)]
 struct ImportArgs {
-    /// Backup JSON file exported by `dokuru-deploy export`
+    /// Backup JSON file exported by `dokuru-deploy config export`
     input: Option<PathBuf>,
 
     #[command(flatten)]
@@ -277,70 +292,47 @@ struct InitOptions {
 }
 
 fn main() -> Result<()> {
-    let has_args = std::env::args_os().nth(1).is_some();
     let cli = Cli::parse();
 
     let Some(command) = cli.command else {
-        if !has_args {
-            Cli::command().print_help()?;
-            println!();
-            return Ok(());
-        }
-
-        return run_init(InitOptions {
-            domain: cli.domain,
-            db_name: cli.db_name.unwrap_or_else(|| "dokuru_db".to_string()),
-            db_user: cli.db_user.unwrap_or_else(|| "dokuru".to_string()),
-            db_password: cli.db_password,
-            resend_key: cli.resend_key,
-            output: cli.output.unwrap_or_else(|| PathBuf::from(".")),
-            clone_if_missing: cli.clone_if_missing,
-            repo_url: cli
-                .repo_url
-                .unwrap_or_else(|| project::DEFAULT_REPO_URL.to_string()),
-        });
+        Cli::command().print_help()?;
+        println!();
+        return Ok(());
     };
 
     match command {
-        Commands::Init {
-            domain,
-            db_name,
-            db_user,
-            db_password,
-            resend_key,
-            output,
-            clone_if_missing,
-            repo_url,
-        } => run_init(InitOptions {
-            domain,
-            db_name: db_name.unwrap_or_else(|| "dokuru_db".to_string()),
-            db_user: db_user.unwrap_or_else(|| "dokuru".to_string()),
-            db_password,
-            resend_key,
-            output: output.unwrap_or_else(|| PathBuf::from(".")),
-            clone_if_missing,
-            repo_url: repo_url.unwrap_or_else(|| project::DEFAULT_REPO_URL.to_string()),
+        Commands::Init(args) => run_init(InitOptions {
+            domain: args.domain,
+            db_name: args.db_name.unwrap_or_else(|| "dokuru_db".to_string()),
+            db_user: args.db_user.unwrap_or_else(|| "dokuru".to_string()),
+            db_password: args.db_password,
+            resend_key: args.resend_key,
+            output: args.output.unwrap_or_else(|| PathBuf::from(".")),
+            clone_if_missing: args.clone_if_missing,
+            repo_url: args
+                .repo_url
+                .unwrap_or_else(|| project::DEFAULT_REPO_URL.to_string()),
         }),
-        Commands::Version { offline } => {
-            release::print_version(offline);
-            Ok(())
-        }
-        Commands::Update { force } => release::update_binary(force),
-        Commands::Configure(args) => run_configure(&args),
-        Commands::Repair(args) => run_repair(&args),
-        Commands::Export(args) => run_export(&args),
-        Commands::Import(args) => run_import(&args),
-        Commands::Doctor(args) => run_doctor(&args),
-        Commands::Config(args) => run_config_command(&args),
-        Commands::Status(args) => run_status(&args),
-        Commands::Health(args) => run_health(&args),
         Commands::Deploy(args) => run_deploy(&args),
         Commands::Up(args) => run_up(&args),
         Commands::Pull(args) => run_pull(&args),
         Commands::Migrate(args) => run_migrate(&args),
-        Commands::Restart(args) => run_restart(&args),
-        Commands::Logs(args) => run_logs(&args),
         Commands::Down(args) => run_down(&args),
+        Commands::Restart(args) => run_restart(&args),
+        Commands::Status(args) => run_status(&args),
+        Commands::Health(args) => run_health(&args),
+        Commands::Logs(args) => run_logs(&args),
+        Commands::Doctor(args) => run_doctor(&args),
+        Commands::Config(args) => run_config_group(&args),
+        Commands::Update { force } => release::update_binary(force),
+        Commands::Version { offline } => {
+            release::print_version(offline);
+            Ok(())
+        }
+        Commands::Configure(args) => run_configure(&args),
+        Commands::Repair(args) => run_repair(&args),
+        Commands::Export(args) => run_export(&args),
+        Commands::Import(args) => run_import(&args),
     }
 }
 
@@ -383,6 +375,17 @@ fn run_import(args: &ImportArgs) -> Result<()> {
 fn run_config_command(args: &ConfigArgs) -> Result<()> {
     let project_dir = resolve_project_arg(&args.project)?;
     runtime::print_config(&project_dir, args.show_secrets)
+}
+
+fn run_config_group(args: &ConfigCommandArgs) -> Result<()> {
+    match &args.subcommand {
+        Some(ConfigCommands::Show(show_args)) => run_config_command(show_args),
+        Some(ConfigCommands::Edit(project_args)) => run_configure(project_args),
+        Some(ConfigCommands::Repair(project_args)) => run_repair(project_args),
+        Some(ConfigCommands::Export(export_args)) => run_export(export_args),
+        Some(ConfigCommands::Import(import_args)) => run_import(import_args),
+        None => run_config_command(&args.show),
+    }
 }
 
 fn run_health(args: &HealthArgs) -> Result<()> {

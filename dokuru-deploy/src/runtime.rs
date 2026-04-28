@@ -1216,7 +1216,7 @@ fn remove_bad_secret(
 
     remove_toml_key(doc, path);
     repairs.push(format!(
-        "{label} removed; run `dokuru-deploy configure` to set it"
+        "{label} removed; run `dokuru-deploy config edit` to set it"
     ));
     true
 }
