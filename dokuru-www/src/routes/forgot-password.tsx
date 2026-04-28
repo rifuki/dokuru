@@ -45,12 +45,12 @@ function ForgotPassword() {
                     <p className="text-muted-foreground">
                         If an account exists for {email}, you will receive a password reset link shortly.
                     </p>
-                    <Link to="/login">
-                        <Button className="mt-4">
+                    <Button asChild className="mt-4 h-11 px-5">
+                        <Link to="/login">
                             <ArrowLeft className="mr-2 h-4 w-4" />
                             Back to Login
-                        </Button>
-                    </Link>
+                        </Link>
+                    </Button>
                 </div>
             </div>
         );
@@ -104,12 +104,16 @@ function ForgotPassword() {
                         </Button>
                     </form>
 
-                    <Link to="/login">
-                        <Button variant="ghost" className="w-full">
+                    <Button
+                        asChild
+                        variant="ghost"
+                        className="h-11 w-full rounded-xl bg-primary/10 text-base font-medium text-primary hover:bg-primary/15 hover:text-primary"
+                    >
+                        <Link to="/login">
                             <ArrowLeft className="mr-2 h-4 w-4" />
                             Back to Login
-                        </Button>
-                    </Link>
+                        </Link>
+                    </Button>
                 </div>
             </div>
         </div>
