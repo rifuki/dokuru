@@ -3,11 +3,15 @@ name: Deploy Compose Stack
 on:
   workflow_dispatch:
     inputs:
-      run_compose_up:
-        description: Run VPS deploy. Requires DOKURU_DEPLOY_* variables/secrets in GitHub Actions.
+      action:
+        description: Open/close the auto-deploy faucet, or deploy once now.
         required: true
-        type: boolean
-        default: false
+        type: choice
+        options:
+          - deploy_once
+          - open_auto_deploy
+          - close_auto_deploy
+        default: deploy_once
   workflow_call:
     inputs:
       run_compose_up:
@@ -50,9 +54,38 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  toggle-auto-deploy:
+    name: Toggle Compose Auto Deploy
+    if: github.event_name == 'workflow_dispatch' && inputs.action != 'deploy_once'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Update auto-deploy variable
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTION: ${{ inputs.action }}
+        run: |
+          set -Eeuo pipefail
+
+          case "${ACTION}" in
+            open_auto_deploy)
+              gh variable set DOKURU_COMPOSE_AUTO_DEPLOY --body true --repo "${GITHUB_REPOSITORY}"
+              printf 'Compose auto deploy is now OPEN. Future main builds can deploy the VPS compose stack.\n'
+              ;;
+            close_auto_deploy)
+              gh variable set DOKURU_COMPOSE_AUTO_DEPLOY --body false --repo "${GITHUB_REPOSITORY}"
+              printf 'Compose auto deploy is now CLOSED. Future main builds will not deploy the VPS compose stack.\n'
+              ;;
+          esac
+
   deploy:
     name: Deploy Compose Stack
-    if: inputs.run_compose_up || vars.DOKURU_COMPOSE_AUTO_DEPLOY == 'true'
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.action == 'deploy_once') ||
+      (github.event_name == 'workflow_call' &&
+        (inputs.run_compose_up || vars.DOKURU_COMPOSE_AUTO_DEPLOY == 'true'))
     runs-on: ubuntu-latest
     environment: production
     env:
