@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       faucet:
-        description: Open or close automatic VPS compose deployment after main image builds.
+        description: Open deploys once now and enables future automatic VPS compose deploys. Close disables future automatic deploys.
         required: true
         type: choice
         options:
@@ -50,3 +50,15 @@ jobs:
           git add .github/compose-auto-deploy
           git commit -m "chore(deploy): ${FAUCET} compose auto deploy [skip ci]"
           git push
+
+  deploy-on-open:
+    name: Deploy Compose Stack After Opening Faucet
+    needs: toggle
+    if: inputs.faucet == 'open'
+    uses: ./.github/workflows/deploy-compose-service.yaml
+    with:
+      run_compose_up: true
+      service: dokuru-server
+      image-tag: latest
+      run-migrations: false
+    secrets: inherit
