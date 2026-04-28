@@ -1,0 +1,40 @@
+name: Toggle Compose Auto Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      faucet:
+        description: Open or close automatic VPS compose deployment after main image builds.
+        required: true
+        type: choice
+        options:
+          - open
+          - close
+        default: open
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  toggle:
+    name: ${{ inputs.faucet == 'open' && 'Open Auto Deploy Faucet' || 'Close Auto Deploy Faucet' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update auto-deploy variable
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FAUCET: ${{ inputs.faucet }}
+        run: |
+          set -Eeuo pipefail
+
+          case "${FAUCET}" in
+            open)
+              gh variable set DOKURU_COMPOSE_AUTO_DEPLOY --body true --repo "${GITHUB_REPOSITORY}"
+              printf 'Compose auto deploy is now OPEN. Future main image builds can deploy the VPS compose stack.\n'
+              ;;
+            close)
+              gh variable set DOKURU_COMPOSE_AUTO_DEPLOY --body false --repo "${GITHUB_REPOSITORY}"
+              printf 'Compose auto deploy is now CLOSED. Future main image builds will not deploy the VPS compose stack.\n'
+              ;;
+          esac
