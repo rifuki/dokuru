@@ -1,18 +1,30 @@
-name: Deploy Compose Service
+name: Deploy Compose Stack
 
 on:
+  workflow_dispatch:
+    inputs:
+      run_compose_up:
+        description: Run VPS deploy. Requires DOKURU_DEPLOY_* variables/secrets in GitHub Actions.
+        required: true
+        type: boolean
+        default: false
   workflow_call:
     inputs:
+      run_compose_up:
+        description: Run the full Compose stack deployment instead of skipping this reusable workflow.
+        required: false
+        type: boolean
+        default: false
       service:
-        description: Docker Compose service to deploy.
+        description: Compatibility input from image build workflows. Ignored by full stack deployment.
         required: true
         type: string
       image-tag:
-        description: Image tag to expose as VERSION during deployment.
+        description: Compatibility input from image build workflows. Ignored by full stack deployment.
         required: true
         type: string
       run-migrations:
-        description: Run database migrations before rolling out the service.
+        description: Compatibility input from image build workflows. Ignored by full stack deployment.
         required: false
         type: boolean
         default: false
@@ -39,7 +51,8 @@ concurrency:
 
 jobs:
   deploy:
-    name: Deploy ${{ inputs.service }}
+    name: Deploy Compose Stack
+    if: inputs.run_compose_up || vars.DOKURU_COMPOSE_AUTO_DEPLOY == 'true'
     runs-on: ubuntu-latest
     environment: production
     env:
@@ -50,9 +63,6 @@ jobs:
       DEPLOY_SSH_KEY: ${{ secrets.DOKURU_DEPLOY_SSH_KEY }}
       GHCR_TOKEN: ${{ secrets.DOKURU_GHCR_TOKEN }}
       GHCR_USER: ${{ github.actor }}
-      SERVICE: ${{ inputs.service }}
-      IMAGE_TAG: ${{ inputs.image-tag }}
-      RUN_MIGRATIONS: ${{ inputs.run-migrations }}
     steps:
       - name: Validate deployment configuration
         run: |
@@ -63,7 +73,8 @@ jobs:
           [ -n "${DEPLOY_SSH_KEY}" ] || missing+=("DOKURU_DEPLOY_SSH_KEY")
 
           if [ "${#missing[@]}" -ne 0 ]; then
-            printf '::error::Missing deployment configuration: %s\n' "${missing[*]}"
+            printf '::error::Missing VPS deployment configuration: %s\n' "${missing[*]}"
+            printf '::error::Set DOKURU_DEPLOY_HOST, DOKURU_DEPLOY_USER, and DOKURU_DEPLOY_PATH in GitHub Actions variables. Set DOKURU_DEPLOY_SSH_KEY in GitHub Actions secrets. DOKURU_DEPLOY_PORT is optional.\n'
             exit 1
           fi
 
@@ -84,8 +95,7 @@ jobs:
       - name: Deploy via Docker Compose
         run: |
           remote_env=$(
-            printf 'DOKURU_DEPLOY_PATH=%q DOKURU_VERSION=%q DOKURU_SERVICE=%q DOKURU_RUN_MIGRATIONS=%q' \
-              "${DEPLOY_PATH}" "${IMAGE_TAG}" "${SERVICE}" "${RUN_MIGRATIONS}"
+            printf 'DOKURU_DEPLOY_PATH=%q' "${DEPLOY_PATH}"
           )
 
           ssh -i ~/.ssh/dokuru_deploy_key -p "${DEPLOY_PORT}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
@@ -94,24 +104,13 @@ jobs:
 
           cd "${DOKURU_DEPLOY_PATH}"
 
-          if [ -d .git ]; then
-            git fetch origin main
-            git checkout main
-            git pull --ff-only origin main
-          fi
+          git pull
 
           test -f docker-compose.yaml
-          export VERSION="${DOKURU_VERSION}"
 
           docker compose config --quiet
-          docker compose pull "${DOKURU_SERVICE}"
-
-          if [ "${DOKURU_RUN_MIGRATIONS}" = "true" ]; then
-            docker compose pull dokuru-server-migrate
-            docker compose up -d dokuru-db dokuru-redis
-            docker compose --profile migrate run --rm dokuru-server-migrate
-          fi
-
-          docker compose up -d "${DOKURU_SERVICE}"
-          docker compose ps "${DOKURU_SERVICE}"
+          docker compose pull
+          docker compose down -v
+          docker compose up -d
+          docker compose ps
           REMOTE
