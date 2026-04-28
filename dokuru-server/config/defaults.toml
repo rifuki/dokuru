@@ -17,7 +17,7 @@ cors_allowed_origins = ["https://app.dokuru.rifuki.dev", "http://localhost:5173"
 
 [bootstrap]
 enabled = true
-admin_email = "admin@dokuru.rifuki.dev"
+admin_email = "dokuru@rifuki.dev"
 admin_username = "admin"
 admin_name = "Administrator"
 
