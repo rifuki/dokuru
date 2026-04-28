@@ -82,8 +82,9 @@ export function ProfileSettings() {
                 useAuthStore.getState().actions.setUser(updatedUser);
             }
             toast.success("Avatar updated successfully");
-        } catch {
+        } catch (error) {
             toast.error("Failed to upload avatar");
+            throw error instanceof Error ? error : new Error("Failed to upload avatar");
         }
     };
 
@@ -205,8 +206,8 @@ export function ProfileSettings() {
                 isOpen={isUploadModalOpen}
                 onClose={() => setIsUploadModalOpen(false)}
                 onUpload={handleAvatarUpload}
-                title="Upload Profile Photo"
-                description="Select a profile photo. Recommended: Square image, at least 200x200px."
+                title="Set Profile Photo"
+                description="Upload a photo, then crop it into a clean square avatar."
                 maxSizeMB={2}
                 isAvatar={true}
             />
