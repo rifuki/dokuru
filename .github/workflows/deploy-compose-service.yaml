@@ -77,7 +77,7 @@ jobs:
       GHCR_USER: ${{ github.actor }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Wait for web image build
         if: github.event_name == 'workflow_run'
