@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Plus, RefreshCw, Container, Box, HardDrive, Search, ChevronDown, Edit, Trash2, Cpu, Server, Eye, EyeOff, Cloud, Globe, Link2, Loader2, WifiOff, AlertTriangle, ArrowUp, ArrowDown, X } from "lucide-react";
 import { AddAgentModal } from "@/components/agents/AddAgentModal";
+import { AgentSetupDialog, AGENT_INSTALL_COMMAND } from "@/components/agents/AgentSetupGuide";
 import { agentDirectApi } from "@/lib/api/agent-direct";
 import { agentApi } from "@/lib/api/agent";
 import { dockerCredential } from "@/services/docker-api";
@@ -358,6 +359,7 @@ function AgentsList() {
   const navigate = useNavigate();
   const { agents, isLoading, fetchAgents, updateAgent, agentInfos, setAgentInfo, setAgentInfoLoading, agentOnlineStatus, agentConnectingStatus, agentConnectionError } = useAgentStore();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSetupGuideOpen, setIsSetupGuideOpen] = useState(false);
 
   // Filter & sort state
   const [search, setSearch]               = useState("");
@@ -513,16 +515,36 @@ function AgentsList() {
           <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
         </div>
       ) : agents.length === 0 ? (
-        <div className="rounded-xl border border-dashed bg-card/50 p-16 text-center flex flex-col items-center justify-center min-h-[400px]">
-          <img src="/docker.svg" alt="Docker" className="w-14 h-14 opacity-40 mb-4" />
-          <h3 className="text-xl font-semibold tracking-tight">No agents</h3>
-          <p className="text-muted-foreground mt-2 max-w-sm text-sm">
-            Add your first Docker agent to start managing and auditing.
-          </p>
-          <Button className="mt-6" onClick={() => setIsAddModalOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Agent
-          </Button>
+        <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-card p-4 shadow-sm">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex min-w-0 items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-background/80">
+                <img src="/docker.svg" alt="Docker" className="h-8 w-8" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-lg font-semibold tracking-tight">Connect your first Docker host</h3>
+                <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                  Run the installer on a host, choose Cloudflare Tunnel or Relay, then paste the generated URL and token.
+                </p>
+                <div className="mt-3 flex max-w-3xl items-center gap-2 rounded-lg border border-border bg-background/75 p-2 font-mono text-xs shadow-inner">
+                  <span className="select-none text-primary">$</span>
+                  <code className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-foreground/90">
+                    {AGENT_INSTALL_COMMAND}
+                  </code>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 flex-wrap gap-2 xl:justify-end">
+              <Button variant="outline" onClick={() => setIsSetupGuideOpen(true)}>
+                Setup Guide
+              </Button>
+              <Button onClick={() => setIsAddModalOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Agent
+              </Button>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="bg-card border border-border rounded-md overflow-hidden">
@@ -769,7 +791,19 @@ function AgentsList() {
         </div>
       )}
 
-      <AddAgentModal open={isAddModalOpen} onOpenChange={setIsAddModalOpen} />
+      <AddAgentModal
+        open={isAddModalOpen}
+        onOpenChange={setIsAddModalOpen}
+        onOpenSetupGuide={() => setIsSetupGuideOpen(true)}
+      />
+      <AgentSetupDialog
+        open={isSetupGuideOpen}
+        onOpenChange={setIsSetupGuideOpen}
+        onStartAddAgent={() => {
+          setIsSetupGuideOpen(false);
+          setIsAddModalOpen(true);
+        }}
+      />
     </div>
   );
 }
