@@ -1,4 +1,4 @@
-name: Build & Deploy Server
+name: Build Server Images
 
 on:
   push:
@@ -7,16 +7,16 @@ on:
     paths:
       - 'dokuru-server/**'
       - 'dokuru-core/**'
+      - 'dokuru-www/**'
       - 'docker-compose.yaml'
       - '.github/workflows/build-server.yaml'
-      - '.github/workflows/deploy-compose-service.yaml'
   pull_request:
     paths:
       - 'dokuru-server/**'
       - 'dokuru-core/**'
+      - 'dokuru-www/**'
       - 'docker-compose.yaml'
       - '.github/workflows/build-server.yaml'
-      - '.github/workflows/deploy-compose-service.yaml'
   workflow_dispatch:
 
 env:
@@ -93,19 +93,3 @@ jobs:
           labels: ${{ steps.migrate-meta.outputs.labels }}
           cache-from: type=gha,scope=dokuru-server-migrate
           cache-to: type=gha,mode=max,scope=dokuru-server-migrate
-
-  deploy:
-    name: Migrate & Deploy Server
-    needs: docker
-    if: >-
-      github.event_name != 'pull_request' &&
-      github.ref == 'refs/heads/main' &&
-      vars.DOKURU_DEPLOY_HOST != '' &&
-      vars.DOKURU_DEPLOY_USER != '' &&
-      vars.DOKURU_DEPLOY_PATH != ''
-    uses: ./.github/workflows/deploy-compose-service.yaml
-    with:
-      service: dokuru-server
-      image-tag: sha-${{ github.sha }}
-      run-migrations: true
-    secrets: inherit

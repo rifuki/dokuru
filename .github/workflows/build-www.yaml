@@ -1,18 +1,22 @@
-name: Build & Deploy Web
+name: Build Web Image
 
 on:
   push:
     branches:
       - main
     paths:
+      - 'dokuru-server/**'
+      - 'dokuru-core/**'
       - 'dokuru-www/**'
+      - 'docker-compose.yaml'
       - '.github/workflows/build-www.yaml'
-      - '.github/workflows/deploy-compose-service.yaml'
   pull_request:
     paths:
+      - 'dokuru-server/**'
+      - 'dokuru-core/**'
       - 'dokuru-www/**'
+      - 'docker-compose.yaml'
       - '.github/workflows/build-www.yaml'
-      - '.github/workflows/deploy-compose-service.yaml'
   workflow_dispatch:
 
 env:
@@ -71,19 +75,3 @@ jobs:
           build-args: |
             VITE_API_BASE_URL=${{ env.VITE_API_BASE_URL }}
             VITE_ENABLE_HOST_SHELL=${{ env.VITE_ENABLE_HOST_SHELL }}
-
-  deploy:
-    name: Deploy Web
-    needs: docker
-    if: >-
-      github.event_name != 'pull_request' &&
-      github.ref == 'refs/heads/main' &&
-      vars.DOKURU_DEPLOY_HOST != '' &&
-      vars.DOKURU_DEPLOY_USER != '' &&
-      vars.DOKURU_DEPLOY_PATH != ''
-    uses: ./.github/workflows/deploy-compose-service.yaml
-    with:
-      service: dokuru-www
-      image-tag: sha-${{ github.sha }}
-      run-migrations: false
-    secrets: inherit
