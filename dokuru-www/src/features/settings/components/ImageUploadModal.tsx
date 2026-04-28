@@ -90,8 +90,12 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number) 
 }
 
 function getCenteredAvatarCrop(width: number, height: number) {
+  const crop = width > height
+    ? { unit: "%" as const, height: 100 }
+    : { unit: "%" as const, width: 100 };
+
   return centerCrop(
-    makeAspectCrop({ unit: "%", width: 72 }, 1, width, height),
+    makeAspectCrop(crop, 1, width, height),
     width,
     height
   );
