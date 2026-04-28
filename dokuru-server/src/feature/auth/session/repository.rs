@@ -122,7 +122,7 @@ impl SessionRepository for SessionRepositoryImpl {
                 user_id, session_id, device_name, device_type, 
                 ip_address, user_agent, location, expires_at
             )
-            VALUES ($1, $2, $3, $4, $5::inet, $6, NULL, $7)
+            VALUES ($1, $2, $3, $4, $5::inet, $6, $7, $8)
             RETURNING *
             ",
         )
@@ -132,6 +132,7 @@ impl SessionRepository for SessionRepositoryImpl {
         .bind(&device_info.device_type)
         .bind(&device_info.ip_address)
         .bind(&device_info.user_agent)
+        .bind(&device_info.location)
         .bind(expires_at)
         .fetch_one(pool)
         .await?;

@@ -7,6 +7,17 @@ import type {
   User,
 } from "@/features/auth/types/auth-types";
 
+type Session = {
+  id: string;
+  device: string;
+  device_type?: string | null;
+  location: string;
+  ip: string;
+  created_at: string;
+  last_active_at: string;
+  is_current: boolean;
+};
+
 function trimLoginCredentials(
   credentials: LoginCredentials
 ): LoginCredentials {
@@ -104,8 +115,8 @@ export const authService = {
     });
   },
 
-  getSessions: async (): Promise<{ id: string; device: string; location: string; ip: string; created_at: string; is_current: boolean }[]> => {
-    const response = await apiClient.get<ApiSuccess<{ id: string; device: string; location: string; ip: string; created_at: string; is_current: boolean }[]>>(
+  getSessions: async (): Promise<Session[]> => {
+    const response = await apiClient.get<ApiSuccess<Session[]>>(
       API_ENDPOINTS.AUTH.SESSIONS
     );
     return response.data.data || [];

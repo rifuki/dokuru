@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Monitor, Smartphone } from "lucide-react";
+import { Monitor, Smartphone, Tablet } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import {
@@ -17,11 +17,44 @@ import {
 interface Session {
     id: string;
     device: string;
+    device_type?: string | null;
     location: string;
     ip: string;
     created_at: string;
+    last_active_at?: string;
     is_current: boolean;
 }
+
+const formatDateTime = (value?: string) => {
+    if (!value) return null;
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+
+    return date.toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
+};
+
+const sessionDetails = (session: Session, includeCreatedAt = false) => {
+    const ip = session.ip && session.ip !== "0.0.0.0" ? session.ip : "Unknown IP";
+    const details = [session.location || "Unknown Location", ip].filter(Boolean);
+    if (includeCreatedAt) details.push(formatDateTime(session.created_at) || "Unknown time");
+
+    return details.join(" • ");
+};
+
+const isTabletSession = (session: Session) =>
+    session.device_type === "tablet" || session.device.toLowerCase().includes("ipad");
+
+const isMobileSession = (session: Session) =>
+    session.device_type === "mobile" ||
+    session.device.toLowerCase().includes("iphone") ||
+    session.device.toLowerCase().includes("android");
 
 export function SessionsSettings() {
     const [sessions, setSessions] = useState<Session[]>([]);
@@ -103,7 +136,9 @@ export function SessionsSettings() {
                             <div key={session.id} className="flex items-center justify-between py-2 group">
                                 <div className="flex items-center gap-4">
                                     <div className="h-12 w-12 shrink-0 rounded-full bg-muted/50 flex items-center justify-center">
-                                        {session.device.includes("iPhone") || session.device.includes("Android") ? (
+                                        {isTabletSession(session) ? (
+                                            <Tablet className="h-6 w-6 text-foreground/80" />
+                                        ) : isMobileSession(session) ? (
                                             <Smartphone className="h-6 w-6 text-foreground/80" />
                                         ) : (
                                             <Monitor className="h-6 w-6 text-foreground/80" />
@@ -114,11 +149,13 @@ export function SessionsSettings() {
                                             {session.device.toUpperCase()}
                                         </div>
                                         <div className="text-[14px] text-muted-foreground">
-                                            {session.location}
+                                            {sessionDetails(session)}
                                         </div>
-                                        <div className="text-[13px] text-muted-foreground/70 hidden">
-                                            {session.ip}
-                                        </div>
+                                        {formatDateTime(session.last_active_at) && (
+                                            <div className="text-[13px] text-muted-foreground/70">
+                                                Last active {formatDateTime(session.last_active_at)}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -135,7 +172,9 @@ export function SessionsSettings() {
                                     <div key={session.id} className="flex items-center justify-between py-4 border-b border-border/20 last:border-0 group">
                                         <div className="flex items-center gap-4">
                                             <div className="h-12 w-12 shrink-0 rounded-full bg-muted/50 flex items-center justify-center">
-                                                {session.device.includes("iPhone") || session.device.includes("Android") ? (
+                                                {isTabletSession(session) ? (
+                                                    <Tablet className="h-6 w-6 text-foreground/80" />
+                                                ) : isMobileSession(session) ? (
                                                     <Smartphone className="h-6 w-6 text-foreground/80" />
                                                 ) : (
                                                     <Monitor className="h-6 w-6 text-foreground/80" />
@@ -146,8 +185,13 @@ export function SessionsSettings() {
                                                     {session.device.toUpperCase()}
                                                 </div>
                                                 <div className="text-[14px] text-muted-foreground">
-                                                    {session.location} <span className="mx-1.5">•</span> {new Date(session.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                    {sessionDetails(session, true)}
                                                 </div>
+                                                {formatDateTime(session.last_active_at) && (
+                                                    <div className="text-[13px] text-muted-foreground/70">
+                                                        Last active {formatDateTime(session.last_active_at)}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                         <Button

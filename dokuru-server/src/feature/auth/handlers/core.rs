@@ -1,5 +1,16 @@
-use axum::{Extension, Json, extract::State, http::StatusCode};
+use std::{
+    net::{IpAddr, Ipv6Addr},
+    time::Duration,
+};
+
+use axum::{
+    Extension, Json,
+    extract::State,
+    http::{HeaderMap, StatusCode},
+};
 use axum_extra::extract::cookie::CookieJar;
+use serde::Deserialize;
+use tokio::time::timeout;
 use validator::Validate;
 
 use crate::{
@@ -19,10 +30,173 @@ use crate::{
     state::AppState,
 };
 
+#[derive(Debug, Deserialize)]
+struct GeoIpResponse {
+    city: Option<String>,
+    region: Option<String>,
+    country_name: Option<String>,
+    country: Option<String>,
+    error: Option<bool>,
+}
+
+async fn device_info_from_headers(headers: &HeaderMap) -> DeviceInfo {
+    let user_agent = headers
+        .get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("Unknown");
+
+    let ip_address = client_ip_from_headers(headers);
+    let location = lookup_ip_location(&ip_address).await;
+
+    DeviceInfo::from_user_agent(user_agent, &ip_address).with_location(location)
+}
+
+fn client_ip_from_headers(headers: &HeaderMap) -> String {
+    headers
+        .get("x-forwarded-for")
+        .and_then(|value| value.to_str().ok())
+        .and_then(parse_ip_list)
+        .or_else(|| {
+            headers
+                .get("x-real-ip")
+                .and_then(|value| value.to_str().ok())
+                .and_then(parse_ip_candidate)
+        })
+        .or_else(|| {
+            headers
+                .get("forwarded")
+                .and_then(|value| value.to_str().ok())
+                .and_then(parse_forwarded_header)
+        })
+        .unwrap_or_else(|| "0.0.0.0".to_string())
+}
+
+fn parse_ip_list(value: &str) -> Option<String> {
+    value.split(',').find_map(parse_ip_candidate)
+}
+
+fn parse_forwarded_header(value: &str) -> Option<String> {
+    value.split(',').find_map(|entry| {
+        entry.split(';').find_map(|part| {
+            let (key, value) = part.trim().split_once('=')?;
+            if key.eq_ignore_ascii_case("for") {
+                parse_ip_candidate(value)
+            } else {
+                None
+            }
+        })
+    })
+}
+
+fn parse_ip_candidate(value: &str) -> Option<String> {
+    let candidate = value.trim().trim_matches('"');
+    let host = if let Some(rest) = candidate.strip_prefix('[') {
+        rest.split_once(']')?.0
+    } else if candidate.matches(':').count() == 1 && candidate.contains('.') {
+        candidate.rsplit_once(':')?.0
+    } else {
+        candidate
+    };
+
+    host.parse::<IpAddr>().ok().map(|ip| ip.to_string())
+}
+
+async fn lookup_ip_location(ip: &str) -> Option<String> {
+    let ip_addr = ip.parse::<IpAddr>().ok()?;
+    if !is_public_ip(ip_addr) {
+        return None;
+    }
+
+    let lookup = async {
+        let url = format!("https://ipapi.co/{ip}/json/");
+        let geo = reqwest::get(url)
+            .await
+            .ok()?
+            .error_for_status()
+            .ok()?
+            .json::<GeoIpResponse>()
+            .await
+            .ok()?;
+
+        if geo.error.unwrap_or(false) {
+            return None;
+        }
+
+        format_location(&geo)
+    };
+
+    timeout(Duration::from_millis(1500), lookup)
+        .await
+        .ok()
+        .flatten()
+}
+
+fn format_location(geo: &GeoIpResponse) -> Option<String> {
+    let country = geo.country_name.as_ref().or(geo.country.as_ref());
+    let mut parts: Vec<String> = Vec::new();
+
+    for part in [geo.city.as_ref(), geo.region.as_ref(), country]
+        .into_iter()
+        .flatten()
+    {
+        let part = part.trim();
+        if !part.is_empty()
+            && !parts
+                .iter()
+                .any(|existing| existing.eq_ignore_ascii_case(part))
+        {
+            parts.push(part.to_string());
+        }
+    }
+
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join(", "))
+    }
+}
+
+fn is_public_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => {
+            let octets = ip.octets();
+            !(ip.is_private()
+                || ip.is_loopback()
+                || ip.is_link_local()
+                || ip.is_broadcast()
+                || ip.is_documentation()
+                || ip.is_unspecified()
+                || ip.is_multicast()
+                || octets[0] == 0
+                || (octets[0] == 100 && (64..=127).contains(&octets[1])))
+        }
+        IpAddr::V6(ip) => {
+            !(ip.is_loopback()
+                || ip.is_unspecified()
+                || ip.is_multicast()
+                || is_ipv6_unique_local(ip)
+                || is_ipv6_link_local(ip)
+                || is_ipv6_documentation(ip))
+        }
+    }
+}
+
+fn is_ipv6_unique_local(ip: Ipv6Addr) -> bool {
+    (ip.segments()[0] & 0xfe00) == 0xfc00
+}
+
+fn is_ipv6_link_local(ip: Ipv6Addr) -> bool {
+    (ip.segments()[0] & 0xffc0) == 0xfe80
+}
+
+fn is_ipv6_documentation(ip: Ipv6Addr) -> bool {
+    ip.segments()[0] == 0x2001 && ip.segments()[1] == 0x0db8
+}
+
 /// POST /api/v1/auth/register
 pub async fn register(
     State(state): State<AppState>,
-    headers: axum::http::HeaderMap,
+    headers: HeaderMap,
     Json(mut req): Json<RegisterRequest>,
 ) -> ApiResult<AuthResponse> {
     req.email = req.email.trim().to_string();
@@ -37,19 +211,7 @@ pub async fn register(
             .with_message(format!("Validation error: {e}")));
     }
 
-    // Extract device info from headers
-    let user_agent = headers
-        .get("user-agent")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("Unknown");
-
-    let ip_address = headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .or_else(|| headers.get("x-real-ip").and_then(|v| v.to_str().ok()))
-        .unwrap_or("0.0.0.0");
-
-    let device_info = DeviceInfo::from_user_agent(user_agent, ip_address);
+    let device_info = device_info_from_headers(&headers).await;
 
     let mut register_data =
         crate::feature::auth::RegisterData::new(req.email.clone(), req.password.clone());
@@ -144,7 +306,7 @@ pub async fn register(
 pub async fn login(
     State(state): State<AppState>,
     jar: CookieJar,
-    headers: axum::http::HeaderMap,
+    headers: HeaderMap,
     Json(mut creds): Json<LoginCredentials>,
 ) -> ApiResult<AuthResponse> {
     creds.username = creds.username.trim().to_string();
@@ -155,19 +317,7 @@ pub async fn login(
         let _ = state.auth_service.logout(None, None).await;
     }
 
-    // Extract device info from headers
-    let user_agent = headers
-        .get("user-agent")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("Unknown");
-
-    let ip_address = headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .or_else(|| headers.get("x-real-ip").and_then(|v| v.to_str().ok()))
-        .unwrap_or("0.0.0.0");
-
-    let device_info = DeviceInfo::from_user_agent(user_agent, ip_address);
+    let device_info = device_info_from_headers(&headers).await;
 
     let login_creds =
         crate::feature::auth::LoginCreds::new(creds.username.clone(), creds.password.clone())
@@ -297,4 +447,61 @@ pub async fn me(
     Ok(ApiSuccess::default()
         .with_data(response)
         .with_message("User info retrieved"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn client_ip_uses_first_forwarded_ip() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", "8.8.8.8, 10.0.0.12".parse().unwrap());
+
+        assert_eq!(client_ip_from_headers(&headers), "8.8.8.8");
+    }
+
+    #[test]
+    fn client_ip_strips_ipv4_port() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-real-ip", "8.8.4.4:51234".parse().unwrap());
+
+        assert_eq!(client_ip_from_headers(&headers), "8.8.4.4");
+    }
+
+    #[test]
+    fn forwarded_header_supports_quoted_ipv6() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "forwarded",
+            "for=\"[2001:4860:4860::8888]:443\";proto=https"
+                .parse()
+                .unwrap(),
+        );
+
+        assert_eq!(client_ip_from_headers(&headers), "2001:4860:4860::8888");
+    }
+
+    #[test]
+    fn public_ip_filter_skips_local_ranges() {
+        assert!(!is_public_ip("127.0.0.1".parse().unwrap()));
+        assert!(!is_public_ip("10.0.0.1".parse().unwrap()));
+        assert!(!is_public_ip("100.64.0.1".parse().unwrap()));
+        assert!(!is_public_ip("::1".parse().unwrap()));
+        assert!(!is_public_ip("fc00::1".parse().unwrap()));
+        assert!(is_public_ip("8.8.8.8".parse().unwrap()));
+    }
+
+    #[test]
+    fn format_location_omits_duplicate_parts() {
+        let geo = GeoIpResponse {
+            city: Some("Singapore".to_string()),
+            region: Some("Singapore".to_string()),
+            country_name: Some("Singapore".to_string()),
+            country: None,
+            error: None,
+        };
+
+        assert_eq!(format_location(&geo).as_deref(), Some("Singapore"));
+    }
 }

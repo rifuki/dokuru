@@ -30,6 +30,7 @@ pub struct DeviceInfo {
     pub device_type: String,
     pub user_agent: String,
     pub ip_address: String,
+    pub location: Option<String>,
 }
 
 impl DeviceInfo {
@@ -42,46 +43,61 @@ impl DeviceInfo {
             device_type,
             user_agent: user_agent.to_string(),
             ip_address: ip.to_string(),
+            location: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_location(mut self, location: Option<String>) -> Self {
+        self.location = location;
+        self
     }
 
     fn parse_user_agent(ua: &str) -> (String, String) {
         let ua_lower = ua.to_lowercase();
 
         // Detect device type
-        let device_type = if ua_lower.contains("mobile") {
-            "mobile"
-        } else if ua_lower.contains("tablet") || ua_lower.contains("ipad") {
+        let device_type = if ua_lower.contains("tablet") || ua_lower.contains("ipad") {
             "tablet"
+        } else if ua_lower.contains("mobile")
+            || ua_lower.contains("iphone")
+            || ua_lower.contains("android")
+        {
+            "mobile"
         } else {
             "desktop"
         }
         .to_string();
 
         // Detect browser
-        let browser = if ua_lower.contains("chrome") {
-            "Chrome"
-        } else if ua_lower.contains("firefox") {
+        let browser = if ua_lower.contains("edg/") || ua_lower.contains("edge") {
+            "Edge"
+        } else if ua_lower.contains("opr/") || ua_lower.contains("opera") {
+            "Opera"
+        } else if ua_lower.contains("firefox") || ua_lower.contains("fxios") {
             "Firefox"
+        } else if ua_lower.contains("chrome") || ua_lower.contains("crios") {
+            "Chrome"
         } else if ua_lower.contains("safari") && !ua_lower.contains("chrome") {
             "Safari"
-        } else if ua_lower.contains("edge") {
-            "Edge"
         } else {
             "Unknown"
         };
 
         // Detect OS
-        let os = if ua_lower.contains("windows") {
+        let os = if ua_lower.contains("android") {
+            "Android"
+        } else if ua_lower.contains("iphone")
+            || ua_lower.contains("ipad")
+            || ua_lower.contains("ipod")
+        {
+            "iOS"
+        } else if ua_lower.contains("windows") {
             "Windows"
         } else if ua_lower.contains("macintosh") || ua_lower.contains("mac os") {
             "macOS"
         } else if ua_lower.contains("linux") {
             "Linux"
-        } else if ua_lower.contains("android") {
-            "Android"
-        } else if ua_lower.contains("iphone") || ua_lower.contains("ipad") {
-            "iOS"
         } else {
             "Unknown"
         };

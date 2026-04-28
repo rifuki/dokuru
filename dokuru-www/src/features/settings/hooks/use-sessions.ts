@@ -9,10 +9,12 @@ export const settingsKeys = {
 export interface Session {
   id: string;
   device: string;
+  device_type?: string | null;
   location: string;
   ip: string;
-  current: boolean;
-  createdAt: string;
+  created_at: string;
+  last_active_at: string;
+  is_current: boolean;
 }
 
 export function useSessions() {
