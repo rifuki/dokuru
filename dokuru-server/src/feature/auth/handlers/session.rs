@@ -6,7 +6,10 @@ use axum::{
 use uuid::Uuid;
 
 use crate::{
-    feature::auth::types::AuthUser,
+    feature::auth::{
+        session::{display_ip_address, lookup_ip_location},
+        types::AuthUser,
+    },
     infrastructure::web::response::{
         ApiError, ApiResult, ApiSuccess, codes::auth as auth_codes, codes::generic,
     },
@@ -39,21 +42,43 @@ pub async fn list_sessions(
 
     tracing::info!("Found {} sessions for user", sessions.len());
 
-    let session_responses: Vec<_> = sessions
-        .into_iter()
-        .map(|session| {
-            serde_json::json!({
-                "id": session.id,
-                "device": session.device_name.unwrap_or_else(|| "Unknown Device".to_string()),
-                "device_type": session.device_type,
-                "location": session.location.unwrap_or_else(|| "Unknown Location".to_string()),
-                "ip": session.ip_address,
-                "created_at": session.created_at.to_rfc3339(),
-                "last_active_at": session.last_active_at.to_rfc3339(),
-                "is_current": session.session_id == auth_user.session_id
-            })
-        })
-        .collect();
+    let mut session_responses = Vec::with_capacity(sessions.len());
+
+    for session in sessions {
+        let ip_address = display_ip_address(&session.ip_address);
+        let location = match session
+            .location
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+        {
+            Some(location) => location.to_string(),
+            None => match lookup_ip_location(&ip_address).await {
+                Some(location) => {
+                    if let Err(error) = state
+                        .auth_service
+                        .session_service()
+                        .update_location(session.id, &location)
+                        .await
+                    {
+                        tracing::warn!(?error, session_id = %session.id, "Failed to backfill session location");
+                    }
+                    location
+                }
+                None => "Unknown Location".to_string(),
+            },
+        };
+
+        session_responses.push(serde_json::json!({
+            "id": session.id,
+            "device": session.device_name.unwrap_or_else(|| "Unknown Device".to_string()),
+            "device_type": session.device_type,
+            "location": location,
+            "ip": ip_address,
+            "created_at": session.created_at.to_rfc3339(),
+            "last_active_at": session.last_active_at.to_rfc3339(),
+            "is_current": session.session_id == auth_user.session_id
+        }));
+    }
 
     Ok(ApiSuccess::default()
         .with_data(session_responses)

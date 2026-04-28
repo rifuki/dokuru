@@ -58,6 +58,17 @@ impl SessionService {
             .await
     }
 
+    /// Update resolved session location
+    pub async fn update_location(
+        &self,
+        id: Uuid,
+        location: &str,
+    ) -> Result<(), SessionRepositoryError> {
+        self.repo
+            .update_location(self.db.pool(), id, location)
+            .await
+    }
+
     /// Revoke a specific session by internal UUID
     pub async fn revoke_session(
         &self,

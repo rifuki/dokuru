@@ -56,6 +56,14 @@ pub trait SessionRepository: Send + Sync {
         session_id: &str,
     ) -> Result<(), SessionRepositoryError>;
 
+    /// Update resolved session location
+    async fn update_location(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        location: &str,
+    ) -> Result<(), SessionRepositoryError>;
+
     /// Revoke a specific session
     async fn revoke(
         &self,
@@ -122,7 +130,7 @@ impl SessionRepository for SessionRepositoryImpl {
                 user_id, session_id, device_name, device_type, 
                 ip_address, user_agent, location, expires_at
             )
-            VALUES ($1, $2, $3, $4, $5::inet, $6, $7, $8)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING *
             ",
         )
@@ -200,6 +208,27 @@ impl SessionRepository for SessionRepositoryImpl {
             ",
         )
         .bind(session_id)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn update_location(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        location: &str,
+    ) -> Result<(), SessionRepositoryError> {
+        sqlx::query(
+            r"
+            UPDATE user_sessions
+            SET location = $2
+            WHERE id = $1 AND is_active = TRUE
+            ",
+        )
+        .bind(id)
+        .bind(location)
         .execute(pool)
         .await?;
 
