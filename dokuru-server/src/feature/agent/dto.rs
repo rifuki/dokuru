@@ -54,6 +54,9 @@ pub struct UpdateAgentDto {
     #[validate(custom(function = "validate_agent_url"))]
     pub url: String,
 
+    #[validate(custom(function = "validate_access_mode"))]
+    pub access_mode: String,
+
     /// If provided, token will be re-hashed and updated
     pub token: Option<String>,
 }

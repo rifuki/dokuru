@@ -13,17 +13,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, RefreshCw, Container, Box, HardDrive, Search, ChevronDown, Edit, Trash2, Cpu, Server, Eye, EyeOff, Cloud, Globe, Link2, Loader2, WifiOff, AlertTriangle, ArrowUp, ArrowDown, X, Check, Copy } from "lucide-react";
+import { Plus, RefreshCw, Container, Box, HardDrive, Search, ChevronDown, Edit, Trash2, Cpu, Server, Cloud, Globe, Link2, Loader2, WifiOff, AlertTriangle, ArrowUp, ArrowDown, X, Check, Copy } from "lucide-react";
 import { AddAgentModal } from "@/components/agents/AddAgentModal";
+import { EditAgentModal } from "@/components/agents/EditAgentModal";
+import {
+  normalizeAgentAccessMode,
+  type AgentAccessMode,
+} from "@/components/agents/AgentConnectionMode";
 import { AgentSetupDialog, AGENT_INSTALL_COMMAND } from "@/components/agents/AgentSetupGuide";
 import { agentDirectApi } from "@/lib/api/agent-direct";
 import { agentApi } from "@/lib/api/agent";
 import { dockerCredential } from "@/services/docker-api";
 import { setAgentToken } from "@/stores/use-agent-store";
 import type { Agent } from "@/types/agent";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 
@@ -77,6 +79,7 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
   const [editName, setEditName] = useState(agent.name);
   const [editUrl, setEditUrl] = useState(agent.url);
   const [editToken, setEditToken] = useState("");
+  const [editAccessMode, setEditAccessMode] = useState<AgentAccessMode>(normalizeAgentAccessMode(agent.access_mode));
   const [showToken, setShowToken] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -90,16 +93,42 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
     setEditName(agent.name);
     setEditUrl(agent.url);
     setEditToken("");
+    setEditAccessMode(normalizeAgentAccessMode(agent.access_mode));
+    setShowToken(false);
     setShowEditDialog(true);
   };
 
+  const handleEditAccessModeChange = (mode: AgentAccessMode) => {
+    setEditAccessMode(mode);
+    setEditUrl((current) => (mode !== "relay" && current === "relay" ? "" : current));
+  };
+
   const handleSave = async () => {
+    const name = editName.trim();
+    const url = editAccessMode === "relay" ? "relay" : editUrl.trim();
+
+    if (!name) {
+      toast.error("Agent name is required");
+      return;
+    }
+
+    if (editAccessMode !== "relay" && !url) {
+      toast.error("Agent URL is required");
+      return;
+    }
+
+    if (editAccessMode === "cloudflare" && !url.startsWith("https://")) {
+      toast.error("Cloudflare Tunnel URL must use HTTPS");
+      return;
+    }
+
     setIsSaving(true);
     try {
       const updated = await agentApi.update(agent.id, {
-        name: editName.trim(),
-        url: editUrl.trim(),
+        name,
+        url,
         token: editToken.trim() || undefined,
+        access_mode: editAccessMode,
       });
       const newToken = editToken.trim();
       if (newToken) {
@@ -281,59 +310,22 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
         </button>
       </div>
 
-      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Agent</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-name">Name</Label>
-              <Input
-                id="edit-name"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                placeholder="Agent name"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-url">URL</Label>
-              <Input
-                id="edit-url"
-                value={editUrl}
-                onChange={(e) => setEditUrl(e.target.value)}
-                placeholder="http://host:port"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-token">Token <span className="text-muted-foreground text-xs">(leave blank to keep current)</span></Label>
-              <div className="relative">
-                <Input
-                  id="edit-token"
-                  type={showToken ? "text" : "password"}
-                  value={editToken}
-                  onChange={(e) => setEditToken(e.target.value)}
-                  placeholder="New token (optional)"
-                  className="pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowToken(v => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditDialog(false)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={isSaving || !editName || !editUrl}>
-              {isSaving ? "Saving…" : "Save Changes"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EditAgentModal
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        name={editName}
+        url={editUrl}
+        token={editToken}
+        accessMode={editAccessMode}
+        showToken={showToken}
+        isSaving={isSaving}
+        onNameChange={setEditName}
+        onUrlChange={setEditUrl}
+        onTokenChange={setEditToken}
+        onAccessModeChange={handleEditAccessModeChange}
+        onShowTokenChange={setShowToken}
+        onSave={handleSave}
+      />
 
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>

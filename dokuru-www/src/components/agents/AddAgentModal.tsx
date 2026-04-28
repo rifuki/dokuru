@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import { useState, type CSSProperties, type FormEvent } from "react";
 import { useAgentStore } from "@/stores/use-agent-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,8 +10,10 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { Check, Cloud, Globe, Link2, Loader2, Dices, Terminal } from "lucide-react";
+import { Link2, Loader2, Dices, Terminal } from "lucide-react";
 import { toast } from "sonner";
+import { AgentConnectionModeOption } from "@/components/agents/AgentConnectionModeOption";
+import type { AgentAccessMode } from "@/components/agents/AgentConnectionMode";
 
 interface AddAgentModalProps {
     open: boolean;
@@ -21,7 +23,7 @@ interface AddAgentModalProps {
 
 const ADJECTIVES = ["Swift", "Brave", "Mighty", "Silent", "Golden", "Azure", "Crimson", "Noble", "Rapid", "Stellar"];
 const NOUNS = ["Phoenix", "Dragon", "Tiger", "Falcon", "Wolf", "Eagle", "Lion", "Panther", "Hawk", "Bear"];
-type AccessMode = "cloudflare" | "relay" | "direct";
+type AccessMode = Exclude<AgentAccessMode, "domain">;
 
 function generateRandomName(): string {
     const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
@@ -107,30 +109,21 @@ export function AddAgentModal({ open, onOpenChange, onOpenSetupGuide }: AddAgent
                         </div>
 
                         <div role="radiogroup" aria-label="Connection mode" className="space-y-2">
-                            <AccessModeOption
-                                value="cloudflare"
-                                label="Cloudflare Tunnel"
-                                description="Instant HTTPS tunnel, no domain required."
-                                icon={<Cloud className="h-4 w-4" />}
+                            <AgentConnectionModeOption
+                                mode="cloudflare"
                                 checked={accessMode === "cloudflare"}
                                 badge="Recommended"
-                                onSelect={setAccessMode}
+                                onSelect={(mode) => setAccessMode(mode)}
                             />
-                            <AccessModeOption
-                                value="relay"
-                                label="Relay Mode"
-                                description="No inbound port and no public URL."
-                                icon={<Link2 className="h-4 w-4" />}
+                            <AgentConnectionModeOption
+                                mode="relay"
                                 checked={accessMode === "relay"}
-                                onSelect={setAccessMode}
+                                onSelect={(mode) => setAccessMode(mode)}
                             />
-                            <AccessModeOption
-                                value="direct"
-                                label="Direct HTTP"
-                                description="Use your own reverse proxy endpoint."
-                                icon={<Globe className="h-4 w-4" />}
+                            <AgentConnectionModeOption
+                                mode="direct"
                                 checked={accessMode === "direct"}
-                                onSelect={setAccessMode}
+                                onSelect={(mode) => setAccessMode(mode)}
                             />
                         </div>
 
@@ -273,53 +266,5 @@ export function AddAgentModal({ open, onOpenChange, onOpenSetupGuide }: AddAgent
                 </form>
             </DialogContent>
         </Dialog>
-    );
-}
-
-function AccessModeOption({
-    value,
-    label,
-    description,
-    icon,
-    checked,
-    badge,
-    onSelect,
-}: {
-    value: AccessMode;
-    label: string;
-    description: string;
-    icon: ReactNode;
-    checked: boolean;
-    badge?: string;
-    onSelect: (value: AccessMode) => void;
-}) {
-    return (
-        <button
-            type="button"
-            role="radio"
-            aria-checked={checked}
-            onClick={() => onSelect(value)}
-            className={`flex w-full cursor-pointer items-center gap-3 rounded-xl border p-3 text-left transition-all ${
-                checked
-                    ? "border-primary bg-primary/10 shadow-sm"
-                    : "border-border bg-background hover:border-primary/40 hover:bg-background/80"
-            }`}
-        >
-            <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${checked ? "bg-primary text-primary-foreground" : "bg-muted text-primary"}`}>
-                {icon}
-            </span>
-            <span className="min-w-0 flex-1">
-                <span className="flex flex-wrap items-center gap-2 text-sm font-semibold">
-                    {label}
-                    {badge && (
-                        <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground">
-                            {badge}
-                        </span>
-                    )}
-                </span>
-                <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{description}</span>
-            </span>
-            <Check className={`h-4 w-4 shrink-0 ${checked ? "text-primary" : "opacity-0"}`} />
-        </button>
     );
 }

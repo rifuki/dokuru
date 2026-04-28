@@ -81,6 +81,7 @@ impl AgentService {
         let params = crate::feature::agent::repository::UpdateAgentParams {
             name: &dto.name,
             url: &dto.url,
+            access_mode: &dto.access_mode,
             token_hash: token_hash.as_deref(),
             encrypted_token: encrypted_token.as_deref(),
         };

@@ -8,6 +8,7 @@ use super::entity::Agent;
 pub struct UpdateAgentParams<'a> {
     pub name: &'a str,
     pub url: &'a str,
+    pub access_mode: &'a str,
     pub token_hash: Option<&'a str>,
     pub encrypted_token: Option<&'a str>,
 }
@@ -98,13 +99,14 @@ impl AgentRepository for AgentRepositoryImpl {
         user_id: Uuid,
         params: UpdateAgentParams<'_>,
     ) -> Result<Option<Agent>> {
-        let agent =
-            if let (Some(hash), Some(encrypted)) = (params.token_hash, params.encrypted_token) {
-                sqlx::query_as::<_, Agent>(
+        let agent = if let (Some(hash), Some(encrypted)) =
+            (params.token_hash, params.encrypted_token)
+        {
+            sqlx::query_as::<_, Agent>(
                     r"
                 UPDATE agents
-                SET name = $1, url = $2, token_hash = $3, encrypted_token = $4, updated_at = NOW()
-                WHERE id = $5 AND user_id = $6
+                SET name = $1, url = $2, token_hash = $3, encrypted_token = $4, access_mode = $5, updated_at = NOW()
+                WHERE id = $6 AND user_id = $7
                 RETURNING *
                 ",
                 )
@@ -112,26 +114,28 @@ impl AgentRepository for AgentRepositoryImpl {
                 .bind(params.url)
                 .bind(hash)
                 .bind(encrypted)
+                .bind(params.access_mode)
                 .bind(id)
                 .bind(user_id)
                 .fetch_optional(pool)
                 .await?
-            } else {
-                sqlx::query_as::<_, Agent>(
-                    r"
+        } else {
+            sqlx::query_as::<_, Agent>(
+                r"
                 UPDATE agents
-                SET name = $1, url = $2, updated_at = NOW()
-                WHERE id = $3 AND user_id = $4
+                SET name = $1, url = $2, access_mode = $3, updated_at = NOW()
+                WHERE id = $4 AND user_id = $5
                 RETURNING *
                 ",
-                )
-                .bind(params.name)
-                .bind(params.url)
-                .bind(id)
-                .bind(user_id)
-                .fetch_optional(pool)
-                .await?
-            };
+            )
+            .bind(params.name)
+            .bind(params.url)
+            .bind(params.access_mode)
+            .bind(id)
+            .bind(user_id)
+            .fetch_optional(pool)
+            .await?
+        };
 
         Ok(agent)
     }

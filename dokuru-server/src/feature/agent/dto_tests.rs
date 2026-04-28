@@ -102,6 +102,7 @@ mod tests {
         let dto = UpdateAgentDto {
             name: "Updated Agent".to_string(),
             url: "http://localhost:9090".to_string(),
+            access_mode: "direct".to_string(),
             token: Some("new-token".to_string()),
         };
         assert!(dto.validate().is_ok());
@@ -112,6 +113,7 @@ mod tests {
         let dto = UpdateAgentDto {
             name: "Updated Agent".to_string(),
             url: "http://localhost:9090".to_string(),
+            access_mode: "direct".to_string(),
             token: None,
         };
         assert!(dto.validate().is_ok());
@@ -122,6 +124,7 @@ mod tests {
         let dto = UpdateAgentDto {
             name: String::new(),
             url: "http://localhost:9090".to_string(),
+            access_mode: "direct".to_string(),
             token: None,
         };
         assert!(dto.validate().is_err());
@@ -132,6 +135,7 @@ mod tests {
         let dto = UpdateAgentDto {
             name: "Updated Agent".to_string(),
             url: "invalid-url".to_string(),
+            access_mode: "direct".to_string(),
             token: None,
         };
         assert!(dto.validate().is_err());

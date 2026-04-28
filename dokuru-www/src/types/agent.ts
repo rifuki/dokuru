@@ -21,4 +21,5 @@ export interface UpdateAgentDto {
   name: string;
   url: string;
   token?: string;
+  access_mode: string;
 }
