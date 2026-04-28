@@ -181,15 +181,15 @@ fn is_public_ip(ip: IpAddr) -> bool {
     }
 }
 
-fn is_ipv6_unique_local(ip: Ipv6Addr) -> bool {
+const fn is_ipv6_unique_local(ip: Ipv6Addr) -> bool {
     (ip.segments()[0] & 0xfe00) == 0xfc00
 }
 
-fn is_ipv6_link_local(ip: Ipv6Addr) -> bool {
+const fn is_ipv6_link_local(ip: Ipv6Addr) -> bool {
     (ip.segments()[0] & 0xffc0) == 0xfe80
 }
 
-fn is_ipv6_documentation(ip: Ipv6Addr) -> bool {
+const fn is_ipv6_documentation(ip: Ipv6Addr) -> bool {
     ip.segments()[0] == 0x2001 && ip.segments()[1] == 0x0db8
 }
 
