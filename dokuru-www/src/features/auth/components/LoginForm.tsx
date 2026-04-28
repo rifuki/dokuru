@@ -19,8 +19,18 @@ export function LoginForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const trimmedUsername = username.trim();
+    const trimmedPassword = password.trim();
+
+    setUsername(trimmedUsername);
+    setPassword(trimmedPassword);
+
     try {
-      await login.mutateAsync({ username, password });
+      await login.mutateAsync({
+        username: trimmedUsername,
+        password: trimmedPassword,
+      });
     } catch {
       // Error handled by hook
     }
@@ -51,7 +61,7 @@ export function LoginForm() {
               type="text"
               placeholder="username or email@example.com"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e) => setUsername(e.target.value.trim())}
               required
               className="h-11 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"
             />
@@ -75,7 +85,7 @@ export function LoginForm() {
                 type={showPassword ? "text" : "password"}
                 placeholder="••••••••"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => setPassword(e.target.value.trim())}
                 required
                 className="h-11 pr-10 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"
               />
