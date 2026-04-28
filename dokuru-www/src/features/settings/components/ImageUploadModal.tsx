@@ -5,10 +5,9 @@ import { decompressFrames, parseGIF, type ParsedFrame } from "gifuct-js";
 import { GIFEncoder, applyPalette, quantize } from "gifenc";
 import ReactCrop, {
   centerCrop,
-  convertToPixelCrop,
   makeAspectCrop,
   type Crop,
-  type PixelCrop,
+  type PercentCrop,
 } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
 import {
@@ -101,17 +100,15 @@ function getCenteredAvatarCrop(width: number, height: number) {
   );
 }
 
-function getAvatarSourceCrop(image: HTMLImageElement, crop: PixelCrop) {
-  const scaleX = image.naturalWidth / image.width;
-  const scaleY = image.naturalHeight / image.height;
-  const x = Math.max(0, crop.x * scaleX);
-  const y = Math.max(0, crop.y * scaleY);
+function getAvatarSourceCrop(image: HTMLImageElement, crop: PercentCrop) {
+  const x = Math.max(0, (crop.x / 100) * image.naturalWidth);
+  const y = Math.max(0, (crop.y / 100) * image.naturalHeight);
 
   return {
     x,
     y,
-    width: Math.min(image.naturalWidth - x, crop.width * scaleX),
-    height: Math.min(image.naturalHeight - y, crop.height * scaleY),
+    width: Math.min(image.naturalWidth - x, (crop.width / 100) * image.naturalWidth),
+    height: Math.min(image.naturalHeight - y, (crop.height / 100) * image.naturalHeight),
   };
 }
 
@@ -152,7 +149,7 @@ export function ImageUploadModal({
   const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [avatarCrop, setAvatarCrop] = useState<Crop>();
-  const [completedAvatarCrop, setCompletedAvatarCrop] = useState<PixelCrop | null>(null);
+  const [completedAvatarCrop, setCompletedAvatarCrop] = useState<PercentCrop | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const avatarImageRef = useRef<HTMLImageElement>(null);
@@ -254,7 +251,7 @@ export function ImageUploadModal({
 
     avatarImageRef.current = image;
     setAvatarCrop(nextCrop);
-    setCompletedAvatarCrop(convertToPixelCrop(nextCrop, image.width, image.height));
+    setCompletedAvatarCrop(nextCrop);
   };
 
   const createStaticAvatarFile = async (sourceFile: File) => {
@@ -433,10 +430,11 @@ export function ImageUploadModal({
     }
   };
 
-  const handleClose = () => {
+  const resetSelection = () => {
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
     }
+
     setStatus('idle');
     setFile(null);
     setPreviewUrl(null);
@@ -444,6 +442,14 @@ export function ImageUploadModal({
     setErrorMessage(null);
     setAvatarCrop(undefined);
     setCompletedAvatarCrop(null);
+  };
+
+  const handleBack = () => {
+    resetSelection();
+  };
+
+  const handleClose = () => {
+    resetSelection();
     onClose();
   };
 
@@ -509,7 +515,7 @@ export function ImageUploadModal({
                       <ReactCrop
                         crop={avatarCrop}
                         onChange={(_, percentCrop) => setAvatarCrop(percentCrop)}
-                        onComplete={(crop) => setCompletedAvatarCrop(crop)}
+                        onComplete={(_, percentCrop) => setCompletedAvatarCrop(percentCrop)}
                         aspect={1}
                         keepSelection
                         minWidth={96}
@@ -584,10 +590,10 @@ export function ImageUploadModal({
               )}>
                 <Button
                   variant="outline"
-                  onClick={() => handleClose()}
+                  onClick={isAvatarCropView ? handleBack : handleClose}
                   disabled={isBusy}
                 >
-                  Cancel
+                  {isAvatarCropView ? 'Back' : 'Cancel'}
                 </Button>
                 <Button
                   onClick={handleUpload}
