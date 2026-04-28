@@ -515,34 +515,40 @@ function AgentsList() {
           <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
         </div>
       ) : agents.length === 0 ? (
-        <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-card p-4 shadow-sm">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex min-w-0 items-start gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-background/80">
-                <img src="/docker.svg" alt="Docker" className="h-8 w-8" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <h3 className="text-lg font-semibold tracking-tight">Connect your first Docker host</h3>
-                <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                  Run the installer on a host, choose Cloudflare Tunnel or Relay, then paste the generated URL and token.
-                </p>
-                <div className="mt-3 flex max-w-3xl items-center gap-2 rounded-lg border border-border bg-background/75 p-2 font-mono text-xs shadow-inner">
-                  <span className="select-none text-primary">$</span>
-                  <code className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-foreground/90">
-                    {AGENT_INSTALL_COMMAND}
-                  </code>
-                </div>
-              </div>
+        <div className="overflow-hidden rounded-2xl border border-dashed border-border bg-card/40 shadow-sm">
+          <div className="flex min-h-[360px] flex-col items-center justify-center px-6 py-12 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-background/70">
+              <img src="/docker.svg" alt="Docker" className="h-10 w-10 opacity-80" />
             </div>
-
-            <div className="flex shrink-0 flex-wrap gap-2 xl:justify-end">
-              <Button variant="outline" onClick={() => setIsSetupGuideOpen(true)}>
-                Setup Guide
-              </Button>
+            <h3 className="mt-6 text-2xl font-semibold tracking-tight">No agents connected</h3>
+            <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+              Add a Docker host to start managing containers, images, networks, and security audits from Dokuru.
+            </p>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
               <Button onClick={() => setIsAddModalOpen(true)}>
                 <Plus className="mr-2 h-4 w-4" />
                 Add Agent
               </Button>
+              <Button variant="outline" onClick={() => setIsSetupGuideOpen(true)}>
+                Setup Guide
+              </Button>
+            </div>
+          </div>
+
+          <div className="border-t border-border bg-background/35 px-4 py-3">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-foreground">Need to install the agent first?</div>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Run this on the Docker host, then paste the generated URL and token into Add Agent.
+                </p>
+              </div>
+              <div className="flex min-w-0 items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 font-mono text-xs shadow-inner xl:w-[560px]">
+                <span className="select-none text-primary">$</span>
+                <code className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-foreground/90">
+                  {AGENT_INSTALL_COMMAND}
+                </code>
+              </div>
             </div>
           </div>
         </div>
@@ -799,7 +805,7 @@ function AgentsList() {
       <AgentSetupDialog
         open={isSetupGuideOpen}
         onOpenChange={setIsSetupGuideOpen}
-        onStartAddAgent={() => {
+        onStartAddAgent={isAddModalOpen ? undefined : () => {
           setIsSetupGuideOpen(false);
           setIsAddModalOpen(true);
         }}

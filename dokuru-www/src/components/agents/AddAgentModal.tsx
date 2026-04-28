@@ -150,8 +150,8 @@ export function AddAgentModal({ open, onOpenChange, onOpenSetupGuide }: AddAgent
                     </div>
 
                     <div className="flex flex-col p-5">
-                        <div className="grid gap-4 md:grid-rows-[72px_96px_96px]">
-                            <div className="space-y-2">
+                        <div className="grid gap-3 md:grid-rows-[70px_90px_90px]">
+                            <div className="space-y-1.5">
                                 <Label htmlFor="name" className="text-sm font-medium">Agent Name</Label>
                                 <div className="flex gap-2">
                                     <Input
@@ -184,7 +184,7 @@ export function AddAgentModal({ open, onOpenChange, onOpenSetupGuide }: AddAgent
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
+                            <div className="space-y-1.5">
                                 <Label htmlFor="url" className="text-sm font-medium">Agent URL</Label>
                                 {accessMode !== "relay" ? (
                                     <Input
@@ -209,29 +209,26 @@ export function AddAgentModal({ open, onOpenChange, onOpenSetupGuide }: AddAgent
                                         data-1p-ignore="true"
                                     />
                                 ) : (
-                                    <Input
-                                        id="url"
-                                        name="agent_endpoint_url"
-                                        type="text"
-                                        value="Relay mode - no URL required"
-                                        disabled
-                                        readOnly
-                                        data-form-type="other"
-                                        data-lpignore="true"
-                                        data-1p-ignore="true"
-                                        className="font-medium text-muted-foreground"
-                                    />
+                                    <div className="flex h-16 items-center gap-3 rounded-lg border border-dashed border-primary/30 bg-primary/5 px-3 text-sm">
+                                        <Link2 className="h-4 w-4 shrink-0 text-primary" />
+                                        <div className="min-w-0">
+                                            <div className="font-semibold text-primary">Relay mode skips the URL field</div>
+                                            <div className="mt-0.5 text-xs leading-4 text-muted-foreground">
+                                                Use Relay on the agent host, then paste the generated token below.
+                                            </div>
+                                        </div>
+                                    </div>
                                 )}
-                                <p className="text-xs text-muted-foreground">
-                                    {accessMode === "cloudflare"
-                                        ? "Copy the trycloudflare URL shown by the agent."
-                                        : accessMode === "direct"
-                                            ? "Use an HTTPS endpoint that reaches the agent service."
-                                            : "Relay connects through Dokuru without a public URL."}
-                                </p>
+                                {accessMode !== "relay" && (
+                                    <p className="text-xs leading-4 text-muted-foreground">
+                                        {accessMode === "cloudflare"
+                                            ? "Copy the trycloudflare URL shown by the agent."
+                                            : "Use an HTTPS endpoint that reaches the agent service."}
+                                    </p>
+                                )}
                             </div>
 
-                            <div className="space-y-2">
+                            <div className="space-y-1.5">
                                 <Label htmlFor="token" className="text-sm font-medium">Agent Token</Label>
                                 <Input
                                     id="token"
@@ -252,7 +249,7 @@ export function AddAgentModal({ open, onOpenChange, onOpenSetupGuide }: AddAgent
                                     className="font-mono text-sm"
                                     style={{ WebkitTextSecurity: "disc" } as CSSProperties}
                                 />
-                                <p className="text-xs text-muted-foreground">
+                                <p className="text-xs leading-4 text-muted-foreground">
                                     Paste the access token shown by the agent on the host.
                                 </p>
                             </div>

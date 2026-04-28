@@ -87,9 +87,11 @@ export function AgentSetupDialog({ open, onOpenChange, onStartAddAgent }: AgentS
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
                         Close
                     </Button>
-                    <Button onClick={onStartAddAgent}>
-                        Open Add Agent
-                    </Button>
+                    {onStartAddAgent && (
+                        <Button onClick={onStartAddAgent}>
+                            Open Add Agent
+                        </Button>
+                    )}
                 </DialogFooter>
             </DialogContent>
         </Dialog>
