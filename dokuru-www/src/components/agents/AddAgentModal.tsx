@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/dialog";
 import { Check, Cloud, Globe, Link2, Loader2, Dices, Terminal } from "lucide-react";
 import { toast } from "sonner";
-import { RelayHint } from "@/components/agents/AgentSetupGuide";
 
 interface AddAgentModalProps {
     open: boolean;
@@ -151,99 +150,112 @@ export function AddAgentModal({ open, onOpenChange, onOpenSetupGuide }: AddAgent
                     </div>
 
                     <div className="flex flex-col p-5">
-                        <div className="space-y-4">
+                        <div className="grid gap-4 md:grid-rows-[72px_96px_96px]">
                             <div className="space-y-2">
-                            <Label htmlFor="name" className="text-sm font-medium">Agent Name</Label>
-                            <div className="flex gap-2">
-                                <Input
-                                    id="name"
-                                    name="agent_display_name"
-                                    placeholder="e.g. Production Server"
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    disabled={isLoading}
-                                    autoComplete="off"
-                                    autoCorrect="off"
-                                    autoCapitalize="off"
-                                    spellCheck={false}
-                                    data-form-type="other"
-                                    data-lpignore="true"
-                                    data-1p-ignore="true"
-                                    className="flex-1"
-                                />
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="icon"
-                                    onClick={handleRandomName}
-                                    disabled={isLoading}
-                                    title="Generate random name"
-                                    className="shrink-0"
-                                >
-                                    <Dices className="h-4 w-4" />
-                                </Button>
+                                <Label htmlFor="name" className="text-sm font-medium">Agent Name</Label>
+                                <div className="flex gap-2">
+                                    <Input
+                                        id="name"
+                                        name="agent_display_name"
+                                        placeholder="e.g. Production Server"
+                                        value={name}
+                                        onChange={(e) => setName(e.target.value)}
+                                        disabled={isLoading}
+                                        autoComplete="off"
+                                        autoCorrect="off"
+                                        autoCapitalize="off"
+                                        spellCheck={false}
+                                        data-form-type="other"
+                                        data-lpignore="true"
+                                        data-1p-ignore="true"
+                                        className="flex-1"
+                                    />
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon"
+                                        onClick={handleRandomName}
+                                        disabled={isLoading}
+                                        title="Generate random name"
+                                        className="shrink-0"
+                                    >
+                                        <Dices className="h-4 w-4" />
+                                    </Button>
+                                </div>
                             </div>
-                        </div>
 
-                        {accessMode !== "relay" && (
                             <div className="space-y-2">
                                 <Label htmlFor="url" className="text-sm font-medium">Agent URL</Label>
-                                <Input
-                                    id="url"
-                                    name="agent_endpoint_url"
-                                    type="url"
-                                    inputMode="url"
-                                    placeholder={
-                                        accessMode === "cloudflare"
-                                            ? "https://xxx.trycloudflare.com"
-                                            : "https://agent.yourdomain.com"
-                                    }
-                                    value={url}
-                                    onChange={(e) => setUrl(e.target.value.trim())}
-                                    disabled={isLoading}
-                                    autoComplete="off"
-                                    autoCorrect="off"
-                                    autoCapitalize="off"
-                                    spellCheck={false}
-                                    data-form-type="other"
-                                    data-lpignore="true"
-                                    data-1p-ignore="true"
-                                />
+                                {accessMode !== "relay" ? (
+                                    <Input
+                                        id="url"
+                                        name="agent_endpoint_url"
+                                        type="url"
+                                        inputMode="url"
+                                        placeholder={
+                                            accessMode === "cloudflare"
+                                                ? "https://xxx.trycloudflare.com"
+                                                : "https://agent.yourdomain.com"
+                                        }
+                                        value={url}
+                                        onChange={(e) => setUrl(e.target.value.trim())}
+                                        disabled={isLoading}
+                                        autoComplete="off"
+                                        autoCorrect="off"
+                                        autoCapitalize="off"
+                                        spellCheck={false}
+                                        data-form-type="other"
+                                        data-lpignore="true"
+                                        data-1p-ignore="true"
+                                    />
+                                ) : (
+                                    <Input
+                                        id="url"
+                                        name="agent_endpoint_url"
+                                        type="text"
+                                        value="Relay mode - no URL required"
+                                        disabled
+                                        readOnly
+                                        data-form-type="other"
+                                        data-lpignore="true"
+                                        data-1p-ignore="true"
+                                        className="font-medium text-muted-foreground"
+                                    />
+                                )}
                                 <p className="text-xs text-muted-foreground">
                                     {accessMode === "cloudflare"
                                         ? "Copy the trycloudflare URL shown by the agent."
-                                        : "Use an HTTPS endpoint that reaches the agent service."}
+                                        : accessMode === "direct"
+                                            ? "Use an HTTPS endpoint that reaches the agent service."
+                                            : "Relay connects through Dokuru without a public URL."}
                                 </p>
                             </div>
-                        )}
 
-                        {accessMode === "relay" && <RelayHint />}
-
-                        <div className="space-y-2">
-                            <Label htmlFor="token" className="text-sm font-medium">Agent Token</Label>
-                            <Input
-                                id="token"
-                                name="agent_access_token"
-                                type="text"
-                                inputMode="text"
-                                placeholder="dok_..."
-                                value={token}
-                                onChange={(e) => setToken(e.target.value.trim())}
-                                disabled={isLoading}
-                                autoComplete="new-password"
-                                autoCorrect="off"
-                                autoCapitalize="off"
-                                spellCheck={false}
-                                data-form-type="other"
-                                data-lpignore="true"
-                                data-1p-ignore="true"
-                                className="font-mono text-sm"
-                                style={{ WebkitTextSecurity: "disc" } as CSSProperties}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                Paste the access token shown by the agent on the host.
-                            </p>
-                        </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="token" className="text-sm font-medium">Agent Token</Label>
+                                <Input
+                                    id="token"
+                                    name="agent_access_token"
+                                    type="text"
+                                    inputMode="text"
+                                    placeholder="dok_..."
+                                    value={token}
+                                    onChange={(e) => setToken(e.target.value.trim())}
+                                    disabled={isLoading}
+                                    autoComplete="new-password"
+                                    autoCorrect="off"
+                                    autoCapitalize="off"
+                                    spellCheck={false}
+                                    data-form-type="other"
+                                    data-lpignore="true"
+                                    data-1p-ignore="true"
+                                    className="font-mono text-sm"
+                                    style={{ WebkitTextSecurity: "disc" } as CSSProperties}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Paste the access token shown by the agent on the host.
+                                </p>
+                            </div>
                         </div>
 
                         <div className="mt-auto flex justify-end gap-3 pt-5">
