@@ -62,10 +62,12 @@ pub async fn forgot_password(
     headers: HeaderMap,
     Json(req): Json<ForgotPasswordRequest>,
 ) -> ApiResult<ForgotPasswordResponse> {
+    let email = req.email.trim();
+
     // Find user
     let user = state
         .user_repo
-        .find_by_email(state.db.pool(), &req.email)
+        .find_by_email(state.db.pool(), email)
         .await
         .map_err(|e| {
             tracing::error!("Database error: {}", e);
@@ -134,8 +136,10 @@ pub async fn reset_password(
     State(state): State<AppState>,
     Json(req): Json<ResetPasswordRequest>,
 ) -> ApiResult<ResetPasswordResponse> {
+    let new_password = req.new_password.trim();
+
     // Validate password
-    if req.new_password.len() < 8 {
+    if new_password.len() < 8 {
         return Err(ApiError::default()
             .with_code(StatusCode::BAD_REQUEST)
             .with_message("Password must be at least 8 characters"));
@@ -180,7 +184,7 @@ pub async fn reset_password(
     state
         .auth_service
         .auth_method_service()
-        .update_password(auth_method.id, &req.new_password)
+        .update_password(auth_method.id, new_password)
         .await
         .map_err(|e| {
             tracing::error!("Failed to update password: {}", e);

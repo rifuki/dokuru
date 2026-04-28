@@ -83,10 +83,12 @@ pub async fn resend_verification(
     State(state): State<AppState>,
     Json(req): Json<ResendVerificationRequest>,
 ) -> ApiResult<VerifyEmailResponse> {
+    let email = req.email.trim();
+
     // Find user
     let user = state
         .user_repo
-        .find_by_email(state.db.pool(), &req.email)
+        .find_by_email(state.db.pool(), email)
         .await
         .map_err(|e| {
             tracing::error!("Database error: {}", e);

@@ -39,16 +39,16 @@ export function RegisterForm() {
 
   // Live username availability check with debounce
   const usernameCheck = useUsernameAvailability(username);
-  
+
   // Live email availability check with debounce
-  const emailCheck = useEmailAvailability(email);
+  const emailCheck = useEmailAvailability(email.trim());
 
   // Track typing state for spinner
   const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     // Only allow lowercase letters, numbers, and underscores (no spaces!)
-    const filtered = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+    const filtered = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "");
     setUsername(filtered);
-    
+
     // Clear previous timer
     if (typingTimerRef.current) {
       clearTimeout(typingTimerRef.current);
@@ -66,14 +66,15 @@ export function RegisterForm() {
   };
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setEmail(e.target.value);
-    
+    const value = e.target.value.trim();
+    setEmail(value);
+
     // Clear previous timer
     if (emailTypingTimerRef.current) {
       clearTimeout(emailTypingTimerRef.current);
     }
-    
-    if (e.target.value.includes('@')) {
+
+    if (value.includes("@")) {
       setIsTypingEmail(true);
       // Reset after debounce time
       emailTypingTimerRef.current = setTimeout(() => {
@@ -87,6 +88,20 @@ export function RegisterForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const trimmedUsername = username.trim();
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+    const trimmedConfirmPassword = confirmPassword.trim();
+
+    setUsername(trimmedUsername);
+    setEmail(trimmedEmail);
+    setPassword(trimmedPassword);
+    setConfirmPassword(trimmedConfirmPassword);
+
+    if (trimmedPassword !== trimmedConfirmPassword) {
+      return;
+    }
+
     // Don't submit if username is taken
     if (usernameCheck.data && !usernameCheck.data.available) {
       return;
@@ -98,10 +113,15 @@ export function RegisterForm() {
     }
 
     // Auto-fill name from username (replace _ with space)
-    const name = username.replace(/[._-]/g, ' ');
+    const name = trimmedUsername.replace(/[._-]/g, " ");
 
     try {
-      await register.mutateAsync({ username, email, password, name });
+      await register.mutateAsync({
+        username: trimmedUsername,
+        email: trimmedEmail,
+        password: trimmedPassword,
+        name,
+      });
     } catch {
       // Error handled by hook
     }
@@ -210,7 +230,7 @@ export function RegisterForm() {
                 type={showPassword ? "text" : "password"}
                 placeholder="Min 8 characters"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => setPassword(e.target.value.trim())}
                 required
                 minLength={8}
                 className="h-11 pr-10 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"
@@ -246,7 +266,7 @@ export function RegisterForm() {
                 type={showConfirmPassword ? "text" : "password"}
                 placeholder="Re-enter password"
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                onChange={(e) => setConfirmPassword(e.target.value.trim())}
                 required
                 minLength={8}
                 className="h-11 pr-10 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"

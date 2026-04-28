@@ -17,8 +17,11 @@ use crate::{
 pub async fn change_password(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
-    Json(req): Json<ChangePasswordRequest>,
+    Json(mut req): Json<ChangePasswordRequest>,
 ) -> ApiResult<()> {
+    req.current_password = req.current_password.trim().to_string();
+    req.new_password = req.new_password.trim().to_string();
+
     // Validate request
     if let Err(e) = req.validate() {
         return Err(ApiError::default()

@@ -28,12 +28,18 @@ function ResetPassword() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (password !== confirmPassword) {
+        const trimmedPassword = password.trim();
+        const trimmedConfirmPassword = confirmPassword.trim();
+
+        setPassword(trimmedPassword);
+        setConfirmPassword(trimmedConfirmPassword);
+
+        if (trimmedPassword !== trimmedConfirmPassword) {
             toast.error("Passwords do not match");
             return;
         }
 
-        if (password.length < 8) {
+        if (trimmedPassword.length < 8) {
             toast.error("Password must be at least 8 characters");
             return;
         }
@@ -48,7 +54,7 @@ function ResetPassword() {
         try {
             await apiClient.post("/auth/reset-password", {
                 token,
-                new_password: password,
+                new_password: trimmedPassword,
             });
             setIsSuccess(true);
         } catch (error: unknown) {
@@ -105,7 +111,7 @@ function ResetPassword() {
                                     type={showPassword ? "text" : "password"}
                                     placeholder="••••••••"
                                     value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
+                                    onChange={(e) => setPassword(e.target.value.trim())}
                                     required
                                     className="h-11 pr-10 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"
                                 />
@@ -133,7 +139,7 @@ function ResetPassword() {
                                     type={showConfirmPassword ? "text" : "password"}
                                     placeholder="••••••••"
                                     value={confirmPassword}
-                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                    onChange={(e) => setConfirmPassword(e.target.value.trim())}
                                     required
                                     className="h-11 pr-10 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"
                                 />

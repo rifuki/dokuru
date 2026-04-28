@@ -19,10 +19,12 @@ function ForgotPassword() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        const trimmedEmail = email.trim();
+        setEmail(trimmedEmail);
         setIsLoading(true);
 
         try {
-            await apiClient.post("/auth/forgot-password", { email });
+            await apiClient.post("/auth/forgot-password", { email: trimmedEmail });
             setIsSuccess(true);
         } catch (error: unknown) {
             const message = error instanceof Error && 'response' in error 
@@ -82,7 +84,7 @@ function ForgotPassword() {
                                     type="email"
                                     placeholder="email@example.com"
                                     value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
+                                    onChange={(e) => setEmail(e.target.value.trim())}
                                     required
                                     className="h-11 pl-10 transition-all focus-visible:ring-2 focus-visible:ring-miku-primary/50"
                                 />

@@ -27,15 +27,23 @@ export function SecuritySettings() {
         e.preventDefault();
         setCurrentPasswordError(null);
 
-        if (newPasswordError || confirmPasswordError || newPassword.length === 0) {
+        const trimmedCurrentPassword = currentPassword.trim();
+        const trimmedNewPassword = newPassword.trim();
+        const trimmedConfirmPassword = confirmPassword.trim();
+
+        setCurrentPassword(trimmedCurrentPassword);
+        setNewPassword(trimmedNewPassword);
+        setConfirmPassword(trimmedConfirmPassword);
+
+        if (trimmedNewPassword.length < 8 || trimmedConfirmPassword !== trimmedNewPassword) {
             return;
         }
 
         setIsSubmitting(true);
         try {
             await apiClient.post('/auth/change-password', {
-                current_password: currentPassword,
-                new_password: newPassword
+                current_password: trimmedCurrentPassword,
+                new_password: trimmedNewPassword
             });
             toast.success("Password changed successfully");
             setCurrentPassword("");
@@ -93,7 +101,7 @@ export function SecuritySettings() {
                             type={showCurrentPassword ? "text" : "password"}
                             value={currentPassword}
                             onChange={(e) => {
-                                setCurrentPassword(e.target.value);
+                                setCurrentPassword(e.target.value.trim());
                                 setCurrentPasswordError(null);
                             }}
                             className={`h-11 bg-muted/40 border-transparent transition-colors focus-visible:ring-1 focus-visible:ring-primary/50 pr-10 hover:bg-muted/60 ${currentPasswordError ? "border-destructive focus-visible:ring-destructive/50" : ""}`}
@@ -127,7 +135,7 @@ export function SecuritySettings() {
                                 id="new-password"
                                 type={showNewPassword ? "text" : "password"}
                                 value={newPassword}
-                                onChange={(e) => handleNewPasswordChange(e.target.value)}
+                                onChange={(e) => handleNewPasswordChange(e.target.value.trim())}
                                 className="h-11 bg-muted/40 border-transparent transition-colors focus-visible:ring-1 focus-visible:ring-primary/50 pr-10 hover:bg-muted/60"
                             />
                             <button
@@ -155,7 +163,7 @@ export function SecuritySettings() {
                             id="confirm-password"
                             type="password"
                             value={confirmPassword}
-                            onChange={(e) => handleConfirmPasswordChange(e.target.value)}
+                            onChange={(e) => handleConfirmPasswordChange(e.target.value.trim())}
                             className={`h-11 bg-muted/40 border-transparent transition-colors focus-visible:ring-1 focus-visible:ring-primary/50 hover:bg-muted/60 ${confirmPasswordError ? "border-destructive focus-visible:ring-destructive/50" : ""}`}
                         />
                         {confirmPasswordError && (

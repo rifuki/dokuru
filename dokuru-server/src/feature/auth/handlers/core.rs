@@ -22,8 +22,13 @@ use crate::{
 pub async fn register(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
-    Json(req): Json<RegisterRequest>,
+    Json(mut req): Json<RegisterRequest>,
 ) -> ApiResult<AuthResponse> {
+    req.email = req.email.trim().to_string();
+    req.password = req.password.trim().to_string();
+    req.username = req.username.map(|username| username.trim().to_string());
+    req.name = req.name.map(|name| name.trim().to_string());
+
     if let Err(e) = req.validate() {
         return Err(ApiError::default()
             .with_code(StatusCode::BAD_REQUEST)
@@ -136,8 +141,11 @@ pub async fn login(
     State(state): State<AppState>,
     jar: CookieJar,
     headers: axum::http::HeaderMap,
-    Json(creds): Json<LoginCredentials>,
+    Json(mut creds): Json<LoginCredentials>,
 ) -> ApiResult<AuthResponse> {
+    creds.username = creds.username.trim().to_string();
+    creds.password = creds.password.trim().to_string();
+
     // Check existing refresh token to avoid concurrent login issues
     if let Some(_cookie) = jar.get(REFRESH_TOKEN_COOKIE) {
         let _ = state.auth_service.logout(None, None).await;

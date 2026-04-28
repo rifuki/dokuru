@@ -7,11 +7,31 @@ import type {
   User,
 } from "@/features/auth/types/auth-types";
 
+function trimLoginCredentials(
+  credentials: LoginCredentials
+): LoginCredentials {
+  return {
+    username: credentials.username.trim(),
+    password: credentials.password.trim(),
+  };
+}
+
+function trimRegisterCredentials(
+  userData: RegisterCredentials
+): RegisterCredentials {
+  return {
+    email: userData.email.trim(),
+    username: userData.username.trim(),
+    password: userData.password.trim(),
+    name: userData.name.trim(),
+  };
+}
+
 export const authService = {
   login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
     const response = await apiClient.post<ApiSuccess<AuthResponse>>(
       API_ENDPOINTS.AUTH.LOGIN,
-      credentials
+      trimLoginCredentials(credentials)
     );
 
     const data = response.data.data;
@@ -25,7 +45,7 @@ export const authService = {
   register: async (userData: RegisterCredentials): Promise<AuthResponse> => {
     const response = await apiClient.post<ApiSuccess<AuthResponse>>(
       API_ENDPOINTS.AUTH.REGISTER,
-      userData
+      trimRegisterCredentials(userData)
     );
 
     const data = response.data.data;
@@ -79,8 +99,8 @@ export const authService = {
 
   changePassword: async (currentPassword: string, newPassword: string): Promise<void> => {
     await apiClient.post(API_ENDPOINTS.AUTH.CHANGE_PASSWORD, {
-      current_password: currentPassword,
-      new_password: newPassword,
+      current_password: currentPassword.trim(),
+      new_password: newPassword.trim(),
     });
   },
 
