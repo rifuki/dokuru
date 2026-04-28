@@ -13,7 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, RefreshCw, Container, Box, HardDrive, Search, ChevronDown, Edit, Trash2, Cpu, Server, Eye, EyeOff, Cloud, Globe, Link2, Loader2, WifiOff, AlertTriangle, ArrowUp, ArrowDown, X } from "lucide-react";
+import { Plus, RefreshCw, Container, Box, HardDrive, Search, ChevronDown, Edit, Trash2, Cpu, Server, Eye, EyeOff, Cloud, Globe, Link2, Loader2, WifiOff, AlertTriangle, ArrowUp, ArrowDown, X, Check, Copy } from "lucide-react";
 import { AddAgentModal } from "@/components/agents/AddAgentModal";
 import { AgentSetupDialog, AGENT_INSTALL_COMMAND } from "@/components/agents/AgentSetupGuide";
 import { agentDirectApi } from "@/lib/api/agent-direct";
@@ -360,6 +360,7 @@ function AgentsList() {
   const { agents, isLoading, fetchAgents, updateAgent, agentInfos, setAgentInfo, setAgentInfoLoading, agentOnlineStatus, agentConnectingStatus, agentConnectionError } = useAgentStore();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSetupGuideOpen, setIsSetupGuideOpen] = useState(false);
+  const [installCommandCopied, setInstallCommandCopied] = useState(false);
 
   // Filter & sort state
   const [search, setSearch]               = useState("");
@@ -376,6 +377,17 @@ function AgentsList() {
   useEffect(() => { fetchAgents(); }, [fetchAgents]);
 
   const handleAgentUpdated = (updated: Agent) => { updateAgent(updated); };
+
+  const copyInstallCommand = async () => {
+    try {
+      await navigator.clipboard.writeText(AGENT_INSTALL_COMMAND);
+      setInstallCommandCopied(true);
+      toast.success("Install command copied");
+      window.setTimeout(() => setInstallCommandCopied(false), 1800);
+    } catch {
+      toast.error("Failed to copy install command");
+    }
+  };
 
   // Initial Docker info fetch — runs once when agents load.
   useEffect(() => {
@@ -550,6 +562,16 @@ function AgentsList() {
                     {AGENT_INSTALL_COMMAND}
                   </code>
                 </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => void copyInstallCommand()}
+                  className="h-7 w-7 shrink-0 text-primary hover:bg-primary/10 hover:text-primary"
+                  title="Copy install command"
+                >
+                  {installCommandCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                </Button>
               </div>
             </div>
           </div>
