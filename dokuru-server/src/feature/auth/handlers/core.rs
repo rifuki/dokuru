@@ -11,6 +11,7 @@ use crate::{
         },
         utils::REFRESH_TOKEN_COOKIE,
     },
+    infrastructure::web::origin::frontend_origin,
     infrastructure::web::response::{
         ApiError, ApiResult, ApiSuccess,
         codes::{auth as auth_codes, validation as val_codes},
@@ -85,11 +86,7 @@ pub async fn register(
     let state_clone = state.clone();
     let email = req.email.clone();
     let user_id = response.user.id;
-    let origin = headers
-        .get("origin")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("http://localhost:5173")
-        .to_string();
+    let origin = frontend_origin(&headers, &state.config);
 
     tokio::spawn(async move {
         let token = uuid::Uuid::new_v4().to_string();

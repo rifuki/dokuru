@@ -1,13 +1,16 @@
 use axum::{
     Json,
     extract::{Query, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    infrastructure::web::response::{ApiError, ApiResult, ApiSuccess},
+    infrastructure::web::{
+        origin::frontend_origin,
+        response::{ApiError, ApiResult, ApiSuccess},
+    },
     state::AppState,
 };
 
@@ -81,6 +84,7 @@ pub struct ResendVerificationRequest {
 
 pub async fn resend_verification(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(req): Json<ResendVerificationRequest>,
 ) -> ApiResult<VerifyEmailResponse> {
     let email = req.email.trim();
@@ -124,8 +128,8 @@ pub async fn resend_verification(
                 .with_message("Failed to send verification email")
         })?;
 
-    // Send email (origin not available here, will fail gracefully)
-    let verification_url = format!("http://localhost:5173/verify-email?token={token}");
+    let origin = frontend_origin(&headers, &state.config);
+    let verification_url = format!("{origin}/verify-email?token={token}");
 
     if let Err(e) = state
         .email_service

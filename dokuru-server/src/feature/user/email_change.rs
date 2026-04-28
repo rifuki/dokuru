@@ -1,10 +1,17 @@
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{
+    Json,
+    extract::State,
+    http::{HeaderMap, StatusCode},
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
     feature::auth::types::AuthUser,
-    infrastructure::web::response::{ApiError, ApiResult, ApiSuccess},
+    infrastructure::web::{
+        origin::frontend_origin,
+        response::{ApiError, ApiResult, ApiSuccess},
+    },
     state::AppState,
 };
 
@@ -21,6 +28,7 @@ pub struct ChangeEmailResponse {
 pub async fn request_email_change(
     State(state): State<AppState>,
     axum::Extension(auth_user): axum::Extension<AuthUser>,
+    headers: HeaderMap,
     Json(req): Json<ChangeEmailRequest>,
 ) -> ApiResult<ChangeEmailResponse> {
     // Validate email format
@@ -76,8 +84,8 @@ pub async fn request_email_change(
                 .with_message("Failed to initiate email change")
         })?;
 
-    // Send verification email to NEW email
-    let verification_url = format!("http://localhost:5173/verify-email-change?token={token}");
+    let origin = frontend_origin(&headers, &state.config);
+    let verification_url = format!("{origin}/verify-email-change?token={token}");
 
     if let Err(e) = state
         .email_service
