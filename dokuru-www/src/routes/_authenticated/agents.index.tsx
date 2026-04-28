@@ -545,9 +545,11 @@ function AgentsList() {
               </div>
               <div className="flex min-w-0 items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 font-mono text-xs shadow-inner xl:w-[560px]">
                 <span className="select-none text-primary">$</span>
-                <code className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-foreground/90">
-                  {AGENT_INSTALL_COMMAND}
-                </code>
+                <div className="min-w-0 flex-1 overflow-x-auto pb-1 [scrollbar-width:thin]">
+                  <code className="block w-max whitespace-nowrap pr-2 text-foreground/90">
+                    {AGENT_INSTALL_COMMAND}
+                  </code>
+                </div>
               </div>
             </div>
           </div>

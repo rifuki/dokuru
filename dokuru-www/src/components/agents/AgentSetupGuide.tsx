@@ -115,9 +115,11 @@ function AgentInstallCommand() {
     return (
         <div className="group flex min-w-0 items-center gap-3 rounded-lg border border-border bg-black/50 p-2 pl-3 font-mono text-sm shadow-inner">
             <span className="select-none text-primary">$</span>
-            <code className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-foreground/90">
-                {AGENT_INSTALL_COMMAND}
-            </code>
+            <div className="min-w-0 flex-1 overflow-x-auto pb-1 [scrollbar-width:thin]">
+                <code className="block w-max whitespace-nowrap pr-2 text-foreground/90">
+                    {AGENT_INSTALL_COMMAND}
+                </code>
+            </div>
             <Button
                 type="button"
                 variant="outline"
