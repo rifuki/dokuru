@@ -61,6 +61,7 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
     const navigate = useNavigate();
     const isAdmin = user?.role === "admin";
     const isAdminRoute = location.pathname === "/admin" || location.pathname.startsWith("/admin/");
+    const isSettingsRoute = location.pathname === "/settings" || location.pathname.startsWith("/settings/");
 
     useEffect(() => {
         if (isLoading) return;
@@ -68,12 +69,12 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
             navigate({ to: "/login", replace: true });
             return;
         }
-        if (isAdmin && !isAdminRoute) {
+        if (isAdmin && !isAdminRoute && !isSettingsRoute) {
             navigate({ to: "/admin", replace: true });
         }
-    }, [isAdmin, isAdminRoute, isAuth, isLoading, navigate]);
+    }, [isAdmin, isAdminRoute, isAuth, isLoading, isSettingsRoute, navigate]);
 
-    if (isLoading || !isAuth || (isAdmin && !isAdminRoute)) return null;
+    if (isLoading || !isAuth || (isAdmin && !isAdminRoute && !isSettingsRoute)) return null;
 
     return <>{children}</>;
 }
