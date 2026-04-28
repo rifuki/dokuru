@@ -4,16 +4,13 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { ChevronDown, Loader2, Plug, PlugZap, RotateCcw, Terminal as TerminalIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import useWebSocket, { ReadyState } from "react-use-websocket";
 
 import { agentApi } from "@/lib/api/agent";
-import { wsApiUrl } from "@/lib/api/api-config";
 import { agentDirectApi } from "@/lib/api/agent-direct";
 import { HOST_SHELLS, normalizeHostShell, type HostShellPath } from "@/lib/host-shell";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/use-auth-store";
-
-type TermStatus = "idle" | "connecting" | "connected" | "disconnected" | "error";
+import { useHostShellSession } from "@/stores/host-shell-session-store";
 
 export function HostShellTerminal({
   agentId,
@@ -30,13 +27,14 @@ export function HostShellTerminal({
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const roRef = useRef<ResizeObserver | null>(null);
+  const lastRenderedChunkIdRef = useRef(0);
   const shellMenuRef = useRef<HTMLDivElement>(null);
   const [termDimensions, setTermDimensions] = useState({ cols: 100, rows: 30 });
   const [selectedShell, setSelectedShell] = useState<HostShellPath>("/bin/sh");
   const [detectedShell, setDetectedShell] = useState<HostShellPath | null>(null);
   const [shellMenuOpen, setShellMenuOpen] = useState(false);
-  const [shouldConnect, setShouldConnect] = useState(false);
   const accessToken = useAuthStore((s) => s.accessToken);
+  const { session, snapshot } = useHostShellSession(agentId);
   const isRelay = accessMode === "relay";
   const availableShells = useMemo<HostShellPath[]>(() => {
     if (detectedShell === "/bin/zsh") return ["/bin/zsh", "/bin/bash", "/bin/sh"];
@@ -44,53 +42,12 @@ export function HostShellTerminal({
     if (detectedShell === "/bin/sh") return ["/bin/sh"];
     return [];
   }, [detectedShell]);
-  const activeShell = availableShells.includes(selectedShell)
+  const activeShell = snapshot.status === "connected" || snapshot.status === "connecting"
+    ? snapshot.shell
+    : availableShells.includes(selectedShell)
     ? selectedShell
     : availableShells[0] ?? "/bin/sh";
-
-  const wsUrl = useMemo(() => {
-    if (!shouldConnect || detectedShell === null) return null;
-    const params = new URLSearchParams({
-      cols: String(termDimensions.cols),
-      rows: String(termDimensions.rows),
-      shell: activeShell,
-    });
-
-    if (isRelay) {
-      if (!accessToken) return null;
-      params.set("access_token", accessToken);
-      return `${wsApiUrl}/agents/${agentId}/host/shell/stream?${params.toString()}`;
-    }
-
-    if (!agentUrl || !token) return null;
-    params.set("token", token);
-    return `${agentUrl.replace(/^http/, "ws")}/host/shell/stream?${params.toString()}`;
-  }, [accessToken, activeShell, agentId, agentUrl, detectedShell, isRelay, shouldConnect, termDimensions, token]);
-
-  const { sendMessage, lastMessage, readyState, getWebSocket } = useWebSocket(wsUrl, {
-    shouldReconnect: () => false,
-    reconnectAttempts: 0,
-    reconnectInterval: 0,
-    retryOnError: false,
-    share: false,
-    onOpen: () => {
-      if (termRef.current) termRef.current.options.disableStdin = false;
-      const ws = getWebSocket();
-      if (ws && "binaryType" in ws) ws.binaryType = "arraybuffer";
-    },
-    onClose: () => {
-      if (termRef.current) termRef.current.options.disableStdin = true;
-    },
-    onError: () => {
-      if (termRef.current) termRef.current.options.disableStdin = true;
-    },
-  }, wsUrl !== null);
-
-  const status: TermStatus = readyState === ReadyState.OPEN ? "connected"
-    : readyState === ReadyState.CONNECTING ? "connecting"
-    : readyState === ReadyState.UNINSTANTIATED ? "idle"
-    : readyState === ReadyState.CLOSED ? "disconnected"
-    : "error";
+  const status = snapshot.status;
 
   useEffect(() => {
     const detect = isRelay
@@ -126,75 +83,90 @@ export function HostShellTerminal({
     termRef.current?.dispose();
     termRef.current = null;
     fitRef.current = null;
-    setShouldConnect(false);
   }, []);
 
-  const startTerminal = useCallback(() => {
-    if (!wrapperRef.current || detectedShell === null) return;
-    disposeTerminal();
+  useEffect(() => {
+    if (!wrapperRef.current) return;
+    const current = session.getSnapshot();
 
-    queueMicrotask(() => {
-      if (!wrapperRef.current) return;
-      const term = new Terminal({
-        cursorBlink: true,
-        fontSize: 13,
-        fontFamily: '"Cascadia Code", "Fira Code", monospace',
-        theme: { background: "#0d1117", foreground: "#c9d1d9", cursor: "#58a6ff" },
-        scrollback: 8000,
-      });
-      const fit = new FitAddon();
-      term.loadAddon(fit);
-      term.open(wrapperRef.current);
-      fit.fit();
-      termRef.current = term;
-      fitRef.current = fit;
-      setTermDimensions({ cols: term.cols, rows: term.rows });
-
-      const ro = new ResizeObserver(() => {
-        fit.fit();
-        queueMicrotask(() => setTermDimensions({ cols: term.cols, rows: term.rows }));
-      });
-      ro.observe(wrapperRef.current);
-      roRef.current = ro;
-      setShouldConnect(true);
+    const term = new Terminal({
+      cursorBlink: true,
+      fontSize: 13,
+      fontFamily: '"Cascadia Code", "Fira Code", monospace',
+      theme: { background: "#0d1117", foreground: "#c9d1d9", cursor: "#58a6ff" },
+      scrollback: 8000,
+      disableStdin: current.status !== "connected",
     });
-  }, [detectedShell, disposeTerminal]);
+    const fit = new FitAddon();
+    term.loadAddon(fit);
+    term.open(wrapperRef.current);
+    fit.fit();
+    termRef.current = term;
+    fitRef.current = fit;
+    setTermDimensions({ cols: term.cols, rows: term.rows });
+
+    current.chunks.forEach((chunk) => term.write(chunk.data));
+    lastRenderedChunkIdRef.current = current.chunks.at(-1)?.id ?? 0;
+
+    const dataDisposable = term.onData((data) => {
+      if (session.getSnapshot().status === "connected") session.send(new TextEncoder().encode(data));
+    });
+    const resizeDisposable = term.onResize(({ cols, rows }) => {
+      setTermDimensions({ cols, rows });
+      if (session.getSnapshot().status === "connected") session.resize(cols, rows);
+    });
+
+    const ro = new ResizeObserver(() => {
+      fit.fit();
+      queueMicrotask(() => {
+        setTermDimensions({ cols: term.cols, rows: term.rows });
+        if (session.getSnapshot().status === "connected") session.resize(term.cols, term.rows);
+      });
+    });
+    ro.observe(wrapperRef.current);
+    roRef.current = ro;
+
+    return () => {
+      dataDisposable.dispose();
+      resizeDisposable.dispose();
+      disposeTerminal();
+    };
+  }, [agentId, disposeTerminal, session]);
+
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+
+    for (const chunk of snapshot.chunks) {
+      if (chunk.id > lastRenderedChunkIdRef.current) {
+        term.write(chunk.data);
+        lastRenderedChunkIdRef.current = chunk.id;
+      }
+    }
+
+    term.options.disableStdin = snapshot.status !== "connected";
+  }, [snapshot.chunks, snapshot.status]);
+
+  const startTerminal = useCallback(() => {
+    if (detectedShell === null) return;
+    const cols = termRef.current?.cols ?? termDimensions.cols;
+    const rows = termRef.current?.rows ?? termDimensions.rows;
+
+    session.connect({
+      agentId,
+      agentUrl,
+      accessMode,
+      token,
+      accessToken,
+      shell: activeShell,
+      cols,
+      rows,
+    });
+  }, [accessMode, accessToken, activeShell, agentId, agentUrl, detectedShell, session, termDimensions, token]);
 
   const disconnect = useCallback(() => {
-    if (termRef.current) {
-      termRef.current.write("\r\n\x1b[33mDokuru host shell disconnected\x1b[0m\r\n");
-      termRef.current.options.disableStdin = true;
-    }
-    if (readyState === ReadyState.OPEN) {
-      sendMessage(new TextEncoder().encode("exit\n"));
-      setTimeout(() => getWebSocket()?.close(), 100);
-    }
-    setShouldConnect(false);
-  }, [getWebSocket, readyState, sendMessage]);
-
-  useEffect(() => disposeTerminal, [disposeTerminal]);
-
-  useEffect(() => {
-    if (!termRef.current) return;
-    const disposable = termRef.current.onData((data) => {
-      if (readyState === ReadyState.OPEN) sendMessage(new TextEncoder().encode(data));
-    });
-    return () => disposable.dispose();
-  }, [readyState, sendMessage]);
-
-  useEffect(() => {
-    if (!termRef.current) return;
-    const disposable = termRef.current.onResize(({ cols, rows }) => {
-      if (readyState === ReadyState.OPEN) sendMessage(JSON.stringify({ type: "resize", cols, rows }));
-    });
-    return () => disposable.dispose();
-  }, [readyState, sendMessage]);
-
-  useEffect(() => {
-    if (!lastMessage || !termRef.current) return;
-    const data = lastMessage.data instanceof ArrayBuffer ? new Uint8Array(lastMessage.data) : lastMessage.data;
-    termRef.current.write(data);
-  }, [lastMessage]);
+    session.disconnect();
+  }, [session]);
 
   const isConnected = status === "connected";
   const isConnecting = status === "connecting";
@@ -282,12 +254,12 @@ export function HostShellTerminal({
 
       <div className="relative bg-[#0d1117] p-2">
         <div ref={wrapperRef} className="h-[68vh] min-h-[420px] rounded-lg" />
-        {!shouldConnect && (
+        {snapshot.status === "idle" && snapshot.chunks.length === 0 && (
           <div className="absolute inset-2 flex items-center justify-center rounded-lg border border-dashed border-white/10 bg-[#0d1117] text-center">
             <div className="space-y-2 px-4">
               <TerminalIcon className="mx-auto h-8 w-8 text-[#2496ED]" />
               <p className="text-sm font-semibold text-white">Host shell is disconnected</p>
-              <p className="max-w-md text-xs text-white/50">Connect only during trusted demos. This opens an interactive shell on the agent host.</p>
+              <p className="max-w-md text-xs text-white/50">Connect only during trusted demos. The shell keeps running in the background while you navigate this app.</p>
             </div>
           </div>
         )}
