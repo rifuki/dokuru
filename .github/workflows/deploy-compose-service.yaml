@@ -53,8 +53,7 @@ jobs:
   deploy:
     name: Deploy Compose Stack
     if: >-
-      (github.event_name == 'workflow_dispatch' && inputs.run_compose_up) ||
-      github.event_name == 'workflow_call'
+      github.event_name != 'workflow_dispatch' || inputs.run_compose_up
     runs-on: ubuntu-latest
     environment: production
     env:
@@ -138,7 +137,6 @@ jobs:
 
           docker compose config --quiet
           docker compose pull
-          docker compose down -v
-          docker compose up -d
+          docker compose up -d --force-recreate
           docker compose ps
           REMOTE
