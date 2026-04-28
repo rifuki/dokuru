@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import { decompressFrames, parseGIF, type ParsedFrame } from "gifuct-js";
+import { GIFEncoder, applyPalette, quantize } from "gifenc";
 import ReactCrop, {
   centerCrop,
   convertToPixelCrop,
@@ -46,17 +48,21 @@ const AVATAR_OUTPUT_SIZE = 512;
 const AVATAR_SOURCE_MAX_SIZE_MB = 20;
 const AVATAR_EXPORT_TYPE = "image/webp";
 const AVATAR_EXPORT_QUALITY = 0.9;
+const GIF_EXPORT_TYPE = "image/gif";
+const GIF_PALETTE_FORMAT = "rgba4444";
 
 const blobExtensionByType: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",
   "image/webp": "webp",
+  "image/gif": "gif",
 };
 
 const fileTypeLabels: Record<string, string> = {
   "image/jpeg": "JPEG",
   "image/png": "PNG",
   "image/webp": "WebP",
+  "image/gif": "GIF",
 };
 
 function formatList(items: string[]) {
@@ -91,6 +97,41 @@ function getCenteredAvatarCrop(width: number, height: number) {
   );
 }
 
+function getAvatarSourceCrop(image: HTMLImageElement, crop: PixelCrop) {
+  const scaleX = image.naturalWidth / image.width;
+  const scaleY = image.naturalHeight / image.height;
+  const x = Math.max(0, crop.x * scaleX);
+  const y = Math.max(0, crop.y * scaleY);
+
+  return {
+    x,
+    y,
+    width: Math.min(image.naturalWidth - x, crop.width * scaleX),
+    height: Math.min(image.naturalHeight - y, crop.height * scaleY),
+  };
+}
+
+function drawCroppedAvatar(
+  ctx: CanvasRenderingContext2D,
+  source: CanvasImageSource,
+  crop: ReturnType<typeof getAvatarSourceCrop>
+) {
+  ctx.clearRect(0, 0, AVATAR_OUTPUT_SIZE, AVATAR_OUTPUT_SIZE);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(
+    source,
+    crop.x,
+    crop.y,
+    crop.width,
+    crop.height,
+    0,
+    0,
+    AVATAR_OUTPUT_SIZE,
+    AVATAR_OUTPUT_SIZE
+  );
+}
+
 export function ImageUploadModal({
   isOpen,
   onClose,
@@ -98,7 +139,7 @@ export function ImageUploadModal({
   title = "Upload Image",
   description = "Select an image to upload. Maximum file size is 5MB.",
   maxSizeMB = 5,
-  acceptedTypes = ['image/jpeg', 'image/png', 'image/webp'],
+  acceptedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
   isAvatar = false,
 }: ImageUploadModalProps) {
   const [status, setStatus] = useState<ModalStatus>('idle');
@@ -212,10 +253,15 @@ export function ImageUploadModal({
     setCompletedAvatarCrop(convertToPixelCrop(nextCrop, image.width, image.height));
   };
 
-  const createAvatarFile = async (sourceFile: File) => {
+  const createStaticAvatarFile = async (sourceFile: File) => {
     const image = avatarImageRef.current;
     const crop = completedAvatarCrop;
     if (!image || !crop?.width || !crop?.height) {
+      throw new Error("Failed to crop image");
+    }
+
+    const sourceCrop = getAvatarSourceCrop(image, crop);
+    if (sourceCrop.width <= 0 || sourceCrop.height <= 0) {
       throw new Error("Failed to crop image");
     }
 
@@ -228,21 +274,7 @@ export function ImageUploadModal({
       throw new Error("Failed to prepare cropped image");
     }
 
-    const scaleX = image.naturalWidth / image.width;
-    const scaleY = image.naturalHeight / image.height;
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(
-      image,
-      crop.x * scaleX,
-      crop.y * scaleY,
-      crop.width * scaleX,
-      crop.height * scaleY,
-      0,
-      0,
-      AVATAR_OUTPUT_SIZE,
-      AVATAR_OUTPUT_SIZE
-    );
+    drawCroppedAvatar(ctx, image, sourceCrop);
 
     const blob = await canvasToBlob(canvas, AVATAR_EXPORT_TYPE, AVATAR_EXPORT_QUALITY);
     if (blob.size > maxSizeBytes) {
@@ -256,6 +288,114 @@ export function ImageUploadModal({
       type: blob.type || AVATAR_EXPORT_TYPE,
       lastModified: Date.now(),
     });
+  };
+
+  const createAnimatedGifAvatarFile = async (sourceFile: File) => {
+    const image = avatarImageRef.current;
+    const crop = completedAvatarCrop;
+    if (!image || !crop?.width || !crop?.height) {
+      throw new Error("Failed to crop image");
+    }
+
+    const sourceCrop = getAvatarSourceCrop(image, crop);
+    if (sourceCrop.width <= 0 || sourceCrop.height <= 0) {
+      throw new Error("Failed to crop image");
+    }
+
+    const parsedGif = parseGIF(await sourceFile.arrayBuffer());
+    const frames = decompressFrames(parsedGif, true);
+    if (!frames.length) {
+      throw new Error("Failed to read animated GIF");
+    }
+
+    const gifCanvas = document.createElement("canvas");
+    gifCanvas.width = parsedGif.lsd.width;
+    gifCanvas.height = parsedGif.lsd.height;
+
+    const gifCtx = gifCanvas.getContext("2d");
+    if (!gifCtx) {
+      throw new Error("Failed to prepare animated GIF");
+    }
+
+    const patchCanvas = document.createElement("canvas");
+    const patchCtx = patchCanvas.getContext("2d");
+    const outputCanvas = document.createElement("canvas");
+    outputCanvas.width = AVATAR_OUTPUT_SIZE;
+    outputCanvas.height = AVATAR_OUTPUT_SIZE;
+    const outputCtx = outputCanvas.getContext("2d", { willReadFrequently: true });
+
+    if (!patchCtx || !outputCtx) {
+      throw new Error("Failed to prepare animated GIF");
+    }
+
+    const gif = GIFEncoder();
+    let previousFrame: ParsedFrame | null = null;
+    let restoreImageData: ImageData | null = null;
+
+    for (const frame of frames) {
+      if (previousFrame?.disposalType === 2) {
+        gifCtx.clearRect(
+          previousFrame.dims.left,
+          previousFrame.dims.top,
+          previousFrame.dims.width,
+          previousFrame.dims.height
+        );
+      } else if (previousFrame?.disposalType === 3 && restoreImageData) {
+        gifCtx.putImageData(restoreImageData, previousFrame.dims.left, previousFrame.dims.top);
+      }
+
+      restoreImageData = frame.disposalType === 3
+        ? gifCtx.getImageData(frame.dims.left, frame.dims.top, frame.dims.width, frame.dims.height)
+        : null;
+
+      patchCanvas.width = frame.dims.width;
+      patchCanvas.height = frame.dims.height;
+      const patchImageData = patchCtx.createImageData(frame.dims.width, frame.dims.height);
+      patchImageData.data.set(frame.patch);
+      patchCtx.putImageData(patchImageData, 0, 0);
+      gifCtx.drawImage(patchCanvas, frame.dims.left, frame.dims.top);
+
+      drawCroppedAvatar(outputCtx, gifCanvas, sourceCrop);
+      const imageData = outputCtx.getImageData(0, 0, AVATAR_OUTPUT_SIZE, AVATAR_OUTPUT_SIZE);
+      const palette = quantize(imageData.data, 256, {
+        format: GIF_PALETTE_FORMAT,
+        oneBitAlpha: true,
+      });
+      const index = applyPalette(imageData.data, palette, GIF_PALETTE_FORMAT);
+      const transparentIndex = palette.findIndex((color) => (color[3] ?? 255) < 128);
+
+      gif.writeFrame(index, AVATAR_OUTPUT_SIZE, AVATAR_OUTPUT_SIZE, {
+        palette,
+        delay: frame.delay || 100,
+        repeat: 0,
+        transparent: transparentIndex >= 0,
+        transparentIndex: transparentIndex >= 0 ? transparentIndex : 0,
+        dispose: transparentIndex >= 0 ? 2 : 1,
+      });
+
+      previousFrame = frame;
+    }
+
+    gif.finish();
+
+    const blob = new Blob([gif.bytes()], { type: GIF_EXPORT_TYPE });
+    if (blob.size > maxSizeBytes) {
+      throw new Error(`Cropped file is still too large. Maximum size: ${maxSizeMB}MB`);
+    }
+
+    const basename = sourceFile.name.replace(/\.[^.]+$/, "") || "avatar";
+    return new File([blob], `${basename}-avatar.gif`, {
+      type: GIF_EXPORT_TYPE,
+      lastModified: Date.now(),
+    });
+  };
+
+  const createAvatarFile = async (sourceFile: File) => {
+    if (sourceFile.type === GIF_EXPORT_TYPE) {
+      return createAnimatedGifAvatarFile(sourceFile);
+    }
+
+    return createStaticAvatarFile(sourceFile);
   };
 
   const handleUpload = async () => {
@@ -397,6 +537,28 @@ export function ImageUploadModal({
                     />
                   )}
 
+                  {isBusy && (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60 px-6 text-white backdrop-blur-[1px]">
+                      {status === 'uploading' ? (
+                        <div className="w-full max-w-56 space-y-3 text-center">
+                          <div className="flex items-center justify-center gap-2 text-sm font-medium">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>Uploading... {progress}%</span>
+                          </div>
+                          <Progress
+                            value={progress}
+                            className="h-1.5 bg-white/25 [&_[data-slot=progress-indicator]]:bg-white"
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center gap-2 text-sm font-medium animate-in zoom-in fade-in duration-300">
+                          <CheckCircle2 className="h-5 w-5" />
+                          <span>Upload successful</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Edit Overlay (Shown on Hover when previewing) */}
                   {status === 'preview' && !isAvatar && (
                     <div
@@ -410,24 +572,6 @@ export function ImageUploadModal({
                     </div>
                   )}
                 </div>
-
-                {/* Upload Progress Indicator beneath the image */}
-                {status === 'uploading' && (
-                  <div className="w-full max-w-[12rem] space-y-2 mt-2">
-                    <p className="text-center text-sm font-medium animate-pulse">Uploading... {progress}%</p>
-                    <Progress value={progress} className="h-2 w-full" />
-                  </div>
-                )}
-
-                {/* Success Message beneath the image */}
-                {status === 'success' && (
-                  <div className="w-full flex-col items-center space-y-1 mt-2 animate-in zoom-in fade-in duration-300">
-                    <div className="flex items-center justify-center gap-2 text-primary font-medium">
-                      <CheckCircle2 className="h-5 w-5" />
-                      <span>Upload successful!</span>
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div className={cn(
