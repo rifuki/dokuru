@@ -5,7 +5,6 @@ import type { User } from "@/features/auth/types/auth-types";
 export interface UpdateUserData {
   name?: string;
   username?: string;
-  email?: string;
 }
 
 export const userService = {

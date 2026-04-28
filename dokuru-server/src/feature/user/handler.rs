@@ -53,13 +53,13 @@ pub async fn update_me(
             .with_message(format!("Validation error: {e}")));
     }
 
-    // Update user (email, username)
+    // Email changes must go through the dedicated verification flow.
     let user = state
         .user_repo
         .update(
             state.db.pool(),
             auth_user.user_id,
-            req.email.as_deref(),
+            None,
             req.username.as_deref(),
         )
         .await

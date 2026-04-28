@@ -92,12 +92,19 @@ pub async fn register(
         let token = uuid::Uuid::new_v4().to_string();
         let expires_at = chrono::Utc::now() + chrono::Duration::hours(24);
 
-        if let Err(e) = state_clone
+        let token_set = match state_clone
             .user_repo
             .set_verification_token(state_clone.db.pool(), user_id, &token, expires_at)
             .await
         {
-            tracing::error!("Failed to set verification token: {}", e);
+            Ok(token_set) => token_set,
+            Err(e) => {
+                tracing::error!("Failed to set verification token: {}", e);
+                return;
+            }
+        };
+
+        if !token_set {
             return;
         }
 

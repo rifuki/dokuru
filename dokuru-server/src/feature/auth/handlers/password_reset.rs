@@ -85,6 +85,12 @@ pub async fn forgot_password(
 
     let user = user.unwrap();
 
+    if !user.email_verified {
+        return Ok(ApiSuccess::default().with_data(ForgotPasswordResponse {
+            message: "If the email exists, a reset link has been sent".to_string(),
+        }));
+    }
+
     // Generate token
     let token = Uuid::new_v4().to_string();
     let expires_at = chrono::Utc::now() + chrono::Duration::hours(1);

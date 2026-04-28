@@ -5,6 +5,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use validator::Validate;
 
 use crate::{
     feature::auth::types::AuthUser,
@@ -15,8 +16,9 @@ use crate::{
     state::AppState,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Validate)]
 pub struct ChangeEmailRequest {
+    #[validate(email(message = "Invalid email format"))]
     new_email: String,
 }
 
@@ -29,13 +31,14 @@ pub async fn request_email_change(
     State(state): State<AppState>,
     axum::Extension(auth_user): axum::Extension<AuthUser>,
     headers: HeaderMap,
-    Json(req): Json<ChangeEmailRequest>,
+    Json(mut req): Json<ChangeEmailRequest>,
 ) -> ApiResult<ChangeEmailResponse> {
-    // Validate email format
-    if !req.new_email.contains('@') {
+    req.new_email = req.new_email.trim().to_string();
+
+    if let Err(e) = req.validate() {
         return Err(ApiError::default()
             .with_code(StatusCode::BAD_REQUEST)
-            .with_message("Invalid email format"));
+            .with_message(format!("Validation error: {e}")));
     }
 
     // Check if new email is same as current

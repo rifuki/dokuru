@@ -43,7 +43,4 @@ pub struct UpdateProfileRequest {
         message = "Username must be between 3 and 50 characters"
     ))]
     pub username: Option<String>,
-
-    #[validate(email(message = "Invalid email format"))]
-    pub email: Option<String>,
 }

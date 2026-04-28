@@ -41,6 +41,7 @@ export function ProfileSettings() {
     const [name, setName] = useState("");
     const [username, setUsername] = useState("");
     const [email, setEmail] = useState("");
+    const [verificationSentEmail, setVerificationSentEmail] = useState<string | null>(null);
 
     // Sync form fields only when user ID changes (initial load), not on every render
     const [initializedId, setInitializedId] = useState<string | null>(null);
@@ -48,6 +49,7 @@ export function ProfileSettings() {
         setName(user.name || "");
         setUsername(user.username || "");
         setEmail(user.email || "");
+        setVerificationSentEmail(null);
         setInitializedId(user.id.toString());
     }
 
@@ -107,16 +109,36 @@ export function ProfileSettings() {
         }
     };
 
-    const handleResendVerification = async () => {
+    const getErrorMessage = (error: unknown) => error instanceof Error && 'response' in error
+        ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+        : undefined;
+
+    const handleSendVerification = async () => {
+        const targetEmail = email.trim();
+        if (!targetEmail) {
+            toast.error("Email address is required");
+            return;
+        }
+
+        if (targetEmail !== user.email) {
+            try {
+                await changeEmail(targetEmail);
+                setEmail(targetEmail);
+                setVerificationSentEmail(targetEmail);
+                toast.success(`Verification email sent to ${targetEmail}. Check your inbox to confirm the change.`);
+            } catch (error: unknown) {
+                toast.error(getErrorMessage(error) || "Failed to send verification email");
+            }
+            return;
+        }
+
         setIsResendingVerification(true);
         try {
             await apiClient.post('/auth/resend-verification', { email: user.email });
             toast.success("Verification email sent! Check your inbox.");
         } catch (error: unknown) {
-            const msg = error instanceof Error && 'response' in error 
-                ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
-                : undefined;
-            
+            const msg = getErrorMessage(error);
+
             if (msg === "Email already verified") {
                 // Refresh user data
                 queryClient.invalidateQueries({ queryKey: settingsKeys.profile() });
@@ -133,16 +155,16 @@ export function ProfileSettings() {
         e.preventDefault();
         
         // Handle email change separately
-        if (email !== user.email) {
+        const nextEmail = email.trim();
+        if (nextEmail !== user.email && verificationSentEmail !== nextEmail) {
             try {
-                await changeEmail(email);
-                toast.success(`Verification email sent to ${email}. Check your inbox to confirm the change.`);
-                setEmail(user.email);
+                await changeEmail(nextEmail);
+                toast.success(`Verification email sent to ${nextEmail}. Check your inbox to confirm the change.`);
+                setEmail(nextEmail);
+                setVerificationSentEmail(nextEmail);
                 queryClient.invalidateQueries({ queryKey: settingsKeys.profile() });
             } catch (error: unknown) {
-                const msg = error instanceof Error && 'response' in error 
-                    ? (error as { response?: { data?: { message?: string } } }).response?.data?.message 
-                    : undefined;
+                const msg = getErrorMessage(error);
                 toast.error(msg || "Failed to initiate email change");
             }
             return;
@@ -167,10 +189,15 @@ export function ProfileSettings() {
         }
     };
 
+    const normalizedEmail = email.trim();
+    const isEmailChanged = normalizedEmail !== user.email;
+    const hasPendingEmailVerification = isEmailChanged && verificationSentEmail === normalizedEmail;
+    const verificationButtonLabel = isEmailChanged && !hasPendingEmailVerification ? "Send" : "Resend";
     const isProfileChanged =
         name !== user.name ||
         username !== (user.username || "") ||
-        email !== user.email;
+        (isEmailChanged && !hasPendingEmailVerification);
+    const isSendingVerification = isResendingVerification || isChangingEmail;
 
     return (
         <div className="space-y-10 animate-fade-in">
@@ -315,27 +342,27 @@ export function ProfileSettings() {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 placeholder="your@email.com"
-                                disabled={!user.email_verified}
+                                disabled={isSendingVerification}
                                 className="h-11 bg-muted/40 border-transparent transition-colors focus-visible:ring-1 focus-visible:ring-primary/50 hover:bg-muted/60 disabled:opacity-70 disabled:cursor-not-allowed pr-24"
                             />
                             {!user.email_verified && (
                                 <button
                                     type="button"
-                                    onClick={handleResendVerification}
-                                    disabled={isResendingVerification}
+                                    onClick={handleSendVerification}
+                                    disabled={isSendingVerification}
                                     className="absolute right-2 top-1/2 -translate-y-1/2 h-7 px-3 text-[12px] font-medium rounded-md bg-muted hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 flex items-center gap-1.5"
                                 >
-                                    {isResendingVerification ? (
+                                    {isSendingVerification ? (
                                         <Loader2 className="h-3 w-3 animate-spin" />
                                     ) : (
-                                        <><RefreshCw className="h-3 w-3" />Resend</>
+                                        <><RefreshCw className="h-3 w-3" />{verificationButtonLabel}</>
                                     )}
                                 </button>
                             )}
                         </div>
                         <p className="text-[13px] text-muted-foreground mt-1">
                             {!user.email_verified
-                                ? "Verify your email to enable editing and notifications."
+                                ? "Fix the address if needed, then send a verification email."
                                 : "We use this for authentication and notifications."
                             }
                         </p>

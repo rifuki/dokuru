@@ -359,7 +359,7 @@ impl UserRepository for UserRepositoryImpl {
         expires_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<bool, sqlx::Error> {
         let result = sqlx::query(
-            "UPDATE users SET verification_token = $2, verification_token_expires_at = $3, updated_at = NOW() WHERE id = $1"
+            "UPDATE users SET verification_token = $2, verification_token_expires_at = $3, pending_email = NULL, pending_email_token = NULL, pending_email_token_expires_at = NULL, updated_at = NOW() WHERE id = $1 AND (pending_email IS NULL OR pending_email_token_expires_at <= NOW())"
         )
         .bind(id)
         .bind(token)
@@ -375,8 +375,8 @@ impl UserRepository for UserRepositoryImpl {
         token: &str,
     ) -> Result<bool, sqlx::Error> {
         let result = sqlx::query(
-            "UPDATE users SET email_verified = true, verification_token = NULL, verification_token_expires_at = NULL, updated_at = NOW() 
-             WHERE verification_token = $1 AND verification_token_expires_at > NOW()"
+            "UPDATE users SET email_verified = true, verification_token = NULL, verification_token_expires_at = NULL, pending_email = NULL, pending_email_token = NULL, pending_email_token_expires_at = NULL, updated_at = NOW() 
+             WHERE verification_token = $1 AND verification_token_expires_at > NOW() AND (pending_email IS NULL OR pending_email_token_expires_at <= NOW())"
         )
         .bind(token)
         .execute(pool)
@@ -435,7 +435,7 @@ impl UserRepository for UserRepositoryImpl {
         expires_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<bool, sqlx::Error> {
         let result = sqlx::query(
-            "UPDATE users SET pending_email = $2, pending_email_token = $3, pending_email_token_expires_at = $4, updated_at = NOW() WHERE id = $1"
+            "UPDATE users SET pending_email = $2, pending_email_token = $3, pending_email_token_expires_at = $4, verification_token = NULL, verification_token_expires_at = NULL, updated_at = NOW() WHERE id = $1"
         )
         .bind(user_id)
         .bind(new_email)
@@ -448,7 +448,7 @@ impl UserRepository for UserRepositoryImpl {
 
     async fn verify_pending_email(&self, pool: &PgPool, token: &str) -> Result<bool, sqlx::Error> {
         let result = sqlx::query(
-            "UPDATE users SET email = pending_email, pending_email = NULL, pending_email_token = NULL, pending_email_token_expires_at = NULL, updated_at = NOW() 
+            "UPDATE users SET email = pending_email, email_verified = true, verification_token = NULL, verification_token_expires_at = NULL, pending_email = NULL, pending_email_token = NULL, pending_email_token_expires_at = NULL, updated_at = NOW() 
              WHERE pending_email_token = $1 AND pending_email_token_expires_at > NOW()"
         )
         .bind(token)

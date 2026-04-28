@@ -117,7 +117,7 @@ pub async fn resend_verification(
     let expires_at = chrono::Utc::now() + chrono::Duration::hours(24);
 
     // Save token
-    state
+    let token_set = state
         .user_repo
         .set_verification_token(state.db.pool(), user.id, &token, expires_at)
         .await
@@ -127,6 +127,12 @@ pub async fn resend_verification(
                 .with_code(StatusCode::INTERNAL_SERVER_ERROR)
                 .with_message("Failed to send verification email")
         })?;
+
+    if !token_set {
+        return Err(ApiError::default()
+            .with_code(StatusCode::BAD_REQUEST)
+            .with_message("A newer email address is pending verification"));
+    }
 
     let origin = frontend_origin(&headers, &state.config);
     let verification_url = format!("{origin}/verify-email?token={token}");
