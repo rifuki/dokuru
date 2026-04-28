@@ -15,7 +15,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Camera, Loader2, AlertCircle, RefreshCw } from "lucide-react";
+import { Camera, Loader2, AlertCircle, Send } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { LoadingDots } from "@/components/ui/loading-dots";
@@ -23,8 +23,10 @@ import { useProfile, settingsKeys } from "@/features/settings/hooks/use-profile"
 import { useUpdateProfile } from "@/features/settings/hooks/use-update-profile";
 import { useEmailChange } from "@/features/settings/hooks/use-email-change";
 import { useAuthStore } from "@/stores/use-auth-store";
-import { getAvatarUrl } from "@/lib/utils";
+import { cn, getAvatarUrl } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function ProfileSettings() {
     const queryClient = useQueryClient();
@@ -121,57 +123,49 @@ export function ProfileSettings() {
             return;
         }
 
-        if (targetEmail !== user.email) {
+        if (!EMAIL_PATTERN.test(targetEmail)) {
+            toast.error("Enter a valid email address");
+            return;
+        }
+
+        const isCurrentEmail = targetEmail.toLowerCase() === user.email.trim().toLowerCase();
+        if (isCurrentEmail && user.email_verified) {
+            return;
+        }
+
+        if (isCurrentEmail) {
+            setIsResendingVerification(true);
             try {
-                await changeEmail(targetEmail);
-                setEmail(targetEmail);
-                setVerificationSentEmail(targetEmail);
-                toast.success(`Verification email sent to ${targetEmail}. Check your inbox to confirm the change.`);
+                await apiClient.post('/auth/resend-verification', { email: user.email });
+                toast.success("Verification email sent! Check your inbox.");
             } catch (error: unknown) {
-                toast.error(getErrorMessage(error) || "Failed to send verification email");
+                const msg = getErrorMessage(error);
+
+                if (msg === "Email already verified") {
+                    queryClient.invalidateQueries({ queryKey: settingsKeys.profile() });
+                    toast.success("Email is already verified!");
+                } else {
+                    toast.error(msg || "Failed to send verification email");
+                }
+            } finally {
+                setIsResendingVerification(false);
             }
             return;
         }
 
-        setIsResendingVerification(true);
         try {
-            await apiClient.post('/auth/resend-verification', { email: user.email });
-            toast.success("Verification email sent! Check your inbox.");
+            await changeEmail(targetEmail);
+            setEmail(targetEmail);
+            setVerificationSentEmail(targetEmail);
+            toast.success(`Verification email sent to ${targetEmail}. Check your inbox to confirm the change.`);
         } catch (error: unknown) {
-            const msg = getErrorMessage(error);
-
-            if (msg === "Email already verified") {
-                // Refresh user data
-                queryClient.invalidateQueries({ queryKey: settingsKeys.profile() });
-                toast.success("Email is already verified!");
-            } else {
-                toast.error(msg || "Failed to send verification email");
-            }
-        } finally {
-            setIsResendingVerification(false);
+            toast.error(getErrorMessage(error) || "Failed to send verification email");
         }
     };
 
     const handleProfileSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        
-        // Handle email change separately
-        const nextEmail = email.trim();
-        if (nextEmail !== user.email && verificationSentEmail !== nextEmail) {
-            try {
-                await changeEmail(nextEmail);
-                toast.success(`Verification email sent to ${nextEmail}. Check your inbox to confirm the change.`);
-                setEmail(nextEmail);
-                setVerificationSentEmail(nextEmail);
-                queryClient.invalidateQueries({ queryKey: settingsKeys.profile() });
-            } catch (error: unknown) {
-                const msg = getErrorMessage(error);
-                toast.error(msg || "Failed to initiate email change");
-            }
-            return;
-        }
 
-        // Handle other updates
         const updates: { name?: string; username?: string } = {};
         if (name !== user.name) updates.name = name;
         if (username !== user.username) updates.username = username;
@@ -191,14 +185,14 @@ export function ProfileSettings() {
     };
 
     const normalizedEmail = email.trim();
-    const isEmailChanged = normalizedEmail !== user.email;
+    const loadedEmail = user.email.trim();
+    const isEmailChanged = normalizedEmail.toLowerCase() !== loadedEmail.toLowerCase();
+    const isEmailValid = EMAIL_PATTERN.test(normalizedEmail);
     const hasPendingEmailVerification = isEmailChanged && verificationSentEmail === normalizedEmail;
     const verificationButtonLabel = isEmailChanged && !hasPendingEmailVerification ? "Send" : "Resend";
-    const isProfileChanged =
-        name !== user.name ||
-        username !== (user.username || "") ||
-        (isEmailChanged && !hasPendingEmailVerification);
-    const isSendingVerification = isResendingVerification || isChangingEmail;
+    const isSendingVerification = isChangingEmail || isResendingVerification;
+    const canSendVerification = isEmailValid && !isSendingVerification && (isEmailChanged || !user.email_verified);
+    const isProfileChanged = name !== user.name || username !== (user.username || "");
 
     return (
         <div className="space-y-10 animate-fade-in">
@@ -252,7 +246,7 @@ export function ProfileSettings() {
 
             <Separator className="bg-border/40" />
 
-            <form onSubmit={handleProfileSubmit} className="space-y-8 max-w-2xl">
+            <form onSubmit={handleProfileSubmit} noValidate className="space-y-8 max-w-2xl">
                 {/* Avatar Section */}
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 p-6 rounded-xl bg-muted/20 border border-border/30">
                     <Avatar className="h-24 w-24 sm:h-28 sm:w-28 border-4 border-background shadow-md">
@@ -350,21 +344,28 @@ export function ProfileSettings() {
                                 <button
                                     type="button"
                                     onClick={handleSendVerification}
-                                    disabled={isSendingVerification}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 h-7 px-3 text-[12px] font-medium rounded-md bg-muted hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                                    disabled={!canSendVerification}
+                                    className={cn(
+                                        "absolute right-2 top-1/2 -translate-y-1/2 h-7 px-3 text-[12px] font-medium rounded-md transition-colors disabled:cursor-not-allowed flex items-center gap-1.5",
+                                        canSendVerification
+                                            ? "bg-muted text-muted-foreground hover:bg-primary hover:text-primary-foreground"
+                                            : "bg-muted text-muted-foreground opacity-60"
+                                    )}
                                 >
                                     {isSendingVerification ? (
                                         <Loader2 className="h-3 w-3 animate-spin" />
                                     ) : (
-                                        <><RefreshCw className="h-3 w-3" />{verificationButtonLabel}</>
+                                        <><Send className="h-3 w-3" />{verificationButtonLabel}</>
                                     )}
                                 </button>
                             )}
                         </div>
                         <p className="text-[13px] text-muted-foreground mt-1">
-                            {!user.email_verified
-                                ? "Fix the address if needed, then send a verification email."
-                                : "We use this for authentication and notifications."
+                            {isEmailChanged && !isEmailValid
+                                ? "Enter a valid email before sending."
+                                : !user.email_verified
+                                    ? "Use Send or Resend to verify your email. Save Changes won't update email."
+                                    : "We use this for authentication and notifications."
                             }
                         </p>
                     </div>
@@ -373,10 +374,10 @@ export function ProfileSettings() {
                 <div className="pt-6">
                     <Button
                         type="submit"
-                        disabled={isUpdating || isChangingEmail || !isProfileChanged}
+                        disabled={isUpdating || !isProfileChanged}
                         className="h-10 px-8 font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-md"
                     >
-                        {isUpdating || isChangingEmail ? <LoadingDots /> : "Save Changes"}
+                        {isUpdating ? <LoadingDots /> : "Save Changes"}
                     </Button>
                 </div>
             </form>
