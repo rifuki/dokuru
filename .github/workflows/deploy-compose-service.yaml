@@ -54,8 +54,7 @@ jobs:
     name: Deploy Compose Stack
     if: >-
       (github.event_name == 'workflow_dispatch' && inputs.run_compose_up) ||
-      (github.event_name == 'workflow_call' &&
-        (inputs.run_compose_up || vars.DOKURU_COMPOSE_AUTO_DEPLOY == 'true'))
+      github.event_name == 'workflow_call'
     runs-on: ubuntu-latest
     environment: production
     env:
@@ -67,7 +66,31 @@ jobs:
       GHCR_TOKEN: ${{ secrets.DOKURU_GHCR_TOKEN }}
       GHCR_USER: ${{ github.actor }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check compose deploy gate
+        id: gate
+        env:
+          FORCE_DEPLOY: ${{ inputs.run_compose_up }}
+        run: |
+          set -Eeuo pipefail
+
+          auto_deploy=false
+          if [ -f .github/compose-auto-deploy ]; then
+            auto_deploy=$(tr '[:upper:]' '[:lower:]' < .github/compose-auto-deploy | tr -d '[:space:]')
+          fi
+
+          if [ "${FORCE_DEPLOY}" = "true" ] || [ "${auto_deploy}" = "true" ]; then
+            printf 'deploy=true\n' >> "${GITHUB_OUTPUT}"
+            printf 'Compose deploy gate is open.\n'
+          else
+            printf 'deploy=false\n' >> "${GITHUB_OUTPUT}"
+            printf 'Compose deploy gate is closed. Skipping VPS deployment.\n'
+          fi
+
       - name: Validate deployment configuration
+        if: steps.gate.outputs.deploy == 'true'
         run: |
           missing=()
           [ -n "${DEPLOY_HOST}" ] || missing+=("DOKURU_DEPLOY_HOST")
@@ -82,6 +105,7 @@ jobs:
           fi
 
       - name: Configure SSH
+        if: steps.gate.outputs.deploy == 'true'
         run: |
           install -d -m 0700 ~/.ssh
           printf '%s\n' "${DEPLOY_SSH_KEY}" > ~/.ssh/dokuru_deploy_key
@@ -89,13 +113,14 @@ jobs:
           ssh-keyscan -p "${DEPLOY_PORT}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
 
       - name: Log in to GHCR on host
-        if: env.GHCR_TOKEN != ''
+        if: steps.gate.outputs.deploy == 'true' && env.GHCR_TOKEN != ''
         run: |
           printf '%s' "${GHCR_TOKEN}" \
             | ssh -i ~/.ssh/dokuru_deploy_key -p "${DEPLOY_PORT}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
                 "docker login ghcr.io -u '${GHCR_USER}' --password-stdin"
 
       - name: Deploy via Docker Compose
+        if: steps.gate.outputs.deploy == 'true'
         run: |
           remote_env=$(
             printf 'DOKURU_DEPLOY_PATH=%q' "${DEPLOY_PATH}"
