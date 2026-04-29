@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { authService } from "@/lib/api";
 import { useAuthActions } from "@/stores/use-auth-store";
@@ -11,6 +12,7 @@ export const authKeys = {
 
 export function useLogin() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { login } = useAuthActions();
 
   return useMutation({
@@ -19,6 +21,10 @@ export function useLogin() {
       login(data.token.access_token, data.user);
       queryClient.invalidateQueries({ queryKey: authKeys.me() });
       toast.success("Welcome back!");
+      void navigate({
+        to: data.user.role === "admin" ? "/admin" : "/agents",
+        replace: true,
+      });
     },
     onError: (error: unknown) => {
       let description = "An unexpected error occurred.";
