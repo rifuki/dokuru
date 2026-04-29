@@ -34,7 +34,7 @@ export function HeaderUserMenu() {
     const { theme, setTheme } = useTheme();
     const displayName = user?.name || user?.email?.split("@")[0] || "User";
     const email = user?.email || "No email set";
-    const menuItemClass = "h-9 rounded-[8px] px-3 text-sm font-medium focus:bg-muted/70 focus:text-foreground dark:focus:bg-white/[0.06]";
+    const menuItemClass = "h-9 rounded-[8px] px-3 text-sm font-medium focus:bg-muted/70 focus:text-foreground dark:focus:bg-white/[0.06] [&_svg]:text-muted-foreground focus:[&_svg]:text-foreground";
 
     return (
         <DropdownMenu>
@@ -49,16 +49,24 @@ export function HeaderUserMenu() {
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 overflow-hidden rounded-[14px] p-1 shadow-xl" sideOffset={8}>
-                <DropdownMenuLabel className="px-3 py-2.5 font-normal">
-                    <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold leading-5 text-foreground">{displayName}</p>
-                        <p className="truncate text-xs leading-5 text-muted-foreground">{email}</p>
+                <DropdownMenuLabel className="px-2.5 py-3 font-normal">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                        <Avatar className="h-9 w-9 shrink-0 object-cover">
+                            <AvatarImage src={getAvatarUrl(user?.avatar_url)} className="object-cover" />
+                            <AvatarFallback className="bg-primary/10 text-sm font-semibold text-primary">
+                                {displayName.charAt(0).toUpperCase()}
+                            </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1 pr-1">
+                            <p className="truncate text-sm font-semibold leading-5 text-foreground" title={displayName}>{displayName}</p>
+                            <p className="truncate text-xs leading-5 text-muted-foreground" title={email}>{email}</p>
+                        </div>
                     </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator className="-mx-1 my-1" />
                 <DropdownMenuGroup>
                     <DropdownMenuItem onClick={() => navigate({ to: "/settings/profile" })} className={menuItemClass}>
-                        <Settings className="mr-2 h-4 w-4 text-primary" />
+                        <Settings className="mr-2 h-4 w-4" />
                         <span>User Settings</span>
                     </DropdownMenuItem>
                 </DropdownMenuGroup>
