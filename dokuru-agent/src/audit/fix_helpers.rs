@@ -15,10 +15,12 @@ use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write as _;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::LazyLock;
 use tokio::process::Command;
 use tokio::sync::{RwLock, mpsc};
 use uuid::Uuid;
+use yaml_edit::YamlFile;
 
 pub type ProgressSender = mpsc::UnboundedSender<FixProgress>;
 
@@ -3143,11 +3145,31 @@ fn update_compose_content(
     rule_id: &str,
     target: Option<&FixTarget>,
 ) -> eyre::Result<Option<String>> {
+    validate_compose_service_with_lossless_parser(content, service)?;
     let mut lines = split_yaml_lines(content);
     let mut block = find_compose_service_block(&lines, service)?;
     let changed = update_compose_service_lines(&mut lines, &mut block, rule_id, target)?;
 
     Ok(changed.then(|| render_yaml_lines(&lines, content.ends_with('\n'))))
+}
+
+fn validate_compose_service_with_lossless_parser(content: &str, service: &str) -> eyre::Result<()> {
+    let yaml = YamlFile::from_str(content)
+        .map_err(|error| eyre::eyre!("compose YAML parse failed: {error}"))?;
+    let doc = yaml
+        .document()
+        .ok_or_else(|| eyre::eyre!("compose file has no YAML document"))?;
+    let root = doc
+        .as_mapping()
+        .ok_or_else(|| eyre::eyre!("compose document root must be a mapping"))?;
+    let services = root
+        .get_mapping("services")
+        .ok_or_else(|| eyre::eyre!("compose file has no services section"))?;
+    services
+        .get_mapping(service)
+        .ok_or_else(|| eyre::eyre!("compose service '{service}' not found or is not a mapping"))?;
+
+    Ok(())
 }
 
 fn update_compose_service_lines(
@@ -4061,5 +4083,138 @@ volumes:
         let updated = update_compose_content(input, "web", "5.11", Some(&target)).unwrap();
 
         assert!(updated.is_none());
+    }
+
+    #[test]
+    fn update_compose_content_covers_all_namespace_rules() {
+        let cases = [
+            ("5.10", "network_mode"),
+            ("5.16", "pid"),
+            ("5.17", "ipc"),
+            ("5.21", "uts"),
+        ];
+
+        for (rule_id, key) in cases {
+            let input = format!(
+                "services:\n  web:\n    image: nginx\n    {key}: host\n    ports:\n      - \"8080:80\"\n"
+            );
+            let expected = "services:\n  web:\n    image: nginx\n    ports:\n      - \"8080:80\"\n";
+
+            let updated = update_compose_content(&input, "web", rule_id, None)
+                .unwrap()
+                .unwrap();
+
+            assert_eq!(updated, expected, "rule {rule_id} should remove {key}");
+        }
+    }
+
+    #[test]
+    fn update_compose_content_removes_both_userns_keys_for_rule_531() {
+        let input = r#"services:
+  web:
+    image: nginx
+    userns_mode: host
+    userns: host
+    ports:
+      - "8080:80"
+"#;
+        let expected = r#"services:
+  web:
+    image: nginx
+    ports:
+      - "8080:80"
+"#;
+
+        let updated = update_compose_content(input, "web", "5.31", None)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(updated, expected);
+    }
+
+    #[test]
+    fn update_compose_content_covers_each_cgroup_rule() {
+        let cases = [
+            ("5.11", "mem_limit", "512m"),
+            ("5.12", "cpu_shares", "1024"),
+            ("5.29", "pids_limit", "200"),
+        ];
+        let target = FixTarget {
+            container_id: "abc".to_string(),
+            memory: Some(512 * 1024 * 1024),
+            cpu_shares: Some(1024),
+            pids_limit: Some(200),
+            strategy: Some("compose_update".to_string()),
+        };
+
+        for (rule_id, key, value) in cases {
+            let input = "services:\n  web:\n    image: nginx\n    ports:\n      - \"8080:80\"\n";
+            let expected = format!(
+                "services:\n  web:\n    image: nginx\n    ports:\n      - \"8080:80\"\n    {key}: {value}\n"
+            );
+
+            let updated = update_compose_content(input, "web", rule_id, Some(&target))
+                .unwrap()
+                .unwrap();
+
+            assert_eq!(updated, expected, "rule {rule_id} should set {key}");
+        }
+    }
+
+    #[test]
+    fn update_compose_content_replaces_existing_cgroup_value_only() {
+        let input = r#"services:
+  web:
+    image: nginx
+    mem_limit: 128m
+    cpu_shares: 256
+    pids_limit: 50
+    command:
+      - sh
+      - -c
+      - echo ok
+"#;
+        let expected = r#"services:
+  web:
+    image: nginx
+    mem_limit: 512m
+    cpu_shares: 1024
+    pids_limit: 200
+    command:
+      - sh
+      - -c
+      - echo ok
+"#;
+        let target = FixTarget {
+            container_id: "abc".to_string(),
+            memory: Some(512 * 1024 * 1024),
+            cpu_shares: Some(1024),
+            pids_limit: Some(200),
+            strategy: Some("compose_update".to_string()),
+        };
+
+        let updated = update_compose_content(input, "web", "cgroup_all", Some(&target))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(updated, expected);
+    }
+
+    #[test]
+    fn update_compose_content_rejects_invalid_yaml_before_patching() {
+        let input = "services:\n  web:\n    image: [nginx\n";
+
+        let error = update_compose_content(input, "web", "5.16", None).unwrap_err();
+
+        assert!(error.to_string().contains("compose YAML parse failed"));
+    }
+
+    #[test]
+    fn update_compose_content_rejects_non_mapping_service() {
+        let input = "services:\n  web: nginx\n";
+
+        let error = update_compose_content(input, "web", "5.16", None).unwrap_err();
+
+        assert!(error.to_string().contains("not found or is not a mapping"));
     }
 }
