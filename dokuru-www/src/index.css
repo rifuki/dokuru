@@ -109,38 +109,57 @@
 }
 
 .dark {
-  --background: #000000;
-  --foreground: #f7f7f7;
-  --card: #0b0b0d;
-  --card-foreground: #f7f7f7;
-  --popover: #101113;
-  --popover-foreground: #f7f7f7;
-  --primary: #1883fd;
+  --background: #090a0d;
+  --foreground: #f2f4f8;
+  --card: #111217;
+  --card-foreground: #f2f4f8;
+  --popover: #15161c;
+  --popover-foreground: #f2f4f8;
+  --primary: #2496ed;
   --primary-foreground: #ffffff;
-  --secondary: #101b28;
-  --secondary-foreground: #d6ebff;
-  --muted: #18191b;
-  --muted-foreground: #a8acb3;
-  --accent: #0d2135;
-  --accent-foreground: #d6ebff;
-  --destructive: oklch(0.64 0.22 24);
+  --secondary: #171922;
+  --secondary-foreground: #e7ebf2;
+  --muted: #181a22;
+  --muted-foreground: #a8afbc;
+  --accent: #132033;
+  --accent-foreground: #dceeff;
+  --destructive: #d85a63;
   --destructive-foreground: #ffffff;
-  --border: rgba(255, 255, 255, 0.13);
-  --input: rgba(255, 255, 255, 0.15);
-  --ring: #1883fd;
+  --border: rgba(229, 233, 240, 0.13);
+  --input: rgba(229, 233, 240, 0.16);
+  --ring: #2496ed;
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: #050607;
-  --sidebar-foreground: #f4f4f5;
-  --sidebar-primary: #1883fd;
+  --sidebar: #08090c;
+  --sidebar-foreground: #f2f4f8;
+  --sidebar-primary: #2496ed;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #102033;
-  --sidebar-accent-foreground: #d6ebff;
-  --sidebar-border: rgba(255, 255, 255, 0.12);
-  --sidebar-ring: #1883fd;
+  --sidebar-accent: #101b2b;
+  --sidebar-accent-foreground: #dceeff;
+  --sidebar-border: rgba(229, 233, 240, 0.12);
+  --sidebar-ring: #2496ed;
+
+  --color-blue-400: #5db4f6;
+  --color-blue-500: #2496ed;
+  --color-blue-600: #1f7fc9;
+  --color-red-400: #e87980;
+  --color-red-500: #d85a63;
+  --color-red-600: #bd4a52;
+  --color-rose-400: #e8798a;
+  --color-rose-500: #d85a63;
+  --color-rose-600: #bd4a52;
+  --color-miku-primary-light: #5db4f6;
+  --color-miku-primary: #2496ed;
+  --color-miku-primary-dark: #1f7fc9;
+  --color-miku-accent: #5db4f6;
+  --color-miku-accent-dark: #2496ed;
+  --color-miku-accent-darker: #1f7fc9;
+  --color-miku-secondary-light: #88c9fa;
+  --color-miku-secondary: #2496ed;
+  --color-miku-secondary-dark: #1f7fc9;
 }
 
 @layer base {
@@ -180,14 +199,14 @@
 @layer base {
   .dark body {
     background-image:
-      linear-gradient(to right, rgba(255, 255, 255, 0.022) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
-    background-size: 48px 48px;
+      linear-gradient(to right, rgba(229, 233, 240, 0.014) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(229, 233, 240, 0.014) 1px, transparent 1px);
+    background-size: 56px 56px;
     background-attachment: fixed;
   }
 
   .dark ::selection {
-    background: rgba(36, 150, 237, 0.36);
+    background: rgba(36, 150, 237, 0.32);
     color: #fff;
   }
 }
@@ -203,14 +222,14 @@
 
   .dark [data-slot="card"] {
     background: var(--card);
-    border-color: rgba(255, 255, 255, 0.13);
-    box-shadow: 0 24px 90px -64px rgba(0, 0, 0, 0.95);
+    border-color: rgba(229, 233, 240, 0.13);
+    box-shadow: 0 24px 90px -64px rgba(0, 0, 0, 0.85);
   }
 
   .dark [data-slot="input"],
   .dark [data-slot="select-trigger"] {
-    background-color: rgba(255, 255, 255, 0.04);
-    border-color: rgba(255, 255, 255, 0.13);
+    background-color: rgba(229, 233, 240, 0.045);
+    border-color: rgba(229, 233, 240, 0.16);
   }
 }
 

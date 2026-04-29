@@ -165,7 +165,7 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
                 isConnecting
                   ? { filter: "brightness(0) saturate(100%) invert(47%) sepia(93%) saturate(2000%) hue-rotate(194deg) brightness(105%) contrast(101%)" }
                   : isOffline
-                  ? { filter: "brightness(0) saturate(100%) invert(27%) sepia(51%) saturate(2878%) hue-rotate(346deg) brightness(104%) contrast(97%)" }
+                  ? { filter: "brightness(0) saturate(100%) invert(47%) sepia(22%) saturate(1388%) hue-rotate(312deg) brightness(94%) contrast(88%)" }
                   : undefined
               }
             />

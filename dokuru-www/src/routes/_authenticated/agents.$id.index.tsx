@@ -812,8 +812,8 @@ function SecurityOverview({
             description="Latest CIS Docker Benchmark result and remediation priority."
             action={<Button size="sm" asChild><Link to="/agents/$id/audit" params={{ id }}>Run Audit</Link></Button>}
         >
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
-                <div className="min-w-0 space-y-4">
+            <div className="space-y-4">
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_460px]">
                     <div className="rounded-[18px] border bg-background/55 p-5 shadow-sm dark:bg-white/[0.025]">
                         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                             <div className="min-w-0 flex-1">
@@ -838,7 +838,7 @@ function SecurityOverview({
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-3">
                         <SignalCard icon={AlertTriangle} label="High risk" value={highRiskFailures} detail="failed" tone={highRiskFailures > 0 ? "red" : "zinc"} />
                         <SignalCard icon={Zap} label="Auto-fix" value={autoFixable} detail="available" tone={autoFixable > 0 ? "blue" : "zinc"} />
                         <SignalCard icon={ShieldCheck} label="Quick wins" value={quickWins} detail="actions" tone={quickWins > 0 ? "blue" : "zinc"} />
@@ -846,7 +846,7 @@ function SecurityOverview({
                     </div>
                 </div>
 
-                <div className="h-fit rounded-[18px] border bg-background/55 p-4 shadow-sm dark:bg-white/[0.025]">
+                <div className="rounded-[18px] border bg-background/55 p-4 shadow-sm dark:bg-white/[0.025]">
                     <div className="flex items-center justify-between gap-3">
                         <h3 className="text-sm font-semibold tracking-tight">Security pillars</h3>
                         <Badge variant="outline" className="rounded-full border-border/70 bg-card px-2.5 py-1 text-[11px] font-medium text-foreground">
@@ -854,7 +854,7 @@ function SecurityOverview({
                         </Badge>
                     </div>
                     {pillars.length > 0 ? (
-                        <div className="mt-4 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-1">
+                        <div className="mt-4 grid gap-2.5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
                             {pillars.map((pillar) => (
                                 <PillarRow key={pillar.key} pillar={pillar} />
                             ))}
