@@ -282,29 +282,30 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
             Dashboard
           </Button>
 
-          <div className="flex items-center rounded-[11px] border bg-background/60 p-1 shadow-sm dark:bg-white/[0.025]">
-            <button
-              type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-              title="Edit agent"
-              aria-label={`Edit ${agent.name}`}
-              onClick={openEdit}
-            >
-              <Edit className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowDeleteDialog(true);
-              }}
-              className="flex h-8 w-8 items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-rose-500/10 hover:text-rose-500"
-              title="Delete agent"
-              aria-label={`Delete ${agent.name}`}
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9 w-9 rounded-[10px] p-0 shadow-none hover:!bg-muted/50"
+            title="Edit agent"
+            aria-label={`Edit ${agent.name}`}
+            onClick={openEdit}
+          >
+            <Edit className="w-4 h-4" />
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            className="h-9 rounded-[10px] px-3.5 text-sm font-semibold shadow-none"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowDeleteDialog(true);
+            }}
+            title="Delete agent"
+            aria-label={`Delete ${agent.name}`}
+          >
+            <Trash2 className="mr-2 w-4 h-4" />
+            Delete
+          </Button>
         </div>
       </div>
 

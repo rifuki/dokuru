@@ -536,7 +536,7 @@ function AgentHero({
                         <Edit className="mr-2 h-3.5 w-3.5" />
                         Edit
                     </Button>
-                    <Button size="sm" variant="outline" onClick={onDelete} className="h-8 border-destructive/35 text-destructive hover:!bg-transparent hover:text-destructive">
+                    <Button size="sm" variant="destructive" onClick={onDelete} className="h-8 shadow-none">
                         <Trash2 className="mr-2 h-3.5 w-3.5" />
                         Delete
                     </Button>
