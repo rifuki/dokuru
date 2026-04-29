@@ -13,43 +13,34 @@ on:
         default: open
 
 permissions:
-  contents: write
+  actions: write
 
 jobs:
   toggle:
     name: ${{ inputs.faucet == 'open' && 'Open Auto Deploy Faucet' || 'Close Auto Deploy Faucet' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
       - name: Update auto-deploy gate
         env:
           FAUCET: ${{ inputs.faucet }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -Eeuo pipefail
 
           case "${FAUCET}" in
             open)
-              printf 'true\n' > .github/compose-auto-deploy
+              value=true
               printf 'Compose auto deploy is now OPEN. Future main image builds can deploy the VPS compose stack.\n'
               ;;
             close)
-              printf 'false\n' > .github/compose-auto-deploy
+              value=false
               printf 'Compose auto deploy is now CLOSED. Future main image builds will not deploy the VPS compose stack.\n'
               ;;
           esac
 
-          if git diff --quiet -- .github/compose-auto-deploy; then
-            printf 'Compose auto deploy gate was already %s.\n' "${FAUCET}"
-            exit 0
-          fi
-
-          git config user.name rifuki
-          git config user.email mail@rifuki.dev
-          git add .github/compose-auto-deploy
-          git commit -m "chore(deploy): ${FAUCET} compose auto deploy [skip ci]"
-          git push
+          gh variable set DOKURU_COMPOSE_AUTO_DEPLOY \
+            --repo "${GITHUB_REPOSITORY}" \
+            --body "${value}"
 
   deploy-on-open:
     name: Deploy Compose Stack After Opening Faucet
