@@ -211,13 +211,13 @@ export function AppSidebar() {
           <SidebarGroup>
             <SidebarGroupLabel>Agents</SidebarGroupLabel>
             <div className="px-2">
-              <Link
-                to="/"
-                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-sidebar-border bg-sidebar-accent/20 text-sm text-sidebar-foreground/60 hover:bg-sidebar-accent/35 transition-colors"
+              <div
+                aria-disabled="true"
+                className="flex cursor-default select-none items-center gap-2 rounded-lg border border-sidebar-border bg-sidebar-accent/20 px-3 py-2 text-sm text-sidebar-foreground/60"
               >
                 <BotOff className="size-4 text-muted-foreground" />
                 <span>No agent connected</span>
-              </Link>
+              </div>
             </div>
           </SidebarGroup>
         )}
