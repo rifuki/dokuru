@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +15,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Camera, Loader2, AlertCircle, Send } from "lucide-react";
+import { Camera, Loader2, AlertCircle, Send, X } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { LoadingDots } from "@/components/ui/loading-dots";
@@ -36,6 +36,7 @@ export function ProfileSettings() {
 
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [isRemoveModalOpen, setIsRemoveModalOpen] = useState(false);
+    const [isAvatarPreviewOpen, setIsAvatarPreviewOpen] = useState(false);
     const [isRemovingAvatar, setIsRemovingAvatar] = useState(false);
     const [isResendingVerification, setIsResendingVerification] = useState(false);
 
@@ -55,6 +56,23 @@ export function ProfileSettings() {
         setInitializedId(user.id.toString());
     }
 
+    useEffect(() => {
+        if (!isAvatarPreviewOpen) return;
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") setIsAvatarPreviewOpen(false);
+        };
+        const previousOverflow = document.body.style.overflow;
+
+        document.body.style.overflow = "hidden";
+        document.addEventListener("keydown", handleKeyDown);
+
+        return () => {
+            document.body.style.overflow = previousOverflow;
+            document.removeEventListener("keydown", handleKeyDown);
+        };
+    }, [isAvatarPreviewOpen]);
+
     if (isLoading || !user) {
         return (
             <div className="flex items-center justify-center py-12">
@@ -64,6 +82,7 @@ export function ProfileSettings() {
     }
 
     const avatarUrl = user?.avatar_url;
+    const avatarSrc = getAvatarUrl(avatarUrl);
 
     const handleAvatarUpload = async (file: File) => {
         const formData = new FormData();
@@ -237,6 +256,34 @@ export function ProfileSettings() {
                 </AlertDialogContent>
             </AlertDialog>
 
+            {isAvatarPreviewOpen && avatarSrc && (
+                <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-6 backdrop-blur-sm animate-in fade-in-0"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Profile picture preview"
+                    onMouseDown={(event) => {
+                        if (event.target === event.currentTarget) setIsAvatarPreviewOpen(false);
+                    }}
+                >
+                    <button
+                        type="button"
+                        className="absolute right-5 top-5 inline-flex h-11 w-11 items-center justify-center rounded-full bg-black/50 text-white/90 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                        onClick={() => setIsAvatarPreviewOpen(false)}
+                        aria-label="Close profile picture preview"
+                    >
+                        <X className="h-6 w-6" />
+                    </button>
+
+                    <img
+                        src={avatarSrc}
+                        alt={`${user.name || user.username || "User"} profile picture`}
+                        className="rounded-full object-cover shadow-2xl ring-1 ring-white/10 animate-in zoom-in-95"
+                        style={{ width: "min(78vw, 78vh, 680px)", height: "min(78vw, 78vh, 680px)" }}
+                    />
+                </div>
+            )}
+
             <div>
                 <h2 className="text-2xl font-bold tracking-tight mb-2">My Account</h2>
                 <p className="text-[15px] text-muted-foreground">
@@ -249,12 +296,23 @@ export function ProfileSettings() {
             <form onSubmit={handleProfileSubmit} noValidate className="space-y-8 max-w-2xl">
                 {/* Avatar Section */}
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 p-6 rounded-xl bg-muted/20 border border-border/30">
-                    <Avatar className="h-24 w-24 sm:h-28 sm:w-28 border-4 border-background shadow-md">
-                        <AvatarImage src={getAvatarUrl(avatarUrl)} />
-                        <AvatarFallback className="bg-muted text-muted-foreground text-3xl sm:text-4xl font-medium">
-                            {user?.name?.charAt(0).toUpperCase() || "U"}
-                        </AvatarFallback>
-                    </Avatar>
+                    <button
+                        type="button"
+                        className={cn(
+                            "rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                            avatarSrc ? "cursor-zoom-in" : "cursor-default"
+                        )}
+                        onClick={() => avatarSrc && setIsAvatarPreviewOpen(true)}
+                        disabled={!avatarSrc}
+                        aria-label="Preview profile picture"
+                    >
+                        <Avatar className="h-24 w-24 sm:h-28 sm:w-28 border-4 border-background shadow-md transition-transform hover:scale-[1.03]">
+                            <AvatarImage src={avatarSrc} />
+                            <AvatarFallback className="bg-muted text-muted-foreground text-3xl sm:text-4xl font-medium">
+                                {user?.name?.charAt(0).toUpperCase() || "U"}
+                            </AvatarFallback>
+                        </Avatar>
+                    </button>
                     <div className="space-y-3">
                         <h4 className="text-[15px] font-bold">Profile Picture</h4>
                         <div className="flex items-center gap-3">
