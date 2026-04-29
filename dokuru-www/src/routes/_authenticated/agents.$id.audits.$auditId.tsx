@@ -258,8 +258,12 @@ function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, 
   const borderLeft = status === "Pass"
     ? "border-l-emerald-500/50"
     : status === "Fail"
-      ? "border-l-red-500/50"
+      ? "border-l-red-400"
       : "border-l-amber-500/50";
+
+  const cardTone = status === "Fail"
+    ? "border-red-500/35 bg-red-500/[0.025] hover:bg-red-500/[0.04]"
+    : "border-border bg-card";
 
   const pillar = getRulePillar(rule.id);
   const pillarMeta = PILLAR_META[pillar];
@@ -274,7 +278,7 @@ function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, 
   ].filter(t => t.show);
 
   return (
-    <div ref={cardRef} className={cn("rounded-lg border bg-card border-l-2 transition-colors", borderLeft, isFocused && "ring-2 ring-[#2496ED]/40")}>
+    <div ref={cardRef} className={cn("rounded-lg border border-l-[3px] transition-colors", borderLeft, cardTone, isFocused && "ring-2 ring-primary/40")}>
       {/* Header row */}
       <div className="px-4 py-3 flex items-center gap-3">
         <button onClick={() => setOpen(v => !v)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
@@ -969,28 +973,27 @@ function AuditDetailPage() {
         <>
           {/* ── Summary Card ────────────────────────────────── */}
           <div className="overflow-hidden rounded-[16px] border border-border bg-card shadow-sm">
-            <div className="border-b border-border bg-muted/25 px-5 py-4 dark:bg-white/[0.025]">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-primary/25 bg-primary/10 text-primary">
-                    <ShieldCheck className="h-5 w-5" />
+            <div className="border-b border-border bg-muted/20 px-5 py-3 dark:bg-[#111111]/90">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex min-w-0 items-center gap-4">
+                  <div className="flex shrink-0 items-center gap-2" aria-hidden="true">
+                    <span className="h-3 w-3 rounded-full bg-[#ff5f57] shadow-[0_0_14px_rgba(255,95,87,0.45)]" />
+                    <span className="h-3 w-3 rounded-full bg-[#ffbd2e] shadow-[0_0_14px_rgba(255,189,46,0.35)]" />
+                    <span className="h-3 w-3 rounded-full bg-[#28c840] shadow-[0_0_14px_rgba(40,200,64,0.35)]" />
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Audit Summary</p>
-                    <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="truncate text-base font-semibold tracking-tight text-foreground">
-                        {agent?.name ?? id}
-                      </span>
-                      <span className="text-sm text-muted-foreground/50">/</span>
-                      <span className="truncate text-sm font-semibold text-primary">
-                        {auditData.hostname}
-                      </span>
-                    </div>
+                  <div className="flex min-w-0 items-center gap-2 text-base">
+                    <span className="truncate font-semibold tracking-tight text-foreground">
+                      {agent?.name ?? id}
+                    </span>
+                    <span className="shrink-0 text-muted-foreground/55">/</span>
+                    <span className="truncate font-mono font-semibold text-primary">
+                      {auditData.hostname}
+                    </span>
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
                   <Clock className="h-4 w-4" />
-                  <span className="font-medium">
+                  <span className="font-mono font-medium">
                     {fmtDate(auditData.timestamp).split(",")[1]?.trim() ?? fmtDate(auditData.timestamp)}
                   </span>
                 </div>
@@ -1032,32 +1035,32 @@ function AuditDetailPage() {
                     onClick={() => setStatusFilter(f => f === "Pass" ? "all" : "Pass")}
                     aria-pressed={statusFilter === "Pass"}
                     className={cn(
-                      "rounded-[12px] border px-3 py-3 text-left transition-all duration-200",
+                      "flex min-h-24 flex-col items-center justify-center rounded-[12px] border px-3 py-3 text-center transition-all duration-200",
                       statusFilter === "Pass"
-                        ? "bg-primary/15 border-primary/45 ring-1 ring-primary/20"
-                        : "bg-emerald-500/5 border-emerald-500/20 hover:bg-emerald-500/10 hover:border-emerald-500/30"
+                        ? "border-[#00d9a5]/50 bg-[#00d9a5]/10 ring-1 ring-[#00d9a5]/20"
+                        : "border-[#00d9a5]/25 bg-[#00d9a5]/5 hover:bg-[#00d9a5]/10 hover:border-[#00d9a5]/35"
                     )}
                   >
-                    <span className={cn("block text-2xl font-black", statusFilter === "Pass" ? "text-primary" : "text-emerald-400")}>{auditData.summary.passed}</span>
-                    <span className="mt-1 block text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Passed</span>
+                    <span className="block text-3xl font-black text-[#00d9a5]">{auditData.summary.passed}</span>
+                    <span className="mt-2 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pass</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setStatusFilter(f => f === "Fail" ? "all" : "Fail")}
                     aria-pressed={statusFilter === "Fail"}
                     className={cn(
-                      "rounded-[12px] border px-3 py-3 text-left transition-all duration-200",
+                      "flex min-h-24 flex-col items-center justify-center rounded-[12px] border px-3 py-3 text-center transition-all duration-200",
                       statusFilter === "Fail"
-                        ? "bg-rose-500/15 border-rose-500/40 ring-1 ring-rose-500/20"
-                        : "bg-rose-500/5 border-rose-500/20 hover:bg-rose-500/10 hover:border-rose-500/30"
+                        ? "bg-rose-500/15 border-rose-500/45 ring-1 ring-rose-500/25"
+                        : "bg-rose-500/5 border-rose-500/25 hover:bg-rose-500/10 hover:border-rose-500/35"
                     )}
                   >
-                    <span className="block text-2xl font-black text-rose-400">{auditData.summary.failed}</span>
-                    <span className="mt-1 block text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Failed</span>
+                    <span className="block text-3xl font-black text-rose-400">{auditData.summary.failed}</span>
+                    <span className="mt-2 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Fail</span>
                   </button>
-                  <div className="rounded-[12px] border border-border bg-muted/20 px-3 py-3 text-left">
-                    <span className="block text-2xl font-black text-foreground/80">{auditData.summary.total}</span>
-                    <span className="mt-1 block text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Total</span>
+                  <div className="flex min-h-24 flex-col items-center justify-center rounded-[12px] border border-border bg-muted/20 px-3 py-3 text-center">
+                    <span className="block text-3xl font-black text-foreground/80">{auditData.summary.total}</span>
+                    <span className="mt-2 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Total</span>
                   </div>
                 </div>
 

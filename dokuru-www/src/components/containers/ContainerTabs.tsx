@@ -602,7 +602,7 @@ export function ContainerTerminal({
         cursorBlink: true,
         fontSize: 13,
         fontFamily: '"Cascadia Code", "Fira Code", monospace',
-        theme: { background: "#0d1117", foreground: "#c9d1d9", cursor: "#58a6ff" },
+        theme: { background: "#090909", foreground: "#d4d4d4", cursor: "#38bdf8" },
         scrollback: 5000,
       });
       const fit = new FitAddon();
@@ -635,20 +635,12 @@ export function ContainerTerminal({
     <div className={`rounded-xl overflow-hidden border border-border shadow-lg ${!active ? "hidden" : ""}`}>
 
       {/* ── Title bar ─────────────────────────────────────────────────────────── */}
-      <div className="relative flex items-center gap-2 px-3 py-1.5 bg-card border-b border-border select-none">
-
-        {/* Status accent line at top */}
-        <div className={`absolute inset-x-0 top-0 h-px transition-colors duration-500 ${
-          isConnected    ? "bg-primary/50"
-          : isConnecting ? "bg-primary/30"
-          : "bg-border"
-        }`} />
-
+      <div className="relative flex items-center gap-2 px-3 py-2 bg-card border-b border-border select-none dark:bg-[#171717]">
         {/* macOS dots */}
         <div className="flex items-center gap-1 shrink-0">
-          <span className="h-2.5 w-2.5 rounded-full bg-white/[0.18]" />
-          <span className="h-2.5 w-2.5 rounded-full bg-white/[0.18]" />
-          <span className="h-2.5 w-2.5 rounded-full bg-primary/70" />
+          <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57] shadow-[0_0_10px_rgba(255,95,87,0.35)]" />
+          <span className="h-2.5 w-2.5 rounded-full bg-[#ffbd2e] shadow-[0_0_10px_rgba(255,189,46,0.28)]" />
+          <span className="h-2.5 w-2.5 rounded-full bg-[#28c840] shadow-[0_0_10px_rgba(40,200,64,0.28)]" />
         </div>
 
         {/* Separator */}
@@ -787,7 +779,7 @@ export function ContainerTerminal({
           Both share #0d1117 so the padding gap is seamless.                      */}
       <div
         className="h-96"
-        style={{ background: "#0d1117", padding: "10px 6px 4px", boxSizing: "border-box", position: "relative" }}
+        style={{ background: "#090909", padding: "10px 6px 4px", boxSizing: "border-box", position: "relative" }}
       >
         <div ref={wrapperRef} style={{ height: "100%", width: "100%", overflow: "hidden" }} />
       </div>
