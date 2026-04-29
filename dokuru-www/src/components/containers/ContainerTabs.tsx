@@ -25,6 +25,10 @@ import useWebSocket, { ReadyState } from "react-use-websocket";
 import { wsApiUrl } from "@/lib/api/api-config";
 import { useAuthStore } from "@/stores/use-auth-store";
 
+const TERMINAL_BG = "#090909";
+const TERMINAL_FG = "#d4d4d4";
+const TERMINAL_CURSOR = "#38bdf8";
+
 // ─── Overview tab ─────────────────────────────────────────────────────────────
 
 export function ContainerOverview({
@@ -515,7 +519,8 @@ export function ContainerTerminal({
       cursorBlink: true,
       fontSize: 13,
       fontFamily: '"Cascadia Code", "Fira Code", monospace',
-      theme: { background: "#0d1117", foreground: "#c9d1d9", cursor: "#58a6ff" },
+      theme: { background: TERMINAL_BG, foreground: TERMINAL_FG, cursor: TERMINAL_CURSOR },
+      allowTransparency: true,
       scrollback: 5000,
     });
     const fit = new FitAddon();
@@ -602,7 +607,8 @@ export function ContainerTerminal({
         cursorBlink: true,
         fontSize: 13,
         fontFamily: '"Cascadia Code", "Fira Code", monospace',
-        theme: { background: "#090909", foreground: "#d4d4d4", cursor: "#38bdf8" },
+        theme: { background: TERMINAL_BG, foreground: TERMINAL_FG, cursor: TERMINAL_CURSOR },
+        allowTransparency: true,
         scrollback: 5000,
       });
       const fit = new FitAddon();
@@ -776,12 +782,12 @@ export function ContainerTerminal({
           Outer div owns the padding + background. Inner div (wrapperRef) fills
           the *content area* via height:100% — so FitAddon measures the right
           dimensions (padding pixels are NOT counted as usable rows).
-          Both share #0d1117 so the padding gap is seamless.                      */}
+          Both share the same neutral terminal surface so the padding gap is seamless. */}
       <div
         className="h-96"
-        style={{ background: "#090909", padding: "10px 6px 4px", boxSizing: "border-box", position: "relative" }}
+        style={{ background: TERMINAL_BG, padding: "10px 6px 4px", boxSizing: "border-box", position: "relative" }}
       >
-        <div ref={wrapperRef} style={{ height: "100%", width: "100%", overflow: "hidden" }} />
+        <div ref={wrapperRef} style={{ height: "100%", width: "100%", overflow: "hidden", background: TERMINAL_BG }} />
       </div>
     </div>
   );
