@@ -365,7 +365,6 @@ function AgentDashboard() {
 
             <AgentHero
                 agent={agent}
-                dockerInfo={dockerInfo}
                 isOnline={isOnline}
                 isRefreshing={isRefreshing}
                 onRefresh={() => void refreshAll()}
@@ -482,7 +481,6 @@ function AgentDialogs({
 
 function AgentHero({
     agent,
-    dockerInfo,
     isOnline,
     isRefreshing,
     onRefresh,
@@ -490,7 +488,6 @@ function AgentHero({
     onDelete,
 }: {
     agent: Agent;
-    dockerInfo: DockerInfo | null;
     isOnline: boolean;
     isRefreshing: boolean;
     onRefresh: () => void;
@@ -498,17 +495,19 @@ function AgentHero({
     onDelete: () => void;
 }) {
     const statusRing = isOnline ? "border-primary/30 bg-primary/10 text-primary" : "border-muted-foreground/30 bg-muted/10 text-muted-foreground";
+    const endpoint = agent.url.replace(/^https?:\/\//, "");
+    const accessLabel = agent.access_mode === "cloudflare" ? "Cloudflare tunnel" : agent.access_mode;
 
     return (
-        <section className="rounded-[19px] border border-border bg-card px-5 py-4 shadow-sm">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                <div className="flex min-w-0 gap-4">
-                    <div className="mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-[12px] border border-border bg-background text-primary">
+        <section className="rounded-[18px] border border-border bg-card p-4 shadow-sm">
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+                <div className="flex min-w-0 items-center gap-4">
+                    <div className="flex size-12 shrink-0 items-center justify-center rounded-[12px] border border-border bg-background text-primary">
                         <Server className="h-5 w-5" />
                     </div>
 
-                    <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
+                    <div className="min-w-0 flex-1 space-y-2.5">
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
                             <h1 className="truncate text-2xl font-semibold tracking-tight">{agent.name}</h1>
                             <div className={cn("inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider", statusRing)}>
                                 <span className={cn("h-1.5 w-1.5 rounded-full", isOnline ? "bg-primary" : "bg-muted-foreground")} />
@@ -516,13 +515,19 @@ function AgentHero({
                             </div>
                         </div>
 
-                        <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm text-muted-foreground">
-                            <span className="min-w-0 max-w-full truncate font-mono text-xs md:max-w-[520px]">{agent.url}</span>
-                            <span className="flex items-center gap-1.5"><GitBranch className="h-3.5 w-3.5" />{agent.access_mode}</span>
-                            {dockerInfo?.docker_version && (
-                                <span className="flex items-center gap-1.5"><Zap className="h-3.5 w-3.5" />Docker {dockerInfo.docker_version}</span>
-                            )}
-                            <span className="flex items-center gap-1.5"><Clock3 className="h-3.5 w-3.5" />Added {fmtFullDate(agent.created_at)}</span>
+                        <div className="flex min-w-0 flex-col gap-2 text-sm text-muted-foreground lg:flex-row lg:items-center">
+                            <div className="flex min-w-0 items-center gap-2 rounded-[10px] border border-border/70 bg-background/50 px-2.5 py-1.5">
+                                <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">Endpoint</span>
+                                <span className="min-w-0 truncate font-mono text-xs text-foreground/80">{endpoint}</span>
+                            </div>
+                            <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[10px] border border-border/70 bg-background/40 px-2.5 text-xs font-medium capitalize">
+                                <GitBranch className="h-3.5 w-3.5" />
+                                {accessLabel}
+                            </span>
+                            <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[10px] border border-border/70 bg-background/40 px-2.5 text-xs font-medium">
+                                <Clock3 className="h-3.5 w-3.5" />
+                                Added {fmtFullDate(agent.created_at)}
+                            </span>
                         </div>
                     </div>
                 </div>
