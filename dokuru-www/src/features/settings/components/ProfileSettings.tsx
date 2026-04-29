@@ -271,7 +271,7 @@ export function ProfileSettings() {
                                     type="button"
                                     variant="ghost"
                                     size="sm"
-                                    className="text-destructive hover:bg-destructive/10"
+                                    className="bg-destructive/15 text-destructive hover:!bg-destructive/70 hover:!text-destructive-foreground"
                                     onClick={() => setIsRemoveModalOpen(true)}
                                     disabled={isRemovingAvatar}
                                 >

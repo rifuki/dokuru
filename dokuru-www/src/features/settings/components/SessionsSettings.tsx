@@ -197,7 +197,7 @@ export function SessionsSettings() {
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            className="h-8 w-8 rounded-full text-destructive/80 hover:!bg-destructive/80 hover:!text-destructive-foreground focus-visible:ring-destructive/30 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
                                             onClick={() => handleRevokeSession(session.id)}
                                             title="Log out device"
                                         >
