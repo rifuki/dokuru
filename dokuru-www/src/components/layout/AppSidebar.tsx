@@ -161,7 +161,7 @@ export function AppSidebar() {
                   asChild
                   isActive={isActive(isAdmin ? "/admin" : "/agents")}
                   tooltip={isAdmin ? "Overview" : "Agents"}
-                  className="text-sm! py-2! data-[active=true]:bg-miku-primary/15 data-[active=true]:text-miku-primary data-[active=true]:font-medium"
+                  className="text-sm! py-2! rounded-[10px]! data-[active=true]:bg-miku-primary/15 data-[active=true]:text-miku-primary data-[active=true]:font-medium"
                 >
                   <Link to={isAdmin ? "/admin" : "/agents"}>
                     {isAdmin ? <Home className="size-4" /> : <Server className="size-4" />}
@@ -192,7 +192,7 @@ export function AppSidebar() {
                       asChild
                       isActive={isActive(item.href)}
                       tooltip={item.title}
-                      className="text-sm! py-2! data-[active=true]:bg-miku-primary/15 data-[active=true]:text-miku-primary data-[active=true]:font-medium"
+                      className="text-sm! py-2! rounded-[10px]! data-[active=true]:bg-miku-primary/15 data-[active=true]:text-miku-primary data-[active=true]:font-medium"
                     >
                       <Link to={item.href}>
                         <item.icon className="size-4" />
@@ -252,7 +252,7 @@ export function AppSidebar() {
                         className={
                           isIconMode
                             ? ""
-                            : `rounded-[19px] border overflow-hidden transition-colors ${
+                            : `rounded-[12px] border overflow-hidden transition-colors ${
                                 isAgentActive
                                   ? "border-miku-primary/40"
                                   : "border-sidebar-border"
@@ -347,7 +347,7 @@ export function AppSidebar() {
                     asChild
                     isActive={isActive(item.href)}
                     tooltip={item.title}
-                    className="text-sm! py-2!"
+                    className="text-sm! py-2! rounded-[10px]!"
                   >
                     <Link to={item.href}>
                       <item.icon className="size-4" />
