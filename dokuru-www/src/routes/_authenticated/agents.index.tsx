@@ -150,10 +150,7 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
   };
 
   return (
-    <div
-      className="group rounded-[19px] border border-border bg-card p-4 shadow-sm transition-colors hover:border-primary/30"
-      onClick={onClick}
-    >
+    <div className="group rounded-[19px] border border-border bg-card p-4 shadow-sm transition-colors">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 gap-4">
           <div className="flex w-14 items-center justify-center shrink-0 relative">
@@ -270,9 +267,8 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
           <Button
             size="sm"
             variant={isOnline && !isConnecting ? "default" : "outline"}
-            className="h-9 rounded-[10px] px-3.5 text-sm font-semibold shadow-none disabled:opacity-45"
+            className="h-9 rounded-[10px] px-3.5 text-sm font-semibold shadow-none"
             onClick={onClick}
-            disabled={!isOnline || isConnecting}
           >
             {isConnecting ? (
               <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
