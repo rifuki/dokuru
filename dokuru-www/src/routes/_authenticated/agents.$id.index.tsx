@@ -794,6 +794,17 @@ function SecurityOverview({
     const passRate = latestAudit.summary.total > 0 ? Math.round((latestAudit.summary.passed / latestAudit.summary.total) * 100) : 0;
     const report = auditReport?.report;
     const pillars = report?.pillars ?? [];
+    const bandLabel = SCORE_COPY[band];
+    const scoreBadgeClass = band === "healthy"
+        ? "border-primary/25 bg-primary/5 text-primary"
+        : band === "warning"
+            ? "border-amber-500/25 bg-amber-500/5 text-amber-500"
+            : "border-rose-500/25 bg-rose-500/5 text-rose-500";
+    const scoreProgressClass = band === "healthy"
+        ? "[&>div]:bg-primary"
+        : band === "warning"
+            ? "[&>div]:bg-amber-500"
+            : "[&>div]:bg-rose-500";
 
     return (
         <SectionCard
@@ -801,73 +812,66 @@ function SecurityOverview({
             description="Latest CIS Docker Benchmark result and remediation priority."
             action={<Button size="sm" asChild><Link to="/agents/$id/audit" params={{ id }}>Run Audit</Link></Button>}
         >
-            <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
-                <div className={cn(
-                    "flex min-h-[285px] flex-col justify-between rounded-[22px] border bg-background/55 p-5 shadow-sm dark:bg-white/[0.025]",
-                    SCORE_COPY[band] === "Healthy posture" ? "border-primary/30" :
-                    SCORE_COPY[band] === "Needs attention" ? "border-amber-500/35" : "border-rose-500/35"
-                )}>
-                    <div className="flex items-center justify-between gap-3">
-                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">CIS Benchmark</span>
-                        <Badge variant="outline" className={cn(
-                            "rounded-full px-2.5 py-0.5 text-[11px] font-medium",
-                            SCORE_COPY[band] === "Healthy posture" ? "text-primary border-primary/25 bg-primary/5" :
-                            SCORE_COPY[band] === "Needs attention" ? "text-amber-500 border-amber-500/20 bg-amber-500/5" : "text-rose-500 border-rose-500/20 bg-rose-500/5"
-                        )}>
-                            {SCORE_COPY[band]}
-                        </Badge>
-                    </div>
-                    <div className="mt-6 flex items-baseline gap-2">
-                        <span className="text-4xl font-semibold tabular-nums tracking-tight">{latestAudit.summary.score}</span>
-                        <span className="text-lg font-medium text-muted-foreground">/100</span>
-                    </div>
-                    <Progress value={latestAudit.summary.score} className={cn(
-                        "mt-5 h-1.5 bg-muted/50",
-                        SCORE_COPY[band] === "Healthy posture" ? "[&>div]:bg-primary" :
-                        SCORE_COPY[band] === "Needs attention" ? "[&>div]:bg-amber-500" : "[&>div]:bg-rose-500"
-                    )} />
-                    <div className="mt-5 grid grid-cols-3 divide-x divide-border border-t border-border pt-4 text-center">
-                        <div className="flex flex-col gap-1 pr-3">
-                            <span className="text-xl font-semibold text-primary">{latestAudit.summary.passed}</span>
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Passed</p>
-                        </div>
-                        <div className="flex flex-col gap-1 px-3">
-                            <span className="text-xl font-semibold text-rose-500">{latestAudit.summary.failed}</span>
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Failed</p>
-                        </div>
-                        <div className="flex flex-col gap-1 pl-3">
-                            <span className="text-xl font-semibold">{latestAudit.summary.total}</span>
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Total</p>
-                        </div>
-                    </div>
-                </div>
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+                <div className="min-w-0 space-y-4">
+                    <div className="rounded-[18px] border bg-background/55 p-5 shadow-sm dark:bg-white/[0.025]">
+                        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                            <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">CIS Benchmark</span>
+                                    <Badge variant="outline" className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-medium", scoreBadgeClass)}>
+                                        {bandLabel}
+                                    </Badge>
+                                </div>
+                                <div className="mt-4 flex items-end gap-2">
+                                    <span className="text-5xl font-semibold leading-none tabular-nums tracking-tight">{latestAudit.summary.score}</span>
+                                    <span className="pb-1 text-lg font-medium text-muted-foreground">/100</span>
+                                </div>
+                                <Progress value={latestAudit.summary.score} className={cn("mt-4 h-1.5 bg-muted/50", scoreProgressClass)} />
+                            </div>
 
-                <div className="flex min-w-0 flex-col gap-4">
+                            <div className="grid w-full grid-cols-3 gap-2 lg:max-w-[360px]">
+                                <ScoreStat label="Passed" value={latestAudit.summary.passed} className="text-primary" />
+                                <ScoreStat label="Failed" value={latestAudit.summary.failed} className="text-rose-500" />
+                                <ScoreStat label="Total" value={latestAudit.summary.total} />
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                         <SignalCard icon={AlertTriangle} label="High risk" value={highRiskFailures} detail="failed" tone={highRiskFailures > 0 ? "red" : "zinc"} />
                         <SignalCard icon={Zap} label="Auto-fix" value={autoFixable} detail="available" tone={autoFixable > 0 ? "blue" : "zinc"} />
                         <SignalCard icon={ShieldCheck} label="Quick wins" value={quickWins} detail="actions" tone={quickWins > 0 ? "blue" : "zinc"} />
                         <SignalCard icon={Clock3} label="History" value={auditHistoryCount} detail="reports" tone="zinc" />
                     </div>
+                </div>
 
-                    <div className="rounded-[22px] border bg-background/55 p-4 shadow-sm dark:bg-white/[0.025]">
-                        <div className="flex items-center justify-between gap-3">
-                            <h3 className="text-sm font-semibold tracking-tight">Security pillars</h3>
-                            <Badge variant="outline" className="rounded-full border-border/70 bg-card px-2.5 py-1 text-[11px] font-medium text-foreground">
-                                {passRate}% avg
-                            </Badge>
-                        </div>
-                        {pillars.length > 0 ? (
-                            <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                                {pillars.map((pillar) => (
-                                    <PillarRow key={pillar.key} pillar={pillar} />
-                                ))}
-                            </div>
-                        ) : null}
+                <div className="h-fit rounded-[18px] border bg-background/55 p-4 shadow-sm dark:bg-white/[0.025]">
+                    <div className="flex items-center justify-between gap-3">
+                        <h3 className="text-sm font-semibold tracking-tight">Security pillars</h3>
+                        <Badge variant="outline" className="rounded-full border-border/70 bg-card px-2.5 py-1 text-[11px] font-medium text-foreground">
+                            {passRate}% avg
+                        </Badge>
                     </div>
+                    {pillars.length > 0 ? (
+                        <div className="mt-4 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-1">
+                            {pillars.map((pillar) => (
+                                <PillarRow key={pillar.key} pillar={pillar} />
+                            ))}
+                        </div>
+                    ) : null}
                 </div>
             </div>
         </SectionCard>
+    );
+}
+
+function ScoreStat({ label, value, className }: { label: string; value: number; className?: string }) {
+    return (
+        <div className="rounded-[14px] border bg-card/70 px-3 py-3 text-center">
+            <span className={cn("text-xl font-semibold tabular-nums", className)}>{value}</span>
+            <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
+        </div>
     );
 }
 
@@ -888,13 +892,13 @@ function SignalCard({
     const isNeutral = tone === "zinc";
 
     return (
-        <div className="group rounded-[18px] border bg-background/55 p-4 shadow-sm transition-colors hover:border-primary/25 dark:bg-white/[0.025]">
+        <div className="group rounded-[16px] border bg-background/55 px-4 py-3.5 shadow-sm transition-colors hover:border-primary/25 dark:bg-white/[0.025]">
             <div className="flex items-center justify-between gap-3">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</span>
                 <Icon className={cn("h-4 w-4", isNeutral ? "text-muted-foreground" : toneClass.text)} />
             </div>
-            <div className="mt-5 flex items-baseline gap-2">
-                <span className={cn("text-3xl font-semibold leading-none tracking-tight tabular-nums", isNeutral ? "text-foreground" : toneClass.text)}>{value}</span>
+            <div className="mt-3 flex items-baseline gap-2">
+                <span className={cn("text-2xl font-semibold leading-none tracking-tight tabular-nums", isNeutral ? "text-foreground" : toneClass.text)}>{value}</span>
                 <span className="text-sm font-medium text-muted-foreground">{detail}</span>
             </div>
         </div>
