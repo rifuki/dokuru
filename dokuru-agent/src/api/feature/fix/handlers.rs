@@ -20,13 +20,13 @@ pub async fn apply_fix(
     Json(payload): Json<FixRequest>,
 ) -> ApiResult<FixOutcome> {
     let registry = RuleRegistry::new();
-    let rollback_targets = fix_helpers::cgroup_rollback_targets(&state.docker, &payload)
+    let rollback_plan = fix_helpers::rollback_plan_for_request(&state.docker, &payload)
         .await
         .unwrap_or_default();
 
     match Box::pin(registry.fix_request(&payload, &state.docker)).await {
         Ok(outcome) => {
-            fix_helpers::record_fix_history(payload, outcome.clone(), rollback_targets).await;
+            fix_helpers::record_fix_history(payload, outcome.clone(), rollback_plan).await;
             Ok(ApiSuccess::default()
                 .with_message("Remediation handled")
                 .with_data(outcome))
@@ -126,7 +126,7 @@ async fn handle_fix_socket(mut socket: WebSocket, state: AppState, payload: Stri
         }
     };
 
-    let rollback_targets = fix_helpers::cgroup_rollback_targets(&state.docker, &request)
+    let rollback_plan = fix_helpers::rollback_plan_for_request(&state.docker, &request)
         .await
         .unwrap_or_default();
     let (progress_tx, mut progress_rx) = mpsc::unbounded_channel::<FixProgress>();
@@ -158,7 +158,7 @@ async fn handle_fix_socket(mut socket: WebSocket, state: AppState, payload: Stri
 
     match final_outcome {
         Ok(Ok(outcome)) => {
-            fix_helpers::record_fix_history(request, outcome.clone(), rollback_targets).await;
+            fix_helpers::record_fix_history(request, outcome.clone(), rollback_plan).await;
             send_stream_message(&mut socket, &FixStreamMessage::Outcome { data: outcome }).await;
         }
         Ok(Err(error)) => {

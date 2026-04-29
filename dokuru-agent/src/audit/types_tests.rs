@@ -324,4 +324,23 @@ mod tests {
         assert_eq!(result.tags.as_ref().unwrap().len(), 4);
         assert!(result.tags.as_ref().unwrap().contains(&"cis".to_string()));
     }
+
+    #[test]
+    fn test_compose_rollback_target_round_trip() {
+        let target = ComposeRollbackTarget {
+            project: "dokuru-lab".to_string(),
+            service: "dokuru-lab".to_string(),
+            compose_path: "/home/rifuki/dokuru-lab/docker-compose.yaml".to_string(),
+            backup_path: Some(
+                "/home/rifuki/dokuru-lab/docker-compose.yaml.dokuru.rollback.test.bak".to_string(),
+            ),
+            working_dir: Some("/home/rifuki/dokuru-lab".to_string()),
+            config_files: Some("docker-compose.yaml".to_string()),
+        };
+
+        let json = serde_json::to_string(&target).unwrap();
+        let decoded = serde_json::from_str::<ComposeRollbackTarget>(&json).unwrap();
+
+        assert_eq!(decoded, target);
+    }
 }

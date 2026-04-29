@@ -83,7 +83,7 @@ export interface FixPreviewTarget {
   current_memory?: number | null;
   current_cpu_shares?: number | null;
   current_pids_limit?: number | null;
-  suggestion: ResourceSuggestion;
+  suggestion?: ResourceSuggestion | null;
   strategy: string;
   compose_project?: string;
   compose_service?: string;

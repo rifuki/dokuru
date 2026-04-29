@@ -167,7 +167,8 @@ pub struct FixPreviewTarget {
     pub current_memory: Option<i64>,
     pub current_cpu_shares: Option<i64>,
     pub current_pids_limit: Option<i64>,
-    pub suggestion: ResourceSuggestion,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub suggestion: Option<ResourceSuggestion>,
     pub strategy: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compose_project: Option<String>,
@@ -193,8 +194,23 @@ pub struct FixHistoryEntry {
     pub rollback_supported: bool,
     #[serde(default)]
     pub rollback_targets: Vec<FixTarget>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub compose_rollback_targets: Vec<ComposeRollbackTarget>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rollback_note: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ComposeRollbackTarget {
+    pub project: String,
+    pub service: String,
+    pub compose_path: String,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub backup_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub working_dir: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub config_files: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -203,7 +219,6 @@ pub struct RollbackRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
 pub struct FixProgress {
     pub rule_id: String,
     pub container_name: String,

@@ -192,12 +192,15 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
                 setPreview(nextPreview);
                 setTargetConfig(Object.fromEntries(nextPreview.targets.map((target) => [
                     target.container_id,
-                    {
-                        memoryMb: Math.round(target.suggestion.memory / 1024 / 1024),
-                        cpuShares: target.suggestion.cpu_shares,
-                        pidsLimit: target.suggestion.pids_limit,
-                        strategy: target.strategy === "compose_update" ? "compose_update" : "docker_update",
-                    },
+                    (() => {
+                        const fallback = getSuggestedLimits(target.container_name);
+                        return {
+                            memoryMb: target.suggestion ? Math.round(target.suggestion.memory / 1024 / 1024) : fallback.memoryMb,
+                            cpuShares: target.suggestion?.cpu_shares ?? fallback.cpuShares,
+                            pidsLimit: target.suggestion?.pids_limit ?? fallback.pidsLimit,
+                            strategy: target.strategy === "compose_update" ? "compose_update" : "docker_update",
+                        };
+                    })(),
                 ])));
             })
             .catch(() => toast.error(`Failed to load fix preview for rule ${result.rule.id}`))

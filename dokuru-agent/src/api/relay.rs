@@ -652,7 +652,7 @@ async fn fix_progress_stream(
     let request = serde_json::from_value::<FixRequest>(payload)
         .wrap_err("Invalid fix progress stream payload")?;
     let docker = crate::docker::get_docker_client()?;
-    let rollback_targets = fix_helpers::cgroup_rollback_targets(&docker, &request)
+    let rollback_plan = fix_helpers::rollback_plan_for_request(&docker, &request)
         .await
         .unwrap_or_default();
     let registry = RuleRegistry::new();
@@ -688,7 +688,7 @@ async fn fix_progress_stream(
 
     match outcome {
         Ok(Ok(outcome)) => {
-            fix_helpers::record_fix_history(request, outcome.clone(), rollback_targets).await;
+            fix_helpers::record_fix_history(request, outcome.clone(), rollback_plan).await;
             send_stream_data(
                 tx,
                 id,
@@ -976,12 +976,12 @@ async fn execute_command(command: &str, payload: serde_json::Value) -> Result<se
                 .wrap_err("Invalid fix command payload")?;
             let docker = bollard::Docker::connect_with_local_defaults()
                 .wrap_err("Failed to connect to local Docker daemon")?;
-            let rollback_targets = fix_helpers::cgroup_rollback_targets(&docker, &payload)
+            let rollback_plan = fix_helpers::rollback_plan_for_request(&docker, &payload)
                 .await
                 .unwrap_or_default();
             let registry = RuleRegistry::new();
             let outcome = Box::pin(registry.fix_request(&payload, &docker)).await?;
-            fix_helpers::record_fix_history(payload, outcome.clone(), rollback_targets).await;
+            fix_helpers::record_fix_history(payload, outcome.clone(), rollback_plan).await;
             serde_json::to_value(outcome).wrap_err("Failed to serialize fix outcome")
         }
         "fix_preview" => {

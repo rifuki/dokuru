@@ -1,7 +1,7 @@
 /// Shared helpers for `fix_fn` implementations
 use crate::audit::types::{
-    FixHistoryEntry, FixOutcome, FixPreview, FixPreviewTarget, FixProgress, FixRequest, FixStatus,
-    FixTarget, ResourceSuggestion, RollbackRequest,
+    ComposeRollbackTarget, FixHistoryEntry, FixOutcome, FixPreview, FixPreviewTarget, FixProgress,
+    FixRequest, FixStatus, FixTarget, ResourceSuggestion, RollbackRequest,
 };
 use bollard::{
     Docker,
@@ -22,6 +22,12 @@ use tokio::sync::{RwLock, mpsc};
 use uuid::Uuid;
 
 pub type ProgressSender = mpsc::UnboundedSender<FixProgress>;
+
+#[derive(Default)]
+pub struct RollbackPlan {
+    pub cgroup_targets: Vec<FixTarget>,
+    pub compose_targets: Vec<ComposeRollbackTarget>,
+}
 
 static FIX_HISTORY: LazyLock<RwLock<Vec<FixHistoryEntry>>> =
     LazyLock::new(|| RwLock::new(Vec::new()));
@@ -1618,7 +1624,8 @@ fn preview_target_from_inspect(
         .as_ref()
         .and_then(|config| config.image.clone())
         .unwrap_or_default();
-    let suggestion = suggest_resource_limits(&name, &image);
+    let suggestion =
+        supports_cgroup_resource_fix(rule_id).then(|| suggest_resource_limits(&name, &image));
     let host_config = inspect.host_config.as_ref();
     let compose = compose_context_from_inspect(inspect);
     let strategy = if supports_cgroup_resource_fix(rule_id) && compose.is_some() {
@@ -1645,13 +1652,23 @@ fn preview_target_from_inspect(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[derive(Clone, Copy)]
+struct ProgressStep {
+    step: u8,
+    total_steps: u8,
+}
+
+impl ProgressStep {
+    const fn new(step: u8, total_steps: u8) -> Self {
+        Self { step, total_steps }
+    }
+}
+
 fn emit_progress(
     progress: Option<&ProgressSender>,
     rule_id: &str,
     container_name: &str,
-    step: u8,
-    total_steps: u8,
+    step: ProgressStep,
     action: &str,
     status: &str,
     detail: Option<String>,
@@ -1661,8 +1678,8 @@ fn emit_progress(
         FixProgress {
             rule_id: rule_id.to_string(),
             container_name: container_name.to_string(),
-            step,
-            total_steps,
+            step: step.step,
+            total_steps: step.total_steps,
             action: action.to_string(),
             status: status.to_string(),
             detail,
@@ -1740,16 +1757,45 @@ async fn default_target_for_rule(
     })
 }
 
-#[allow(dead_code)]
-pub async fn apply_cgroup_resource_fix(
-    docker: &Docker,
+fn fix_outcome(
     rule_id: &str,
-    targets: &[FixTarget],
-) -> eyre::Result<FixOutcome> {
-    apply_cgroup_resource_fix_with_progress(docker, rule_id, targets, None).await
+    updated: &[String],
+    failed: &[String],
+    empty_message: &str,
+    mut message: String,
+) -> FixOutcome {
+    if updated.is_empty() && failed.is_empty() {
+        return FixOutcome {
+            rule_id: rule_id.to_string(),
+            status: FixStatus::Applied,
+            message: empty_message.to_string(),
+            requires_restart: false,
+            restart_command: None,
+            requires_elevation: false,
+        };
+    }
+
+    if !updated.is_empty() {
+        let _ = write!(message, ": {}", updated.join(", "));
+    }
+    if !failed.is_empty() {
+        let _ = write!(message, ". Failed {}: {}", failed.len(), failed.join("; "));
+    }
+
+    FixOutcome {
+        rule_id: rule_id.to_string(),
+        status: if updated.is_empty() && !failed.is_empty() {
+            FixStatus::Blocked
+        } else {
+            FixStatus::Applied
+        },
+        message,
+        requires_restart: false,
+        restart_command: None,
+        requires_elevation: false,
+    }
 }
 
-#[allow(clippy::too_many_lines)]
 pub async fn apply_cgroup_resource_fix_with_progress(
     docker: &Docker,
     rule_id: &str,
@@ -1774,165 +1820,176 @@ pub async fn apply_cgroup_resource_fix_with_progress(
         });
     }
 
+    let (updated, failed) = apply_cgroup_targets(docker, rule_id, targets, progress).await;
+
+    Ok(fix_outcome(
+        rule_id,
+        &updated,
+        &failed,
+        "No containers needed cgroup resource updates",
+        format!("Updated cgroup limits for {} container(s)", updated.len()),
+    ))
+}
+
+async fn apply_cgroup_targets(
+    docker: &Docker,
+    rule_id: &str,
+    targets: &[FixTarget],
+    progress: Option<&ProgressSender>,
+) -> (Vec<String>, Vec<String>) {
     let mut updated = Vec::new();
     let mut failed = Vec::new();
     let mut compose_services = HashSet::<String>::new();
 
     for target in targets {
-        let container_label = container_label(docker, &target.container_id).await;
-        if target.strategy.as_deref() == Some("compose_update") {
-            let inspect = match docker.inspect_container(&target.container_id, None).await {
-                Ok(inspect) => inspect,
-                Err(error) => {
-                    failed.push(format!("{container_label}: inspect failed: {error}"));
-                    continue;
-                }
-            };
-            let Some(ctx) = compose_context_from_inspect(&inspect) else {
-                failed.push(format!(
-                    "{container_label}: compose_update requested but container has no Compose metadata"
-                ));
-                continue;
-            };
-            if !compose_services.insert(ctx.key()) {
-                continue;
-            }
-
-            match apply_compose_cgroup_resource_fix(docker, rule_id, target, &ctx, progress).await {
-                Ok(label) => updated.push(label),
-                Err(error) => {
-                    failed.push(format!("{container_label}: compose update failed: {error}"));
-                }
-            }
-            continue;
+        match apply_cgroup_target(docker, rule_id, target, progress, &mut compose_services).await {
+            Ok(Some(label)) => updated.push(label),
+            Ok(None) => {}
+            Err(error) => failed.push(error),
         }
+    }
 
-        emit_progress(
-            progress,
-            rule_id,
-            &container_label,
-            1,
-            3,
-            "inspect_current_cgroup",
-            "done",
-            Some("Read current container resource limits".to_string()),
-        );
-        let options = match update_options(rule_id, target) {
-            Ok(options) => options,
-            Err(error) => {
-                emit_progress(
-                    progress,
-                    rule_id,
-                    &container_label,
-                    2,
-                    3,
-                    "prepare_update",
-                    "error",
-                    Some(error.to_string()),
-                );
-                failed.push(format!("{container_label}: {error}"));
-                continue;
-            }
+    (updated, failed)
+}
+
+async fn apply_cgroup_target(
+    docker: &Docker,
+    rule_id: &str,
+    target: &FixTarget,
+    progress: Option<&ProgressSender>,
+    compose_services: &mut HashSet<String>,
+) -> Result<Option<String>, String> {
+    let container_label = container_label(docker, &target.container_id).await;
+    if target.strategy.as_deref() == Some("compose_update") {
+        let inspect = match docker.inspect_container(&target.container_id, None).await {
+            Ok(inspect) => inspect,
+            Err(error) => return Err(format!("{container_label}: inspect failed: {error}")),
         };
+        let Some(ctx) = compose_context_from_inspect(&inspect) else {
+            return Err(format!(
+                "{container_label}: compose_update requested but container has no Compose metadata"
+            ));
+        };
+        if !compose_services.insert(ctx.key()) {
+            return Ok(None);
+        }
 
-        let update_command = docker_update_command(rule_id, target, &container_label);
-        send_progress(
-            progress,
-            FixProgress {
-                rule_id: rule_id.to_string(),
-                container_name: container_label.clone(),
-                step: 2,
-                total_steps: 3,
-                action: "docker_update".to_string(),
-                status: "in_progress".to_string(),
-                detail: Some(cgroup_update_detail(rule_id, target)),
-                command: Some(update_command.clone()),
-                stdout: None,
-                stderr: None,
-            },
-        );
-        match docker.update_container(&target.container_id, options).await {
-            Ok(()) => {
-                send_progress(
-                    progress,
-                    FixProgress {
-                        rule_id: rule_id.to_string(),
-                        container_name: container_label.clone(),
-                        step: 2,
-                        total_steps: 3,
-                        action: "docker_update".to_string(),
-                        status: "done".to_string(),
-                        detail: Some(cgroup_update_detail(rule_id, target)),
-                        command: Some(update_command),
-                        stdout: Some(target.container_id.clone()),
-                        stderr: None,
-                    },
-                );
-                match verify_cgroup_update(docker, rule_id, target).await {
-                    Ok(()) => {
-                        emit_progress(
-                            progress,
-                            rule_id,
-                            &container_label,
-                            3,
-                            3,
-                            "verify_cgroup",
-                            "done",
-                            Some("Container cgroup limits updated and verified".to_string()),
-                        );
-                        updated.push(container_label);
-                    }
-                    Err(error) => {
-                        emit_progress(
-                            progress,
-                            rule_id,
-                            &container_label,
-                            3,
-                            3,
-                            "verify_cgroup",
-                            "error",
-                            Some(error.to_string()),
-                        );
-                        failed.push(format!("{container_label}: verification failed: {error}"));
-                    }
+        return apply_compose_cgroup_resource_fix(docker, rule_id, target, &ctx, progress)
+            .await
+            .map(Some)
+            .map_err(|error| format!("{container_label}: compose update failed: {error}"));
+    }
+
+    apply_standalone_cgroup_target(docker, rule_id, target, progress, &container_label)
+        .await
+        .map(Some)
+}
+
+async fn apply_standalone_cgroup_target(
+    docker: &Docker,
+    rule_id: &str,
+    target: &FixTarget,
+    progress: Option<&ProgressSender>,
+    container_label: &str,
+) -> Result<String, String> {
+    emit_progress(
+        progress,
+        rule_id,
+        container_label,
+        ProgressStep::new(1, 3),
+        "inspect_current_cgroup",
+        "done",
+        Some("Read current container resource limits".to_string()),
+    );
+    let options = match update_options(rule_id, target) {
+        Ok(options) => options,
+        Err(error) => {
+            emit_progress(
+                progress,
+                rule_id,
+                container_label,
+                ProgressStep::new(2, 3),
+                "prepare_update",
+                "error",
+                Some(error.to_string()),
+            );
+            return Err(format!("{container_label}: {error}"));
+        }
+    };
+
+    let update_command = docker_update_command(rule_id, target, container_label);
+    send_progress(
+        progress,
+        FixProgress {
+            rule_id: rule_id.to_string(),
+            container_name: container_label.to_string(),
+            step: 2,
+            total_steps: 3,
+            action: "docker_update".to_string(),
+            status: "in_progress".to_string(),
+            detail: Some(cgroup_update_detail(rule_id, target)),
+            command: Some(update_command.clone()),
+            stdout: None,
+            stderr: None,
+        },
+    );
+    match docker.update_container(&target.container_id, options).await {
+        Ok(()) => {
+            send_progress(
+                progress,
+                FixProgress {
+                    rule_id: rule_id.to_string(),
+                    container_name: container_label.to_string(),
+                    step: 2,
+                    total_steps: 3,
+                    action: "docker_update".to_string(),
+                    status: "done".to_string(),
+                    detail: Some(cgroup_update_detail(rule_id, target)),
+                    command: Some(update_command),
+                    stdout: Some(target.container_id.clone()),
+                    stderr: None,
+                },
+            );
+            match verify_cgroup_update(docker, rule_id, target).await {
+                Ok(()) => {
+                    emit_progress(
+                        progress,
+                        rule_id,
+                        container_label,
+                        ProgressStep::new(3, 3),
+                        "verify_cgroup",
+                        "done",
+                        Some("Container cgroup limits updated and verified".to_string()),
+                    );
+                    Ok(container_label.to_string())
+                }
+                Err(error) => {
+                    emit_progress(
+                        progress,
+                        rule_id,
+                        container_label,
+                        ProgressStep::new(3, 3),
+                        "verify_cgroup",
+                        "error",
+                        Some(error.to_string()),
+                    );
+                    Err(format!("{container_label}: verification failed: {error}"))
                 }
             }
-            Err(error) => {
-                emit_progress(
-                    progress,
-                    rule_id,
-                    &container_label,
-                    2,
-                    3,
-                    "docker_update",
-                    "error",
-                    Some(error.to_string()),
-                );
-                failed.push(format!("{container_label}: update failed: {error}"));
-            }
+        }
+        Err(error) => {
+            emit_progress(
+                progress,
+                rule_id,
+                container_label,
+                ProgressStep::new(2, 3),
+                "docker_update",
+                "error",
+                Some(error.to_string()),
+            );
+            Err(format!("{container_label}: update failed: {error}"))
         }
     }
-
-    let mut message = format!("Updated cgroup limits for {} container(s)", updated.len());
-    if !updated.is_empty() {
-        let _ = write!(message, ": {}", updated.join(", "));
-    }
-    if !failed.is_empty() {
-        let _ = write!(message, ". Failed {}: {}", failed.len(), failed.join("; "));
-    }
-
-    Ok(FixOutcome {
-        rule_id: rule_id.to_string(),
-        status: if updated.is_empty() && !failed.is_empty() {
-            FixStatus::Blocked
-        } else {
-            FixStatus::Applied
-        },
-        message,
-        requires_restart: false,
-        restart_command: None,
-        requires_elevation: false,
-    })
 }
 
 async fn apply_compose_cgroup_resource_fix(
@@ -1947,8 +2004,7 @@ async fn apply_compose_cgroup_resource_fix(
         progress,
         rule_id,
         &label,
-        1,
-        3,
+        ProgressStep::new(1, 3),
         "inspect_current_cgroup",
         "done",
         Some("Detected Compose-managed container resource limits".to_string()),
@@ -1964,8 +2020,7 @@ async fn apply_compose_cgroup_resource_fix(
         progress,
         rule_id,
         &format!("{}:{}", ctx.project, ctx.service),
-        3,
-        3,
+        ProgressStep::new(3, 3),
         "verify_cgroup",
         "done",
         Some("Compose service cgroup limits updated and verified".to_string()),
@@ -2326,7 +2381,6 @@ pub async fn apply_privileged_fix(docker: &Docker, rule_id: &str) -> eyre::Resul
     Box::pin(apply_privileged_fix_with_progress(docker, rule_id, None)).await
 }
 
-#[allow(clippy::too_many_lines)]
 pub async fn apply_privileged_fix_with_progress(
     docker: &Docker,
     rule_id: &str,
@@ -2350,8 +2404,7 @@ pub async fn apply_privileged_fix_with_progress(
                     progress,
                     rule_id,
                     &short_id(id),
-                    1,
-                    6,
+                    ProgressStep::new(1, 6),
                     "inspect_container",
                     "error",
                     Some(e.to_string()),
@@ -2387,8 +2440,7 @@ pub async fn apply_privileged_fix_with_progress(
             progress,
             rule_id,
             &label,
-            1,
-            6,
+            ProgressStep::new(1, 6),
             "inspect_container",
             "done",
             Some("Container is running with --privileged".to_string()),
@@ -2405,49 +2457,28 @@ pub async fn apply_privileged_fix_with_progress(
             continue;
         }
 
-        match recreate_without_privileged(docker, id, inspect, progress, &label, rule_id).await {
+        match Box::pin(recreate_without_privileged(
+            docker, id, inspect, progress, &label, rule_id,
+        ))
+        .await
+        {
             Ok(()) => updated.push(label),
             Err(e) => failed.push(format!("{label}: {e}")),
         }
     }
 
-    if updated.is_empty() && failed.is_empty() {
-        return Ok(FixOutcome {
-            rule_id: rule_id.to_string(),
-            status: FixStatus::Applied,
-            message: "No containers were running in privileged mode".to_string(),
-            requires_restart: false,
-            restart_command: None,
-            requires_elevation: false,
-        });
-    }
-
-    let mut message = format!(
-        "Recreated {} container(s) without --privileged",
-        updated.len()
-    );
-    if !updated.is_empty() {
-        let _ = write!(message, ": {}", updated.join(", "));
-    }
-    if !failed.is_empty() {
-        let _ = write!(message, ". Failed {}: {}", failed.len(), failed.join("; "));
-    }
-
-    Ok(FixOutcome {
-        rule_id: rule_id.to_string(),
-        status: if updated.is_empty() && !failed.is_empty() {
-            FixStatus::Blocked
-        } else {
-            FixStatus::Applied
-        },
-        message,
-        requires_restart: false,
-        restart_command: None,
-        requires_elevation: false,
-    })
+    Ok(fix_outcome(
+        rule_id,
+        &updated,
+        &failed,
+        "No containers were running in privileged mode",
+        format!(
+            "Recreated {} container(s) without --privileged",
+            updated.len()
+        ),
+    ))
 }
 
-#[allow(clippy::too_many_lines)]
 async fn recreate_without_privileged(
     docker: &Docker,
     id: &str,
@@ -2470,55 +2501,131 @@ async fn recreate_without_privileged(
     let mut host_config = inspect.host_config.unwrap_or_default();
     host_config.privileged = Some(false);
 
+    let mut create_config: Config<String> = container_config.into();
+    create_config.host_config = Some(host_config);
+    recreate_container(
+        docker,
+        rule_id,
+        progress,
+        RecreateContainerRequest {
+            id: id.to_string(),
+            name,
+            label: label.to_string(),
+            create_config,
+            save_detail: "Saved container config before recreate".to_string(),
+            recreate_detail: None,
+            done_detail: "Container restarted without --privileged".to_string(),
+        },
+    )
+    .await
+}
+
+struct RecreateContainerRequest {
+    id: String,
+    name: String,
+    label: String,
+    create_config: Config<String>,
+    save_detail: String,
+    recreate_detail: Option<String>,
+    done_detail: String,
+}
+
+struct CreatedRecreateTarget {
+    start_target: String,
+    label: String,
+    done_detail: String,
+}
+
+async fn recreate_container(
+    docker: &Docker,
+    rule_id: &str,
+    progress: Option<&ProgressSender>,
+    request: RecreateContainerRequest,
+) -> eyre::Result<()> {
     emit_progress(
         progress,
         rule_id,
-        label,
-        2,
-        6,
+        &request.label,
+        ProgressStep::new(2, 6),
         "save_config",
         "done",
-        Some("Saved container config before recreate".to_string()),
+        Some(request.save_detail.clone()),
     );
-
+    stop_container_for_recreate(docker, rule_id, progress, &request).await?;
+    remove_container_for_recreate(docker, rule_id, progress, &request).await?;
+    let created = create_container_for_recreate(docker, rule_id, progress, request).await?;
     emit_progress(
         progress,
         rule_id,
-        label,
-        3,
-        6,
+        &created.label,
+        ProgressStep::new(6, 6),
+        "start_container",
+        "in_progress",
+        None,
+    );
+    docker
+        .start_container(&created.start_target, None::<StartContainerOptions<String>>)
+        .await?;
+    emit_progress(
+        progress,
+        rule_id,
+        &created.label,
+        ProgressStep::new(6, 6),
+        "verify_isolation",
+        "done",
+        Some(created.done_detail),
+    );
+    Ok(())
+}
+
+async fn stop_container_for_recreate(
+    docker: &Docker,
+    rule_id: &str,
+    progress: Option<&ProgressSender>,
+    request: &RecreateContainerRequest,
+) -> eyre::Result<()> {
+    emit_progress(
+        progress,
+        rule_id,
+        &request.label,
+        ProgressStep::new(3, 6),
         "stop_container",
         "in_progress",
         None,
     );
     docker
-        .stop_container(id, Some(StopContainerOptions { t: 10 }))
+        .stop_container(&request.id, Some(StopContainerOptions { t: 10 }))
         .await?;
-
     emit_progress(
         progress,
         rule_id,
-        label,
-        3,
-        6,
+        &request.label,
+        ProgressStep::new(3, 6),
         "stop_container",
         "done",
         None,
     );
+    Ok(())
+}
 
+async fn remove_container_for_recreate(
+    docker: &Docker,
+    rule_id: &str,
+    progress: Option<&ProgressSender>,
+    request: &RecreateContainerRequest,
+) -> eyre::Result<()> {
     emit_progress(
         progress,
         rule_id,
-        label,
-        4,
-        6,
+        &request.label,
+        ProgressStep::new(4, 6),
         "remove_container",
         "in_progress",
         None,
     );
     docker
         .remove_container(
-            id,
+            &request.id,
             Some(RemoveContainerOptions {
                 v: false,
                 force: false,
@@ -2526,80 +2633,57 @@ async fn recreate_without_privileged(
             }),
         )
         .await?;
-
     emit_progress(
         progress,
         rule_id,
-        label,
-        4,
-        6,
+        &request.label,
+        ProgressStep::new(4, 6),
         "remove_container",
         "done",
         None,
     );
-
-    let mut create_config: Config<String> = container_config.into();
-    create_config.host_config = Some(host_config);
-
-    let opts = if name.is_empty() {
-        None
-    } else {
-        Some(CreateContainerOptions {
-            name: name.clone(),
-            platform: None,
-        })
-    };
-
-    emit_progress(
-        progress,
-        rule_id,
-        label,
-        5,
-        6,
-        "recreate_container",
-        "in_progress",
-        None,
-    );
-    let created = docker.create_container(opts, create_config).await?;
-
-    emit_progress(
-        progress,
-        rule_id,
-        label,
-        5,
-        6,
-        "recreate_container",
-        "done",
-        None,
-    );
-
-    let start_target = if name.is_empty() { created.id } else { name };
-    emit_progress(
-        progress,
-        rule_id,
-        label,
-        6,
-        6,
-        "start_container",
-        "in_progress",
-        None,
-    );
-    docker
-        .start_container(&start_target, None::<StartContainerOptions<String>>)
-        .await?;
-
-    emit_progress(
-        progress,
-        rule_id,
-        label,
-        6,
-        6,
-        "verify_isolation",
-        "done",
-        Some("Container restarted without --privileged".to_string()),
-    );
-
     Ok(())
+}
+
+async fn create_container_for_recreate(
+    docker: &Docker,
+    rule_id: &str,
+    progress: Option<&ProgressSender>,
+    request: RecreateContainerRequest,
+) -> eyre::Result<CreatedRecreateTarget> {
+    let opts = (!request.name.is_empty()).then(|| CreateContainerOptions {
+        name: request.name.clone(),
+        platform: None,
+    });
+    emit_progress(
+        progress,
+        rule_id,
+        &request.label,
+        ProgressStep::new(5, 6),
+        "recreate_container",
+        "in_progress",
+        request.recreate_detail,
+    );
+    let created = docker.create_container(opts, request.create_config).await?;
+    emit_progress(
+        progress,
+        rule_id,
+        &request.label,
+        ProgressStep::new(5, 6),
+        "recreate_container",
+        "done",
+        None,
+    );
+    let start_target = if request.name.is_empty() {
+        created.id
+    } else {
+        request.name
+    };
+    Ok(CreatedRecreateTarget {
+        start_target,
+        label: request.label,
+        done_detail: request.done_detail,
+    })
 }
 
 /// Stop → remove → recreate (with namespace isolation fixed) → start all violating containers.
@@ -2607,7 +2691,6 @@ pub async fn apply_namespace_fix(docker: &Docker, rule_id: &str) -> eyre::Result
     Box::pin(apply_namespace_fix_with_progress(docker, rule_id, None)).await
 }
 
-#[allow(clippy::too_many_lines)]
 pub async fn apply_namespace_fix_with_progress(
     docker: &Docker,
     rule_id: &str,
@@ -2634,8 +2717,7 @@ pub async fn apply_namespace_fix_with_progress(
                     progress,
                     rule_id,
                     &short_id(id),
-                    1,
-                    6,
+                    ProgressStep::new(1, 6),
                     "inspect_container",
                     "error",
                     Some(e.to_string()),
@@ -2675,8 +2757,7 @@ pub async fn apply_namespace_fix_with_progress(
             progress,
             rule_id,
             &label,
-            1,
-            6,
+            ProgressStep::new(1, 6),
             "inspect_container",
             "done",
             Some("Container violates namespace isolation rule".to_string()),
@@ -2693,49 +2774,28 @@ pub async fn apply_namespace_fix_with_progress(
             continue;
         }
 
-        match recreate_without_namespace(docker, id, inspect, rule_id, progress, &label).await {
+        match Box::pin(recreate_without_namespace(
+            docker, id, inspect, rule_id, progress, &label,
+        ))
+        .await
+        {
             Ok(()) => updated.push(label),
             Err(e) => failed.push(format!("{label}: {e}")),
         }
     }
 
-    if updated.is_empty() && failed.is_empty() {
-        return Ok(FixOutcome {
-            rule_id: rule_id.to_string(),
-            status: FixStatus::Applied,
-            message: "No containers needed namespace isolation fix".to_string(),
-            requires_restart: false,
-            restart_command: None,
-            requires_elevation: false,
-        });
-    }
-
-    let mut message = format!(
-        "Recreated {} container(s) with isolated namespace",
-        updated.len()
-    );
-    if !updated.is_empty() {
-        let _ = write!(message, ": {}", updated.join(", "));
-    }
-    if !failed.is_empty() {
-        let _ = write!(message, ". Failed {}: {}", failed.len(), failed.join("; "));
-    }
-
-    Ok(FixOutcome {
-        rule_id: rule_id.to_string(),
-        status: if updated.is_empty() && !failed.is_empty() {
-            FixStatus::Blocked
-        } else {
-            FixStatus::Applied
-        },
-        message,
-        requires_restart: false,
-        restart_command: None,
-        requires_elevation: false,
-    })
+    Ok(fix_outcome(
+        rule_id,
+        &updated,
+        &failed,
+        "No containers needed namespace isolation fix",
+        format!(
+            "Recreated {} container(s) with isolated namespace",
+            updated.len()
+        ),
+    ))
 }
 
-#[allow(clippy::too_many_lines)]
 async fn recreate_without_namespace(
     docker: &Docker,
     id: &str,
@@ -2767,136 +2827,23 @@ async fn recreate_without_namespace(
         _ => {}
     }
 
-    emit_progress(
-        progress,
-        rule_id,
-        label,
-        2,
-        6,
-        "save_config",
-        "done",
-        Some("Saved container config before namespace recreate".to_string()),
-    );
-
-    // Stop with 10s grace period
-    emit_progress(
-        progress,
-        rule_id,
-        label,
-        3,
-        6,
-        "stop_container",
-        "in_progress",
-        None,
-    );
-    docker
-        .stop_container(id, Some(StopContainerOptions { t: 10 }))
-        .await?;
-    emit_progress(
-        progress,
-        rule_id,
-        label,
-        3,
-        6,
-        "stop_container",
-        "done",
-        None,
-    );
-
-    // Remove (keep volumes)
-    emit_progress(
-        progress,
-        rule_id,
-        label,
-        4,
-        6,
-        "remove_container",
-        "in_progress",
-        None,
-    );
-    docker
-        .remove_container(
-            id,
-            Some(RemoveContainerOptions {
-                v: false,
-                force: false,
-                link: false,
-            }),
-        )
-        .await?;
-    emit_progress(
-        progress,
-        rule_id,
-        label,
-        4,
-        6,
-        "remove_container",
-        "done",
-        None,
-    );
-
-    // Reconstruct Config<String> from the inspect result
     let mut create_config: Config<String> = container_config.into();
     create_config.host_config = Some(host_config);
-
-    let opts = if name.is_empty() {
-        None
-    } else {
-        Some(CreateContainerOptions {
-            name: name.clone(),
-            platform: None,
-        })
-    };
-
-    emit_progress(
-        progress,
+    recreate_container(
+        docker,
         rule_id,
-        label,
-        5,
-        6,
-        "recreate_container",
-        "in_progress",
-        Some(namespace_fix_detail(rule_id).to_string()),
-    );
-    let created = docker.create_container(opts, create_config).await?;
-    emit_progress(
         progress,
-        rule_id,
-        label,
-        5,
-        6,
-        "recreate_container",
-        "done",
-        None,
-    );
-
-    let start_target = if name.is_empty() { created.id } else { name };
-    emit_progress(
-        progress,
-        rule_id,
-        label,
-        6,
-        6,
-        "start_container",
-        "in_progress",
-        None,
-    );
-    docker
-        .start_container(&start_target, None::<StartContainerOptions<String>>)
-        .await?;
-
-    emit_progress(
-        progress,
-        rule_id,
-        label,
-        6,
-        6,
-        "verify_isolation",
-        "done",
-        Some("Container restarted with hardened namespace isolation".to_string()),
-    );
-
-    Ok(())
+        RecreateContainerRequest {
+            id: id.to_string(),
+            name,
+            label: label.to_string(),
+            create_config,
+            save_detail: "Saved container config before namespace recreate".to_string(),
+            recreate_detail: Some(namespace_fix_detail(rule_id).to_string()),
+            done_detail: "Container restarted with hardened namespace isolation".to_string(),
+        },
+    )
+    .await
 }
 
 fn namespace_fix_detail(rule_id: &str) -> &'static str {
@@ -2938,7 +2885,6 @@ fn compose_context_from_inspect(inspect: &ContainerInspectResponse) -> Option<Co
     })
 }
 
-#[allow(clippy::too_many_lines)]
 async fn apply_compose_service_fix(
     docker: &Docker,
     rule_id: &str,
@@ -2946,12 +2892,28 @@ async fn apply_compose_service_fix(
     progress: Option<&ProgressSender>,
 ) -> eyre::Result<()> {
     let label = format!("{}:{}", ctx.project, ctx.service);
+    let edit = prepare_compose_service_edit(rule_id, ctx, &label, progress).await?;
+    let backup_path = write_compose_service_edit(rule_id, &label, &edit, progress).await?;
+    run_compose_service_edit(docker, rule_id, ctx, &label, &edit, &backup_path, progress).await
+}
+
+struct ComposeServiceEdit {
+    compose_paths: Vec<PathBuf>,
+    compose_path: PathBuf,
+    document: Value,
+}
+
+async fn prepare_compose_service_edit(
+    rule_id: &str,
+    ctx: &ComposeContext,
+    label: &str,
+    progress: Option<&ProgressSender>,
+) -> eyre::Result<ComposeServiceEdit> {
     emit_progress(
         progress,
         rule_id,
-        &label,
-        2,
-        6,
+        label,
+        ProgressStep::new(2, 6),
         "resolve_compose_file",
         "in_progress",
         Some("Resolving Docker Compose config files".to_string()),
@@ -2960,9 +2922,8 @@ async fn apply_compose_service_fix(
     emit_progress(
         progress,
         rule_id,
-        &label,
-        2,
-        6,
+        label,
+        ProgressStep::new(2, 6),
         "resolve_compose_file",
         "done",
         Some(format!("{} compose file(s) found", compose_paths.len())),
@@ -2973,9 +2934,8 @@ async fn apply_compose_service_fix(
     emit_progress(
         progress,
         rule_id,
-        &label,
-        3,
-        6,
+        label,
+        ProgressStep::new(3, 6),
         "update_compose_yaml",
         "in_progress",
         Some("Editing Compose service definition".to_string()),
@@ -3006,48 +2966,68 @@ async fn apply_compose_service_fix(
         ));
     };
 
-    let backup_path = compose_backup_path(&compose_path);
+    Ok(ComposeServiceEdit {
+        compose_paths,
+        compose_path,
+        document,
+    })
+}
+
+async fn write_compose_service_edit(
+    rule_id: &str,
+    label: &str,
+    edit: &ComposeServiceEdit,
+    progress: Option<&ProgressSender>,
+) -> eyre::Result<PathBuf> {
+    let backup_path = compose_backup_path(&edit.compose_path);
     emit_progress(
         progress,
         rule_id,
-        &label,
-        3,
-        6,
+        label,
+        ProgressStep::new(3, 6),
         "backup_compose_yaml",
         "in_progress",
         Some(format!("Creating backup {}", backup_path.display())),
     );
-    tokio::fs::copy(&compose_path, &backup_path).await?;
-    tokio::fs::write(&compose_path, serde_yaml::to_string(&document)?).await?;
+    tokio::fs::copy(&edit.compose_path, &backup_path).await?;
+    tokio::fs::write(&edit.compose_path, serde_yaml::to_string(&edit.document)?).await?;
     emit_progress(
         progress,
         rule_id,
-        &label,
-        3,
-        6,
+        label,
+        ProgressStep::new(3, 6),
         "update_compose_yaml",
         "done",
-        Some(format!("Updated {}", compose_path.display())),
+        Some(format!("Updated {}", edit.compose_path.display())),
     );
+    Ok(backup_path)
+}
 
+async fn run_compose_service_edit(
+    docker: &Docker,
+    rule_id: &str,
+    ctx: &ComposeContext,
+    label: &str,
+    edit: &ComposeServiceEdit,
+    backup_path: &Path,
+    progress: Option<&ProgressSender>,
+) -> eyre::Result<()> {
     emit_progress(
         progress,
         rule_id,
-        &label,
-        4,
-        6,
+        label,
+        ProgressStep::new(4, 6),
         "docker_compose_up",
         "in_progress",
         Some(format!("Recreating service {}", ctx.service)),
     );
-    if let Err(error) = run_compose_up(ctx, &compose_paths).await {
-        let _ = tokio::fs::copy(&backup_path, &compose_path).await;
+    if let Err(error) = run_compose_up(ctx, &edit.compose_paths).await {
+        let _ = tokio::fs::copy(backup_path, &edit.compose_path).await;
         emit_progress(
             progress,
             rule_id,
-            &label,
-            4,
-            6,
+            label,
+            ProgressStep::new(4, 6),
             "docker_compose_up",
             "error",
             Some(error.to_string()),
@@ -3060,9 +3040,8 @@ async fn apply_compose_service_fix(
     emit_progress(
         progress,
         rule_id,
-        &label,
-        5,
-        6,
+        label,
+        ProgressStep::new(5, 6),
         "docker_compose_up",
         "done",
         None,
@@ -3071,9 +3050,8 @@ async fn apply_compose_service_fix(
     emit_progress(
         progress,
         rule_id,
-        &label,
-        6,
-        6,
+        label,
+        ProgressStep::new(6, 6),
         "verify_compose_service",
         "in_progress",
         None,
@@ -3082,9 +3060,8 @@ async fn apply_compose_service_fix(
     emit_progress(
         progress,
         rule_id,
-        &label,
-        6,
-        6,
+        label,
+        ProgressStep::new(6, 6),
         "verify_compose_service",
         "done",
         Some("Compose service recreated and verified".to_string()),
@@ -3431,37 +3408,63 @@ fn container_violates_rule(inspect: &ContainerInspectResponse, rule_id: &str) ->
     }
 }
 
-pub async fn cgroup_rollback_targets(
+pub async fn rollback_plan_for_request(
     docker: &Docker,
     request: &FixRequest,
-) -> eyre::Result<Vec<FixTarget>> {
+) -> eyre::Result<RollbackPlan> {
     if !supports_cgroup_resource_fix(&request.rule_id) {
-        return Ok(Vec::new());
+        if supports_namespace_fix(&request.rule_id) || supports_privileged_fix(&request.rule_id) {
+            return Ok(RollbackPlan {
+                cgroup_targets: Vec::new(),
+                compose_targets: compose_rollback_targets_for_rule(docker, &request.rule_id)
+                    .await?,
+            });
+        }
+
+        return Ok(RollbackPlan::default());
     }
 
-    let target_ids = if request.targets.is_empty() {
-        preview_fix(docker, &request.rule_id)
-            .await?
-            .targets
-            .into_iter()
-            .map(|target| target.container_id)
-            .collect::<Vec<_>>()
+    cgroup_rollback_plan(docker, request).await
+}
+
+async fn cgroup_rollback_plan(docker: &Docker, request: &FixRequest) -> eyre::Result<RollbackPlan> {
+    let targets = if request.targets.is_empty() {
+        let containers = docker.list_containers::<String>(None).await?;
+        let mut targets = Vec::new();
+        for container in &containers {
+            if let Some(target) = default_target_for_rule(docker, &request.rule_id, container).await
+            {
+                targets.push(target);
+            }
+        }
+        targets
     } else {
-        request
-            .targets
-            .iter()
-            .map(|target| target.container_id.clone())
-            .collect()
+        request.targets.clone()
     };
 
-    let mut rollback_targets = Vec::new();
-    for container_id in target_ids {
-        let inspect = docker.inspect_container(&container_id, None).await?;
-        let Some(host_config) = inspect.host_config else {
+    let mut cgroup_targets = Vec::new();
+    let mut compose_targets = Vec::new();
+    let mut compose_services = HashSet::<String>::new();
+
+    for target in targets {
+        let inspect = docker.inspect_container(&target.container_id, None).await?;
+        let Some(host_config) = inspect.host_config.as_ref() else {
             continue;
         };
-        rollback_targets.push(FixTarget {
-            container_id,
+
+        if let Some(ctx) = compose_context_from_inspect(&inspect) {
+            if compose_services.insert(ctx.key())
+                && let Ok(compose_path) =
+                    find_compose_update_path(&ctx, &request.rule_id, Some(&target)).await
+            {
+                compose_targets
+                    .push(compose_rollback_target_with_backup(&ctx, compose_path).await?);
+            }
+            continue;
+        }
+
+        cgroup_targets.push(FixTarget {
+            container_id: target.container_id,
             memory: host_config.memory,
             cpu_shares: host_config.cpu_shares,
             pids_limit: host_config.pids_limit,
@@ -3469,15 +3472,121 @@ pub async fn cgroup_rollback_targets(
         });
     }
 
-    Ok(rollback_targets)
+    Ok(RollbackPlan {
+        cgroup_targets,
+        compose_targets,
+    })
+}
+
+async fn compose_rollback_targets_for_rule(
+    docker: &Docker,
+    rule_id: &str,
+) -> eyre::Result<Vec<ComposeRollbackTarget>> {
+    let containers = docker.list_containers::<String>(None).await?;
+    let mut targets = Vec::new();
+    let mut compose_services = HashSet::<String>::new();
+
+    for container in &containers {
+        let Some(id) = container.id.as_deref() else {
+            continue;
+        };
+        let inspect = docker.inspect_container(id, None).await?;
+        if !container_violates_rule(&inspect, rule_id) {
+            continue;
+        }
+        let Some(ctx) = compose_context_from_inspect(&inspect) else {
+            continue;
+        };
+        if !compose_services.insert(ctx.key()) {
+            continue;
+        }
+        if let Ok(compose_path) = find_compose_update_path(&ctx, rule_id, None).await {
+            targets.push(compose_rollback_target_with_backup(&ctx, compose_path).await?);
+        }
+    }
+
+    Ok(targets)
+}
+
+async fn find_compose_update_path(
+    ctx: &ComposeContext,
+    rule_id: &str,
+    target: Option<&FixTarget>,
+) -> eyre::Result<PathBuf> {
+    let compose_paths = resolve_compose_files(ctx).await?;
+    let mut skipped = Vec::new();
+
+    for compose_path in compose_paths {
+        let content = tokio::fs::read_to_string(&compose_path).await?;
+        let mut document: Value = serde_yaml::from_str(&content)?;
+        match update_compose_document(&mut document, &ctx.service, rule_id, target) {
+            Ok(true) => return Ok(compose_path),
+            Ok(false) => skipped.push(format!(
+                "{}: no rollback-relevant change",
+                compose_path.display()
+            )),
+            Err(error) => skipped.push(format!("{}: {error}", compose_path.display())),
+        }
+    }
+
+    Err(eyre::eyre!(
+        "compose service '{}' could not be mapped to a rollback compose file for rule {} ({})",
+        ctx.service,
+        rule_id,
+        skipped.join("; ")
+    ))
+}
+
+async fn compose_rollback_target_with_backup(
+    ctx: &ComposeContext,
+    compose_path: PathBuf,
+) -> eyre::Result<ComposeRollbackTarget> {
+    let backup_path = compose_rollback_backup_path(&compose_path);
+    tokio::fs::copy(&compose_path, &backup_path).await?;
+
+    Ok(ComposeRollbackTarget {
+        project: ctx.project.clone(),
+        service: ctx.service.clone(),
+        compose_path: compose_path.to_string_lossy().to_string(),
+        backup_path: Some(backup_path.to_string_lossy().to_string()),
+        working_dir: ctx
+            .working_dir
+            .as_ref()
+            .map(|path| path.to_string_lossy().to_string()),
+        config_files: ctx.config_files.clone(),
+    })
+}
+
+fn compose_rollback_backup_path(path: &Path) -> PathBuf {
+    let filename = path.file_name().map_or_else(
+        || "compose.yaml".to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    path.with_file_name(format!("{filename}.dokuru.rollback.{}.bak", Uuid::new_v4()))
 }
 
 pub async fn record_fix_history(
     request: FixRequest,
     outcome: FixOutcome,
-    rollback_targets: Vec<FixTarget>,
+    rollback_plan: RollbackPlan,
 ) -> FixHistoryEntry {
-    let rollback_supported = !rollback_targets.is_empty() && outcome.status == FixStatus::Applied;
+    let RollbackPlan {
+        cgroup_targets: rollback_targets,
+        compose_targets,
+    } = rollback_plan;
+    let compose_rollback_targets = compose_targets;
+    let has_compose_rollback = compose_rollback_targets
+        .iter()
+        .any(|target| target.backup_path.is_some());
+    let rollback_supported = outcome.status == FixStatus::Applied
+        && (!rollback_targets.is_empty() || has_compose_rollback);
+    let rollback_note = rollback_supported.then(|| {
+        if has_compose_rollback {
+            "Rollback restores backed up Compose YAML and recreates services".to_string()
+        } else {
+            "Rollback restores previous cgroup resource limits".to_string()
+        }
+    });
     let entry = FixHistoryEntry {
         id: Uuid::new_v4().to_string(),
         timestamp: chrono::Utc::now().to_rfc3339(),
@@ -3485,8 +3594,8 @@ pub async fn record_fix_history(
         outcome,
         rollback_supported,
         rollback_targets,
-        rollback_note: rollback_supported
-            .then(|| "Rollback restores previous cgroup resource limits".to_string()),
+        compose_rollback_targets,
+        rollback_note,
     };
 
     let mut history = FIX_HISTORY.write().await;
@@ -3511,15 +3620,20 @@ pub async fn rollback_fix(docker: &Docker, request: &RollbackRequest) -> eyre::R
         return Ok(blocked("rollback", "Fix history entry not found"));
     };
 
-    if !entry.rollback_supported || entry.rollback_targets.is_empty() {
+    if !entry.rollback_supported
+        || (entry.rollback_targets.is_empty() && entry.compose_rollback_targets.is_empty())
+    {
         return Ok(blocked(
             &entry.request.rule_id,
-            "Rollback is only supported for cgroup fixes with captured previous limits",
+            "Rollback is only supported when previous cgroup limits or Compose backups were captured",
         ));
     }
 
     let mut restored = Vec::new();
     let mut failed = Vec::new();
+
+    rollback_compose_targets(&entry.compose_rollback_targets, &mut restored, &mut failed).await;
+
     for target in &entry.rollback_targets {
         let options = UpdateContainerOptions::<String> {
             memory: target.memory,
@@ -3537,10 +3651,7 @@ pub async fn rollback_fix(docker: &Docker, request: &RollbackRequest) -> eyre::R
         }
     }
 
-    let mut message = format!(
-        "Rolled back cgroup limits for {} container(s)",
-        restored.len()
-    );
+    let mut message = format!("Rolled back {} target(s)", restored.len());
     if !restored.is_empty() {
         let _ = write!(message, ": {}", restored.join(", "));
     }
@@ -3560,6 +3671,67 @@ pub async fn rollback_fix(docker: &Docker, request: &RollbackRequest) -> eyre::R
         restart_command: None,
         requires_elevation: false,
     })
+}
+
+async fn rollback_compose_targets(
+    targets: &[ComposeRollbackTarget],
+    restored: &mut Vec<String>,
+    failed: &mut Vec<String>,
+) {
+    let mut seen = HashSet::<String>::new();
+
+    for target in targets {
+        let key = format!(
+            "{}:{}:{}",
+            target.project, target.service, target.compose_path
+        );
+        if !seen.insert(key) {
+            continue;
+        }
+
+        let label = format!("{}:{} (compose)", target.project, target.service);
+        let Some(backup_path) = target.backup_path.as_ref() else {
+            failed.push(format!("{label}: compose backup path was not captured"));
+            continue;
+        };
+
+        let backup_path = PathBuf::from(backup_path);
+        let compose_path = PathBuf::from(&target.compose_path);
+        if tokio::fs::metadata(&backup_path).await.is_err() {
+            failed.push(format!(
+                "{label}: backup file missing: {}",
+                backup_path.display()
+            ));
+            continue;
+        }
+
+        if let Err(error) = tokio::fs::copy(&backup_path, &compose_path).await {
+            failed.push(format!(
+                "{label}: failed to restore {} from {}: {error}",
+                compose_path.display(),
+                backup_path.display()
+            ));
+            continue;
+        }
+
+        let ctx = ComposeContext {
+            project: target.project.clone(),
+            service: target.service.clone(),
+            working_dir: target.working_dir.as_ref().map(PathBuf::from),
+            config_files: target.config_files.clone(),
+        };
+        let compose_paths = resolve_compose_files(&ctx)
+            .await
+            .unwrap_or_else(|_| vec![compose_path.clone()]);
+
+        match run_compose_up_capture(&ctx, &compose_paths).await {
+            Ok(_) => restored.push(label),
+            Err(error) => failed.push(format!(
+                "{label}: restored {} but docker compose up failed: {error}",
+                compose_path.display()
+            )),
+        }
+    }
 }
 
 /// Merge a key into /etc/docker/daemon.json, creating the file if needed.
