@@ -11,7 +11,6 @@ use bollard::{
     },
     models::{ContainerInspectResponse, ContainerSummary, MountPointTypeEnum},
 };
-use serde_yaml::{Mapping, Value};
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write as _;
 use std::os::unix::fs::MetadataExt;
@@ -2032,7 +2031,7 @@ async fn apply_compose_cgroup_resource_fix(
 struct ComposeCgroupUpdate {
     compose_paths: Vec<PathBuf>,
     compose_path: PathBuf,
-    document: Value,
+    content: String,
 }
 
 async fn prepare_compose_cgroup_update(
@@ -2045,16 +2044,15 @@ async fn prepare_compose_cgroup_update(
 
     for compose_path in compose_paths.clone() {
         let content = tokio::fs::read_to_string(&compose_path).await?;
-        let mut document: Value = serde_yaml::from_str(&content)?;
-        match update_compose_document(&mut document, &ctx.service, rule_id, Some(target)) {
-            Ok(true) => {
+        match update_compose_content(&content, &ctx.service, rule_id, Some(target)) {
+            Ok(Some(updated_content)) => {
                 return Ok(ComposeCgroupUpdate {
                     compose_paths,
                     compose_path,
-                    document,
+                    content: updated_content,
                 });
             }
-            Ok(false) => skipped.push(format!(
+            Ok(None) => skipped.push(format!(
                 "{}: resource values already match",
                 compose_path.display()
             )),
@@ -2079,11 +2077,7 @@ async fn write_compose_cgroup_update(
 ) -> eyre::Result<PathBuf> {
     let backup_path = compose_backup_path(&update.compose_path);
     tokio::fs::copy(&update.compose_path, &backup_path).await?;
-    tokio::fs::write(
-        &update.compose_path,
-        serde_yaml::to_string(&update.document)?,
-    )
-    .await?;
+    tokio::fs::write(&update.compose_path, &update.content).await?;
     send_progress(
         progress,
         FixProgress {
@@ -2900,7 +2894,7 @@ async fn apply_compose_service_fix(
 struct ComposeServiceEdit {
     compose_paths: Vec<PathBuf>,
     compose_path: PathBuf,
-    document: Value,
+    content: String,
 }
 
 async fn prepare_compose_service_edit(
@@ -2928,7 +2922,7 @@ async fn prepare_compose_service_edit(
         "done",
         Some(format!("{} compose file(s) found", compose_paths.len())),
     );
-    let mut update: Option<(PathBuf, Value)> = None;
+    let mut update: Option<(PathBuf, String)> = None;
     let mut skipped = Vec::new();
 
     emit_progress(
@@ -2942,14 +2936,13 @@ async fn prepare_compose_service_edit(
     );
     for compose_path in &compose_paths {
         let content = tokio::fs::read_to_string(compose_path).await?;
-        let mut document: Value = serde_yaml::from_str(&content)?;
 
-        match update_compose_document(&mut document, &ctx.service, rule_id, None) {
-            Ok(true) => {
-                update = Some((compose_path.clone(), document));
+        match update_compose_content(&content, &ctx.service, rule_id, None) {
+            Ok(Some(updated_content)) => {
+                update = Some((compose_path.clone(), updated_content));
                 break;
             }
-            Ok(false) => skipped.push(format!(
+            Ok(None) => skipped.push(format!(
                 "{}: service setting not present",
                 compose_path.display()
             )),
@@ -2957,7 +2950,7 @@ async fn prepare_compose_service_edit(
         }
     }
 
-    let Some((compose_path, document)) = update else {
+    let Some((compose_path, content)) = update else {
         return Err(eyre::eyre!(
             "compose service '{}' does not declare the setting required for rule {} ({})",
             ctx.service,
@@ -2969,7 +2962,7 @@ async fn prepare_compose_service_edit(
     Ok(ComposeServiceEdit {
         compose_paths,
         compose_path,
-        document,
+        content,
     })
 }
 
@@ -2990,7 +2983,7 @@ async fn write_compose_service_edit(
         Some(format!("Creating backup {}", backup_path.display())),
     );
     tokio::fs::copy(&edit.compose_path, &backup_path).await?;
-    tokio::fs::write(&edit.compose_path, serde_yaml::to_string(&edit.document)?).await?;
+    tokio::fs::write(&edit.compose_path, &edit.content).await?;
     emit_progress(
         progress,
         rule_id,
@@ -3137,80 +3130,71 @@ fn compose_backup_path(path: &Path) -> PathBuf {
     path.with_file_name(format!("{filename}.dokuru.bak.{timestamp}"))
 }
 
-fn update_compose_document(
-    document: &mut Value,
+#[derive(Clone, Copy)]
+struct ComposeServiceBlock {
+    service_line: usize,
+    end: usize,
+    body_indent: usize,
+}
+
+fn update_compose_content(
+    content: &str,
     service: &str,
     rule_id: &str,
     target: Option<&FixTarget>,
-) -> eyre::Result<bool> {
-    let Value::Mapping(root) = document else {
-        return Err(eyre::eyre!("compose document root must be a mapping"));
-    };
-    let services = mapping_get_mut(root, "services")
-        .ok_or_else(|| eyre::eyre!("compose file has no services section"))?;
-    let Value::Mapping(services) = services else {
-        return Err(eyre::eyre!("compose services section must be a mapping"));
-    };
-    let service_config = mapping_get_mut(services, service)
-        .ok_or_else(|| eyre::eyre!("compose service '{service}' not found"))?;
-    let Value::Mapping(service_config) = service_config else {
-        return Err(eyre::eyre!("compose service '{service}' must be a mapping"));
-    };
+) -> eyre::Result<Option<String>> {
+    let mut lines = split_yaml_lines(content);
+    let mut block = find_compose_service_block(&lines, service)?;
+    let changed = update_compose_service_lines(&mut lines, &mut block, rule_id, target)?;
 
+    Ok(changed.then(|| render_yaml_lines(&lines, content.ends_with('\n'))))
+}
+
+fn update_compose_service_lines(
+    lines: &mut Vec<String>,
+    block: &mut ComposeServiceBlock,
+    rule_id: &str,
+    target: Option<&FixTarget>,
+) -> eyre::Result<bool> {
     let changed = match rule_id {
-        "5.5" => set_service_bool(service_config, "privileged", false),
-        "5.10" => remove_service_key(service_config, "network_mode"),
-        "5.16" => remove_service_key(service_config, "pid"),
-        "5.17" => remove_service_key(service_config, "ipc"),
-        "5.21" => remove_service_key(service_config, "uts"),
-        "5.31" => {
-            remove_service_key(service_config, "userns_mode")
-                | remove_service_key(service_config, "userns")
-        }
-        "5.11" => set_service_value(
-            service_config,
+        "5.5" => set_existing_service_value(lines, block, "privileged", "false"),
+        "5.10" => remove_service_keys_text(lines, block, &["network_mode"]),
+        "5.16" => remove_service_keys_text(lines, block, &["pid"]),
+        "5.17" => remove_service_keys_text(lines, block, &["ipc"]),
+        "5.21" => remove_service_keys_text(lines, block, &["uts"]),
+        "5.31" => remove_service_keys_text(lines, block, &["userns_mode", "userns"]),
+        "5.11" => set_service_value_text(
+            lines,
+            block,
             "mem_limit",
-            Value::String(compose_memory_value(
+            &compose_memory_value(
                 target
                     .and_then(|target| target.memory)
                     .unwrap_or(DEFAULT_MEMORY_BYTES),
-            )),
+            ),
         ),
-        "5.12" => set_service_i64(
-            service_config,
+        "5.12" => set_service_value_text(
+            lines,
+            block,
             "cpu_shares",
-            target
+            &target
                 .and_then(|target| target.cpu_shares)
-                .unwrap_or(DEFAULT_CPU_SHARES),
+                .unwrap_or(DEFAULT_CPU_SHARES)
+                .to_string(),
         ),
-        "5.29" => set_service_i64(
-            service_config,
+        "5.29" => set_service_value_text(
+            lines,
+            block,
             "pids_limit",
-            target
+            &target
                 .and_then(|target| target.pids_limit)
-                .unwrap_or(DEFAULT_PIDS_LIMIT),
+                .unwrap_or(DEFAULT_PIDS_LIMIT)
+                .to_string(),
         ),
         "cgroup_all" => {
             let target = target
                 .ok_or_else(|| eyre::eyre!("cgroup_all compose update needs target values"))?;
-            let memory_changed = set_service_value(
-                service_config,
-                "mem_limit",
-                Value::String(compose_memory_value(
-                    target.memory.unwrap_or(DEFAULT_MEMORY_BYTES),
-                )),
-            );
-            let cpu_changed = set_service_i64(
-                service_config,
-                "cpu_shares",
-                target.cpu_shares.unwrap_or(DEFAULT_CPU_SHARES),
-            );
-            let pids_changed = set_service_i64(
-                service_config,
-                "pids_limit",
-                target.pids_limit.unwrap_or(DEFAULT_PIDS_LIMIT),
-            );
-            memory_changed | cpu_changed | pids_changed
+            set_cgroup_all_service_values(lines, block, target)
         }
         _ => false,
     };
@@ -3218,37 +3202,222 @@ fn update_compose_document(
     Ok(changed)
 }
 
-fn mapping_get_mut<'a>(mapping: &'a mut Mapping, key: &str) -> Option<&'a mut Value> {
-    mapping.get_mut(Value::String(key.to_string()))
+fn set_cgroup_all_service_values(
+    lines: &mut Vec<String>,
+    block: &mut ComposeServiceBlock,
+    target: &FixTarget,
+) -> bool {
+    let memory = compose_memory_value(target.memory.unwrap_or(DEFAULT_MEMORY_BYTES));
+    let cpu_shares = target.cpu_shares.unwrap_or(DEFAULT_CPU_SHARES).to_string();
+    let pids_limit = target.pids_limit.unwrap_or(DEFAULT_PIDS_LIMIT).to_string();
+
+    set_service_value_text(lines, block, "mem_limit", &memory)
+        | set_service_value_text(lines, block, "cpu_shares", &cpu_shares)
+        | set_service_value_text(lines, block, "pids_limit", &pids_limit)
 }
 
-fn remove_service_key(mapping: &mut Mapping, key: &str) -> bool {
-    mapping.remove(Value::String(key.to_string())).is_some()
+fn split_yaml_lines(content: &str) -> Vec<String> {
+    content.lines().map(ToOwned::to_owned).collect()
 }
 
-fn set_service_bool(mapping: &mut Mapping, key: &str, value: bool) -> bool {
-    let yaml_key = Value::String(key.to_string());
-    if mapping.get(&yaml_key) == Some(&Value::Bool(value)) {
+fn render_yaml_lines(lines: &[String], trailing_newline: bool) -> String {
+    let mut content = lines.join("\n");
+    if trailing_newline {
+        content.push('\n');
+    }
+    content
+}
+
+fn find_compose_service_block(
+    lines: &[String],
+    service: &str,
+) -> eyre::Result<ComposeServiceBlock> {
+    let services_section_line = find_mapping_key(lines, 0..lines.len(), 0, "services")
+        .ok_or_else(|| eyre::eyre!("compose file has no services section"))?;
+    let services_section_indent = leading_spaces(&lines[services_section_line]);
+    let services_end = block_end(lines, services_section_line + 1, services_section_indent);
+    let service_name_indent = first_child_indent(
+        lines,
+        services_section_line + 1,
+        services_end,
+        services_section_indent,
+    )
+    .ok_or_else(|| eyre::eyre!("compose services section is empty"))?;
+    let target_service_line = find_mapping_key(
+        lines,
+        services_section_line + 1..services_end,
+        service_name_indent,
+        service,
+    )
+    .ok_or_else(|| eyre::eyre!("compose service '{service}' not found"))?;
+    let end = block_end(lines, target_service_line + 1, service_name_indent);
+    let body_indent = first_child_indent(lines, target_service_line + 1, end, service_name_indent)
+        .unwrap_or(service_name_indent + 2);
+
+    Ok(ComposeServiceBlock {
+        service_line: target_service_line,
+        end,
+        body_indent,
+    })
+}
+
+fn find_mapping_key(
+    lines: &[String],
+    mut range: std::ops::Range<usize>,
+    indent: usize,
+    key: &str,
+) -> Option<usize> {
+    range.find(|&idx| mapping_key_matches_at(&lines[idx], indent, key))
+}
+
+fn block_end(lines: &[String], start: usize, parent_indent: usize) -> usize {
+    lines
+        .iter()
+        .enumerate()
+        .skip(start)
+        .find_map(|(idx, line)| {
+            let trimmed = line.trim();
+            (!trimmed.is_empty()
+                && !trimmed.starts_with('#')
+                && leading_spaces(line) <= parent_indent)
+                .then_some(idx)
+        })
+        .unwrap_or(lines.len())
+}
+
+fn first_child_indent(
+    lines: &[String],
+    start: usize,
+    end: usize,
+    parent_indent: usize,
+) -> Option<usize> {
+    lines[start..end]
+        .iter()
+        .filter(|line| !line.trim().is_empty() && !line.trim_start().starts_with('#'))
+        .map(|line| leading_spaces(line))
+        .find(|&indent| indent > parent_indent)
+}
+
+fn mapping_key_matches_at(line: &str, indent: usize, key: &str) -> bool {
+    leading_spaces(line) == indent && mapping_key_matches(line.trim(), key)
+}
+
+fn mapping_key_matches(trimmed: &str, key: &str) -> bool {
+    let Some((raw_key, _)) = trimmed.split_once(':') else {
         return false;
-    }
-    if mapping.contains_key(&yaml_key) {
-        mapping.insert(yaml_key, Value::Bool(value));
-        return true;
-    }
-    false
+    };
+    unquote_yaml_key(raw_key.trim()) == key
 }
 
-fn set_service_i64(mapping: &mut Mapping, key: &str, value: i64) -> bool {
-    set_service_value(mapping, key, Value::Number(serde_yaml::Number::from(value)))
+fn unquote_yaml_key(raw_key: &str) -> &str {
+    raw_key
+        .strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+        .or_else(|| {
+            raw_key
+                .strip_prefix('\'')
+                .and_then(|value| value.strip_suffix('\''))
+        })
+        .unwrap_or(raw_key)
 }
 
-fn set_service_value(mapping: &mut Mapping, key: &str, value: Value) -> bool {
-    let yaml_key = Value::String(key.to_string());
-    if mapping.get(&yaml_key) == Some(&value) {
-        return false;
+fn leading_spaces(line: &str) -> usize {
+    line.as_bytes()
+        .iter()
+        .take_while(|&&byte| byte == b' ')
+        .count()
+}
+
+fn service_key_range(
+    lines: &[String],
+    block: &ComposeServiceBlock,
+    key: &str,
+) -> Option<std::ops::Range<usize>> {
+    let start = (block.service_line + 1..block.end)
+        .find(|&idx| mapping_key_matches_at(&lines[idx], block.body_indent, key))?;
+    Some(start..block_end(lines, start + 1, block.body_indent))
+}
+
+fn remove_service_keys_text(
+    lines: &mut Vec<String>,
+    block: &mut ComposeServiceBlock,
+    keys: &[&str],
+) -> bool {
+    let mut ranges = keys
+        .iter()
+        .filter_map(|key| service_key_range(lines, block, key))
+        .collect::<Vec<_>>();
+    let removed = ranges.iter().map(std::ops::Range::len).sum::<usize>();
+    ranges.sort_by_key(|range| range.start);
+    for range in ranges.into_iter().rev() {
+        lines.drain(range);
     }
-    mapping.insert(yaml_key, value);
+    block.end = block.end.saturating_sub(removed);
+    removed > 0
+}
+
+fn set_existing_service_value(
+    lines: &mut Vec<String>,
+    block: &mut ComposeServiceBlock,
+    key: &str,
+    value: &str,
+) -> bool {
+    service_key_range(lines, block, key)
+        .is_some_and(|range| replace_service_value_range(lines, block, range, key, value))
+}
+
+fn set_service_value_text(
+    lines: &mut Vec<String>,
+    block: &mut ComposeServiceBlock,
+    key: &str,
+    value: &str,
+) -> bool {
+    if let Some(range) = service_key_range(lines, block, key) {
+        return replace_service_value_range(lines, block, range, key, value);
+    }
+
+    let line = service_value_line(block.body_indent, key, value);
+    let insert_at = service_insert_index(lines, block);
+    lines.insert(insert_at, line);
+    block.end += 1;
     true
+}
+
+fn replace_service_value_range(
+    lines: &mut Vec<String>,
+    block: &mut ComposeServiceBlock,
+    range: std::ops::Range<usize>,
+    key: &str,
+    value: &str,
+) -> bool {
+    if range.len() == 1 && service_line_has_value(&lines[range.start], key, value) {
+        return false;
+    }
+
+    let old_len = range.len();
+    lines.splice(range, [service_value_line(block.body_indent, key, value)]);
+    block.end = block.end + 1 - old_len;
+    true
+}
+
+fn service_line_has_value(line: &str, key: &str, value: &str) -> bool {
+    let trimmed = line.trim();
+    let Some((raw_key, raw_value)) = trimmed.split_once(':') else {
+        return false;
+    };
+    unquote_yaml_key(raw_key.trim()) == key && raw_value.trim() == value
+}
+
+fn service_value_line(indent: usize, key: &str, value: &str) -> String {
+    format!("{}{}: {}", " ".repeat(indent), key, value)
+}
+
+fn service_insert_index(lines: &[String], block: &ComposeServiceBlock) -> usize {
+    let mut insert_at = block.end;
+    while insert_at > block.service_line + 1 && lines[insert_at - 1].trim().is_empty() {
+        insert_at -= 1;
+    }
+    insert_at
 }
 
 fn compose_up_command_text(ctx: &ComposeContext, compose_paths: &[PathBuf]) -> String {
@@ -3518,10 +3687,9 @@ async fn find_compose_update_path(
 
     for compose_path in compose_paths {
         let content = tokio::fs::read_to_string(&compose_path).await?;
-        let mut document: Value = serde_yaml::from_str(&content)?;
-        match update_compose_document(&mut document, &ctx.service, rule_id, target) {
-            Ok(true) => return Ok(compose_path),
-            Ok(false) => skipped.push(format!(
+        match update_compose_content(&content, &ctx.service, rule_id, target) {
+            Ok(Some(_)) => return Ok(compose_path),
+            Ok(None) => skipped.push(format!(
                 "{}: no rollback-relevant change",
                 compose_path.display()
             )),
@@ -3779,52 +3947,87 @@ mod tests {
     use super::*;
 
     #[test]
-    fn update_compose_document_removes_namespace_setting() {
-        let mut doc: Value = serde_yaml::from_str(
-            r#"
-services:
+    fn update_compose_content_removes_namespace_setting_without_reformatting() {
+        let input = r#"services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+
   web:
     image: nginx
-    network_mode: host
-"#,
-        )
-        .unwrap();
+    pid: host
+    ports:
+      - "8080:80"
 
-        assert!(update_compose_document(&mut doc, "web", "5.10", None).unwrap());
+volumes:
+  caddy-data:
+"#;
+        let expected = r#"services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
 
-        let rendered = serde_yaml::to_string(&doc).unwrap();
-        assert!(!rendered.contains("network_mode"));
-        assert!(rendered.contains("image: nginx"));
+  web:
+    image: nginx
+    ports:
+      - "8080:80"
+
+volumes:
+  caddy-data:
+"#;
+
+        let updated = update_compose_content(input, "web", "5.16", None)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(updated, expected);
     }
 
     #[test]
-    fn update_compose_document_disables_privileged_service() {
-        let mut doc: Value = serde_yaml::from_str(
-            r#"
-services:
+    fn update_compose_content_disables_privileged_service() {
+        let input = r#"services:
   worker:
     image: alpine
     privileged: true
-"#,
-        )
-        .unwrap();
+"#;
+        let expected = r#"services:
+  worker:
+    image: alpine
+    privileged: false
+"#;
 
-        assert!(update_compose_document(&mut doc, "worker", "5.5", None).unwrap());
+        let updated = update_compose_content(input, "worker", "5.5", None)
+            .unwrap()
+            .unwrap();
 
-        let rendered = serde_yaml::to_string(&doc).unwrap();
-        assert!(rendered.contains("privileged: false"));
+        assert_eq!(updated, expected);
     }
 
     #[test]
-    fn update_compose_document_sets_cgroup_limits() {
-        let mut doc: Value = serde_yaml::from_str(
-            r#"
-services:
+    fn update_compose_content_sets_cgroup_limits_without_reformatting() {
+        let input = r#"services:
   web:
     image: nginx
-"#,
-        )
-        .unwrap();
+    environment:
+      NODE_ENV: production
+
+  api:
+    image: node:20-alpine
+"#;
+        let expected = r#"services:
+  web:
+    image: nginx
+    environment:
+      NODE_ENV: production
+    mem_limit: 512m
+    cpu_shares: 1024
+    pids_limit: 200
+
+  api:
+    image: node:20-alpine
+"#;
         let target = FixTarget {
             container_id: "abc".to_string(),
             memory: Some(512 * 1024 * 1024),
@@ -3833,11 +4036,30 @@ services:
             strategy: Some("compose_update".to_string()),
         };
 
-        assert!(update_compose_document(&mut doc, "web", "cgroup_all", Some(&target)).unwrap());
+        let updated = update_compose_content(input, "web", "cgroup_all", Some(&target))
+            .unwrap()
+            .unwrap();
 
-        let rendered = serde_yaml::to_string(&doc).unwrap();
-        assert!(rendered.contains("mem_limit: 512m"));
-        assert!(rendered.contains("cpu_shares: 1024"));
-        assert!(rendered.contains("pids_limit: 200"));
+        assert_eq!(updated, expected);
+    }
+
+    #[test]
+    fn update_compose_content_returns_none_when_values_match() {
+        let input = r#"services:
+  web:
+    image: nginx
+    mem_limit: 512m
+"#;
+        let target = FixTarget {
+            container_id: "abc".to_string(),
+            memory: Some(512 * 1024 * 1024),
+            cpu_shares: None,
+            pids_limit: None,
+            strategy: Some("compose_update".to_string()),
+        };
+
+        let updated = update_compose_content(input, "web", "5.11", Some(&target)).unwrap();
+
+        assert!(updated.is_none());
     }
 }
