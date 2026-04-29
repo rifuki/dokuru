@@ -27,7 +27,7 @@ export const Route = createFileRoute("/_authenticated/agents/$id/containers/$con
 
 function stateColor(state: string) {
   switch (state.toLowerCase()) {
-    case "running":    return "bg-green-500/10 text-green-500 border-green-500/20";
+    case "running":    return "bg-primary/10 text-primary border-primary/25";
     case "exited":     return "bg-gray-500/10 text-gray-500 border-gray-500/20";
     case "paused":     return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
     case "restarting": return "bg-blue-500/10 text-blue-500 border-blue-500/20";
@@ -178,17 +178,17 @@ function ContainerDetailPage() {
         <div className="flex items-center gap-1 shrink-0">
           {isRunning ? (
             <>
-              <Button size="sm" variant="outline" className="hover:bg-yellow-500/10 hover:text-yellow-500 hover:border-yellow-500/30" onClick={() => stopMutation.mutate()} disabled={anyPending}>
+              <Button size="sm" variant="outline" className="hover:!bg-transparent hover:text-destructive hover:border-destructive/30" onClick={() => stopMutation.mutate()} disabled={anyPending}>
                 <SquareIcon className="h-4 w-4 mr-1.5 fill-current" />
                 Stop
               </Button>
-              <Button size="sm" variant="outline" className="hover:bg-blue-500/10 hover:text-blue-500 hover:border-blue-500/30" onClick={() => restartMutation.mutate()} disabled={anyPending}>
+              <Button size="sm" variant="outline" className="hover:!bg-transparent hover:text-primary hover:border-primary/30" onClick={() => restartMutation.mutate()} disabled={anyPending}>
                 <RotateCw className="h-4 w-4 mr-1.5" />
                 Restart
               </Button>
             </>
           ) : (
-            <Button size="sm" variant="outline" className="hover:bg-green-500/10 hover:text-green-500 hover:border-green-500/30" onClick={() => startMutation.mutate()} disabled={anyPending}>
+            <Button size="sm" variant="outline" className="hover:!bg-transparent hover:text-primary hover:border-primary/30" onClick={() => startMutation.mutate()} disabled={anyPending}>
               <Play className="h-4 w-4 mr-1.5" />
               Start
             </Button>
@@ -196,7 +196,7 @@ function ContainerDetailPage() {
           <Button
             size="sm"
             variant="outline"
-            className="hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30"
+            className="hover:!bg-transparent hover:text-destructive hover:border-destructive/30"
             onClick={() => { if (confirm(`Remove container "${name}"?`)) removeMutation.mutate(); }}
             disabled={anyPending}
           >

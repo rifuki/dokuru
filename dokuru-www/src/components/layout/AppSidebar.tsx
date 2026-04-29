@@ -236,7 +236,7 @@ export function AppSidebar() {
                 const iconColor = isConnecting
                   ? "text-blue-400"
                   : isOnline
-                  ? "text-green-500"
+                  ? "text-primary"
                   : isOffline
                   ? "text-red-500"
                   : "text-muted-foreground";
@@ -252,7 +252,7 @@ export function AppSidebar() {
                         className={
                           isIconMode
                             ? ""
-                            : `rounded-lg border overflow-hidden transition-colors ${
+                            : `rounded-[19px] border overflow-hidden transition-colors ${
                                 isAgentActive
                                   ? "border-miku-primary/40"
                                   : "border-sidebar-border"
@@ -300,7 +300,7 @@ export function AppSidebar() {
                                   <span
                                     key={item.href}
                                     title="Agent offline"
-                                    className="flex items-center gap-3 py-2 text-sm px-3 mx-1.5 rounded-md text-sidebar-foreground/30 cursor-not-allowed select-none"
+                                     className="flex items-center gap-3 py-2 text-sm px-3 mx-1.5 rounded-[6px] text-sidebar-foreground/30 cursor-not-allowed select-none"
                                   >
                                     <item.icon className="size-4 shrink-0" />
                                     <span>{item.title}</span>
@@ -311,8 +311,8 @@ export function AppSidebar() {
                                     to={item.href}
                                     className={`flex items-center gap-3 py-1.5 text-sm transition-colors ${
                                       active
-                                        ? "px-3 mx-0 rounded-none border-l-[3px] border-miku-primary bg-miku-primary/20 text-miku-primary font-medium"
-                                        : "px-3 mx-1.5 rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                                        ? "px-3 mx-0 rounded-none border-l-[3px] border-miku-primary bg-miku-primary/18 text-miku-primary font-medium"
+                                        : "px-3 mx-1.5 rounded-[6px] text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
                                     }`}
                                   >
                                     <item.icon className="size-4 shrink-0" />

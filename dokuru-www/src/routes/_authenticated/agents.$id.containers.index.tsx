@@ -33,7 +33,7 @@ export const Route = createFileRoute("/_authenticated/agents/$id/containers/")({
 
 function stateColor(state: string) {
   switch (state.toLowerCase()) {
-    case "running":    return "bg-green-500/10 text-green-500 border-green-500/20";
+    case "running":    return "bg-primary/10 text-primary border-primary/25";
     case "exited":     return "bg-gray-500/10 text-gray-500 border-gray-500/20";
     case "paused":     return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
     case "restarting": return "bg-blue-500/10 text-blue-500 border-blue-500/20";
@@ -89,7 +89,7 @@ function ContainerRow({
           <div className="relative flex items-center justify-center w-8 h-8 shrink-0 rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
             <ContainerIcon className="h-4 w-4" />
             <span className={`absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full border border-card ${
-              isRunning ? "bg-green-500" : "bg-muted-foreground/40"
+              isRunning ? "bg-primary" : "bg-muted-foreground/40"
             }`} />
           </div>
 
@@ -121,8 +121,8 @@ function ContainerRow({
                   variant="ghost"
                   className={`h-9 w-9 p-0 text-muted-foreground ${
                     isRunning
-                      ? "hover:bg-destructive/10 hover:text-destructive"
-                      : "hover:bg-green-500/10 hover:text-green-500"
+                      ? "hover:!bg-transparent hover:text-destructive"
+                      : "hover:!bg-transparent hover:text-primary"
                   }`}
                   onClick={() => isRunning ? onStop(container.id) : onStart(container.id)}
                   disabled={isThisPending}
@@ -144,7 +144,7 @@ function ContainerRow({
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-9 w-9 p-0 hover:bg-blue-500/10 hover:text-blue-500"
+                    className="h-9 w-9 p-0 hover:!bg-transparent hover:text-primary"
                     onClick={() => onRestart(container.id)}
                     disabled={isThisPending}
                   >
@@ -164,7 +164,7 @@ function ContainerRow({
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="h-9 w-9 p-0 hover:bg-primary/10 hover:text-primary"
+                  className="h-9 w-9 p-0 hover:!bg-transparent hover:text-primary"
                   asChild
                 >
                   <Link to="/agents/$id/containers/$containerId" params={{ id: agentId, containerId: container.id }}>
@@ -180,7 +180,7 @@ function ContainerRow({
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="h-9 w-9 p-0 hover:bg-destructive/10 hover:text-destructive"
+                  className="h-9 w-9 p-0 hover:!bg-transparent hover:text-destructive"
                   onClick={() => { if (confirm(`Remove container "${name}"?`)) onRemove(container.id); }}
                   disabled={isThisPending}
                 >

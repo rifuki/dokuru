@@ -179,7 +179,7 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
                   isConnecting
                     ? "border-blue-500/30 bg-blue-500/10 text-blue-400"
                     : isOnline
-                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                    ? "border-primary/35 bg-primary/10 text-primary"
                     : "border-red-500/30 bg-red-500/10 text-red-400"
                 }`}
               >
@@ -223,8 +223,8 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
                   <Container className="w-3.5 h-3.5" />
                   <span>{info.containers.total} containers</span>
                   <span className="ml-2 inline-flex items-center gap-1.5">
-                    <span className="inline-flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded px-1.5 py-0.5 text-[11px] font-semibold">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                    <span className="inline-flex items-center gap-1 bg-primary/10 border border-primary/20 text-primary rounded px-1.5 py-0.5 text-[11px] font-semibold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
                       {info.containers.running}
                     </span>
                     <span className="inline-flex items-center gap-1 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded px-1.5 py-0.5 text-[11px] font-semibold">
@@ -270,11 +270,11 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
       <div className="w-[180px] border-l border-border flex flex-col justify-center gap-2 px-4 py-3 bg-muted/30">
         <button
           className={`flex items-center justify-center gap-2 h-9 w-full rounded text-sm font-semibold transition-all ${
-            isConnecting
-              ? "bg-blue-500/10 border border-blue-500/30 text-blue-400 cursor-wait"
-              : isOnline
-              ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 ring-1 ring-emerald-500/20 cursor-pointer"
-              : "bg-red-500/10 border border-red-500/30 text-red-400 cursor-not-allowed"
+              isConnecting
+                ? "bg-blue-500/10 border border-blue-500/30 text-blue-400 cursor-wait"
+                : isOnline
+                ? "bg-primary/10 border border-primary/35 text-primary hover:bg-primary/15 ring-1 ring-primary/20 cursor-pointer"
+                : "bg-red-500/10 border border-red-500/30 text-red-400 cursor-not-allowed"
           }`}
           onClick={isOnline ? onClick : undefined}
           disabled={!isOnline || isConnecting}
@@ -283,7 +283,7 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
           ) : (
             <span className={`w-2 h-2 rounded-full ${
-              isOnline ? "bg-emerald-400 animate-pulse" : "bg-red-400"
+              isOnline ? "bg-primary animate-pulse" : "bg-red-400"
             }`} />
           )}
           {isConnecting ? "Connecting..." : isOnline ? "Connected" : "Disconnected"}

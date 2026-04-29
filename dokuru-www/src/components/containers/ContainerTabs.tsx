@@ -64,14 +64,14 @@ export function ContainerOverview({
   const created = data.Created ? new Date(data.Created as string).toLocaleString() : "N/A";
 
   return (
-    <div className="p-6 space-y-6 text-sm">
+    <div className="p-5 sm:p-6 space-y-6 text-sm">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <section className="space-y-3">
-          <h4 className="font-semibold text-sm flex items-center gap-2">
+          <h4 className="font-semibold text-sm flex items-center gap-2 text-foreground">
             <div className="h-1 w-1 rounded-full bg-primary" />
             Container Info
           </h4>
-          <div className="space-y-2 bg-muted/50 rounded-lg p-4">
+          <div className="space-y-2 rounded-[19px] border border-border bg-muted/55 p-4 shadow-sm dark:bg-white/[0.045]">
             <div className="flex justify-between text-xs">
               <span className="text-muted-foreground">Created:</span>
               <span className="font-mono">{created}</span>
@@ -85,11 +85,11 @@ export function ContainerOverview({
 
         {ports && Object.keys(ports).length > 0 && (
           <section className="space-y-3">
-            <h4 className="font-semibold text-sm flex items-center gap-2">
+            <h4 className="font-semibold text-sm flex items-center gap-2 text-foreground">
               <div className="h-1 w-1 rounded-full bg-primary" />
               Port Bindings
             </h4>
-            <div className="space-y-2 bg-muted/50 rounded-lg p-4">
+            <div className="space-y-2 rounded-[19px] border border-border bg-muted/55 p-4 shadow-sm dark:bg-white/[0.045]">
               {Object.entries(ports).map(([containerPort, bindings]) => (
                 <div key={containerPort} className="flex items-center gap-3 font-mono text-xs">
                   <span className="text-muted-foreground">{containerPort}</span>
@@ -108,7 +108,7 @@ export function ContainerOverview({
 
       {networks && Object.keys(networks).length > 0 && (
         <section className="space-y-3">
-          <h4 className="font-semibold text-sm flex items-center gap-2">
+          <h4 className="font-semibold text-sm flex items-center gap-2 text-foreground">
             <div className="h-1 w-1 rounded-full bg-primary" />
             Networks & IP Address
           </h4>
@@ -116,7 +116,7 @@ export function ContainerOverview({
             {Object.entries(networks).map(([name, net]) => {
               const networkData = net as { IPAddress?: string; NetworkID?: string };
               return (
-                <div key={name} className="bg-muted/50 rounded-lg p-3">
+                <div key={name} className="rounded-[19px] border border-border bg-muted/55 p-4 shadow-sm dark:bg-white/[0.045]">
                   <div className="flex items-center gap-2 mb-1">
                     <Link
                       to="/agents/$id/networks/$networkId"
@@ -140,13 +140,13 @@ export function ContainerOverview({
 
       {(mounts?.length || binds.length) > 0 && (
         <section className="space-y-3">
-          <h4 className="font-semibold text-sm flex items-center gap-2">
+          <h4 className="font-semibold text-sm flex items-center gap-2 text-foreground">
             <div className="h-1 w-1 rounded-full bg-primary" />
             Volume Mounts
           </h4>
-          <div className="space-y-2 bg-muted/50 rounded-lg p-4">
+          <div className="space-y-2 rounded-[19px] border border-border bg-muted/55 p-4 shadow-sm dark:bg-white/[0.045]">
             {(mounts ?? []).map((m, i) => (
-              <div key={i} className="font-mono text-xs flex items-start gap-3 p-2 rounded hover:bg-background transition-colors">
+              <div key={i} className="font-mono text-xs flex items-start gap-3 rounded-[6px] bg-background/50 p-2 transition-colors hover:bg-background">
                 <Badge variant="outline" className="text-[10px] mt-0.5">{m.Type}</Badge>
                 <div className="flex-1 min-w-0">
                   <div className="text-foreground font-medium truncate">{m.Destination}</div>
@@ -160,17 +160,17 @@ export function ContainerOverview({
 
       {env.length > 0 && (
         <section className="space-y-3">
-          <h4 className="font-semibold text-sm flex items-center gap-2">
+          <h4 className="font-semibold text-sm flex items-center gap-2 text-foreground">
             <div className="h-1 w-1 rounded-full bg-primary" />
             Environment Variables
             <Badge variant="secondary" className="text-[10px] ml-auto">{env.length}</Badge>
           </h4>
-          <div className="max-h-64 overflow-y-auto rounded-lg bg-muted/50 p-4 space-y-1">
+          <div className="max-h-64 overflow-y-auto rounded-[19px] border border-border bg-muted/55 p-4 space-y-1 shadow-sm dark:bg-white/[0.045]">
             {env.map((e, i) => {
               const [key, ...rest] = e.split("=");
               return (
-                <div key={i} className="font-mono text-xs leading-relaxed p-1.5 rounded hover:bg-background transition-colors">
-                  <span className="text-blue-400 font-medium">{key}</span>
+                <div key={i} className="font-mono text-xs leading-relaxed p-1.5 rounded-[6px] hover:bg-background transition-colors">
+                  <span className="text-primary font-medium">{key}</span>
                   {rest.length > 0 && <span className="text-muted-foreground">={rest.join("=")}</span>}
                 </div>
               );
@@ -181,15 +181,15 @@ export function ContainerOverview({
 
       {Object.keys(labels).length > 0 && (
         <section className="space-y-3">
-          <h4 className="font-semibold text-sm flex items-center gap-2">
+          <h4 className="font-semibold text-sm flex items-center gap-2 text-foreground">
             <div className="h-1 w-1 rounded-full bg-primary" />
             Labels
             <Badge variant="secondary" className="text-[10px] ml-auto">{Object.keys(labels).length}</Badge>
           </h4>
-          <div className="max-h-48 overflow-y-auto rounded-lg bg-muted/50 p-4 space-y-1">
+          <div className="max-h-48 overflow-y-auto rounded-[19px] border border-border bg-muted/55 p-4 space-y-1 shadow-sm dark:bg-white/[0.045]">
             {Object.entries(labels).map(([k, v]) => (
-              <div key={k} className="font-mono text-xs p-1.5 rounded hover:bg-background transition-colors">
-                <span className="text-purple-400 font-medium">{k}</span>
+              <div key={k} className="font-mono text-xs p-1.5 rounded-[6px] hover:bg-background transition-colors">
+                <span className="text-primary font-medium">{k}</span>
                 <span className="text-muted-foreground">={v}</span>
               </div>
             ))}
@@ -342,7 +342,7 @@ export function ContainerStats({
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="space-y-3 p-5 rounded-lg border bg-card">
+        <div className="space-y-3 rounded-[19px] border border-border bg-card p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
@@ -352,24 +352,24 @@ export function ContainerStats({
             </div>
             <span className="font-mono text-2xl font-bold text-blue-500">{cpuPct.toFixed(1)}%</span>
           </div>
-          <div className="h-3 bg-muted rounded-full overflow-hidden">
+            <div className="h-3 bg-muted rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-500 shadow-lg shadow-blue-500/50"
+              className="h-full bg-primary transition-all duration-500"
               style={{ width: `${Math.min(cpuPct, 100)}%` }}
             />
           </div>
           <p className="text-xs text-muted-foreground">Real-time CPU utilization</p>
         </div>
 
-        <div className="space-y-3 p-5 rounded-lg border bg-card">
+        <div className="space-y-3 rounded-[19px] border border-border bg-card p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${memPct > 80 ? "bg-red-500/10" : "bg-green-500/10"}`}>
-                <MemoryStick className={`h-4 w-4 ${memPct > 80 ? "text-red-500" : "text-green-500"}`} />
+              <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${memPct > 80 ? "bg-red-500/10" : "bg-primary/10"}`}>
+                <MemoryStick className={`h-4 w-4 ${memPct > 80 ? "text-red-500" : "text-primary"}`} />
               </div>
               <span className="text-sm font-semibold">Memory Usage</span>
             </div>
-            <span className={`font-mono text-2xl font-bold ${memPct > 80 ? "text-red-500" : "text-green-500"}`}>
+            <span className={`font-mono text-2xl font-bold ${memPct > 80 ? "text-red-500" : "text-primary"}`}>
               {memPct.toFixed(1)}%
             </span>
           </div>
@@ -377,8 +377,8 @@ export function ContainerStats({
             <div
               className={`h-full transition-all duration-500 shadow-lg ${
                 memPct > 80
-                  ? "bg-gradient-to-r from-red-500 to-red-600 shadow-red-500/50"
-                  : "bg-gradient-to-r from-green-500 to-green-600 shadow-green-500/50"
+                  ? "bg-red-500"
+                  : "bg-primary"
               }`}
               style={{ width: `${Math.min(memPct, 100)}%` }}
             />
@@ -639,16 +639,16 @@ export function ContainerTerminal({
 
         {/* Status accent line at top */}
         <div className={`absolute inset-x-0 top-0 h-px transition-colors duration-500 ${
-          isConnected    ? "bg-gradient-to-r from-transparent via-emerald-500/40 to-transparent"
-          : isConnecting ? "bg-gradient-to-r from-transparent via-primary/30 to-transparent"
+          isConnected    ? "bg-primary/50"
+          : isConnecting ? "bg-primary/30"
           : "bg-border"
         }`} />
 
         {/* macOS dots */}
         <div className="flex items-center gap-1 shrink-0">
-          <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f56]" />
-          <span className="h-2.5 w-2.5 rounded-full bg-[#ffbd2e]" />
-          <span className="h-2.5 w-2.5 rounded-full bg-[#27c93f]" />
+          <span className="h-2.5 w-2.5 rounded-full bg-white/[0.18]" />
+          <span className="h-2.5 w-2.5 rounded-full bg-white/[0.18]" />
+          <span className="h-2.5 w-2.5 rounded-full bg-primary/70" />
         </div>
 
         {/* Separator */}
@@ -712,7 +712,7 @@ export function ContainerTerminal({
                         </span>
                       )}
                       {isDefault && (
-                        <span className="text-[8px] px-1 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-mono tracking-wide">
+                        <span className="text-[8px] px-1 py-0.5 rounded bg-primary/15 text-primary border border-primary/20 font-mono tracking-wide">
                           detected
                         </span>
                       )}
@@ -730,7 +730,7 @@ export function ContainerTerminal({
         {/* Status indicator — disconnected only shown if we've had a session before */}
         {(isConnected || isConnecting || isDisconnected) && (
           <div className={`flex items-center gap-1 text-[10px] font-mono font-medium uppercase tracking-wide shrink-0 transition-colors duration-300 ${
-            isConnected    ? "text-emerald-500"
+            isConnected    ? "text-primary"
             : isConnecting ? "text-primary"
             : "text-destructive"
           }`}>
