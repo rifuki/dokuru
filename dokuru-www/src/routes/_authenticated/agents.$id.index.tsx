@@ -76,7 +76,7 @@ const SCORE_COPY = {
     critical: "Critical exposure",
 } as const;
 
-type DashboardTone = "green" | "amber" | "red" | "blue" | "violet" | "cyan" | "zinc";
+type DashboardTone = "amber" | "red" | "blue" | "zinc";
 
 function dockerCredentialFor(agent: Agent | null | undefined) {
     if (!agent) return "";
@@ -145,7 +145,7 @@ function severityWeight(result: AuditResult) {
 
 function statusClass(state: string) {
     const normalized = state.toLowerCase();
-    if (normalized === "running") return "border-emerald-500/20 bg-emerald-500/10 text-emerald-400";
+    if (normalized === "running") return "border-primary/25 bg-primary/10 text-primary";
     if (normalized === "exited" || normalized === "stopped") return "border-zinc-500/20 bg-zinc-500/10 text-zinc-400";
     if (normalized === "paused") return "border-amber-500/20 bg-amber-500/10 text-amber-400";
     if (normalized === "restarting") return "border-blue-500/20 bg-blue-500/10 text-blue-400";
@@ -154,12 +154,9 @@ function statusClass(state: string) {
 
 function toneClasses(tone: DashboardTone) {
     const map: Record<DashboardTone, { icon: string; bg: string; border: string; text: string; progress: string }> = {
-        green: { icon: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/20", text: "text-emerald-500", progress: "[&>div]:bg-emerald-500" },
         amber: { icon: "text-amber-500", bg: "bg-amber-500/10", border: "border-amber-500/20", text: "text-amber-500", progress: "[&>div]:bg-amber-500" },
         red: { icon: "text-rose-500", bg: "bg-rose-500/10", border: "border-rose-500/20", text: "text-rose-500", progress: "[&>div]:bg-rose-500" },
         blue: { icon: "text-blue-500", bg: "bg-blue-500/10", border: "border-blue-500/20", text: "text-blue-500", progress: "[&>div]:bg-blue-500" },
-        violet: { icon: "text-violet-500", bg: "bg-violet-500/10", border: "border-violet-500/20", text: "text-violet-500", progress: "[&>div]:bg-violet-500" },
-        cyan: { icon: "text-cyan-500", bg: "bg-cyan-500/10", border: "border-cyan-500/20", text: "text-cyan-500", progress: "[&>div]:bg-cyan-500" },
         zinc: { icon: "text-muted-foreground", bg: "bg-muted/10", border: "border-border", text: "text-foreground", progress: "[&>div]:bg-muted-foreground" },
     };
     return map[tone];
@@ -806,7 +803,7 @@ function SecurityOverview({
         >
             <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
                 <div className={cn(
-                    "flex flex-col justify-between rounded-[19px] border bg-background/45 p-5 shadow-sm dark:bg-white/[0.025]",
+                    "flex min-h-[285px] flex-col justify-between rounded-[22px] border bg-background/55 p-5 shadow-sm dark:bg-white/[0.025]",
                     SCORE_COPY[band] === "Healthy posture" ? "border-primary/30" :
                     SCORE_COPY[band] === "Needs attention" ? "border-amber-500/35" : "border-rose-500/35"
                 )}>
@@ -845,44 +842,62 @@ function SecurityOverview({
                     </div>
                 </div>
 
-                <div className="rounded-[19px] border bg-background/45 p-5 shadow-sm dark:bg-white/[0.025]">
-                    <div className="grid gap-4 border-b border-border pb-5 sm:grid-cols-4 sm:divide-x sm:divide-border">
-                        <div className="sm:pr-4">
-                            <p className="text-xs font-medium text-muted-foreground">High severity</p>
-                            <p className="mt-1 text-xl font-semibold tabular-nums text-rose-500">{highRiskFailures}</p>
-                            <p className="text-xs text-muted-foreground">failed rules</p>
-                        </div>
-                        <div className="sm:px-4">
-                            <p className="text-xs font-medium text-muted-foreground">Auto fixes</p>
-                            <p className="mt-1 text-xl font-semibold tabular-nums text-primary">{autoFixable}</p>
-                            <p className="text-xs text-muted-foreground">available</p>
-                        </div>
-                        <div className="sm:px-4">
-                            <p className="text-xs font-medium text-muted-foreground">Recommended</p>
-                            <p className="mt-1 text-xl font-semibold tabular-nums text-primary">{quickWins}</p>
-                            <p className="text-xs text-muted-foreground">actions</p>
-                        </div>
-                        <div className="sm:pl-4">
-                            <p className="text-xs font-medium text-muted-foreground">Reports</p>
-                            <p className="mt-1 text-xl font-semibold tabular-nums">{auditHistoryCount}</p>
-                            <p className="text-xs text-muted-foreground">saved</p>
-                        </div>
+                <div className="flex min-w-0 flex-col gap-4">
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                        <SignalCard icon={AlertTriangle} label="High risk" value={highRiskFailures} detail="failed" tone={highRiskFailures > 0 ? "red" : "zinc"} />
+                        <SignalCard icon={Zap} label="Auto-fix" value={autoFixable} detail="available" tone={autoFixable > 0 ? "blue" : "zinc"} />
+                        <SignalCard icon={ShieldCheck} label="Quick wins" value={quickWins} detail="actions" tone={quickWins > 0 ? "blue" : "zinc"} />
+                        <SignalCard icon={Clock3} label="History" value={auditHistoryCount} detail="reports" tone="zinc" />
                     </div>
 
-                    <div className="mt-5 flex items-center justify-between">
-                        <h3 className="text-sm font-semibold">Security pillars</h3>
-                        <Badge variant="outline" className="rounded-full text-[10px] font-mono">{passRate}% avg</Badge>
-                    </div>
-                    {pillars.length > 0 ? (
-                        <div className="mt-1 grid gap-x-6 lg:grid-cols-2">
-                            {pillars.map((pillar) => (
-                                <PillarRow key={pillar.key} pillar={pillar} />
-                            ))}
+                    <div className="rounded-[22px] border bg-background/55 p-4 shadow-sm dark:bg-white/[0.025]">
+                        <div className="flex items-center justify-between gap-3">
+                            <h3 className="text-sm font-semibold tracking-tight">Security pillars</h3>
+                            <Badge variant="outline" className="rounded-full border-border/70 bg-card px-2.5 py-1 text-[11px] font-medium text-foreground">
+                                {passRate}% avg
+                            </Badge>
                         </div>
-                    ) : null}
+                        {pillars.length > 0 ? (
+                            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                                {pillars.map((pillar) => (
+                                    <PillarRow key={pillar.key} pillar={pillar} />
+                                ))}
+                            </div>
+                        ) : null}
+                    </div>
                 </div>
             </div>
         </SectionCard>
+    );
+}
+
+function SignalCard({
+    icon: Icon,
+    label,
+    value,
+    detail,
+    tone,
+}: {
+    icon: React.ComponentType<{ className?: string }>;
+    label: string;
+    value: number;
+    detail: string;
+    tone: DashboardTone;
+}) {
+    const toneClass = toneClasses(tone);
+    const isNeutral = tone === "zinc";
+
+    return (
+        <div className="group rounded-[18px] border bg-background/55 p-4 shadow-sm transition-colors hover:border-primary/25 dark:bg-white/[0.025]">
+            <div className="flex items-center justify-between gap-3">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</span>
+                <Icon className={cn("h-4 w-4", isNeutral ? "text-muted-foreground" : toneClass.text)} />
+            </div>
+            <div className="mt-5 flex items-baseline gap-2">
+                <span className={cn("text-3xl font-semibold leading-none tracking-tight tabular-nums", isNeutral ? "text-foreground" : toneClass.text)}>{value}</span>
+                <span className="text-sm font-medium text-muted-foreground">{detail}</span>
+            </div>
+        </div>
     );
 }
 
@@ -891,12 +906,14 @@ function PillarRow({ pillar }: { pillar: AuditReportResponse["report"]["pillars"
     const meta = PILLAR_META[key];
     const Icon = meta?.icon ?? ShieldCheck;
     const percent = pillar.percent ?? 0;
+    const percentClass = percent >= 80 ? "text-primary" : percent >= 60 ? "text-amber-500" : "text-rose-500";
+    const progressClass = percent >= 80 ? "[&>div]:bg-primary" : percent >= 60 ? "[&>div]:bg-amber-500" : "[&>div]:bg-rose-500";
 
     return (
-        <div className="border-t border-border/70 py-3 first:border-t-0">
+        <div className="rounded-[16px] border bg-card/70 p-3.5 transition-colors hover:border-primary/25 hover:bg-muted/20">
             <div className="flex items-center justify-between gap-4">
                 <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex size-8 shrink-0 items-center justify-center rounded-[8px] border bg-card text-primary">
+                    <div className="flex size-9 shrink-0 items-center justify-center rounded-[10px] border border-border/70 bg-background text-primary">
                         <Icon className="h-3.5 w-3.5" />
                     </div>
                     <div className="min-w-0">
@@ -904,13 +921,13 @@ function PillarRow({ pillar }: { pillar: AuditReportResponse["report"]["pillars"
                         <p className="text-[11px] text-muted-foreground">{pillar.passed}/{pillar.total} checks passed</p>
                     </div>
                 </div>
-                <span className={cn("font-mono text-sm font-semibold", percent >= 80 ? "text-primary" : percent >= 60 ? "text-amber-500" : "text-rose-500")}>
+                <span className={cn("font-mono text-sm font-semibold", percentClass)}>
                     {percent}%
                 </span>
             </div>
             <Progress value={percent} className={cn(
-                "mt-3 h-1 bg-muted/60",
-                percent >= 80 ? "[&>div]:bg-primary" : percent >= 60 ? "[&>div]:bg-amber-500" : "[&>div]:bg-rose-500"
+                "mt-3 h-1 bg-muted/45",
+                progressClass
             )} />
         </div>
     );
@@ -990,7 +1007,7 @@ function WorkloadOverview({
                                             </div>
                                             <Badge variant="outline" className="font-mono text-[10px] border-border/50 bg-muted/10">{pct}%</Badge>
                                         </div>
-                                        <Progress value={pct} className={cn("mt-3 h-1 bg-muted/30", pct === 100 ? "[&>div]:bg-emerald-500" : pct > 0 ? "[&>div]:bg-amber-500" : "[&>div]:bg-zinc-500")} />
+                                        <Progress value={pct} className={cn("mt-3 h-1 bg-muted/30", pct === 100 ? "[&>div]:bg-primary" : pct > 0 ? "[&>div]:bg-amber-500" : "[&>div]:bg-zinc-500")} />
                                     </Link>
                                 );
                             })
@@ -1051,8 +1068,8 @@ function ActionPanel({ id, agent, latestAudit }: { id: string; agent: Agent; lat
                     </Button>
                     <Button variant="outline" className="flex h-auto w-full flex-col items-center gap-2 py-3 hover:bg-muted/50 group" asChild>
                         <Link to="/agents/$id/shell" params={{ id }}>
-                            <Terminal className="h-5 w-5 text-emerald-500 transition-transform group-hover:scale-110" />
-                            <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-500">VPS Shell</span>
+                            <Terminal className="h-5 w-5 text-primary transition-transform group-hover:scale-110" />
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">VPS Shell</span>
                         </Link>
                     </Button>
                 </div>
