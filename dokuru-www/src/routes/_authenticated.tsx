@@ -155,8 +155,8 @@ function NotificationsMenu() {
                     )}
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-96">
-                <DropdownMenuLabel className="flex items-center justify-between">
+            <DropdownMenuContent align="end" className="w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-[14px] p-1 shadow-xl">
+                <DropdownMenuLabel className="flex items-center justify-between px-3 py-2.5">
                     <span>Notifications</span>
                     {unreadCount > 0 && (
                         <Badge variant="secondary" className="text-xs bg-primary/15 text-primary border-primary/30">
@@ -164,7 +164,7 @@ function NotificationsMenu() {
                         </Badge>
                     )}
                 </DropdownMenuLabel>
-                <DropdownMenuSeparator />
+                <DropdownMenuSeparator className="-mx-1 my-1" />
                 {notifications.length === 0 ? (
                     <div className="py-6 text-center text-sm text-muted-foreground">
                         No notifications
@@ -174,10 +174,10 @@ function NotificationsMenu() {
                         <DropdownMenuItem
                             key={notification.id}
                             onSelect={() => openNotification(notification)}
-                            className="flex flex-col items-start gap-1 p-3 cursor-pointer focus:bg-primary/10 dark:focus:bg-primary/20"
+                            className="flex cursor-pointer flex-col items-start gap-1 rounded-[8px] p-2.5 focus:bg-primary/10 dark:focus:bg-primary/20"
                         >
                             <div className="flex w-full items-center justify-between gap-3">
-                                <span className="text-sm font-medium">{notification.title}</span>
+                                <span className="truncate text-sm font-medium">{notification.title}</span>
                                 {!notification.read_at && (
                                     <span className="h-2 w-2 rounded-full bg-primary shrink-0" />
                                 )}
@@ -191,9 +191,9 @@ function NotificationsMenu() {
                         </DropdownMenuItem>
                     ))
                 )}
-                <DropdownMenuSeparator />
+                <DropdownMenuSeparator className="-mx-1 my-1" />
                 <DropdownMenuItem
-                    className="justify-center text-sm text-muted-foreground cursor-pointer focus:bg-primary/10 dark:focus:bg-primary/20 focus:text-primary"
+                    className="cursor-pointer justify-center rounded-[8px] py-2.5 text-sm text-muted-foreground focus:bg-primary/10 focus:text-primary dark:focus:bg-primary/20"
                     onSelect={() => navigate({ to: "/notifications" })}
                 >
                     View all notifications
