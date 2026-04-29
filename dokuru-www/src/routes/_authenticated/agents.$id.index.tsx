@@ -44,7 +44,6 @@ import {
     Clock3,
     Container as ContainerIcon,
     Edit,
-    Gauge,
     GitBranch,
     HardDrive,
     Layers,
@@ -53,7 +52,6 @@ import {
     RefreshCw,
     Server,
     ShieldCheck,
-    ShieldX,
     SquareStack,
     Trash2,
     Zap,
@@ -502,27 +500,27 @@ function AgentHero({
     onEdit: () => void;
     onDelete: () => void;
 }) {
-    const statusRing = isOnline ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-500" : "border-muted-foreground/30 bg-muted/10 text-muted-foreground";
+    const statusRing = isOnline ? "border-primary/30 bg-primary/10 text-primary" : "border-muted-foreground/30 bg-muted/10 text-muted-foreground";
 
     return (
-        <section className="relative overflow-hidden rounded-2xl border bg-card p-4">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between relative">
-                <div className="flex min-w-0 items-center gap-4">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border bg-muted/30">
-                        <Server className="h-5 w-5 text-muted-foreground" />
+        <section className="rounded-[19px] border border-border bg-card px-5 py-4 shadow-sm">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                <div className="flex min-w-0 gap-4">
+                    <div className="mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-[12px] border border-border bg-background text-primary">
+                        <Server className="h-5 w-5" />
                     </div>
 
-                    <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                            <h1 className="truncate text-xl font-bold tracking-tight">{agent.name}</h1>
+                    <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <h1 className="truncate text-2xl font-semibold tracking-tight">{agent.name}</h1>
                             <div className={cn("inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider", statusRing)}>
-                                <span className={cn("h-1.5 w-1.5 rounded-full", isOnline ? "bg-emerald-500" : "bg-muted-foreground")} />
+                                <span className={cn("h-1.5 w-1.5 rounded-full", isOnline ? "bg-primary" : "bg-muted-foreground")} />
                                 <span>{isOnline ? "Online" : "Offline"}</span>
                             </div>
                         </div>
 
-                        <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                            <span className="truncate font-mono text-xs">{agent.url}</span>
+                        <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm text-muted-foreground">
+                            <span className="min-w-0 max-w-full truncate font-mono text-xs md:max-w-[520px]">{agent.url}</span>
                             <span className="flex items-center gap-1.5"><GitBranch className="h-3.5 w-3.5" />{agent.access_mode}</span>
                             {dockerInfo?.docker_version && (
                                 <span className="flex items-center gap-1.5"><Zap className="h-3.5 w-3.5" />Docker {dockerInfo.docker_version}</span>
@@ -532,16 +530,16 @@ function AgentHero({
                     </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
-                    <Button size="sm" variant="outline" onClick={onRefresh} disabled={isRefreshing} className="h-8">
+                <div className="flex flex-wrap items-center gap-2 xl:shrink-0">
+                    <Button size="sm" variant="outline" onClick={onRefresh} disabled={isRefreshing} className="h-8 hover:!bg-transparent">
                         <RefreshCw className={cn("mr-2 h-3.5 w-3.5", isRefreshing && "animate-spin")} />
                         Refresh
                     </Button>
-                    <Button size="sm" variant="outline" onClick={onEdit} className="h-8">
+                    <Button size="sm" variant="outline" onClick={onEdit} className="h-8 hover:!bg-transparent">
                         <Edit className="mr-2 h-3.5 w-3.5" />
                         Edit
                     </Button>
-                    <Button size="sm" variant="destructive" onClick={onDelete} className="h-8">
+                    <Button size="sm" variant="outline" onClick={onDelete} className="h-8 border-destructive/35 text-destructive hover:!bg-transparent hover:text-destructive">
                         <Trash2 className="mr-2 h-3.5 w-3.5" />
                         Delete
                     </Button>
@@ -661,8 +659,8 @@ function ResourceOverview({
 
     return (
         <SectionCard
-            title="Docker Fleet"
-            description="Live inventory, running capacity, and storage surfaces from this host."
+            title="Docker Inventory"
+            description="Containers, images, networks, and storage reported by this agent."
             action={<Button size="sm" variant="outline" asChild><Link to="/agents/$id/containers" params={{ id }}>Open Inventory</Link></Button>}
         >
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -671,7 +669,7 @@ function ResourceOverview({
                     label="Containers"
                     value={dockerInfo.containers.total}
                     detail={`${runningContainers} running · ${stoppedContainers} stopped`}
-                    tone={unhealthyContainers > 0 ? "amber" : "blue"}
+                    tone={unhealthyContainers > 0 ? "red" : "blue"}
                     progress={containerPct}
                     to="/agents/$id/containers"
                     id={id}
@@ -681,7 +679,7 @@ function ResourceOverview({
                     label="Stacks"
                     value={dockerInfo.stacks}
                     detail={stackTotal > 0 ? `${stackRunning}/${stackTotal} stack containers running` : "No compose stacks detected"}
-                    tone={stackPct === 100 || stackTotal === 0 ? "cyan" : "amber"}
+                    tone="blue"
                     progress={stackTotal > 0 ? stackPct : 0}
                     to="/agents/$id/stacks"
                     id={id}
@@ -691,7 +689,7 @@ function ResourceOverview({
                     label="Images"
                     value={dockerInfo.images}
                     detail="Local image cache"
-                    tone="violet"
+                    tone="blue"
                     to="/agents/$id/images"
                     id={id}
                 />
@@ -700,7 +698,7 @@ function ResourceOverview({
                     label="Volumes"
                     value={dockerInfo.volumes}
                     detail="Persistent Docker storage"
-                    tone="amber"
+                    tone="blue"
                     to="/agents/$id/volumes"
                     id={id}
                 />
@@ -709,7 +707,7 @@ function ResourceOverview({
                     label="Networks"
                     value={dockerInfo.networks}
                     detail="Docker network surfaces"
-                    tone="green"
+                    tone="blue"
                     to="/agents/$id/networks"
                     id={id}
                 />
@@ -802,77 +800,86 @@ function SecurityOverview({
 
     return (
         <SectionCard
-            title="Security Flight Deck"
-            description="CIS posture, weak zones, and remediation signals at a glance."
+            title="Security Overview"
+            description="Latest CIS Docker Benchmark result and remediation priority."
             action={<Button size="sm" asChild><Link to="/agents/$id/audit" params={{ id }}>Run Audit</Link></Button>}
         >
-            <div className="grid gap-4 xl:grid-cols-[1fr_minmax(0,2fr)]">
-                {/* Score Section */}
+            <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
                 <div className={cn(
-                    "group relative flex flex-col justify-between overflow-hidden rounded-2xl border bg-card p-5 transition-all border-t-2",
-                    SCORE_COPY[band] === "Healthy posture" ? "border-t-emerald-500/50" :
-                    SCORE_COPY[band] === "Needs attention" ? "border-t-amber-500/50" : "border-t-rose-500/50"
+                    "flex flex-col justify-between rounded-[19px] border bg-background/45 p-5 shadow-sm dark:bg-white/[0.025]",
+                    SCORE_COPY[band] === "Healthy posture" ? "border-primary/30" :
+                    SCORE_COPY[band] === "Needs attention" ? "border-amber-500/35" : "border-rose-500/35"
                 )}>
-                    <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-primary/5 blur-3xl transition-opacity group-hover:bg-primary/10" />
-                    
-                    <div className="relative flex items-center justify-between">
-                        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">CIS Score</span>
+                    <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">CIS Benchmark</span>
                         <Badge variant="outline" className={cn(
-                            "px-2 py-0.5 text-[10px]",
-                            SCORE_COPY[band] === "Healthy posture" ? "text-emerald-500 border-emerald-500/20 bg-emerald-500/5" :
+                            "rounded-full px-2.5 py-0.5 text-[11px] font-medium",
+                            SCORE_COPY[band] === "Healthy posture" ? "text-primary border-primary/25 bg-primary/5" :
                             SCORE_COPY[band] === "Needs attention" ? "text-amber-500 border-amber-500/20 bg-amber-500/5" : "text-rose-500 border-rose-500/20 bg-rose-500/5"
                         )}>
                             {SCORE_COPY[band]}
                         </Badge>
                     </div>
-                    <div className="relative mt-6 flex items-baseline gap-1">
-                        <span className="text-6xl font-black tabular-nums tracking-tighter drop-shadow-sm">{latestAudit.summary.score}</span>
-                        <span className="text-xl font-bold text-muted-foreground/50">/100</span>
+                    <div className="mt-6 flex items-baseline gap-2">
+                        <span className="text-4xl font-semibold tabular-nums tracking-tight">{latestAudit.summary.score}</span>
+                        <span className="text-lg font-medium text-muted-foreground">/100</span>
                     </div>
                     <Progress value={latestAudit.summary.score} className={cn(
-                        "mt-5 h-[3px] bg-muted/30",
-                        SCORE_COPY[band] === "Healthy posture" ? "[&>div]:bg-emerald-500" :
+                        "mt-5 h-1.5 bg-muted/50",
+                        SCORE_COPY[band] === "Healthy posture" ? "[&>div]:bg-primary" :
                         SCORE_COPY[band] === "Needs attention" ? "[&>div]:bg-amber-500" : "[&>div]:bg-rose-500"
                     )} />
-                    <div className="relative mt-5 grid grid-cols-3 gap-2 border-t border-border/50 pt-5 text-center">
-                        <div className="flex flex-col gap-1">
-                            <span className="text-xl font-black text-emerald-500">{latestAudit.summary.passed}</span>
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Passed</p>
+                    <div className="mt-5 grid grid-cols-3 divide-x divide-border border-t border-border pt-4 text-center">
+                        <div className="flex flex-col gap-1 pr-3">
+                            <span className="text-xl font-semibold text-primary">{latestAudit.summary.passed}</span>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Passed</p>
                         </div>
-                        <div className="flex flex-col gap-1 border-l border-border/50">
-                            <span className="text-xl font-black text-rose-500">{latestAudit.summary.failed}</span>
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Failed</p>
+                        <div className="flex flex-col gap-1 px-3">
+                            <span className="text-xl font-semibold text-rose-500">{latestAudit.summary.failed}</span>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Failed</p>
                         </div>
-                        <div className="flex flex-col gap-1 border-l border-border/50">
-                            <span className="text-xl font-black">{latestAudit.summary.total}</span>
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Total</p>
+                        <div className="flex flex-col gap-1 pl-3">
+                            <span className="text-xl font-semibold">{latestAudit.summary.total}</span>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Total</p>
                         </div>
                     </div>
                 </div>
 
-                <div className="flex flex-col gap-4">
-                    {/* Metrics Row */}
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                        <SignalCard icon={ShieldX} label="High risk" value={highRiskFailures} detail="fail" tone={highRiskFailures > 0 ? "red" : "zinc"} />
-                        <SignalCard icon={Zap} label="Auto-fix" value={autoFixable} detail="fixes" tone={autoFixable > 0 ? "blue" : "zinc"} />
-                        <SignalCard icon={Gauge} label="Quick wins" value={quickWins} detail="actions" tone={quickWins > 0 ? "green" : "zinc"} />
-                        <SignalCard icon={Clock3} label="History" value={auditHistoryCount} detail="reports" tone="violet" />
+                <div className="rounded-[19px] border bg-background/45 p-5 shadow-sm dark:bg-white/[0.025]">
+                    <div className="grid gap-4 border-b border-border pb-5 sm:grid-cols-4 sm:divide-x sm:divide-border">
+                        <div className="sm:pr-4">
+                            <p className="text-xs font-medium text-muted-foreground">High severity</p>
+                            <p className="mt-1 text-xl font-semibold tabular-nums text-rose-500">{highRiskFailures}</p>
+                            <p className="text-xs text-muted-foreground">failed rules</p>
+                        </div>
+                        <div className="sm:px-4">
+                            <p className="text-xs font-medium text-muted-foreground">Auto fixes</p>
+                            <p className="mt-1 text-xl font-semibold tabular-nums text-primary">{autoFixable}</p>
+                            <p className="text-xs text-muted-foreground">available</p>
+                        </div>
+                        <div className="sm:px-4">
+                            <p className="text-xs font-medium text-muted-foreground">Recommended</p>
+                            <p className="mt-1 text-xl font-semibold tabular-nums text-primary">{quickWins}</p>
+                            <p className="text-xs text-muted-foreground">actions</p>
+                        </div>
+                        <div className="sm:pl-4">
+                            <p className="text-xs font-medium text-muted-foreground">Reports</p>
+                            <p className="mt-1 text-xl font-semibold tabular-nums">{auditHistoryCount}</p>
+                            <p className="text-xs text-muted-foreground">saved</p>
+                        </div>
                     </div>
 
-                    {/* Pillars List */}
-                    <div className="rounded-2xl border bg-card p-4">
-                        <div className="mb-4 flex items-center justify-between">
-                            <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Security Pillars</h3>
-                            <Badge variant="outline" className="text-[10px] font-mono">{passRate}% avg</Badge>
-                        </div>
-                        {pillars.length > 0 ? (
-                            <div className="grid gap-2 lg:grid-cols-2">
-                                {pillars.map((pillar) => (
-                                    <PillarRow key={pillar.key} pillar={pillar} />
-                                ))}
-                            </div>
-                        ) : null}
+                    <div className="mt-5 flex items-center justify-between">
+                        <h3 className="text-sm font-semibold">Security pillars</h3>
+                        <Badge variant="outline" className="rounded-full text-[10px] font-mono">{passRate}% avg</Badge>
                     </div>
+                    {pillars.length > 0 ? (
+                        <div className="mt-1 grid gap-x-6 lg:grid-cols-2">
+                            {pillars.map((pillar) => (
+                                <PillarRow key={pillar.key} pillar={pillar} />
+                            ))}
+                        </div>
+                    ) : null}
                 </div>
             </div>
         </SectionCard>
@@ -886,50 +893,25 @@ function PillarRow({ pillar }: { pillar: AuditReportResponse["report"]["pillars"
     const percent = pillar.percent ?? 0;
 
     return (
-        <div className="group relative flex items-center justify-between overflow-hidden rounded-xl border bg-muted/20 p-3 transition-colors hover:border-primary/30 hover:bg-muted/50">
-            <div className="flex items-center gap-3">
-                <div className={cn("flex size-8 items-center justify-center rounded-md border bg-muted/30 text-muted-foreground", meta?.color)}>
-                    <Icon className="h-3.5 w-3.5" />
+        <div className="border-t border-border/70 py-3 first:border-t-0">
+            <div className="flex items-center justify-between gap-4">
+                <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-[8px] border bg-card text-primary">
+                        <Icon className="h-3.5 w-3.5" />
+                    </div>
+                    <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">{meta?.name ?? pillar.label}</p>
+                        <p className="text-[11px] text-muted-foreground">{pillar.passed}/{pillar.total} checks passed</p>
+                    </div>
                 </div>
-                <span className="text-sm font-bold">{meta?.name ?? pillar.label}</span>
-            </div>
-            <div className="flex items-center gap-3">
-                <span className="text-[11px] font-medium text-muted-foreground">{pillar.passed}/{pillar.total}</span>
-                <span className={cn("font-mono text-sm font-bold", percent >= 80 ? "text-emerald-500" : percent >= 60 ? "text-amber-500" : "text-rose-500")}>
+                <span className={cn("font-mono text-sm font-semibold", percent >= 80 ? "text-primary" : percent >= 60 ? "text-amber-500" : "text-rose-500")}>
                     {percent}%
                 </span>
             </div>
-        </div>
-    );
-}
-
-function SignalCard({
-    icon: Icon,
-    label,
-    value,
-    detail,
-    tone,
-}: {
-    icon: React.ComponentType<{ className?: string }>;
-    label: string;
-    value: number;
-    detail: string;
-    tone: DashboardTone;
-}) {
-    const toneClass = toneClasses(tone);
-    return (
-        <div className={cn(
-            "group relative overflow-hidden rounded-xl border bg-muted/20 p-3.5 transition-colors hover:bg-muted/50 border-t-2",
-            tone === "zinc" ? "border-t-transparent hover:border-border" : toneClass.border.replace("border-", "border-t-").replace("/20", "/50")
-        )}>
-            <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{label}</span>
-                <Icon className={cn("h-3.5 w-3.5 transition-transform group-hover:scale-110", toneClass.text)} />
-            </div>
-            <div className="mt-3 flex items-baseline gap-1.5">
-                <span className={cn("text-2xl font-black leading-none tracking-tight", toneClass.text)}>{value}</span>
-                <span className="text-[10px] font-medium text-muted-foreground">{detail}</span>
-            </div>
+            <Progress value={percent} className={cn(
+                "mt-3 h-1 bg-muted/60",
+                percent >= 80 ? "[&>div]:bg-primary" : percent >= 60 ? "[&>div]:bg-amber-500" : "[&>div]:bg-rose-500"
+            )} />
         </div>
     );
 }

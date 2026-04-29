@@ -150,13 +150,13 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
   };
 
   return (
-    <div className="flex transition-all">
-      <div
-        className="flex-1 hover:bg-muted/50 transition-colors cursor-pointer"
-        onClick={onClick}
-      >
-        <div className="p-4 flex items-center gap-6">
-          <div className="w-14 flex items-center justify-center shrink-0 relative">
+    <div
+      className="group rounded-[19px] border border-border bg-card p-4 shadow-sm transition-colors hover:border-primary/30"
+      onClick={onClick}
+    >
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 gap-4">
+          <div className="flex w-14 items-center justify-center shrink-0 relative">
             <img
               src="/docker.svg"
               alt="Docker"
@@ -171,9 +171,9 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
             />
           </div>
 
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-base font-bold text-foreground tracking-tight">{agent.name}</span>
+              <span className="text-base font-semibold text-foreground tracking-tight">{agent.name}</span>
               <span
                 className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-[11px] font-semibold uppercase ${
                   isConnecting
@@ -201,7 +201,7 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
                   Docker {info.docker_version}
                 </span>
               )}
-              <span className="text-[12px] text-muted-foreground/70 font-mono">
+              <span className="min-w-0 max-w-full truncate text-[12px] text-muted-foreground/70 font-mono lg:max-w-[520px]">
                 {agent.url.replace(/^https?:\/\//, '')}
               </span>
             </div>
@@ -258,56 +258,37 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
                 </span>
               </div>
             ) : (
-              <div className="flex items-center gap-2 mt-3">
-                <AlertTriangle className="h-3.5 w-3.5 text-amber-400/70" />
-                <span className="text-[12px] text-amber-400/70">Docker info unavailable</span>
+              <div className="mt-3 inline-flex w-fit items-center gap-2 rounded-[6px] border border-amber-600/25 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 dark:border-amber-400/25 dark:bg-amber-500/10 dark:text-amber-300">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                <span>Docker info unavailable</span>
               </div>
             )}
           </div>
         </div>
-      </div>
 
-      <div className="w-[180px] border-l border-border flex flex-col justify-center gap-2 px-4 py-3 bg-muted/30">
-        <button
-          className={`flex items-center justify-center gap-2 h-9 w-full rounded text-sm font-semibold transition-all ${
-              isConnecting
-                ? "bg-blue-500/10 border border-blue-500/30 text-blue-400 cursor-wait"
-                : isOnline
-                ? "bg-primary/10 border border-primary/35 text-primary hover:bg-primary/15 ring-1 ring-primary/20 cursor-pointer"
-                : "bg-red-500/10 border border-red-500/30 text-red-400 cursor-not-allowed"
-          }`}
-          onClick={isOnline ? onClick : undefined}
-          disabled={!isOnline || isConnecting}
-        >
-          {isConnecting ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <span className={`w-2 h-2 rounded-full ${
-              isOnline ? "bg-primary animate-pulse" : "bg-red-400"
-            }`} />
-          )}
-          {isConnecting ? "Connecting..." : isOnline ? "Connected" : "Disconnected"}
-        </button>
-      </div>
-
-      <div className="w-12 border-l border-border flex flex-col items-center justify-start py-4 bg-muted/30">
-        <button
-          className="w-8 h-8 flex items-center justify-center text-muted-foreground/70 hover:text-foreground rounded hover:bg-muted/50 transition-colors group cursor-pointer"
-          title="Edit agent"
-          onClick={openEdit}
-        >
-          <Edit className="w-4 h-4 group-hover:scale-110 transition-transform" />
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowDeleteDialog(true);
-          }}
-          className="w-8 h-8 flex items-center justify-center text-muted-foreground/70 hover:text-rose-400 rounded hover:bg-muted/50 transition-colors group cursor-pointer"
-          title="Delete agent"
-        >
-          <Trash2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
-        </button>
+        <div className="flex items-center gap-1 self-start lg:self-center" onClick={(e) => e.stopPropagation()}>
+          <Button size="sm" variant="outline" className="h-8 px-3 hover:!bg-transparent" onClick={onClick} disabled={!isOnline || isConnecting}>
+            {isConnecting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+            Open
+          </Button>
+          <button
+            className="flex h-8 w-8 items-center justify-center rounded-[6px] text-muted-foreground/70 transition-colors hover:text-foreground"
+            title="Edit agent"
+            onClick={openEdit}
+          >
+            <Edit className="w-4 h-4" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowDeleteDialog(true);
+            }}
+            className="flex h-8 w-8 items-center justify-center rounded-[6px] text-muted-foreground/70 transition-colors hover:text-rose-500"
+            title="Delete agent"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       <EditAgentModal
@@ -569,9 +550,9 @@ function AgentsList() {
           </div>
         </div>
       ) : (
-        <div className="bg-card border border-border rounded-md overflow-hidden">
+        <div className="overflow-hidden rounded-[19px] border border-border bg-card shadow-sm">
           {/* Filter bar */}
-          <div className="p-4 border-b border-border">
+          <div className="border-b border-border bg-muted/20 p-4">
             <div className="flex items-center gap-3 flex-wrap">
 
               {/* Connection filter */}
@@ -723,7 +704,7 @@ function AgentsList() {
           </div>
 
           {/* Agent list */}
-          <div className="divide-y divide-border">
+          <div className="space-y-3 p-4">
             {displayAgents.length === 0 ? (
               <div className="py-12 text-center">
                 <Search className="w-8 h-8 mx-auto text-muted-foreground/30 mb-3" />
