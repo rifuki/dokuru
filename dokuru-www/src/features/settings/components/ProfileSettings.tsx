@@ -398,7 +398,7 @@ export function ProfileSettings() {
                                 disabled={isSendingVerification}
                                 className="h-11 bg-muted/40 border-transparent transition-colors focus-visible:ring-1 focus-visible:ring-primary/50 hover:bg-muted/60 disabled:opacity-70 disabled:cursor-not-allowed pr-24"
                             />
-                            {!user.email_verified && (
+                            {(isEmailChanged || !user.email_verified) && (
                                 <button
                                     type="button"
                                     onClick={handleSendVerification}
@@ -421,6 +421,10 @@ export function ProfileSettings() {
                         <p className="text-[13px] text-muted-foreground mt-1">
                             {isEmailChanged && !isEmailValid
                                 ? "Enter a valid email before sending."
+                                : hasPendingEmailVerification
+                                    ? `Check ${normalizedEmail} to confirm this email change.`
+                                : isEmailChanged
+                                    ? "Send a verification link to the new address. Your email changes after you confirm it."
                                 : !user.email_verified
                                     ? "Use Send or Resend to verify your email. Save Changes won't update email."
                                     : "We use this for authentication and notifications."
