@@ -268,11 +268,11 @@ export function CommandMenuTrigger({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="inline-flex items-center gap-2 rounded-md border bg-background px-3 py-1.5 text-sm text-muted-foreground hover:bg-primary/10 hover:text-primary"
+      className="inline-flex h-10 w-[240px] items-center gap-3 rounded-[12px] border border-border bg-card px-3.5 text-sm text-muted-foreground transition-colors hover:border-primary/35 hover:bg-muted/60 hover:text-foreground xl:w-[300px]"
     >
       <Search className="h-3.5 w-3.5" />
-      <span>Search...</span>
-      <kbd className="pointer-events-none ml-2 hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex">
+      <span className="min-w-0 flex-1 truncate text-left">Search...</span>
+      <kbd className="pointer-events-none hidden h-5 select-none items-center gap-1 rounded-[6px] border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex">
         <span className="text-xs">⌘</span>K
       </kbd>
     </button>

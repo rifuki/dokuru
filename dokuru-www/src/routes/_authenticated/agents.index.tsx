@@ -150,7 +150,7 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
   };
 
   return (
-    <div className="group rounded-[19px] border border-border bg-card p-4 shadow-sm transition-colors">
+    <div className="group rounded-[14px] border border-border bg-card p-4 shadow-sm transition-colors">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 gap-4">
           <div className="flex w-14 items-center justify-center shrink-0 relative">
@@ -563,7 +563,7 @@ function AgentsList() {
           </div>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-[19px] border border-border bg-card shadow-sm">
+        <div className="overflow-hidden rounded-[14px] border border-border bg-card shadow-sm">
           {/* Filter bar */}
           <div className="border-b border-border bg-muted/20 p-4">
             <div className="flex items-center gap-3 flex-wrap">

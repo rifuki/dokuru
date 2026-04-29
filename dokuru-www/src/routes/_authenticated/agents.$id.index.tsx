@@ -500,9 +500,9 @@ function AgentHero({
 
     return (
         <section className="rounded-[18px] border border-border bg-card p-5 shadow-sm">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                <div className="flex min-w-0 items-start gap-4">
-                    <div className="mt-0.5 flex size-12 shrink-0 items-center justify-center rounded-[12px] border border-border bg-background text-primary">
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+                <div className="flex min-w-0 items-center gap-4">
+                    <div className="flex size-12 shrink-0 items-center justify-center rounded-[12px] border border-border bg-background text-primary">
                         <Server className="h-5 w-5" />
                     </div>
 
@@ -533,7 +533,7 @@ function AgentHero({
                     </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 xl:shrink-0">
+                <div className="flex flex-wrap items-center gap-2 xl:shrink-0 xl:justify-end">
                     <Button size="sm" variant="outline" onClick={onRefresh} disabled={isRefreshing} className="h-8 hover:!bg-transparent">
                         <RefreshCw className={cn("mr-2 h-3.5 w-3.5", isRefreshing && "animate-spin")} />
                         Refresh

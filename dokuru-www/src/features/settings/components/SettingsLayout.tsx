@@ -40,7 +40,7 @@ export function SettingsLayout() {
                                 key={item.href}
                                 to={item.href}
                                 className={`
-                                        flex items-center gap-3 rounded-md px-3 py-1.5 text-[15px] font-medium transition-colors
+                                        flex items-center gap-3 rounded-[8px] px-3 py-1.5 text-[15px] font-medium transition-colors
                                         ${isActive
                                         ? "bg-primary/15 text-primary"
                                         : "text-muted-foreground hover:bg-primary/10 hover:text-foreground"

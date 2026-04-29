@@ -62,7 +62,7 @@
 }
 
 :root {
-  --radius: 1.1875rem;
+  --radius: 0.875rem;
 
   --background: #f5f7fa;
   --foreground: #1f1f1f;
@@ -109,37 +109,37 @@
 }
 
 .dark {
-  --background: #090a0d;
+  --background: #121418;
   --foreground: #f2f4f8;
-  --card: #111217;
+  --card: #181a20;
   --card-foreground: #f2f4f8;
-  --popover: #15161c;
+  --popover: #181a20;
   --popover-foreground: #f2f4f8;
   --primary: #2496ed;
   --primary-foreground: #ffffff;
-  --secondary: #171922;
+  --secondary: #20232a;
   --secondary-foreground: #e7ebf2;
-  --muted: #181a22;
+  --muted: #22252d;
   --muted-foreground: #a8afbc;
-  --accent: #132033;
+  --accent: #1f2934;
   --accent-foreground: #dceeff;
   --destructive: #d85a63;
   --destructive-foreground: #ffffff;
-  --border: rgba(229, 233, 240, 0.13);
-  --input: rgba(229, 233, 240, 0.16);
+  --border: rgba(229, 233, 240, 0.16);
+  --input: rgba(229, 233, 240, 0.19);
   --ring: #2496ed;
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: #08090c;
+  --sidebar: #111318;
   --sidebar-foreground: #f2f4f8;
   --sidebar-primary: #2496ed;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #101b2b;
+  --sidebar-accent: #1e2630;
   --sidebar-accent-foreground: #dceeff;
-  --sidebar-border: rgba(229, 233, 240, 0.12);
+  --sidebar-border: rgba(229, 233, 240, 0.15);
   --sidebar-ring: #2496ed;
 
   --color-blue-400: #5db4f6;
@@ -199,8 +199,8 @@
 @layer base {
   .dark body {
     background-image:
-      linear-gradient(to right, rgba(229, 233, 240, 0.014) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(229, 233, 240, 0.014) 1px, transparent 1px);
+      linear-gradient(to right, rgba(229, 233, 240, 0.018) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(229, 233, 240, 0.018) 1px, transparent 1px);
     background-size: 56px 56px;
     background-attachment: fixed;
   }
@@ -222,14 +222,14 @@
 
   .dark [data-slot="card"] {
     background: var(--card);
-    border-color: rgba(229, 233, 240, 0.13);
-    box-shadow: 0 24px 90px -64px rgba(0, 0, 0, 0.85);
+    border-color: rgba(229, 233, 240, 0.16);
+    box-shadow: 0 24px 80px -62px rgba(0, 0, 0, 0.75);
   }
 
   .dark [data-slot="input"],
   .dark [data-slot="select-trigger"] {
-    background-color: rgba(229, 233, 240, 0.045);
-    border-color: rgba(229, 233, 240, 0.16);
+    background-color: rgba(229, 233, 240, 0.055);
+    border-color: rgba(229, 233, 240, 0.19);
   }
 }
 
