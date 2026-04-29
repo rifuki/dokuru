@@ -105,7 +105,7 @@ export function LoginForm() {
 
           <Button
             type="submit"
-            className="w-full h-11 bg-gradient-to-r from-miku-primary to-miku-accent hover:opacity-90 transition-opacity text-base font-medium shadow-md hover:shadow-lg"
+            className="h-11 w-full text-base font-medium"
             disabled={login.isPending}
           >
             {login.isPending ? (

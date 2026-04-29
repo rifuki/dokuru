@@ -16,7 +16,7 @@ pub(crate) fn Problem() -> impl IntoView {
                             <Icon kind=IconKind::AlertTriangle size=12/>
                             <span>"/ the problem"</span>
                         </div>
-                        <h2 class="font-heading text-4xl md:text-5xl font-black tracking-tighter leading-[1.05] text-white">
+                        <h2 class="font-heading text-4xl md:text-5xl font-extrabold tracking-tighter leading-[1.08] text-white">
                             "Docker misconfigurations"
                             <br class="hidden sm:block"/>
                             "are " <span class="text-rose-400">"easy to miss"</span> " —"

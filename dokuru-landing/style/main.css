@@ -51,7 +51,7 @@
 
 html,
 body {
-  background: #050505;
+  background: #030507;
   overflow-x: clip;
   scroll-behavior: smooth;
 }
@@ -68,19 +68,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   color: #ffffff;
-  background-color: #050505;
-  background-image:
-    radial-gradient(
-      ellipse 1000px 500px at 15% -10%,
-      rgba(36, 150, 237, 0.12),
-      transparent 60%
-    ),
-    radial-gradient(
-      ellipse 800px 400px at 95% 5%,
-      rgba(0, 229, 255, 0.06),
-      transparent 60%
-    );
-  background-repeat: no-repeat;
+  background-color: #030507;
 }
 
 code,
@@ -93,15 +81,15 @@ pre,
 
 .font-heading {
   font-family: "Chivo", "IBM Plex Sans", sans-serif;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.035em;
 }
 
 .bg-grid {
   background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
     linear-gradient(
       to bottom,
-      rgba(255, 255, 255, 0.04) 1px,
+      rgba(255, 255, 255, 0.03) 1px,
       transparent 1px
     );
   background-size: 48px 48px;
@@ -111,12 +99,12 @@ pre,
   background-image:
     linear-gradient(
       to right,
-      rgba(255, 255, 255, 0.035) 1px,
+      rgba(255, 255, 255, 0.026) 1px,
       transparent 1px
     ),
     linear-gradient(
       to bottom,
-      rgba(255, 255, 255, 0.035) 1px,
+      rgba(255, 255, 255, 0.026) 1px,
       transparent 1px
     );
   background-size: 24px 24px;
@@ -209,10 +197,10 @@ pre,
 @keyframes glow {
   0%,
   100% {
-    box-shadow: 0 0 20px rgba(36, 150, 237, 0.3);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
   }
   50% {
-    box-shadow: 0 0 40px rgba(36, 150, 237, 0.6);
+    box-shadow: 0 0 32px rgba(0, 0, 0, 0.7);
   }
 }
 

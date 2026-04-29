@@ -16,16 +16,14 @@ pub(crate) fn FinalCta() -> impl IntoView {
             <div class="max-w-6xl mx-auto px-6 md:px-10">
                 <div node_ref=card_ref class="reveal relative rounded-2xl border border-white/10 bg-[#09090B] overflow-hidden">
                     <div class="absolute inset-0 pointer-events-none bg-grid-fine opacity-60"/>
-                    <div class="orb-breathe absolute -top-32 -right-32 w-[480px] h-[480px] rounded-full bg-[#2496ED]/15 blur-[120px] pointer-events-none"/>
-                    <div class="orb-breathe-delayed absolute -bottom-32 -left-32 w-[420px] h-[420px] rounded-full bg-[#00E5FF]/10 blur-[120px] pointer-events-none"/>
                     <div class="relative p-5 sm:p-10 md:p-16 grid lg:grid-cols-12 gap-10 items-center">
                         <div class="lg:col-span-7">
                             <div node_ref=label_ref class="reveal font-mono text-[11px] uppercase tracking-[0.22em] text-[#2496ED] mb-4" style="--motion-duration: 500ms">"/ start auditing"</div>
-                            <h2 node_ref=heading_ref class="reveal font-heading text-4xl md:text-5xl lg:text-6xl font-black tracking-tighter text-white leading-[1.02]" style="--motion-delay: 100ms; --motion-duration: 500ms">"Start auditing Docker"<br class="hidden sm:block"/>"security with Dokuru."</h2>
+                            <h2 node_ref=heading_ref class="reveal font-heading text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tighter text-white leading-[1.06]" style="--motion-delay: 100ms; --motion-duration: 500ms">"Start auditing Docker"<br class="hidden sm:block"/>"security with Dokuru."</h2>
                             <p node_ref=body_ref class="reveal mt-5 text-zinc-400 text-lg max-w-xl" style="--motion-delay: 200ms; --motion-duration: 500ms">"Connect your Docker hosts, run isolation-focused audits, and apply supported fixes — from one dashboard."</p>
                             <div node_ref=actions_ref class="reveal mt-8 flex flex-wrap items-center gap-3" style="--motion-delay: 300ms; --motion-duration: 500ms">
-                                <a href="#register" data-testid="final-cta-primary" class="group inline-flex items-center gap-2 bg-[#2496ED] hover:bg-[#1C7CBA] text-white font-medium px-6 py-3.5 rounded-md shadow-[0_0_48px_-8px_rgba(36,150,237,0.7)] transition-all hover:scale-105 active:scale-95">"Get Started" <Icon kind=IconKind::ArrowRight size=16 class="transition-transform group-hover:translate-x-0.5"/></a>
-                                <a href="#how-it-works" data-testid="final-cta-secondary" class="inline-flex items-center gap-2 bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-white/25 text-white font-medium px-6 py-3.5 rounded-md transition-all hover:scale-105 active:scale-95"><Icon kind=IconKind::Terminal size=16 class="text-[#2496ED]"/>"View Audit Workflow"</a>
+                                <a href="#register" data-testid="final-cta-primary" class="group inline-flex items-center gap-2 bg-[#2496ED] hover:bg-[#1C7CBA] text-white font-medium px-6 py-3.5 rounded-xl shadow-sm transition-colors active:scale-[0.98]">"Get Started" <Icon kind=IconKind::ArrowRight size=16 class="transition-transform group-hover:translate-x-0.5"/></a>
+                                <a href="#how-it-works" data-testid="final-cta-secondary" class="inline-flex items-center gap-2 bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-white/25 text-white font-medium px-6 py-3.5 rounded-xl transition-colors active:scale-[0.98]"><Icon kind=IconKind::Terminal size=16 class="text-[#2496ED]"/>"View Audit Workflow"</a>
                             </div>
                         </div>
                         <div node_ref=preview_ref class="reveal lg:col-span-5" data-reveal="left" style="--motion-delay: 200ms; --motion-duration: 600ms">

@@ -39,13 +39,13 @@ pub(crate) fn Header() -> impl IntoView {
         <header
             data-testid="site-header"
             class=move || if scrolled.get() {
-                "animate-enter-down fixed top-0 left-0 right-0 z-50 transition-all duration-300 bg-[#050505]/80 backdrop-blur-xl border-b border-white/10"
+                "animate-enter-down fixed top-0 left-0 right-0 z-50 transition-all duration-300 bg-[#030507]/82 backdrop-blur-xl border-b border-white/10"
             } else {
                 "animate-enter-down fixed top-0 left-0 right-0 z-50 transition-all duration-300 bg-transparent border-b border-transparent"
             }
         >
             <div class="max-w-7xl mx-auto px-6 md:px-10 h-16 flex items-center justify-between">
-                <a href="#top" data-testid="header-logo" class="flex items-center gap-2.5 group transition-transform hover:scale-105">
+                <a href="#top" data-testid="header-logo" class="flex items-center gap-2.5 group transition-opacity hover:opacity-90">
                     <DokuruMark class="h-7 w-7"/>
                     <span class="font-heading font-black text-white text-lg tracking-tight">"dokuru"</span>
                     <span class="hidden sm:inline-block font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500 border border-white/10 rounded px-1.5 py-0.5 ml-1">"v1"</span>
@@ -62,7 +62,7 @@ pub(crate) fn Header() -> impl IntoView {
                 </nav>
 
                 <div class="flex items-center gap-3">
-                    <a href=APP_URL target="_blank" rel="noopener noreferrer" data-testid="header-cta-enter-app" class="animate-pop-in inline-flex items-center gap-2 bg-[#2496ED] hover:bg-[#1C7CBA] text-white text-sm font-medium px-4 py-2 rounded-md shadow-[0_0_24px_-4px_rgba(36,150,237,0.5)] transition-all hover:scale-105 active:scale-95" style="--motion-delay: 500ms">
+                    <a href=APP_URL target="_blank" rel="noopener noreferrer" data-testid="header-cta-enter-app" class="animate-pop-in inline-flex items-center gap-2 bg-[#2496ED] hover:bg-[#1C7CBA] text-white text-sm font-medium px-4 py-2 rounded-xl shadow-sm transition-colors active:scale-[0.98]" style="--motion-delay: 500ms">
                         "Enter App"
                     </a>
                     <button

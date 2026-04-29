@@ -22,8 +22,8 @@ const techStack = ["Rust", "React", "TypeScript"];
 
 export function AuthHero() {
   return (
-    <div className="relative hidden lg:flex h-full flex-col bg-zinc-50 dark:bg-zinc-950 p-10 text-zinc-900 dark:text-white dark:border-l">
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:14px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
+      <div className="relative hidden h-full flex-col overflow-hidden bg-zinc-50 p-10 text-zinc-900 dark:border-l dark:border-white/10 dark:bg-transparent dark:text-white lg:flex">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:14px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] dark:bg-[linear-gradient(to_right,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.04)_1px,transparent_1px)] dark:bg-[size:48px_48px]" />
 
       <div className="relative z-20 m-auto w-full max-w-sm">
         <div className="space-y-8">
@@ -39,8 +39,8 @@ export function AuthHero() {
           <div className="space-y-6 pt-4">
             {features.map((feature, i) => (
               <div key={i} className="flex items-center gap-4">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm dark:shadow-none">
-                  <feature.icon className="h-5 w-5 text-zinc-600 dark:text-zinc-300" />
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.035] dark:shadow-none">
+                  <feature.icon className="h-5 w-5 text-zinc-600 dark:text-primary" />
                 </div>
                 <div>
                   <h3 className="text-sm font-medium leading-none text-zinc-900 dark:text-zinc-100">
@@ -56,7 +56,7 @@ export function AuthHero() {
             {techStack.map((tech) => (
               <span
                 key={tech}
-                className="rounded-md bg-white dark:bg-zinc-900 px-2.5 py-1 text-xs font-medium text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800 shadow-sm dark:shadow-none select-none"
+                className="rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-zinc-600 shadow-sm select-none border border-zinc-200 dark:border-white/10 dark:bg-white/[0.035] dark:text-zinc-300 dark:shadow-none"
               >
                 {tech}
               </span>

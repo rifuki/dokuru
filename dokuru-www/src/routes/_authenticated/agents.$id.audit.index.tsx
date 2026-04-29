@@ -689,8 +689,8 @@ function AuditRunTerminal({
     const latest = lines.at(-1);
 
     return (
-        <div className="flex h-full w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-[#2496ED]/25 bg-[#05070A] text-left shadow-[0_0_45px_-18px_rgba(36,150,237,0.65)]">
-            <div className="flex items-center justify-between border-b border-white/8 bg-white/[0.03] px-4 py-2.5">
+        <div className="flex h-full w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#03070C] text-left shadow-[0_30px_90px_-64px_rgba(0,0,0,0.95)]">
+            <div className="flex items-center justify-between border-b border-white/8 bg-white/[0.025] px-4 py-2.5">
                 <div className="flex items-center gap-2 min-w-0">
                     <Terminal className="h-4 w-4 text-[#2496ED] shrink-0" />
                     <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-[#2496ED]">
@@ -726,7 +726,7 @@ function AuditRunTerminal({
                     </div>
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-white/8 bg-black/40 p-3 font-mono text-[11px] leading-relaxed">
+                <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-white/8 bg-black/35 p-3 font-mono text-[11px] leading-relaxed">
                     {lines.length === 0 && !error && (
                         <p className="text-white/35">$ connecting to dokuru-agent audit websocket...</p>
                     )}
@@ -1142,15 +1142,15 @@ function AuditPage() {
                 <>
                     {/* ── Run New Audit Card ────────────────────────────── */}
                     <div className={cn(
-                        "relative overflow-hidden rounded-2xl border border-dashed bg-card/50 px-4 py-4 transition-[height] duration-500",
+                        "relative overflow-hidden rounded-3xl border border-border/70 bg-card/90 px-4 py-4 shadow-[0_30px_110px_-82px_rgba(0,0,0,0.95)] backdrop-blur-sm transition-[height] duration-500",
                         isRunning ? "h-[430px] sm:h-[450px] md:h-[470px]" : "h-[340px] sm:h-[350px] md:h-[360px]",
                     )}>
-                        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(36,150,237,0.16),transparent_34%),linear-gradient(180deg,rgba(36,150,237,0.08),transparent_42%)]" />
+                        <div className="pointer-events-none absolute inset-0 bg-white/[0.018]" />
                         {isRunning ? (
                             <div className="relative z-10 flex h-full flex-col">
                                 <div className="flex items-start gap-4 animate-in fade-in slide-in-from-top-2 duration-500">
                                     <div className="flex min-w-0 items-center gap-3">
-                                        <div className="rounded-xl border border-primary/20 bg-primary/10 p-2 shadow-[0_0_24px_-10px_rgba(36,150,237,0.8)]">
+                                        <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-2 shadow-sm">
                                             <Shield className="h-5 w-5 text-primary" />
                                         </div>
                                         <div className="min-w-0 text-left">
@@ -1173,7 +1173,7 @@ function AuditPage() {
                             </div>
                         ) : (
                             <div className="relative z-10 flex h-full flex-col items-center justify-center gap-4 text-center">
-                                <div className="rounded-full bg-primary/10 p-5 shadow-[0_0_42px_-18px_rgba(36,150,237,0.8)]">
+                                <div className="rounded-full border border-white/10 bg-white/[0.035] p-5 shadow-sm">
                                     <Shield className="h-10 w-10 text-primary" />
                                 </div>
                                 <div>

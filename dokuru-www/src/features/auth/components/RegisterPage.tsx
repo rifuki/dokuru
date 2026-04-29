@@ -19,11 +19,13 @@ export function RegisterPage() {
 
   return (
     <div className="w-full h-screen lg:grid lg:grid-cols-2 overflow-hidden bg-background">
-      <div className="flex flex-col justify-center items-center px-6 sm:px-8 lg:px-12 relative h-full">
+      <div className="relative flex h-full flex-col items-center justify-center overflow-hidden px-6 sm:px-8 lg:px-12">
         <div className="absolute top-4 right-4 z-10">
           <ThemeToggle />
         </div>
-        <RegisterForm />
+        <div className="relative z-10 w-full flex justify-center">
+          <RegisterForm />
+        </div>
       </div>
       <AuthHero />
     </div>

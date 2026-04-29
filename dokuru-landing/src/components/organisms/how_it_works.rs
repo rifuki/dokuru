@@ -21,7 +21,7 @@ pub(crate) fn HowItWorks() -> impl IntoView {
             <div class="max-w-7xl mx-auto px-6 md:px-10">
                 <div node_ref=heading_ref class="reveal mb-14 max-w-3xl">
                     <div class="font-mono text-[11px] uppercase tracking-[0.22em] text-[#2496ED] mb-4">"/ how it works"</div>
-                    <h2 class="font-heading text-4xl md:text-5xl font-black tracking-tighter text-white leading-[1.05]">
+                    <h2 class="font-heading text-4xl md:text-5xl font-extrabold tracking-tighter text-white leading-[1.08]">
                         "Three steps from"
                         <br class="hidden sm:block"/>
                         "install to audit."
@@ -39,7 +39,7 @@ pub(crate) fn HowItWorks() -> impl IntoView {
                                         <div class=move || if active_step.get() == i { "w-10 h-10 rounded-md border border-[#2496ED] bg-[#2496ED]/10 grid place-items-center font-mono text-sm text-[#2496ED] transition-all" } else { "w-10 h-10 rounded-md border border-white/15 bg-[#09090B] grid place-items-center font-mono text-sm text-[#2496ED] transition-all" }>
                                             {step.num}
                                         </div>
-                                        <div class=if i < STEPS.len() - 1 { "w-px flex-1 bg-gradient-to-b from-[#2496ED]/40 to-transparent mt-2" } else { "hidden" }/>
+                                        <div class=if i < STEPS.len() - 1 { "w-px flex-1 bg-white/15 mt-2" } else { "hidden" }/>
                                     </div>
                                     <div class="pb-4">
                                         <h3 class=move || if active_step.get() == i { "font-heading text-xl md:text-2xl font-bold text-white group-hover:text-white transition-colors" } else { "font-heading text-xl md:text-2xl font-bold text-zinc-400 group-hover:text-white transition-colors" }>{step.title}</h3>

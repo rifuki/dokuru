@@ -85,9 +85,9 @@ function DashboardLayout() {
     return (
         <SidebarProvider>
             <AppSidebar />
-            <SidebarInset className="min-w-0 overflow-x-hidden">
+            <SidebarInset className="min-w-0 overflow-x-hidden bg-transparent">
                 {/* Top Header - Shared for all authenticated users */}
-                <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center justify-between gap-2 border-b bg-background px-4 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-16">
+                <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between gap-2 border-b border-border/60 bg-background/80 px-4 backdrop-blur-xl transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-16">
                     <div className="flex items-center gap-2">
                         <SidebarTrigger className="-ml-1 md:hidden">
                             <Menu className="h-5 w-5" />
@@ -108,7 +108,7 @@ function DashboardLayout() {
                 </header>
 
                 {/* Page Content */}
-                <main className="flex-1 p-6 min-w-0 overflow-x-hidden">
+                <main className="relative flex-1 p-6 min-w-0 overflow-x-hidden md:p-8">
                     <Outlet />
                 </main>
             </SidebarInset>

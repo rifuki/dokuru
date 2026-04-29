@@ -9,7 +9,6 @@ pub(crate) fn Hero() -> impl IntoView {
     view! {
         <section id="top" data-testid="hero-section" class="relative pt-20 md:pt-24 pb-20 md:pb-28 overflow-hidden">
             <div class="absolute inset-0 bg-grid-fine mask-fade-b pointer-events-none animate-fade-in"/>
-            <div class="absolute -top-40 left-1/2 -translate-x-1/2 w-[900px] h-[500px] rounded-full bg-[#2496ED]/10 blur-[140px] pointer-events-none animate-scale-fade"/>
 
             <div class="relative max-w-7xl mx-auto px-6 md:px-10">
                 <div class="animate-enter-soft-down flex flex-wrap items-center gap-x-3 gap-y-2 mb-8" style="--motion-delay: 200ms">
@@ -22,14 +21,14 @@ pub(crate) fn Hero() -> impl IntoView {
 
                 <div class="grid lg:grid-cols-12 gap-10 lg:gap-14 items-start">
                     <div class="lg:col-span-7">
-                        <h1 data-testid="hero-headline" class="animate-enter-up font-heading text-4xl sm:text-5xl lg:text-7xl font-black tracking-tighter leading-[0.95] text-white" style="--motion-delay: 300ms; --motion-duration: 800ms">
+                        <h1 data-testid="hero-headline" class="animate-enter-up font-heading text-4xl sm:text-5xl lg:text-7xl font-extrabold tracking-tighter leading-[0.98] text-white" style="--motion-delay: 300ms; --motion-duration: 800ms">
                             "Monitor Docker"
                             <br/>
                             "security across"
                             <br/>
                             <span class="relative inline-block">
-                                <span class="bg-gradient-to-r from-white via-white to-[#2496ED] bg-clip-text text-transparent">"your infrastructure."</span>
-                                <span class="hero-underline absolute -bottom-2 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#2496ED]/50 to-transparent origin-left"/>
+                                <span>"your infrastructure."</span>
+                                <span class="hero-underline absolute -bottom-2 left-0 right-0 h-px bg-white/25 origin-left"/>
                             </span>
                         </h1>
 
@@ -44,11 +43,11 @@ pub(crate) fn Hero() -> impl IntoView {
                         </p>
 
                         <div class="animate-enter-up mt-9 flex flex-wrap items-center gap-3" style="--motion-delay: 700ms; --motion-duration: 600ms">
-                            <a href=APP_URL target="_blank" rel="noopener noreferrer" data-testid="hero-cta-primary" class="group inline-flex items-center gap-2 bg-[#2496ED] hover:bg-[#1C7CBA] text-white font-medium px-5 py-3 rounded-md shadow-[0_0_40px_-6px_rgba(36,150,237,0.7)] transition-all hover:scale-105 active:scale-95">
+                            <a href=APP_URL target="_blank" rel="noopener noreferrer" data-testid="hero-cta-primary" class="group inline-flex items-center gap-2 bg-[#2496ED] hover:bg-[#1C7CBA] text-white font-medium px-5 py-3 rounded-xl shadow-sm transition-colors active:scale-[0.98]">
                                 "Enter App"
                                 <Icon kind=IconKind::ArrowRight size=16 class="transition-transform group-hover:translate-x-0.5"/>
                             </a>
-                            <a href="#how-it-works" data-testid="hero-cta-secondary" class="inline-flex items-center gap-2 bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-white/25 text-white font-medium px-5 py-3 rounded-md transition-all hover:scale-105 active:scale-95">
+                            <a href="#how-it-works" data-testid="hero-cta-secondary" class="inline-flex items-center gap-2 bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-white/25 text-white font-medium px-5 py-3 rounded-xl transition-colors active:scale-[0.98]">
                                 <Icon kind=IconKind::Terminal size=16 class="text-[#2496ED]"/>
                                 "See How It Works"
                             </a>
@@ -63,7 +62,6 @@ pub(crate) fn Hero() -> impl IntoView {
 
                     <div class="animate-enter-right lg:col-span-5 lg:pl-4 relative" style="--motion-delay: 600ms">
                         <div class="relative">
-                            <div class="absolute -inset-px rounded-xl bg-gradient-to-br from-[#2496ED]/40 via-transparent to-[#00E5FF]/30 blur-[2px] opacity-70 pointer-events-none"/>
                             <div class="relative"><AuditPanel/></div>
                         </div>
                         <div class="mt-4 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-600">
