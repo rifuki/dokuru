@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useReducer, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { agentApi } from "@/lib/api/agent";
@@ -743,7 +743,6 @@ type ViewMode = "pillar" | "section";
 function AuditDetailPage() {
   const { id, auditId } = Route.useParams();
   const { ruleId: focusedRuleId } = Route.useSearch();
-  const router = useRouter();
   const navigate = useNavigate();
   const [agent, setAgent] = useState<Agent | null>(null);
   const [token, setToken] = useState<string | undefined>();
@@ -957,38 +956,53 @@ function AuditDetailPage() {
           <h2 className="text-2xl font-bold tracking-tight">Security Audit</h2>
           <p className="text-muted-foreground text-sm mt-0.5">CIS Docker Benchmark v1.8.0</p>
         </div>
-        <Button variant="outline" onClick={() => router.history.back()}>
-          <ArrowLeft className="h-4 w-4 mr-1.5" /> Back
+        <Button
+          variant="outline"
+          className="h-10 rounded-[10px] border-primary/25 bg-primary/10 px-4 font-semibold text-primary shadow-none hover:bg-primary/15 hover:text-primary"
+          onClick={() => navigate({ to: "/agents/$id/audits", params: { id } })}
+        >
+          <ArrowLeft className="h-4 w-4 mr-1.5" /> Back to Audits
         </Button>
       </div>
 
       {auditData ? (
         <>
           {/* ── Summary Card ────────────────────────────────── */}
-          <div className="rounded-2xl border border-border bg-card dark:bg-gradient-to-br dark:from-[#0A0A0B] dark:via-[#111113] dark:to-[#0A0A0B] overflow-hidden shadow-2xl">
-            {/* Terminal-style header with glow */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-muted/40 dark:bg-background dark:bg-[#09090B]/80 backdrop-blur-sm">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="flex gap-1.5">
-                  <div className="h-3 w-3 shrink-0 rounded-full bg-red-500/80 shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
-                  <div className="h-3 w-3 shrink-0 rounded-full bg-yellow-500/80 shadow-[0_0_8px_rgba(234,179,8,0.5)]" />
-                  <div className="h-3 w-3 shrink-0 rounded-full bg-green-500/80 shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
+          <div className="overflow-hidden rounded-[16px] border border-border bg-card shadow-sm">
+            <div className="border-b border-border bg-muted/25 px-5 py-4 dark:bg-white/[0.025]">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-primary/25 bg-primary/10 text-primary">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Audit Summary</p>
+                    <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="truncate text-base font-semibold tracking-tight text-foreground">
+                        {agent?.name ?? id}
+                      </span>
+                      <span className="text-sm text-muted-foreground/50">/</span>
+                      <span className="truncate text-sm font-semibold text-primary">
+                        {auditData.hostname}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <span className="ml-2 text-sm font-mono text-muted-foreground truncate">
-                  {agent?.name ?? id} <span className="text-muted-foreground/40">/</span> <span className="text-[#2496ED]">{auditData.hostname}</span>
-                </span>
+                <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
+                  <Clock className="h-4 w-4" />
+                  <span className="font-medium">
+                    {fmtDate(auditData.timestamp).split(",")[1]?.trim() ?? fmtDate(auditData.timestamp)}
+                  </span>
+                </div>
               </div>
-              <span className="text-xs font-mono text-muted-foreground/60 shrink-0 ml-4">
-                {fmtDate(auditData.timestamp).split(",")[1]?.trim() ?? fmtDate(auditData.timestamp)}
-              </span>
             </div>
 
             {/* Body: score left + breakdown right */}
-            <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-white/10">
+            <div className="grid grid-cols-1 divide-y divide-border md:grid-cols-2 md:divide-x md:divide-y-0">
               {/* Left: Score + stats */}
               <div className="p-6 flex flex-col">
                 <div>
-                  <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground/60 mb-3">Audit Score</p>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground mb-3">Audit Score</p>
                   <div className="flex items-baseline gap-3">
                     <span className={cn("text-7xl font-black tabular-nums leading-none",
                       auditData.summary.score >= 80 ? "text-emerald-400"
@@ -1009,37 +1023,41 @@ function AuditDetailPage() {
                       style={{ width: `${auditData.summary.score}%` }}
                     />
                   </div>
-                  <p className="mt-2 text-xs text-muted-foreground/60 font-mono">CIS Docker Benchmark v1.8.0 · {auditData.summary.total} rules</p>
+                  <p className="mt-2 text-sm text-muted-foreground">CIS Docker Benchmark v1.8.0 · {auditData.summary.total} rules</p>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3 mt-6">
                   <button
+                    type="button"
                     onClick={() => setStatusFilter(f => f === "Pass" ? "all" : "Pass")}
+                    aria-pressed={statusFilter === "Pass"}
                     className={cn(
-                      "flex flex-col items-center py-3 rounded-xl border transition-all duration-200",
+                      "rounded-[12px] border px-3 py-3 text-left transition-all duration-200",
                       statusFilter === "Pass"
-                        ? "bg-emerald-500/15 border-emerald-500/40 ring-1 ring-emerald-500/20"
+                        ? "bg-primary/15 border-primary/45 ring-1 ring-primary/20"
                         : "bg-emerald-500/5 border-emerald-500/20 hover:bg-emerald-500/10 hover:border-emerald-500/30"
                     )}
                   >
-                    <span className="text-2xl font-black text-emerald-400">{auditData.summary.passed}</span>
-                    <span className="text-[9px] text-muted-foreground uppercase tracking-[0.15em] mt-1">Pass</span>
+                    <span className={cn("block text-2xl font-black", statusFilter === "Pass" ? "text-primary" : "text-emerald-400")}>{auditData.summary.passed}</span>
+                    <span className="mt-1 block text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Passed</span>
                   </button>
                   <button
+                    type="button"
                     onClick={() => setStatusFilter(f => f === "Fail" ? "all" : "Fail")}
+                    aria-pressed={statusFilter === "Fail"}
                     className={cn(
-                      "flex flex-col items-center py-3 rounded-xl border transition-all duration-200",
+                      "rounded-[12px] border px-3 py-3 text-left transition-all duration-200",
                       statusFilter === "Fail"
                         ? "bg-rose-500/15 border-rose-500/40 ring-1 ring-rose-500/20"
                         : "bg-rose-500/5 border-rose-500/20 hover:bg-rose-500/10 hover:border-rose-500/30"
                     )}
                   >
-                    <span className="text-2xl font-black text-rose-400">{auditData.summary.failed}</span>
-                    <span className="text-[9px] text-muted-foreground uppercase tracking-[0.15em] mt-1">Fail</span>
+                    <span className="block text-2xl font-black text-rose-400">{auditData.summary.failed}</span>
+                    <span className="mt-1 block text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Failed</span>
                   </button>
-                  <div className="flex flex-col items-center py-3 rounded-xl border border-border bg-muted/20">
-                    <span className="text-2xl font-black text-muted-foreground">{auditData.summary.total}</span>
-                    <span className="text-[9px] text-muted-foreground/60 uppercase tracking-[0.15em] mt-1">Total</span>
+                  <div className="rounded-[12px] border border-border bg-muted/20 px-3 py-3 text-left">
+                    <span className="block text-2xl font-black text-foreground/80">{auditData.summary.total}</span>
+                    <span className="mt-1 block text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Total</span>
                   </div>
                 </div>
 
@@ -1050,11 +1068,11 @@ function AuditDetailPage() {
                     { icon: Container, label: "Containers", value: String(auditData.total_containers) },
                     { icon: Clock, label: "Ran", value: fmtDate(auditData.timestamp).split(",")[1]?.trim() ?? fmtDate(auditData.timestamp) },
                   ].map(({ icon: Icon, label, value }) => (
-                    <div key={label} className="bg-muted/20 border border-white/5 rounded-lg px-3 py-2 flex items-center gap-2 min-w-0 hover:bg-white/[0.04] transition-colors">
-                      <Icon className="h-4 w-4 text-muted-foreground/60 shrink-0" />
+                    <div key={label} className="flex min-w-0 items-center gap-2 rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2.5 transition-colors hover:bg-muted/30">
+                      <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
                       <div className="min-w-0">
-                        <p className="text-[9px] text-muted-foreground/60 uppercase tracking-[0.15em]">{label}</p>
-                        <p className="text-xs font-semibold text-foreground/80 truncate">{value}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-[0.14em]">{label}</p>
+                        <p className="truncate text-sm font-semibold text-foreground/90">{value}</p>
                       </div>
                     </div>
                   ))}
@@ -1063,17 +1081,41 @@ function AuditDetailPage() {
 
               {/* Right: Pillar/Section breakdown with toggle */}
               <div className="p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground/60">
-                    {viewMode === "pillar" ? "Security Pillars" : "CIS Sections"}
-                  </p>
-                  <button
-                    onClick={() => setViewMode(m => m === "pillar" ? "section" : "pillar")}
-                    className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-muted/20 border border-border hover:bg-primary/20 hover:border-primary/50 hover:text-primary transition-all text-muted-foreground"
-                  >
-                    <ArrowLeftRight className="h-3 w-3" />
-                    Switch to {viewMode === "pillar" ? "Sections" : "Pillars"}
-                  </button>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                      {viewMode === "pillar" ? "Security Pillars" : "CIS Sections"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground/70">
+                      View audit progress by {viewMode === "pillar" ? "security area" : "CIS benchmark section"}.
+                    </p>
+                  </div>
+                  <div className="inline-flex w-fit items-center gap-1 rounded-[10px] border border-border bg-muted/25 p-1">
+                    <button
+                      type="button"
+                      onClick={() => setViewMode("pillar")}
+                      aria-pressed={viewMode === "pillar"}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-[7px] px-3 py-1.5 text-xs font-semibold transition-colors",
+                        viewMode === "pillar" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                      )}
+                    >
+                      <Layers className="h-3.5 w-3.5" />
+                      Pillars
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode("section")}
+                      aria-pressed={viewMode === "section"}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-[7px] px-3 py-1.5 text-xs font-semibold transition-colors",
+                        viewMode === "section" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                      )}
+                    >
+                      <Terminal className="h-3.5 w-3.5" />
+                      Sections
+                    </button>
+                  </div>
                 </div>
 
                 {viewMode === "pillar" ? (
@@ -1093,7 +1135,7 @@ function AuditDetailPage() {
                           <span className="text-sm font-semibold text-foreground/90">{meta.name}</span>
                           <span className="text-xs text-muted-foreground/60 font-mono ml-auto">{passed}<span className="text-muted-foreground/40">/</span>{total}</span>
                         </div>
-                        <div className="h-1.5 bg-muted/40 rounded-full overflow-hidden">
+                        <div className="h-2 bg-muted/40 rounded-full overflow-hidden">
                           <div
                             className={cn("h-full rounded-full transition-all duration-700", meta.barColor)}
                             style={{ width: `${pct}%` }}
@@ -1113,12 +1155,12 @@ function AuditDetailPage() {
 
                 {/* Quick Stats */}
                 <div className="pt-4 mt-4 border-t border-border grid grid-cols-2 gap-2">
-                  <div className="bg-muted/20 border border-white/5 rounded-lg px-3 py-2">
-                    <p className="text-[9px] text-muted-foreground/60 uppercase tracking-[0.15em]">Critical</p>
+                  <div className="rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2.5">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-[0.14em]">Critical</p>
                     <p className="text-lg font-black text-rose-400">{report?.severity_failures.high ?? auditData.results.filter(r => r.rule.severity === "High" && r.status === "Fail").length}</p>
                   </div>
-                  <div className="bg-muted/20 border border-white/5 rounded-lg px-3 py-2">
-                    <p className="text-[9px] text-muted-foreground/60 uppercase tracking-[0.15em]">Medium</p>
+                  <div className="rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2.5">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-[0.14em]">Medium</p>
                     <p className="text-lg font-black text-amber-400">{report?.severity_failures.medium ?? auditData.results.filter(r => r.rule.severity === "Medium" && r.status === "Fail").length}</p>
                   </div>
                 </div>
