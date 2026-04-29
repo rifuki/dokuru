@@ -499,14 +499,14 @@ function AgentHero({
     const accessLabel = agent.access_mode === "cloudflare" ? "Cloudflare tunnel" : agent.access_mode;
 
     return (
-        <section className="rounded-[18px] border border-border bg-card p-4 shadow-sm">
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
-                <div className="flex min-w-0 items-center gap-4">
-                    <div className="flex size-12 shrink-0 items-center justify-center rounded-[12px] border border-border bg-background text-primary">
+        <section className="rounded-[18px] border border-border bg-card p-5 shadow-sm">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                <div className="flex min-w-0 items-start gap-4">
+                    <div className="mt-0.5 flex size-12 shrink-0 items-center justify-center rounded-[12px] border border-border bg-background text-primary">
                         <Server className="h-5 w-5" />
                     </div>
 
-                    <div className="min-w-0 flex-1 space-y-2.5">
+                    <div className="min-w-0 flex-1">
                         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
                             <h1 className="truncate text-2xl font-semibold tracking-tight">{agent.name}</h1>
                             <div className={cn("inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider", statusRing)}>
@@ -515,17 +515,18 @@ function AgentHero({
                             </div>
                         </div>
 
-                        <div className="flex min-w-0 flex-col gap-2 text-sm text-muted-foreground lg:flex-row lg:items-center">
-                            <div className="flex min-w-0 items-center gap-2 rounded-[10px] border border-border/70 bg-background/50 px-2.5 py-1.5">
-                                <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">Endpoint</span>
-                                <span className="min-w-0 truncate font-mono text-xs text-foreground/80">{endpoint}</span>
-                            </div>
-                            <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[10px] border border-border/70 bg-background/40 px-2.5 text-xs font-medium capitalize">
-                                <GitBranch className="h-3.5 w-3.5" />
+                        <div className="mt-3 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-muted-foreground">
+                            <span className="min-w-0 truncate font-mono text-xs text-muted-foreground md:max-w-[620px]">
+                                {endpoint}
+                            </span>
+                            <span className="h-1 w-1 rounded-full bg-border" />
+                            <span className="inline-flex items-center gap-1.5 text-xs font-medium capitalize">
+                                <GitBranch className="h-3.5 w-3.5 text-muted-foreground/80" />
                                 {accessLabel}
                             </span>
-                            <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[10px] border border-border/70 bg-background/40 px-2.5 text-xs font-medium">
-                                <Clock3 className="h-3.5 w-3.5" />
+                            <span className="h-1 w-1 rounded-full bg-border" />
+                            <span className="inline-flex items-center gap-1.5 text-xs font-medium">
+                                <Clock3 className="h-3.5 w-3.5 text-muted-foreground/80" />
                                 Added {fmtFullDate(agent.created_at)}
                             </span>
                         </div>
