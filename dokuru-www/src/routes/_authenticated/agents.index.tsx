@@ -13,7 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, RefreshCw, Container, Box, HardDrive, Search, ChevronDown, Edit, Trash2, Cpu, Server, Cloud, Globe, Link2, Loader2, WifiOff, AlertTriangle, ArrowUp, ArrowDown, X, Check, Copy } from "lucide-react";
+import { Plus, RefreshCw, Container, Box, HardDrive, Search, ChevronDown, Edit, Trash2, Cpu, Server, Cloud, Globe, Link2, Loader2, WifiOff, AlertTriangle, ArrowUp, ArrowDown, ArrowUpRight, X, Check, Copy } from "lucide-react";
 import { AddAgentModal } from "@/components/agents/AddAgentModal";
 import { EditAgentModal } from "@/components/agents/EditAgentModal";
 import {
@@ -266,28 +266,45 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
           </div>
         </div>
 
-        <div className="flex items-center gap-1 self-start lg:self-center" onClick={(e) => e.stopPropagation()}>
-          <Button size="sm" variant="outline" className="h-8 px-3 hover:!bg-transparent" onClick={onClick} disabled={!isOnline || isConnecting}>
-            {isConnecting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-            Open
+        <div className="flex shrink-0 items-center gap-2 self-start lg:self-center" onClick={(e) => e.stopPropagation()}>
+          <Button
+            size="sm"
+            variant={isOnline && !isConnecting ? "default" : "outline"}
+            className="h-9 rounded-[10px] px-3.5 text-sm font-semibold shadow-none disabled:opacity-45"
+            onClick={onClick}
+            disabled={!isOnline || isConnecting}
+          >
+            {isConnecting ? (
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <ArrowUpRight className="mr-2 h-3.5 w-3.5" />
+            )}
+            Dashboard
           </Button>
-          <button
-            className="flex h-8 w-8 items-center justify-center rounded-[6px] text-muted-foreground/70 transition-colors hover:text-foreground"
-            title="Edit agent"
-            onClick={openEdit}
-          >
-            <Edit className="w-4 h-4" />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowDeleteDialog(true);
-            }}
-            className="flex h-8 w-8 items-center justify-center rounded-[6px] text-muted-foreground/70 transition-colors hover:text-rose-500"
-            title="Delete agent"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+
+          <div className="flex items-center rounded-[11px] border bg-background/60 p-1 shadow-sm dark:bg-white/[0.025]">
+            <button
+              type="button"
+              className="flex h-8 w-8 items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+              title="Edit agent"
+              aria-label={`Edit ${agent.name}`}
+              onClick={openEdit}
+            >
+              <Edit className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowDeleteDialog(true);
+              }}
+              className="flex h-8 w-8 items-center justify-center rounded-[8px] text-muted-foreground transition-colors hover:bg-rose-500/10 hover:text-rose-500"
+              title="Delete agent"
+              aria-label={`Delete ${agent.name}`}
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 
