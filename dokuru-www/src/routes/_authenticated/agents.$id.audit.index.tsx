@@ -688,18 +688,18 @@ function AuditRunTerminal({
 
     return (
         <div className="flex h-full w-full animate-in flex-col overflow-hidden bg-card text-left fade-in zoom-in-95 duration-500">
-            <div className="flex items-center justify-between gap-4 border-b border-border bg-muted/10 px-5 py-4">
+            <div className="flex items-center justify-between gap-4 border-b border-border bg-muted/10 px-5 py-3">
                 <div className="flex min-w-0 items-center gap-3">
                     <div className="flex shrink-0 items-center gap-1.5" aria-hidden="true">
                         <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f56]" />
                         <span className="h-2.5 w-2.5 rounded-full bg-[#ffbd2e]" />
                         <span className="h-2.5 w-2.5 rounded-full bg-[#27c93f]" />
                     </div>
-                    <div className="h-5 w-px shrink-0 bg-border" />
                     <Terminal className="h-4 w-4 shrink-0 text-primary" />
-                    <div className="min-w-0">
-                        <h3 className="truncate text-sm font-semibold text-foreground">Live security audit</h3>
-                        <p className="mt-0.5 truncate font-mono text-[10px] uppercase tracking-[0.18em] text-primary">
+                    <div className="flex min-w-0 items-baseline gap-2">
+                        <h3 className="shrink-0 text-sm font-semibold text-foreground">Live security audit</h3>
+                        <span className="text-muted-foreground/50">/</span>
+                        <p className="truncate font-mono text-xs font-semibold text-primary">
                             CIS Docker Benchmark v1.8.0
                         </p>
                     </div>
