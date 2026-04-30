@@ -2,7 +2,7 @@ import "@xterm/xterm/css/xterm.css";
 
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
-import { ChevronDown, Loader2, Plug, PlugZap, RotateCcw, Terminal as TerminalIcon } from "lucide-react";
+import { ChevronDown, Loader2, Plug, PowerOff, RotateCcw, Terminal as TerminalIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { agentApi } from "@/lib/api/agent";
@@ -11,6 +11,11 @@ import { HOST_SHELLS, normalizeHostShell, type HostShellPath } from "@/lib/host-
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { useHostShellSession } from "@/stores/host-shell-session-store";
+
+const TERMINAL_BG = "#090909";
+const TERMINAL_FG = "#d4d4d4";
+const TERMINAL_CURSOR = "#38bdf8";
+const terminalControlClass = "inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-border bg-background px-2.5 font-mono text-xs font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60";
 
 export function HostShellTerminal({
   agentId,
@@ -27,6 +32,7 @@ export function HostShellTerminal({
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const roRef = useRef<ResizeObserver | null>(null);
+  const autoConnectRef = useRef(false);
   const lastRenderedChunkIdRef = useRef(0);
   const shellMenuRef = useRef<HTMLDivElement>(null);
   const [termDimensions, setTermDimensions] = useState({ cols: 100, rows: 30 });
@@ -93,7 +99,8 @@ export function HostShellTerminal({
       cursorBlink: true,
       fontSize: 13,
       fontFamily: '"Cascadia Code", "Fira Code", monospace',
-      theme: { background: "#0d1117", foreground: "#c9d1d9", cursor: "#58a6ff" },
+      theme: { background: TERMINAL_BG, foreground: TERMINAL_FG, cursor: TERMINAL_CURSOR },
+      allowTransparency: true,
       scrollback: 8000,
       disableStdin: current.status !== "connected",
     });
@@ -148,7 +155,7 @@ export function HostShellTerminal({
   }, [snapshot.chunks, snapshot.status]);
 
   const startTerminal = useCallback(() => {
-    if (detectedShell === null) return;
+    if (detectedShell === null || status === "connected" || status === "connecting") return;
     const cols = termRef.current?.cols ?? termDimensions.cols;
     const rows = termRef.current?.rows ?? termDimensions.rows;
 
@@ -162,7 +169,13 @@ export function HostShellTerminal({
       cols,
       rows,
     });
-  }, [accessMode, accessToken, activeShell, agentId, agentUrl, detectedShell, session, termDimensions, token]);
+  }, [accessMode, accessToken, activeShell, agentId, agentUrl, detectedShell, session, status, termDimensions, token]);
+
+  useEffect(() => {
+    if (autoConnectRef.current || detectedShell === null || !termRef.current) return;
+    autoConnectRef.current = true;
+    startTerminal();
+  }, [detectedShell, startTerminal]);
 
   const disconnect = useCallback(() => {
     session.disconnect();
@@ -170,26 +183,29 @@ export function HostShellTerminal({
 
   const isConnected = status === "connected";
   const isConnecting = status === "connecting";
+  const isDisconnected = status === "disconnected" || status === "error";
   const shellLabel = activeShell.split("/").pop();
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-lg">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/20 px-3 py-2">
+    <div className="overflow-hidden rounded-[18px] border border-border bg-card shadow-lg">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/15 px-4 py-3 dark:bg-[#171717]">
         <div className="flex min-w-0 items-center gap-2">
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1.5" aria-hidden="true">
             <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f56]" />
             <span className="h-2.5 w-2.5 rounded-full bg-[#ffbd2e]" />
             <span className="h-2.5 w-2.5 rounded-full bg-[#27c93f]" />
           </div>
-          <TerminalIcon className="h-4 w-4 text-[#2496ED]" />
-          <span className="truncate font-mono text-xs text-muted-foreground">vps://{agentId.slice(0, 8)}</span>
+          <div className="h-4 w-px shrink-0 bg-border/70" />
+          <TerminalIcon className="h-4 w-4 shrink-0 text-primary" />
+          <span className="truncate font-mono text-sm text-muted-foreground">vps://{agentId.slice(0, 8)}</span>
           <span className={cn(
             "rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase",
-            isConnected ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-400"
-              : isConnecting ? "border-blue-500/25 bg-blue-500/10 text-blue-400"
+            isConnected ? "border-primary/25 bg-primary/10 text-primary"
+              : isConnecting ? "border-primary/25 bg-primary/10 text-primary"
+              : isDisconnected ? "border-destructive/25 bg-destructive/10 text-destructive"
               : "border-border bg-muted/40 text-muted-foreground"
           )}>
-            {status}
+            {isConnecting ? "connecting" : isConnected ? "connected" : isDisconnected ? "disconnected" : "idle"}
           </span>
         </div>
 
@@ -198,7 +214,7 @@ export function HostShellTerminal({
             <button
               type="button"
               onClick={() => setShellMenuOpen((value) => !value)}
-              className="inline-flex h-8 items-center gap-1 rounded-md border bg-background px-2 font-mono text-xs text-muted-foreground hover:text-foreground"
+              className={terminalControlClass}
               disabled={detectedShell === null || isConnected || isConnecting}
             >
               {detectedShell === null ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : shellLabel}
@@ -240,26 +256,39 @@ export function HostShellTerminal({
             )}
           </div>
           {isConnected || isConnecting ? (
-            <button type="button" onClick={disconnect} className="inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-semibold text-muted-foreground hover:text-foreground">
-              <Plug className="h-3.5 w-3.5" /> Disconnect
+            <button type="button" onClick={disconnect} className={terminalControlClass}>
+              {isConnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PowerOff className="h-3.5 w-3.5" />}
+              Disconnect
             </button>
           ) : (
-            <button type="button" onClick={startTerminal} disabled={detectedShell === null} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#2496ED] px-3 text-xs font-bold text-white hover:bg-[#1d7ac7] disabled:cursor-not-allowed disabled:opacity-60">
-              {status === "disconnected" || status === "error" ? <RotateCcw className="h-3.5 w-3.5" /> : <PlugZap className="h-3.5 w-3.5" />}
-              {status === "disconnected" || status === "error" ? "Reconnect" : "Connect Shell"}
+            <button
+              type="button"
+              onClick={startTerminal}
+              disabled={detectedShell === null}
+              className={cn(terminalControlClass, "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary")}
+            >
+              {isDisconnected ? <RotateCcw className="h-3.5 w-3.5" /> : <Plug className="h-3.5 w-3.5" />}
+              {isDisconnected ? "Reconnect" : "Connect"}
             </button>
           )}
         </div>
       </div>
 
-      <div className="relative bg-[#0d1117] p-2">
-        <div ref={wrapperRef} className="h-[68vh] min-h-[420px] rounded-lg" />
+      <div className="relative p-2" style={{ background: TERMINAL_BG }}>
+        <div ref={wrapperRef} className="h-[68vh] min-h-[420px] rounded-[12px]" style={{ background: TERMINAL_BG }} />
         {snapshot.status === "idle" && snapshot.chunks.length === 0 && (
-          <div className="absolute inset-2 flex items-center justify-center rounded-lg border border-dashed border-white/10 bg-[#0d1117] text-center">
-            <div className="space-y-2 px-4">
-              <TerminalIcon className="mx-auto h-8 w-8 text-[#2496ED]" />
-              <p className="text-sm font-semibold text-white">Host shell is disconnected</p>
-              <p className="max-w-md text-xs text-white/50">Connect only during trusted demos. The shell keeps running in the background while you navigate this app.</p>
+          <div className="pointer-events-none absolute inset-2 flex items-center justify-center rounded-[12px] text-center">
+            <div className="space-y-2 px-4 text-muted-foreground">
+              <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" />
+              <p className="text-sm font-semibold text-foreground">Connecting shell...</p>
+            </div>
+          </div>
+        )}
+        {isDisconnected && snapshot.chunks.length === 0 && (
+          <div className="pointer-events-none absolute inset-2 flex items-center justify-center rounded-[12px] text-center">
+            <div className="space-y-2 px-4 text-muted-foreground">
+              <TerminalIcon className="mx-auto h-6 w-6 text-destructive" />
+              <p className="text-sm font-semibold text-foreground">Shell disconnected</p>
             </div>
           </div>
         )}

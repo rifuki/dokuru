@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Lock, Terminal } from "lucide-react";
+import { ArrowLeft, Lock } from "lucide-react";
 
 import { HostShellTerminal } from "@/components/agents/HostShellTerminal";
 import { Button } from "@/components/ui/button";
@@ -50,19 +50,13 @@ function AgentHostShellPage() {
   const token = dockerCredential(agent) || undefined;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 pb-8">
-      <div className="rounded-2xl border bg-card p-3">
-        <div className="mb-3 flex items-center gap-2 px-1 text-sm font-semibold text-muted-foreground">
-          <Terminal className="h-4 w-4 text-[#2496ED]" />
-          Remote host terminal via dokuru-agent
-        </div>
-        <HostShellTerminal
-          agentId={agent.id}
-          agentUrl={agent.url}
-          accessMode={agent.access_mode}
-          token={token}
-        />
-      </div>
+    <div className="mx-auto max-w-6xl pb-8">
+      <HostShellTerminal
+        agentId={agent.id}
+        agentUrl={agent.url}
+        accessMode={agent.access_mode}
+        token={token}
+      />
     </div>
   );
 }
