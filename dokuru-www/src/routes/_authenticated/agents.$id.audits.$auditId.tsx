@@ -1007,7 +1007,7 @@ function AuditDetailPage() {
 
   if (loading) {
     return (
-      <div className="max-w-5xl mx-auto w-full flex items-center justify-center py-20">
+      <div className="flex min-h-[calc(100svh-8rem)] w-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
