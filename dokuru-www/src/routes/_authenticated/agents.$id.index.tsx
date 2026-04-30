@@ -499,7 +499,7 @@ function AgentHero({
     const accessLabel = agent.access_mode === "cloudflare" ? "Cloudflare tunnel" : agent.access_mode;
 
     return (
-        <section className="rounded-[18px] border border-border bg-card p-5 shadow-sm">
+        <section className="rounded-[20px] border border-white/5 bg-[#0a0a0a] p-6 shadow-sm">
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
                 <div className="flex min-w-0 items-center gap-4">
                     <div className="flex size-12 shrink-0 items-center justify-center rounded-[12px] border border-border bg-background text-primary">
@@ -743,7 +743,7 @@ function MetricCard({
         <Link
             to={to}
             params={{ id }}
-            className="group flex flex-col justify-between rounded-lg border bg-background p-3 transition-colors hover:border-primary/50"
+            className="group flex flex-col justify-between rounded-[16px] border border-white/5 bg-[#0a0a0a] p-5 transition-all hover:border-white/10 hover:bg-white/[0.02]"
         >
             <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold">{label}</span>
@@ -820,7 +820,7 @@ function SecurityOverview({
         >
             <div className="space-y-4">
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_460px]">
-                    <div className="rounded-[18px] border bg-background/55 p-5 shadow-sm dark:bg-white/[0.025]">
+                    <div className="rounded-[20px] border border-white/5 bg-[#0a0a0a] p-6 shadow-sm">
                         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                             <div className="min-w-0 flex-1">
                                 <div className="flex flex-wrap items-center gap-3">
@@ -852,7 +852,7 @@ function SecurityOverview({
                     </div>
                 </div>
 
-                <div className="rounded-[18px] border bg-background/55 p-4 shadow-sm dark:bg-white/[0.025]">
+                <div className="rounded-[20px] border border-white/5 bg-[#0a0a0a] p-6 shadow-sm">
                     <div className="flex items-center justify-between gap-3">
                         <h3 className="text-sm font-semibold tracking-tight">Security pillars</h3>
                         <Badge variant="outline" className="rounded-full border-border/70 bg-card px-2.5 py-1 text-[11px] font-medium text-foreground">
@@ -874,7 +874,7 @@ function SecurityOverview({
 
 function ScoreStat({ label, value, className }: { label: string; value: number; className?: string }) {
     return (
-        <div className="rounded-[14px] border bg-card/70 px-3 py-3 text-center">
+        <div className="rounded-[14px] bg-white/[0.02] border border-white/5 px-3 py-3 text-center">
             <span className={cn("text-xl font-semibold tabular-nums", className)}>{value}</span>
             <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
         </div>
@@ -898,7 +898,7 @@ function SignalCard({
     const isNeutral = tone === "zinc";
 
     return (
-        <div className="group rounded-[16px] border bg-background/55 px-4 py-3.5 shadow-sm transition-colors hover:border-primary/25 dark:bg-white/[0.025]">
+        <div className="group rounded-[16px] border border-white/5 bg-[#0a0a0a] px-5 py-4 shadow-sm transition-colors hover:border-white/10">
             <div className="flex items-center justify-between gap-3">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</span>
                 <Icon className={cn("h-4 w-4", isNeutral ? "text-muted-foreground" : toneClass.text)} />
@@ -920,7 +920,7 @@ function PillarRow({ pillar }: { pillar: AuditReportResponse["report"]["pillars"
     const progressClass = percent >= 80 ? "[&>div]:bg-primary" : percent >= 60 ? "[&>div]:bg-amber-500" : "[&>div]:bg-rose-500";
 
     return (
-        <div className="rounded-[16px] border bg-card/70 p-3.5 transition-colors hover:border-primary/25 hover:bg-muted/20">
+        <div className="rounded-[16px] border border-white/5 bg-white/[0.01] p-4 transition-colors hover:border-white/10 hover:bg-white/[0.03]">
             <div className="flex items-center justify-between gap-4">
                 <div className="flex min-w-0 items-center gap-3">
                     <div className="flex size-9 shrink-0 items-center justify-center rounded-[10px] border border-border/70 bg-background text-primary">
@@ -961,7 +961,7 @@ function WorkloadOverview({
     return (
         <SectionCard title="Workload Snapshot" description="Recent containers and biggest compose stacks on this Docker host.">
             <div className="grid gap-4 lg:grid-cols-2">
-                <div className="overflow-hidden rounded-xl border bg-card">
+                <div className="overflow-hidden rounded-[20px] border border-white/5 bg-[#0a0a0a]">
                     <ListHeader icon={ContainerIcon} title="Recent Containers" action={<Link to="/agents/$id/containers" params={{ id }} className="text-xs font-medium text-primary hover:underline">View all</Link>} />
                     <div className="divide-y divide-border/40">
                         {isContainersLoading ? (
@@ -995,7 +995,7 @@ function WorkloadOverview({
                     </div>
                 </div>
 
-                <div className="overflow-hidden rounded-xl border bg-card">
+                <div className="overflow-hidden rounded-[20px] border border-white/5 bg-[#0a0a0a]">
                     <ListHeader icon={SquareStack} title="Compose Stacks" action={<Link to="/agents/$id/stacks" params={{ id }} className="text-xs font-medium text-primary hover:underline">View stacks</Link>} />
                     <div className="divide-y divide-border/40">
                         {isStacksLoading ? (
@@ -1034,7 +1034,8 @@ function WorkloadOverview({
 function ActionPanel({ id, agent, latestAudit }: { id: string; agent: Agent; latestAudit: AuditResponse | null }) {
     return (
         <SectionCard title="Control Dock" description="Fast actions for this host.">
-            <div className="grid gap-2">
+            <div className="rounded-[20px] border border-white/5 bg-[#0a0a0a] p-5 grid gap-4">
+                <div className="grid gap-2">
                 <Button className="w-full justify-between shadow-sm" asChild>
                     <Link to="/agents/$id/audit" params={{ id }}>
                         <span className="inline-flex items-center gap-2"><ShieldCheck className="h-4 w-4" />Run CIS Audit</span>
@@ -1084,20 +1085,21 @@ function ActionPanel({ id, agent, latestAudit }: { id: string; agent: Agent; lat
                     </Button>
                 </div>
             </div>
-            <div className="mt-4 flex flex-col gap-2 rounded-xl border bg-muted/20 p-3.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Connection Status</span>
-                <div className="flex flex-col gap-1.5 text-sm">
-                    <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Mode</span>
-                        <Badge variant="outline" className="font-mono text-[10px]">{agent.access_mode}</Badge>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Status</span>
-                        <Badge variant="outline" className="font-mono text-[10px]">{agent.status}</Badge>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Last Seen</span>
-                        <span className="font-mono text-xs font-semibold">{relativeTime(agent.last_seen)}</span>
+                <div className="mt-2 flex flex-col gap-2 rounded-xl bg-white/[0.02] p-4 border border-white/5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Connection Status</span>
+                    <div className="flex flex-col gap-2 text-sm mt-1">
+                        <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Mode</span>
+                            <Badge variant="outline" className="font-mono text-[10px]">{agent.access_mode}</Badge>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Status</span>
+                            <Badge variant="outline" className="font-mono text-[10px]">{agent.status}</Badge>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Last Seen</span>
+                            <span className="font-mono text-xs font-semibold">{relativeTime(agent.last_seen)}</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1199,7 +1201,7 @@ function FailingRuleRow({
             : "text-muted-foreground";
 
     const remediationLabel = result.remediation_kind === "auto" ? "Auto-fix" : result.remediation_kind;
-    const rowClassName = "group relative block overflow-hidden rounded-xl border bg-card p-4 transition-all hover:border-primary/40 hover:bg-muted/30";
+    const rowClassName = "group relative block overflow-hidden rounded-[16px] border border-white/5 bg-[#0a0a0a] p-5 transition-all hover:border-white/10 hover:bg-white/[0.02]";
     const content = (
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div className={cn("absolute inset-y-0 left-0 w-1", severityClass.replace("bg-", "").replace("border-", "bg-").split(" ")[0])} />
@@ -1264,19 +1266,21 @@ function HostFacts({ dockerInfo }: { dockerInfo: DockerInfo }) {
 
     return (
         <SectionCard title="Host Facts">
-            <div className="grid grid-cols-2 gap-y-3 lg:grid-cols-1">
-                {infoRows.map((row) => {
-                    const Icon = row.icon;
-                    return (
-                        <div key={row.label} className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between text-sm transition-colors hover:bg-muted/30 p-2 -mx-2 rounded-lg">
-                            <span className="text-muted-foreground flex items-center gap-2">
-                                <Icon className="h-4 w-4" />
-                                {row.label}
-                            </span>
-                            <span className="font-mono text-xs font-medium">{row.value}</span>
-                        </div>
-                    );
-                })}
+            <div className="rounded-[20px] border border-white/5 bg-[#0a0a0a] p-5">
+                <div className="grid grid-cols-2 gap-y-1 lg:grid-cols-1">
+                    {infoRows.map((row) => {
+                        const Icon = row.icon;
+                        return (
+                            <div key={row.label} className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between text-sm transition-colors hover:bg-white/[0.02] p-2.5 -mx-2.5 rounded-xl">
+                                <span className="text-muted-foreground flex items-center gap-2.5">
+                                    <Icon className="h-4 w-4" />
+                                    {row.label}
+                                </span>
+                                <span className="font-mono text-xs font-medium">{row.value}</span>
+                            </div>
+                        );
+                    })}
+                </div>
             </div>
         </SectionCard>
     );
@@ -1294,13 +1298,13 @@ function SectionCard({
     children: React.ReactNode;
 }) {
     return (
-        <section className="relative overflow-hidden rounded-2xl border bg-card p-5">
-            <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <section className="relative">
+            <div className="mb-5 flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between px-1">
                 <div>
-                    <h2 className="text-lg font-bold tracking-tight">{title}</h2>
-                    {description ? <p className="text-sm font-medium text-muted-foreground">{description}</p> : null}
+                    <h2 className="text-xl font-bold tracking-tight text-white">{title}</h2>
+                    {description ? <p className="text-sm font-medium text-zinc-400 mt-1">{description}</p> : null}
                 </div>
-                {action ? <div className="shrink-0">{action}</div> : null}
+                {action ? <div className="shrink-0 mb-0.5">{action}</div> : null}
             </div>
             {children}
         </section>
