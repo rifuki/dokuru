@@ -118,6 +118,11 @@ export function AppSidebar() {
   const isActive = (href: string) => {
     if (href === "/admin") return location.pathname === "/admin";
     if (href === "/") return location.pathname === "/";
+    if (href === "/agents") return location.pathname === "/agents";
+    if (/^\/agents\/[^/]+$/.test(href)) return location.pathname === href;
+    if (href.startsWith("/agents/")) {
+      return location.pathname === href || location.pathname.startsWith(`${href}/`);
+    }
     return location.pathname === href;
   };
 
