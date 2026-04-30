@@ -944,6 +944,14 @@ function AuditDetailPage() {
     try { return new Date(ts).toLocaleString(); } catch { return ts; }
   };
 
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    navigate({ to: "/agents/$id/audits", params: { id } });
+  };
+
   if (loading) {
     return (
       <div className="max-w-5xl mx-auto w-full flex items-center justify-center py-20">
@@ -962,10 +970,11 @@ function AuditDetailPage() {
         </div>
         <Button
           variant="outline"
-          className="h-10 rounded-[10px] border-primary/25 bg-primary/10 px-4 font-semibold text-primary shadow-none hover:bg-primary/15 hover:text-primary"
-          onClick={() => navigate({ to: "/agents/$id/audits", params: { id } })}
+          size="sm"
+          className="shrink-0"
+          onClick={handleBack}
         >
-          <ArrowLeft className="h-4 w-4 mr-1.5" /> Back to Audits
+          <ArrowLeft className="h-4 w-4" /> Back
         </Button>
       </div>
 

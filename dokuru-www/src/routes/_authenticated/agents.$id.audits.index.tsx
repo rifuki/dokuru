@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { agentApi } from "@/lib/api/agent";
 import type { AuditResponse } from "@/lib/api/agent-direct";
 import { Badge } from "@/components/ui/badge";
-import { Clock, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Clock, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/audits/")({
@@ -29,6 +30,14 @@ function AuditHistoryPage() {
         }
     };
 
+    const handleBack = () => {
+        if (window.history.length > 1) {
+            window.history.back();
+            return;
+        }
+        navigate({ to: "/agents/$id/audit", params: { id } });
+    };
+
     const fmtDate = (ts: string) => {
         try { return new Date(ts).toLocaleString(); } catch { return ts; }
     };
@@ -43,11 +52,17 @@ function AuditHistoryPage() {
 
     return (
         <div className="max-w-4xl mx-auto w-full space-y-6 pb-10">
-            <div>
-                <h2 className="text-2xl font-bold tracking-tight">Audit History</h2>
-                <p className="text-muted-foreground text-sm mt-0.5">
-                    All security audit results for this agent
-                </p>
+            <div className="flex items-start justify-between gap-4">
+                <div>
+                    <h2 className="text-2xl font-bold tracking-tight">Audit History</h2>
+                    <p className="text-muted-foreground text-sm mt-0.5">
+                        All security audit results for this agent
+                    </p>
+                </div>
+                <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={handleBack}>
+                    <ArrowLeft className="h-4 w-4" />
+                    Back
+                </Button>
             </div>
 
             {audits.length === 0 ? (

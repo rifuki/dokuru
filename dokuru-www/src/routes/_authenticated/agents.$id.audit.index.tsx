@@ -1147,8 +1147,8 @@ function AuditPage() {
                                     <p className="text-sm text-muted-foreground">Most recent security audit result</p>
                                 </div>
                                 <Link to="/agents/$id/audits" params={{ id: agent?.id ?? "" }}>
-                                    <Button variant="outline">
-                                        <Clock className="h-4 w-4 mr-2" /> View All History
+                                    <Button variant="outline" size="sm">
+                                        <Clock className="h-4 w-4" /> History
                                     </Button>
                                 </Link>
                             </div>
