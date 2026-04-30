@@ -15,6 +15,7 @@ import {
   PowerOff,
   ChevronDown,
   Loader2,
+  Layers,
 } from "lucide-react";
 import { dockerApi, type Container } from "@/services/docker-api";
 import { Badge } from "@/components/ui/badge";
@@ -64,7 +65,8 @@ export function ContainerOverview({
   const networks = networkSettings?.Networks as Record<string, unknown> | undefined;
   const labels = (cfg?.Labels as Record<string, string> | undefined) ?? {};
   const binds = (hostCfg?.Binds as string[] | undefined) ?? [];
-  const stackName = labels["com.docker.compose.project"] || "N/A";
+  const stackName = labels["com.docker.compose.project"] || "";
+  const serviceName = labels["com.docker.compose.service"] || "";
   const created = data.Created ? new Date(data.Created as string).toLocaleString() : "N/A";
 
   return (
@@ -75,15 +77,36 @@ export function ContainerOverview({
             <div className="h-1 w-1 rounded-full bg-primary" />
             Container Info
           </h4>
-          <div className="space-y-2 rounded-[19px] border border-border bg-muted/55 p-4 shadow-sm dark:bg-white/[0.045]">
-            <div className="flex justify-between text-xs">
+          <div className="space-y-3 rounded-[19px] border border-border bg-muted/55 p-4 shadow-sm dark:bg-white/[0.045]">
+            <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-3 text-xs">
               <span className="text-muted-foreground">Created:</span>
-              <span className="font-mono">{created}</span>
+              <span className="font-mono text-right truncate">{created}</span>
             </div>
-            <div className="flex justify-between text-xs">
+
+            <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-3 text-xs">
               <span className="text-muted-foreground">Stack:</span>
-              <span className="font-mono text-primary">{stackName}</span>
+              {stackName ? (
+                <Link
+                  to="/agents/$id/stacks"
+                  params={{ id: agentId }}
+                  className="ml-auto inline-flex min-w-0 items-center gap-1.5 rounded-md border border-primary/20 bg-primary/10 px-2 py-1 font-mono text-primary hover:bg-primary/15"
+                >
+                  <Layers className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{stackName}</span>
+                </Link>
+              ) : (
+                <span className="font-mono text-right text-muted-foreground">N/A</span>
+              )}
             </div>
+
+            {serviceName && (
+              <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-3 text-xs">
+                <span className="text-muted-foreground">Service:</span>
+                <span className="ml-auto min-w-0 max-w-full truncate rounded-md border border-border/70 bg-background/45 px-2 py-1 text-right font-mono text-foreground">
+                  {serviceName}
+                </span>
+              </div>
+            )}
           </div>
         </section>
 

@@ -1,10 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { canUseDockerAgent, dockerApi, dockerCredential, type Container, type Stack } from "@/services/docker-api";
+import { canUseDockerAgent, dockerApi, dockerCredential, type Container } from "@/services/docker-api";
 import { agentApi } from "@/lib/api/agent";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Container as ContainerIcon, ArrowLeft, Play, SquareIcon, RotateCw, Trash2, Layers } from "lucide-react";
+import { Container as ContainerIcon, ArrowLeft, Play, SquareIcon, RotateCw, Trash2 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
@@ -35,14 +35,6 @@ function stateColor(state: string) {
   }
 }
 
-function findContainerStack(stacks: Stack[] | undefined, containerId: string) {
-  for (const stack of stacks ?? []) {
-    const container = stack.containers.find((item) => item.id === containerId);
-    if (container) return { stack: stack.name, service: container.service || undefined };
-  }
-  return undefined;
-}
-
 function ContainerDetailPage() {
   const { id, containerId } = Route.useParams();
   const { from, auditId, ruleId } = Route.useSearch();
@@ -69,22 +61,9 @@ function ContainerDetailPage() {
     refetchInterval: 5000,
   });
 
-  const { data: stacks } = useQuery({
-    queryKey: ["stacks", id],
-    queryFn: async () => {
-      const credential = dockerCredential(agent);
-      if (!agent || !credential) throw new Error("Agent token not available");
-      const res = await dockerApi.listStacks(agent.url, credential);
-      return res.data;
-    },
-    enabled: canUseDockerAgent(agent),
-    refetchInterval: 10000,
-  });
-
   const container: Container | undefined = containers?.find((c) => c.id === containerId);
   const isRunning = container?.state.toLowerCase() === "running";
   const name = container?.names[0]?.replace("/", "") || containerId.slice(0, 12);
-  const stackInfo = findContainerStack(stacks, containerId);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["containers", id] });
 
@@ -189,17 +168,6 @@ function ContainerDetailPage() {
                 <Badge variant="outline" className={`text-xs font-medium shrink-0 ${stateColor(container.state)}`}>
                   {container.state}
                 </Badge>
-                {stackInfo && (
-                  <Link
-                    to="/agents/$id/stacks"
-                    params={{ id }}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-xs font-mono text-primary hover:bg-primary/15"
-                  >
-                    <Layers className="h-3.5 w-3.5" />
-                    {stackInfo.stack}
-                    {stackInfo.service && <span className="text-primary/70">/{stackInfo.service}</span>}
-                  </Link>
-                )}
               </div>
               <p className="text-xs text-muted-foreground font-mono truncate mt-0.5">{container.id.slice(0, 12)} · {container.image}</p>
             </div>

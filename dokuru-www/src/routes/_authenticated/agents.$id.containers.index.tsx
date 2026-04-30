@@ -10,9 +10,8 @@ import {
   Search,
   ExternalLink,
   Loader2,
-  Layers,
 } from "lucide-react";
-import { canUseDockerAgent, dockerApi, dockerCredential, type Container, type Stack } from "@/services/docker-api";
+import { canUseDockerAgent, dockerApi, dockerCredential, type Container } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -42,24 +41,8 @@ function stateColor(state: string) {
   }
 }
 
-type ContainerStackInfo = {
-  stack: string;
-  service?: string;
-};
-
-function buildContainerStackMap(stacks: Stack[] | undefined) {
-  const map = new Map<string, ContainerStackInfo>();
-  for (const stack of stacks ?? []) {
-    for (const container of stack.containers) {
-      map.set(container.id, { stack: stack.name, service: container.service || undefined });
-    }
-  }
-  return map;
-}
-
 function ContainerRow({
   container,
-  stackInfo,
   agentUrl,
   token,
   agentId,
@@ -73,7 +56,6 @@ function ContainerRow({
   removePendingId,
 }: {
   container: Container;
-  stackInfo?: ContainerStackInfo;
   agentUrl: string;
   token: string;
   agentId: string;
@@ -114,22 +96,7 @@ function ContainerRow({
           <div className="min-w-0 flex-1 grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_6rem_minmax(0,2fr)] gap-4 items-center">
             <div className="flex flex-col gap-0.5 min-w-0">
               <span className="font-semibold text-sm truncate">{name}</span>
-              <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                <span className="text-xs text-muted-foreground font-mono truncate">{container.id.slice(0, 12)}</span>
-                {stackInfo && (
-                  <Link
-                    to="/agents/$id/stacks"
-                    params={{ id: agentId }}
-                    onClick={(event) => event.stopPropagation()}
-                    className="inline-flex items-center gap-1 rounded-md border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[11px] font-mono text-primary hover:bg-primary/15"
-                    title={`Stack: ${stackInfo.stack}${stackInfo.service ? ` / ${stackInfo.service}` : ""}`}
-                  >
-                    <Layers className="h-3 w-3 shrink-0" />
-                    <span className="truncate max-w-32">{stackInfo.stack}</span>
-                    {stackInfo.service && <span className="text-primary/70">/{stackInfo.service}</span>}
-                  </Link>
-                )}
-              </div>
+              <span className="text-xs text-muted-foreground font-mono truncate">{container.id.slice(0, 12)}</span>
             </div>
             <span className="text-sm text-muted-foreground truncate font-mono">{container.image}</span>
             <div>
@@ -261,18 +228,6 @@ function ContainersPage() {
     refetchInterval: 5000,
   });
 
-  const { data: stacks } = useQuery({
-    queryKey: ["stacks", id],
-    queryFn: async () => {
-      const credential = dockerCredential(agent);
-      if (!agent || !credential) throw new Error("Agent token not available");
-      const res = await dockerApi.listStacks(agent.url, credential);
-      return res.data;
-    },
-    enabled: canUseDockerAgent(agent),
-    refetchInterval: 10000,
-  });
-
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["containers", id] });
 
   const startMutation = useMutation({
@@ -320,17 +275,12 @@ function ContainersPage() {
   const restartPendingId = restartMutation.isPending ? restartMutation.variables : undefined;
   const removePendingId  = removeMutation.isPending  ? removeMutation.variables  : undefined;
 
-  const containerStackMap = buildContainerStackMap(stacks);
-
   const filtered = (containers ?? []).filter((c) => {
     if (!search) return true;
     const q = search.toLowerCase();
-    const stackInfo = containerStackMap.get(c.id);
     return (c.names[0] ?? "").toLowerCase().includes(q)
       || c.image.toLowerCase().includes(q)
-      || c.state.toLowerCase().includes(q)
-      || stackInfo?.stack.toLowerCase().includes(q)
-      || stackInfo?.service?.toLowerCase().includes(q);
+      || c.state.toLowerCase().includes(q);
   });
 
   const running = filtered.filter((c) => c.state.toLowerCase() === "running").length;
@@ -391,7 +341,6 @@ function ContainersPage() {
             <ContainerRow
               key={container.id}
               container={container}
-              stackInfo={containerStackMap.get(container.id)}
               agentUrl={agent?.url ?? ""}
               token={dockerCredential(agent)}
               agentId={id}
