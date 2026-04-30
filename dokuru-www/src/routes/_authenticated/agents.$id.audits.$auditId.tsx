@@ -1375,10 +1375,10 @@ function AuditDetailPage() {
           <div className="space-y-2">
             {/* Row 1: Search + view toggle + clear */}
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 border border-border rounded-lg p-1 bg-muted/20 shrink-0">
+              <div className="flex items-stretch overflow-hidden border border-border rounded-lg bg-muted/20 shrink-0">
                 <button
                   onClick={() => setViewMode("pillar")}
-                  className={cn("flex items-center gap-1.5 text-xs px-3 py-1.5 rounded font-bold transition-all",
+                  className={cn("flex items-center gap-1.5 text-xs px-3 py-2 font-bold transition-all",
                     viewMode === "pillar" ? "bg-[#2496ED] text-white" : "hover:bg-muted/40 text-muted-foreground")}
                 >
                   <Layers className="h-3.5 w-3.5" />
@@ -1386,7 +1386,7 @@ function AuditDetailPage() {
                 </button>
                 <button
                   onClick={() => setViewMode("section")}
-                  className={cn("flex items-center gap-1.5 text-xs px-3 py-1.5 rounded font-bold transition-all",
+                  className={cn("flex items-center gap-1.5 border-l border-border/60 text-xs px-3 py-2 font-bold transition-all",
                     viewMode === "section" ? "bg-[#2496ED] text-white" : "hover:bg-muted/40 text-muted-foreground")}
                 >
                   <Terminal className="h-3.5 w-3.5" />
