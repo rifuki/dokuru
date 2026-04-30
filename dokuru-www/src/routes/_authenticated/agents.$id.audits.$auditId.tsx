@@ -582,18 +582,18 @@ function BeforeAfterComparison({
             </span>
             <span className="pb-1 text-sm font-mono text-muted-foreground">/ 100</span>
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            <div className="rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2.5">
-              <p className="text-lg font-black text-emerald-400">{before.summary.passed}</p>
-              <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Pass</p>
+          <div className="grid grid-cols-3 divide-x divide-border overflow-hidden rounded-[12px] border border-border/80 bg-muted/20">
+            <div className="px-4 py-3 text-center">
+              <p className="text-xl font-black leading-none text-emerald-400">{before.summary.passed}</p>
+              <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Pass</p>
             </div>
-            <div className="rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2.5">
-              <p className="text-lg font-black text-rose-400">{before.summary.failed}</p>
-              <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fail</p>
+            <div className="px-4 py-3 text-center">
+              <p className="text-xl font-black leading-none text-rose-400">{before.summary.failed}</p>
+              <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fail</p>
             </div>
-            <div className="rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2.5">
-              <p className="text-lg font-black text-foreground/80">{before.summary.total}</p>
-              <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Total</p>
+            <div className="px-4 py-3 text-center">
+              <p className="text-xl font-black leading-none text-foreground/80">{before.summary.total}</p>
+              <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Total</p>
             </div>
           </div>
         </div>
@@ -609,18 +609,24 @@ function BeforeAfterComparison({
             </span>
             <span className="pb-1 text-sm font-mono text-muted-foreground">/ 100</span>
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            <div className="rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2.5">
-              <p className="text-lg font-black text-emerald-400">{after.summary.passed}</p>
-              <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Pass <span className={passDeltaTone}>{signed(passDelta)}</span></p>
+          <div className="grid grid-cols-3 divide-x divide-border overflow-hidden rounded-[12px] border border-border/80 bg-muted/20">
+            <div className="px-4 py-3 text-center">
+              <p className="text-xl font-black leading-none text-emerald-400">
+                {after.summary.passed}
+                {passDelta !== 0 && <span className={cn("ml-1 text-xs font-bold", passDeltaTone)}>{signed(passDelta)}</span>}
+              </p>
+              <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Pass</p>
             </div>
-            <div className="rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2.5">
-              <p className="text-lg font-black text-rose-400">{after.summary.failed}</p>
-              <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fail <span className={failDeltaTone}>{signed(failDelta)}</span></p>
+            <div className="px-4 py-3 text-center">
+              <p className="text-xl font-black leading-none text-rose-400">
+                {after.summary.failed}
+                {failDelta !== 0 && <span className={cn("ml-1 text-xs font-bold", failDeltaTone)}>{signed(failDelta)}</span>}
+              </p>
+              <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fail</p>
             </div>
-            <div className="rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2.5">
-              <p className="text-lg font-black text-emerald-400">{fixedRules.length}</p>
-              <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fixed</p>
+            <div className="px-4 py-3 text-center">
+              <p className="text-xl font-black leading-none text-emerald-400">{fixedRules.length}</p>
+              <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fixed</p>
             </div>
           </div>
         </div>
