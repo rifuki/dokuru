@@ -189,7 +189,7 @@ function ImagesPage() {
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary"
+                  className="h-8 w-8 p-0 text-muted-foreground hover:!bg-transparent hover:text-primary"
                   asChild
                 >
                   <Link
@@ -207,7 +207,7 @@ function ImagesPage() {
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
+                  className="h-8 w-8 p-0 text-muted-foreground hover:!bg-transparent hover:text-destructive"
                   onClick={() => {
                     if (confirm("Remove this image?")) removeMutation.mutate(row.original.id);
                   }}

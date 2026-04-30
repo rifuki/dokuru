@@ -143,7 +143,7 @@ function VolumesPage() {
           <div className="flex justify-end gap-1">
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary" asChild>
+                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground hover:!bg-transparent hover:text-primary" asChild>
                   <Link to="/agents/$id/volumes/$volumeName" params={{ id, volumeName: row.original.name }}>
                     <ExternalLink className="h-4 w-4" />
                   </Link>
@@ -155,7 +155,7 @@ function VolumesPage() {
               <TooltipTrigger asChild>
                 <Button
                   size="sm" variant="ghost"
-                  className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  className="h-8 w-8 p-0 text-muted-foreground hover:!bg-transparent hover:text-destructive"
                   onClick={() => setVolumeToRemove(row.original.name)}
                   disabled={removeMutation.isPending}
                 >
