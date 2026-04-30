@@ -30,6 +30,17 @@ const TERMINAL_BG = "#090909";
 const TERMINAL_FG = "#d4d4d4";
 const TERMINAL_CURSOR = "#38bdf8";
 
+function mountTypeBadgeClass(type: string) {
+  switch (type.toLowerCase()) {
+    case "bind":
+      return "border-sky-400/35 bg-sky-400/10 text-sky-300 shadow-[0_0_16px_rgba(56,189,248,0.08)]";
+    case "volume":
+      return "border-violet-400/35 bg-violet-400/10 text-violet-300 shadow-[0_0_16px_rgba(167,139,250,0.08)]";
+    default:
+      return "border-border bg-muted/70 text-muted-foreground";
+  }
+}
+
 // ─── Overview tab ─────────────────────────────────────────────────────────────
 
 export function ContainerOverview({
@@ -116,15 +127,15 @@ export function ContainerOverview({
               <div className="h-1 w-1 rounded-full bg-primary" />
               Port Bindings
             </h4>
-            <div className="space-y-2 rounded-[19px] border border-border bg-muted/55 p-4 shadow-sm dark:bg-white/[0.045]">
+            <div className="rounded-[19px] border border-border bg-muted/55 p-4 font-mono text-xs shadow-sm dark:bg-white/[0.045]">
               {Object.entries(ports).map(([containerPort, bindings]) => (
-                <div key={containerPort} className="flex items-center gap-3 font-mono text-xs">
-                  <span className="text-muted-foreground">{containerPort}</span>
-                  <span className="text-muted-foreground">→</span>
+                <div key={containerPort} className="grid grid-cols-[5.5rem_1rem_minmax(0,1fr)] items-center gap-x-3 py-1 first:pt-0 last:pb-0">
+                  <span className="text-muted-foreground tabular-nums">{containerPort}</span>
+                  <span className="text-center text-muted-foreground/60">→</span>
                   {bindings && bindings.length > 0 ? (
-                    <span className="text-primary font-medium">{bindings.map((b) => b.HostPort).join(", ")}</span>
+                    <span className="font-medium text-primary tabular-nums">{bindings.map((b) => b.HostPort).join(", ")}</span>
                   ) : (
-                    <span className="text-muted-foreground italic">(not published)</span>
+                    <span className="italic text-muted-foreground/70">(not published)</span>
                   )}
                 </div>
               ))}
@@ -173,8 +184,10 @@ export function ContainerOverview({
           </h4>
           <div className="space-y-2 rounded-[19px] border border-border bg-muted/55 p-4 shadow-sm dark:bg-white/[0.045]">
             {(mounts ?? []).map((m, i) => (
-              <div key={i} className="font-mono text-xs flex items-start gap-3 rounded-[6px] bg-background/50 p-2 transition-colors hover:bg-background">
-                <Badge variant="outline" className="text-[10px] mt-0.5">{m.Type}</Badge>
+              <div key={i} className="flex items-center gap-3 rounded-lg bg-background/50 px-3 py-2.5 font-mono text-xs transition-colors hover:bg-background">
+                <Badge variant="outline" className={`h-7 min-w-16 justify-center rounded-full px-2.5 text-[10px] uppercase tracking-[0.12em] ${mountTypeBadgeClass(m.Type)}`}>
+                  {m.Type}
+                </Badge>
                 <div className="flex-1 min-w-0">
                   <div className="text-foreground font-medium truncate">{m.Destination}</div>
                   <div className="text-muted-foreground text-[11px] truncate mt-0.5">← {m.Source}</div>
