@@ -352,9 +352,13 @@ export function AppSidebar() {
                             <div className="border-t border-sidebar-border/60 overflow-hidden">
                               {agentNavItems(agent.id).map((item) => {
                                 const auditStream = item.title === "Audit" ? auditStreams[agent.id] : undefined;
+                                const isCurrentAuditPage = item.title === "Audit" && (
+                                  location.pathname === `/agents/${agent.id}/audit` ||
+                                  location.pathname.startsWith(`/agents/${agent.id}/audits`)
+                                );
                                 const completedAuditId = auditStream?.status === "complete" ? auditStream.savedAudit?.id : undefined;
                                 const completedAuditViewed = !!completedAuditId && viewedAuditResults[agent.id] === completedAuditId;
-                                const auditStatus = completedAuditViewed ? null : auditSidebarStatus(auditStream);
+                                const auditStatus = isCurrentAuditPage || completedAuditViewed ? null : auditSidebarStatus(auditStream);
                                 const auditResultHref = completedAuditId && !completedAuditViewed
                                   ? `/agents/${agent.id}/audits/${completedAuditId}`
                                   : item.href;
