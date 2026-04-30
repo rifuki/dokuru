@@ -120,6 +120,16 @@ export function AppSidebar() {
     if (href === "/") return location.pathname === "/";
     if (href === "/agents") return location.pathname === "/agents";
     if (/^\/agents\/[^/]+$/.test(href)) return location.pathname === href;
+    const auditMatch = href.match(/^\/agents\/([^/]+)\/audit$/);
+    if (auditMatch) {
+      const auditHistoryHref = `/agents/${auditMatch[1]}/audits`;
+      return (
+        location.pathname === href ||
+        location.pathname.startsWith(`${href}/`) ||
+        location.pathname === auditHistoryHref ||
+        location.pathname.startsWith(`${auditHistoryHref}/`)
+      );
+    }
     if (href.startsWith("/agents/")) {
       return location.pathname === href || location.pathname.startsWith(`${href}/`);
     }
