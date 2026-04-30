@@ -20,7 +20,7 @@ pub(crate) fn Hero() -> impl IntoView {
                 </div>
 
                 <div class="grid lg:grid-cols-12 gap-10 lg:gap-14 items-center">
-                    <div class="lg:col-span-6 xl:col-span-7">
+                    <div class="lg:col-span-7">
                         <h1 data-testid="hero-headline" class="animate-enter-up font-heading text-5xl sm:text-6xl lg:text-[64px] xl:text-[72px] font-bold tracking-tight leading-[1.05] text-white" style="--motion-delay: 300ms; --motion-duration: 800ms">
                             "Focused Docker"
                             <br/>
@@ -60,7 +60,7 @@ pub(crate) fn Hero() -> impl IntoView {
                         </div>
                     </div>
 
-                    <div class="animate-enter-right lg:col-span-6 xl:col-span-5 relative" style="--motion-delay: 600ms">
+                    <div class="animate-enter-right lg:col-span-5 relative lg:pl-4" style="--motion-delay: 600ms">
                         <div class="absolute inset-0 bg-[#2496ED]/10 blur-[100px] rounded-full scale-90"/>
                         <div class="relative rounded-xl border border-white/10 bg-[#050505] shadow-[0_0_40px_rgba(0,0,0,0.8)] overflow-hidden">
                             <AuditPanel/>
