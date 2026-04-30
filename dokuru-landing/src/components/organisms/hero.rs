@@ -7,7 +7,7 @@ use leptos::prelude::*;
 #[component]
 pub(crate) fn Hero() -> impl IntoView {
     view! {
-        <section id="top" data-testid="hero-section" class="relative pt-20 md:pt-24 pb-20 md:pb-28 overflow-hidden">
+        <section id="top" data-testid="hero-section" class="relative min-h-[100svh] flex flex-col justify-center pt-24 pb-20 md:pb-28 overflow-hidden">
             <div class="absolute inset-0 bg-grid-fine mask-fade-b pointer-events-none animate-fade-in"/>
 
             <div class="relative max-w-7xl mx-auto px-6 md:px-10">
