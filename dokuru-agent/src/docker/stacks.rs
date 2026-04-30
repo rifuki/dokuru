@@ -8,7 +8,7 @@ use axum::{
 use bollard::container::ListContainersOptions;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path as FsPath, PathBuf};
 use tracing::warn;
 
 use super::get_docker_client;
@@ -194,13 +194,13 @@ async fn get_stack(Path(name): Path<String>) -> Result<Json<StackResponse>, Stat
 // Compose file reading — mirrors Dockge's approach
 // ---------------------------------------------------------------------------
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct ComposeFileResponse {
     path: String,
     content: String,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct ComposeErrorResponse {
     error: String,
     detail: String,
@@ -374,17 +374,75 @@ async fn update_compose_file(
         Err(error) => return compose_error(error.error, error.detail),
     };
 
-    if let Err(error) = tokio::fs::write(&path, &payload.content).await {
-        return compose_status(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Could not write compose file for stack '{name}'"),
-            error.to_string(),
-        );
+    match write_compose_content(&path, payload.content, &name).await {
+        Ok(response) => Json(response).into_response(),
+        Err(error) => compose_status(StatusCode::INTERNAL_SERVER_ERROR, error.error, error.detail),
+    }
+}
+
+async fn write_compose_content(
+    path: &FsPath,
+    content: String,
+    stack_name: &str,
+) -> Result<ComposeFileResponse, ComposeErrorResponse> {
+    if let Err(error) = tokio::fs::write(path, &content).await {
+        return Err(ComposeErrorResponse {
+            error: format!("Could not write compose file for stack '{stack_name}'"),
+            detail: error.to_string(),
+        });
     }
 
-    Json(ComposeFileResponse {
+    Ok(ComposeFileResponse {
         path: path.to_string_lossy().into_owned(),
-        content: payload.content,
+        content,
     })
-    .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::write_compose_content;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_compose_path(name: &str) -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be after unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "dokuru-{name}-{}-{nanos}.compose.yaml",
+            std::process::id()
+        ))
+    }
+
+    #[tokio::test]
+    async fn write_compose_content_updates_file_on_disk() {
+        let path = temp_compose_path("write");
+        let original = "services:\n  app:\n    image: nginx:alpine\n";
+        let updated = "services:\n  app:\n    image: caddy:2-alpine\n";
+
+        tokio::fs::write(&path, original).await.unwrap();
+        let response = write_compose_content(&path, updated.to_string(), "dokuru-lab")
+            .await
+            .unwrap();
+
+        assert_eq!(response.path, path.to_string_lossy().as_ref());
+        assert_eq!(response.content, updated);
+        assert_eq!(tokio::fs::read_to_string(&path).await.unwrap(), updated);
+
+        let _ = tokio::fs::remove_file(&path).await;
+    }
+
+    #[tokio::test]
+    async fn write_compose_content_returns_write_error() {
+        let missing_parent = temp_compose_path("missing-parent").join("compose.yaml");
+        let error = write_compose_content(&missing_parent, "services: {}\n".to_string(), "missing")
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            error.error,
+            "Could not write compose file for stack 'missing'"
+        );
+        assert!(!error.detail.is_empty());
+    }
 }
