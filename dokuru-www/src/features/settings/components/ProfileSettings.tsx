@@ -60,7 +60,12 @@ export function ProfileSettings() {
         if (!isAvatarPreviewOpen) return;
 
         const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key === "Escape") setIsAvatarPreviewOpen(false);
+            if (event.key !== "Escape") return;
+
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            setIsAvatarPreviewOpen(false);
         };
         const previousOverflow = document.body.style.overflow;
 
@@ -258,6 +263,7 @@ export function ProfileSettings() {
 
             {isAvatarPreviewOpen && avatarSrc && (
                 <div
+                    data-settings-escape-layer="true"
                     className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-6 backdrop-blur-sm animate-in fade-in-0"
                     role="dialog"
                     aria-modal="true"

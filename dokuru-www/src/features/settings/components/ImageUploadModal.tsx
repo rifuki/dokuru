@@ -456,6 +456,20 @@ export function ImageUploadModal({
   const isDragging = status === 'selecting';
   const isBusy = status === 'uploading' || status === 'success';
   const isAvatarCropView = isAvatar && !!previewUrl && (status === 'preview' || status === 'uploading' || status === 'success');
+
+  const handleEscapeKeyDown = (event: KeyboardEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (isBusy) return;
+    if (isAvatarCropView) {
+      handleBack();
+      return;
+    }
+
+    handleClose();
+  };
+
   const uploadHint = isAvatar
     ? `${acceptedFileTypes} • Max ${sourceMaxSizeMB} MB`
     : `${acceptedFileTypes} • Max ${maxSizeMB} MB`;
@@ -464,6 +478,8 @@ export function ImageUploadModal({
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent
+        data-settings-escape-layer="true"
+        onEscapeKeyDown={handleEscapeKeyDown}
         className={cn(
           "max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md",
           isAvatarCropView && "gap-0 p-0 sm:max-w-[28rem]"

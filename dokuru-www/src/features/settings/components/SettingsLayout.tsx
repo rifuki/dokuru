@@ -9,6 +9,25 @@ const settingsNavigation = [
     { name: "Devices", href: "/settings/sessions" },
 ];
 
+const ESCAPE_BLOCKING_SELECTOR = [
+    '[data-settings-escape-layer="true"]',
+    '[data-slot="dialog-content"]',
+    '[data-slot="alert-dialog-content"]',
+    '[role="dialog"][aria-modal="true"]',
+    '[role="alertdialog"][aria-modal="true"]',
+].join(',');
+
+function hasOpenEscapeBlockingLayer(event: KeyboardEvent) {
+    if (event.defaultPrevented) return true;
+
+    const eventPathHasLayer = event.composedPath().some((target) => {
+        if (!(target instanceof Element)) return false;
+        return target.matches(ESCAPE_BLOCKING_SELECTOR) || !!target.closest(ESCAPE_BLOCKING_SELECTOR);
+    });
+
+    return eventPathHasLayer || !!document.querySelector(ESCAPE_BLOCKING_SELECTOR);
+}
+
 export function SettingsLayout() {
     const location = useLocation();
     const navigate = useNavigate();
@@ -18,6 +37,7 @@ export function SettingsLayout() {
     useEffect(() => {
         const handleEsc = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
+                if (hasOpenEscapeBlockingLayer(e)) return;
                 navigate({ to: user?.role === 'admin' ? '/admin' : '/' });
             }
         };
