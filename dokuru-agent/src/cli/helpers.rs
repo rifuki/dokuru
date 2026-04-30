@@ -856,16 +856,34 @@ pub fn write_config_file(
 }
 
 fn should_use_dokuru_group_permissions() -> bool {
-    invoking_non_root_user().is_some()
+    should_use_dokuru_group_permissions_for(
+        nix_like_is_root(),
+        std::env::var("SUDO_USER").ok().as_deref(),
+        std::env::var("DOAS_USER").ok().as_deref(),
+        std::env::var("USER").ok().as_deref(),
+    )
 }
 
-fn invoking_non_root_user() -> Option<String> {
-    std::env::var("SUDO_USER")
-        .or_else(|_| std::env::var("DOAS_USER"))
-        .or_else(|_| std::env::var("USER"))
-        .ok()
-        .map(|user| user.trim().to_string())
-        .filter(|user| !user.is_empty() && user != "root")
+fn should_use_dokuru_group_permissions_for(
+    running_as_root: bool,
+    sudo_user: Option<&str>,
+    doas_user: Option<&str>,
+    user: Option<&str>,
+) -> bool {
+    if non_root_env_user(sudo_user).is_some() || non_root_env_user(doas_user).is_some() {
+        return true;
+    }
+
+    if running_as_root {
+        return false;
+    }
+
+    non_root_env_user(user).is_some()
+}
+
+fn non_root_env_user(user: Option<&str>) -> Option<&str> {
+    user.map(str::trim)
+        .filter(|user| !user.is_empty() && *user != "root")
 }
 
 fn ensure_dokuru_group() -> Result<()> {
@@ -1232,4 +1250,59 @@ pub fn hash_token(token: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(token.as_bytes());
     hex::encode(hasher.finalize())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_use_dokuru_group_permissions_for;
+
+    #[test]
+    fn root_login_uses_root_only_permissions() {
+        assert!(!should_use_dokuru_group_permissions_for(
+            true,
+            None,
+            None,
+            Some("root")
+        ));
+    }
+
+    #[test]
+    fn root_login_with_sudo_root_uses_root_only_permissions() {
+        assert!(!should_use_dokuru_group_permissions_for(
+            true,
+            Some("root"),
+            None,
+            Some("root")
+        ));
+    }
+
+    #[test]
+    fn sudo_from_non_root_user_uses_group_permissions() {
+        assert!(should_use_dokuru_group_permissions_for(
+            true,
+            Some("rifuki"),
+            None,
+            Some("root")
+        ));
+    }
+
+    #[test]
+    fn root_process_ignores_stale_user_without_sudo_context() {
+        assert!(!should_use_dokuru_group_permissions_for(
+            true,
+            None,
+            None,
+            Some("rifuki")
+        ));
+    }
+
+    #[test]
+    fn non_root_process_uses_group_permissions() {
+        assert!(should_use_dokuru_group_permissions_for(
+            false,
+            None,
+            None,
+            Some("rifuki")
+        ));
+    }
 }
