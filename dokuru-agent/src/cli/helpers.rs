@@ -785,20 +785,25 @@ pub fn write_config_file(
     token_hash: Option<String>,
     relay_token: Option<String>,
 ) -> Result<()> {
-    ensure_dokuru_group()?;
+    let use_dokuru_group = should_use_dokuru_group_permissions();
+    if use_dokuru_group {
+        ensure_dokuru_group()?;
+    }
 
     fs::create_dir_all(&config.config_dir)
         .wrap_err_with(|| format!("Failed to create {}", config.config_dir.display()))?;
 
-    // Set directory permission to 775 with dokuru group
+    // Root-only VPS installs do not need an extra writable admin group.
     let mut dir_permissions = fs::metadata(&config.config_dir)
         .wrap_err_with(|| format!("Failed to stat {}", config.config_dir.display()))?
         .permissions();
-    dir_permissions.set_mode(0o775);
+    dir_permissions.set_mode(if use_dokuru_group { 0o775 } else { 0o700 });
     fs::set_permissions(&config.config_dir, dir_permissions)
         .wrap_err_with(|| format!("Failed to chmod {}", config.config_dir.display()))?;
 
-    chgrp_dokuru(&config.config_dir)?;
+    if use_dokuru_group {
+        chgrp_dokuru(&config.config_dir)?;
+    }
 
     let config_path = runtime_config_path(config);
 
@@ -835,17 +840,32 @@ pub fn write_config_file(
     fs::write(&config_path, toml_content)
         .wrap_err_with(|| format!("Failed to write {}", config_path.display()))?;
 
-    // Set file permission to 664 (group writable)
+    // Keep group-writable config for sudo-based admin installs; use root-only on root VPSes.
     let mut file_permissions = fs::metadata(&config_path)
         .wrap_err_with(|| format!("Failed to stat {}", config_path.display()))?
         .permissions();
-    file_permissions.set_mode(0o664);
+    file_permissions.set_mode(if use_dokuru_group { 0o664 } else { 0o600 });
     fs::set_permissions(&config_path, file_permissions)
         .wrap_err_with(|| format!("Failed to chmod {}", config_path.display()))?;
 
-    chgrp_dokuru(&config_path)?;
+    if use_dokuru_group {
+        chgrp_dokuru(&config_path)?;
+    }
 
     Ok(())
+}
+
+fn should_use_dokuru_group_permissions() -> bool {
+    invoking_non_root_user().is_some()
+}
+
+fn invoking_non_root_user() -> Option<String> {
+    std::env::var("SUDO_USER")
+        .or_else(|_| std::env::var("DOAS_USER"))
+        .or_else(|_| std::env::var("USER"))
+        .ok()
+        .map(|user| user.trim().to_string())
+        .filter(|user| !user.is_empty() && user != "root")
 }
 
 fn ensure_dokuru_group() -> Result<()> {
