@@ -1154,8 +1154,8 @@ function AuditPage() {
                                             <Shield className="h-5 w-5 text-primary" />
                                         </div>
                                         <div className="min-w-0 text-left">
-                                            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-primary">Run New Security Audit</p>
-                                            <h3 className="truncate text-base font-semibold">Live scan in progress</h3>
+                                            <h3 className="truncate text-base font-semibold">Live security audit</h3>
+                                            <p className="mt-0.5 text-xs text-muted-foreground">Scanning CIS Docker Benchmark v1.8.0</p>
                                         </div>
                                     </div>
                                 </div>
