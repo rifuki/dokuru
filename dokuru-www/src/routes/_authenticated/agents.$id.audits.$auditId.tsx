@@ -553,72 +553,73 @@ function BeforeAfterComparison({
   const fixedRules = after.results.filter(result => result.status === "Pass" && beforeByRule.get(result.rule.id)?.status === "Fail");
   const regressedRules = after.results.filter(result => result.status === "Fail" && beforeByRule.get(result.rule.id)?.status === "Pass");
   const signed = (value: number) => `${value > 0 ? "+" : ""}${value}`;
+  const scoreDeltaTone = scoreDelta > 0 ? "text-emerald-400" : scoreDelta < 0 ? "text-rose-400" : "text-muted-foreground";
+  const passDeltaTone = passDelta > 0 ? "text-emerald-400" : passDelta < 0 ? "text-rose-400" : "text-muted-foreground/60";
+  const failDeltaTone = failDelta < 0 ? "text-emerald-400" : failDelta > 0 ? "text-rose-400" : "text-muted-foreground/60";
 
   return (
-    <div className="rounded-2xl border border-[#2496ED]/20 bg-card dark:bg-gradient-to-br dark:from-[#07111A] dark:via-[#0A0A0B] dark:to-[#111113] overflow-hidden shadow-xl">
-      <div className="flex flex-col gap-3 border-b border-border px-5 py-4 md:flex-row md:items-center md:justify-between">
+    <div className="rounded-2xl border border-border bg-card dark:bg-gradient-to-br dark:from-[#0A0A0B] dark:to-[#111113] overflow-hidden">
+      <div className="flex flex-col gap-4 border-b border-border px-5 py-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h3 className="text-base font-bold tracking-tight">Before / After Comparison</h3>
           <p className="text-sm text-muted-foreground">Compare the previous audit against the current one to track hardening progress.</p>
         </div>
-        <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#2496ED]/25 bg-[#2496ED]/10 px-3 py-1.5 text-xs font-bold text-[#2496ED]">
+        <span className="inline-flex w-fit items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs font-bold text-muted-foreground">
           <ArrowLeftRight className="h-3.5 w-3.5" />
-          score delta {signed(scoreDelta)}
+          score delta <span className={scoreDeltaTone}>{signed(scoreDelta)}</span>
         </span>
       </div>
 
-      <div className="grid grid-cols-1 gap-0 md:grid-cols-[1fr_auto_1fr] md:items-stretch">
-        <div className="p-5 space-y-4">
+      <div className="grid grid-cols-1 divide-y divide-border md:grid-cols-2 md:divide-x md:divide-y-0">
+        <div className="p-5 space-y-5">
           <div className="flex items-center justify-between">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">Before</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Before</p>
             <span className="text-xs font-mono text-muted-foreground/60">{fmtDate(before.timestamp)}</span>
           </div>
           <div className="flex items-end gap-3">
-            <span className={cn("text-5xl font-black tabular-nums leading-none", scoreTone(before.summary.score))}>
+            <span className={cn("text-4xl font-black tabular-nums leading-none", scoreTone(before.summary.score))}>
               {before.summary.score}
             </span>
             <span className="pb-1 text-sm font-mono text-muted-foreground">/ 100</span>
           </div>
           <div className="grid grid-cols-3 gap-2">
-            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+            <div className="rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2.5">
               <p className="text-lg font-black text-emerald-400">{before.summary.passed}</p>
               <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Pass</p>
             </div>
-            <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2">
+            <div className="rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2.5">
               <p className="text-lg font-black text-rose-400">{before.summary.failed}</p>
               <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fail</p>
             </div>
-            <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
-              <p className="text-lg font-black text-muted-foreground">{before.summary.total}</p>
+            <div className="rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2.5">
+              <p className="text-lg font-black text-foreground/80">{before.summary.total}</p>
               <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Total</p>
             </div>
           </div>
         </div>
 
-        <div className="hidden w-px bg-border md:block" />
-
-        <div className="border-t border-border p-5 space-y-4 md:border-t-0">
+        <div className="p-5 space-y-5">
           <div className="flex items-center justify-between">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">After</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">After</p>
             <span className="text-xs font-mono text-muted-foreground/60">{fmtDate(after.timestamp)}</span>
           </div>
           <div className="flex items-end gap-3">
-            <span className={cn("text-5xl font-black tabular-nums leading-none", scoreTone(after.summary.score))}>
+            <span className={cn("text-4xl font-black tabular-nums leading-none", scoreTone(after.summary.score))}>
               {after.summary.score}
             </span>
             <span className="pb-1 text-sm font-mono text-muted-foreground">/ 100</span>
           </div>
           <div className="grid grid-cols-3 gap-2">
-            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+            <div className="rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2.5">
               <p className="text-lg font-black text-emerald-400">{after.summary.passed}</p>
-              <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Pass {signed(passDelta)}</p>
+              <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Pass <span className={passDeltaTone}>{signed(passDelta)}</span></p>
             </div>
-            <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2">
+            <div className="rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2.5">
               <p className="text-lg font-black text-rose-400">{after.summary.failed}</p>
-              <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fail {signed(failDelta)}</p>
+              <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fail <span className={failDeltaTone}>{signed(failDelta)}</span></p>
             </div>
-            <div className="rounded-lg border border-[#2496ED]/20 bg-[#2496ED]/10 px-3 py-2">
-              <p className="text-lg font-black text-[#2496ED]">{fixedRules.length}</p>
+            <div className="rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2.5">
+              <p className="text-lg font-black text-emerald-400">{fixedRules.length}</p>
               <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fixed</p>
             </div>
           </div>
@@ -638,7 +639,7 @@ function BeforeAfterComparison({
               {fixedRules.length > 0 ? (
                 <div className="space-y-2">
                   {fixedRules.slice(0, 5).map(result => (
-                    <div key={result.rule.id} className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">
+                    <div key={result.rule.id} className="flex items-center gap-2 rounded-lg border border-border/80 bg-muted/20 px-3 py-2">
                       <span className="font-mono text-xs font-black text-emerald-400">{result.rule.id}</span>
                       <span className="min-w-0 truncate text-sm text-muted-foreground">{result.rule.title}</span>
                     </div>
@@ -660,7 +661,7 @@ function BeforeAfterComparison({
               {regressedRules.length > 0 ? (
                 <div className="space-y-2">
                   {regressedRules.slice(0, 5).map(result => (
-                    <div key={result.rule.id} className="flex items-center gap-2 rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 py-2">
+                    <div key={result.rule.id} className="flex items-center gap-2 rounded-lg border border-border/80 bg-muted/20 px-3 py-2">
                       <span className="font-mono text-xs font-black text-rose-400">{result.rule.id}</span>
                       <span className="min-w-0 truncate text-sm text-muted-foreground">{result.rule.title}</span>
                     </div>
