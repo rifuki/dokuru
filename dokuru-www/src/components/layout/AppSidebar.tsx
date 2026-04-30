@@ -44,11 +44,51 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useAuthUser } from "@/stores/use-auth-store";
+import { useAuditStore, type AuditStreamState } from "@/stores/use-audit-store";
 import { useAgentStore } from "@/stores/use-agent-store";
 import { Loader2 } from "lucide-react";
 import { useRealtimeAgents } from "@/hooks/useRealtimeAgents";
 import { useAgentConnections } from "@/hooks/useAgentConnections";
 import { HOST_SHELL_ENABLED } from "@/lib/host-shell";
+
+function auditSidebarStatus(stream?: AuditStreamState) {
+  if (!stream) return null;
+
+  if (stream.status === "running") {
+    const pct = stream.total > 0 ? Math.min(99, Math.round((stream.current / stream.total) * 100)) : 0;
+    return {
+      label: stream.total > 0 ? `${pct}%` : "Live",
+      title: stream.total > 0 ? `Audit running (${stream.current}/${stream.total})` : "Audit running",
+      className: "border-[#2496ED]/30 bg-[#2496ED]/10 text-[#2496ED]",
+    };
+  }
+
+  if (stream.status === "saving") {
+    return {
+      label: "Saving",
+      title: "Audit complete, saving result",
+      className: "border-amber-400/30 bg-amber-400/10 text-amber-300",
+    };
+  }
+
+  if (stream.status === "complete") {
+    return {
+      label: "Done",
+      title: stream.savedAudit ? `Audit complete - ${stream.savedAudit.summary.score}/100` : "Audit complete",
+      className: "border-emerald-400/30 bg-emerald-400/10 text-emerald-300",
+    };
+  }
+
+  if (stream.status === "error") {
+    return {
+      label: "Error",
+      title: stream.error ?? "Audit failed",
+      className: "border-rose-400/30 bg-rose-400/10 text-rose-300",
+    };
+  }
+
+  return null;
+}
 
 const agentNavItems = (agentId: string) => {
   const items = [
@@ -71,6 +111,7 @@ export function AppSidebar() {
   const isAdmin = user?.role === "admin";
   const location = useLocation();
   const { agents, fetchAgents, agentOnlineStatus, agentConnectingStatus, setAgentOnline } = useAgentStore();
+  const auditStreams = useAuditStore((state) => state.auditStreams);
   const { state: sidebarState } = useSidebar();
   const isIconMode = sidebarState === "collapsed";
   const [openAgents, setOpenAgents] = useState<Record<string, boolean>>({});
@@ -309,6 +350,11 @@ export function AppSidebar() {
                           <CollapsibleContent>
                             <div className="border-t border-sidebar-border/60 overflow-hidden">
                               {agentNavItems(agent.id).map((item) => {
+                                const auditStream = item.title === "Audit" ? auditStreams[agent.id] : undefined;
+                                const auditStatus = auditSidebarStatus(auditStream);
+                                const auditResultHref = auditStream?.status === "complete" && auditStream.savedAudit?.id
+                                  ? `/agents/${agent.id}/audits/${auditStream.savedAudit.id}`
+                                  : item.href;
                                 const active = isActive(item.href);
                                 const disabled = item.requiresOnline && !isOnline;
                                 return disabled ? (
@@ -323,7 +369,8 @@ export function AppSidebar() {
                                 ) : (
                                   <Link
                                      key={item.href}
-                                     to={item.href}
+                                     to={auditResultHref}
+                                     title={auditStatus?.title}
                                       className={`flex items-center gap-3 border-l-4 px-3 py-2 text-sm transition-colors ${
                                         active
                                           ? "border-miku-primary bg-miku-primary/18 font-medium text-miku-primary"
@@ -331,7 +378,12 @@ export function AppSidebar() {
                                       }`}
                                     >
                                       <item.icon className="size-4 shrink-0" />
-                                    <span>{item.title}</span>
+                                    <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                                    {auditStatus && (
+                                      <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold leading-none ${auditStatus.className}`}>
+                                        {auditStatus.label}
+                                      </span>
+                                    )}
                                   </Link>
                                 );
                               })}

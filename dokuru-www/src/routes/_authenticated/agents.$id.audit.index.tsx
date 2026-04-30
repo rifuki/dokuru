@@ -806,6 +806,7 @@ function AuditPage() {
     const auditProgressLines = auditStream?.lines ?? [];
     const auditStreamError = auditStream?.error ?? null;
     const mountedRef = useRef(false);
+    const watchedRunningAuditRef = useRef(false);
 
     useEffect(() => {
         agentApi.getById(id).then(a => {
@@ -831,6 +832,27 @@ function AuditPage() {
         };
     }, []);
 
+    useEffect(() => {
+        if (isRunning) {
+            watchedRunningAuditRef.current = true;
+            return;
+        }
+
+        if (auditStream?.status === "complete" && auditStream.savedAudit?.id && watchedRunningAuditRef.current) {
+            watchedRunningAuditRef.current = false;
+            void navigate({
+                to: "/agents/$id/audits/$auditId",
+                params: { id, auditId: auditStream.savedAudit.id },
+                replace: true,
+            });
+            return;
+        }
+
+        if (auditStream?.status === "error") {
+            watchedRunningAuditRef.current = false;
+        }
+    }, [auditStream?.savedAudit?.id, auditStream?.status, id, isRunning, navigate]);
+
     const handleRunAudit = async () => {
         if (!agent) return;
         if (agent.access_mode !== "relay" && !token) {
@@ -843,9 +865,10 @@ function AuditPage() {
                 toast.success(`Audit complete — ${savedAudit.summary.score}/100`);
                 await queryClient.invalidateQueries({ queryKey: ["audits", id] });
                 if (savedAudit.id) {
-                    navigate({
+                    await navigate({
                         to: "/agents/$id/audits/$auditId",
-                        params: { id: agent.id, auditId: savedAudit.id }
+                        params: { id: agent.id, auditId: savedAudit.id },
+                        replace: true,
                     });
                 }
             } catch {
