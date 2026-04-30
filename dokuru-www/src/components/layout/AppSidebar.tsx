@@ -297,7 +297,7 @@ export function AppSidebar() {
 
                         {!isIconMode && (
                           <CollapsibleContent>
-                            <div className="border-t border-sidebar-border/60 p-1.5">
+                            <div className="border-t border-sidebar-border/60 overflow-hidden">
                               {agentNavItems(agent.id).map((item) => {
                                 const active = isActive(item.href);
                                 const disabled = item.requiresOnline && !isOnline;
@@ -305,7 +305,7 @@ export function AppSidebar() {
                                   <span
                                     key={item.href}
                                     title="Agent offline"
-                                     className="flex cursor-not-allowed select-none items-center gap-3 rounded-[10px] px-3 py-2 text-sm text-sidebar-foreground/30"
+                                     className="flex cursor-not-allowed select-none items-center gap-3 border-l-4 border-transparent px-3 py-2 text-sm text-sidebar-foreground/30"
                                   >
                                     <item.icon className="size-4 shrink-0" />
                                     <span>{item.title}</span>
@@ -314,10 +314,10 @@ export function AppSidebar() {
                                   <Link
                                      key={item.href}
                                      to={item.href}
-                                      className={`relative flex items-center gap-3 overflow-hidden rounded-[10px] px-3 py-2 text-sm transition-colors ${
+                                      className={`flex items-center gap-3 border-l-4 px-3 py-2 text-sm transition-colors ${
                                         active
-                                          ? "bg-miku-primary/16 font-medium text-miku-primary ring-1 ring-inset ring-miku-primary/20 before:absolute before:inset-y-1.5 before:left-0 before:w-1 before:rounded-r-full before:bg-miku-primary before:content-['']"
-                                          : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                                          ? "border-miku-primary bg-miku-primary/18 font-medium text-miku-primary"
+                                          : "border-transparent text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
                                       }`}
                                     >
                                       <item.icon className="size-4 shrink-0" />
