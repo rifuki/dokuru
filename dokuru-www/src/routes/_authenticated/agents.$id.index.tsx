@@ -19,7 +19,6 @@ import type { Agent } from "@/types/agent";
 import { getAgentToken, setAgentToken, useAgentStore } from "@/stores/use-agent-store";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -494,15 +493,16 @@ function AgentHero({
     onEdit: () => void;
     onDelete: () => void;
 }) {
-    const statusRing = isOnline ? "border-primary/30 bg-primary/10 text-primary" : "border-muted-foreground/30 bg-muted/10 text-muted-foreground";
+    const statusRing = isOnline ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" : "border-muted-foreground/30 bg-muted/10 text-muted-foreground";
     const endpoint = agent.url.replace(/^https?:\/\//, "");
     const accessLabel = agent.access_mode === "cloudflare" ? "Cloudflare tunnel" : agent.access_mode;
 
     return (
-        <section className="rounded-[20px] border border-white/5 bg-[#0a0a0a] p-6 shadow-sm">
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+        <section className="relative overflow-hidden rounded-[18px] border border-border bg-card p-5 shadow-sm">
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/[0.04] to-transparent" />
+            <div className="relative grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
                 <div className="flex min-w-0 items-center gap-4">
-                    <div className="flex size-12 shrink-0 items-center justify-center rounded-[12px] border border-border bg-background text-primary">
+                    <div className="flex size-12 shrink-0 items-center justify-center rounded-[12px] border border-primary/25 bg-primary/10 text-primary">
                         <Server className="h-5 w-5" />
                     </div>
 
@@ -510,7 +510,7 @@ function AgentHero({
                         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
                             <h1 className="truncate text-2xl font-semibold tracking-tight">{agent.name}</h1>
                             <div className={cn("inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider", statusRing)}>
-                                <span className={cn("h-1.5 w-1.5 rounded-full", isOnline ? "bg-primary" : "bg-muted-foreground")} />
+                                <span className={cn("h-1.5 w-1.5 rounded-full", isOnline ? "bg-emerald-400 animate-pulse" : "bg-muted-foreground")} />
                                 <span>{isOnline ? "Online" : "Offline"}</span>
                             </div>
                         </div>
@@ -743,7 +743,7 @@ function MetricCard({
         <Link
             to={to}
             params={{ id }}
-            className="group flex flex-col justify-between rounded-[16px] border border-white/5 bg-[#0a0a0a] p-5 transition-all hover:border-white/10 hover:bg-white/[0.02]"
+            className="group flex flex-col justify-between rounded-lg border bg-background p-3 transition-colors hover:border-primary/50"
         >
             <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold">{label}</span>
@@ -754,7 +754,14 @@ function MetricCard({
                 <p className="mt-1 truncate text-xs text-muted-foreground">{detail}</p>
             </div>
             {typeof progress === "number" ? (
-                <Progress value={progress} className={cn("mt-4 h-1.5", toneClass.progress)} />
+                <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+                    <div
+                        className={cn("h-full rounded-full transition-all duration-700",
+                            tone === "red" ? "bg-rose-500" : tone === "amber" ? "bg-amber-500" : "bg-blue-400"
+                        )}
+                        style={{ width: `${progress}%` }}
+                    />
+                </div>
             ) : null}
         </Link>
     );
@@ -806,12 +813,6 @@ function SecurityOverview({
         : band === "warning"
             ? "border-amber-500/25 bg-amber-500/5 text-amber-500"
             : "border-rose-500/25 bg-rose-500/5 text-rose-500";
-    const scoreProgressClass = band === "healthy"
-        ? "[&>div]:bg-primary"
-        : band === "warning"
-            ? "[&>div]:bg-amber-500"
-            : "[&>div]:bg-rose-500";
-
     return (
         <SectionCard
             title="Security Overview"
@@ -820,8 +821,9 @@ function SecurityOverview({
         >
             <div className="space-y-4">
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_460px]">
-                    <div className="rounded-[20px] border border-white/5 bg-[#0a0a0a] p-6 shadow-sm">
-                        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="rounded-[18px] border bg-background/55 p-5 shadow-sm dark:bg-white/[0.025]">
+                        <div className="flex flex-wrap items-center gap-5">
+                            <ScoreRing score={latestAudit.summary.score} band={band} />
                             <div className="min-w-0 flex-1">
                                 <div className="flex flex-wrap items-center gap-3">
                                     <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">CIS Benchmark</span>
@@ -829,17 +831,11 @@ function SecurityOverview({
                                         {bandLabel}
                                     </Badge>
                                 </div>
-                                <div className="mt-4 flex items-end gap-2">
-                                    <span className="text-5xl font-semibold leading-none tabular-nums tracking-tight">{latestAudit.summary.score}</span>
-                                    <span className="pb-1 text-lg font-medium text-muted-foreground">/100</span>
+                                <div className="mt-4 grid grid-cols-3 gap-2">
+                                    <ScoreStat label="Passed" value={latestAudit.summary.passed} className="text-primary" />
+                                    <ScoreStat label="Failed" value={latestAudit.summary.failed} className="text-rose-500" />
+                                    <ScoreStat label="Total" value={latestAudit.summary.total} />
                                 </div>
-                                <Progress value={latestAudit.summary.score} className={cn("mt-4 h-1.5 bg-muted/50", scoreProgressClass)} />
-                            </div>
-
-                            <div className="grid w-full grid-cols-3 gap-2 lg:max-w-[360px]">
-                                <ScoreStat label="Passed" value={latestAudit.summary.passed} className="text-primary" />
-                                <ScoreStat label="Failed" value={latestAudit.summary.failed} className="text-rose-500" />
-                                <ScoreStat label="Total" value={latestAudit.summary.total} />
                             </div>
                         </div>
                     </div>
@@ -852,7 +848,7 @@ function SecurityOverview({
                     </div>
                 </div>
 
-                <div className="rounded-[20px] border border-white/5 bg-[#0a0a0a] p-6 shadow-sm">
+                <div className="rounded-[18px] border bg-background/55 p-4 shadow-sm dark:bg-white/[0.025]">
                     <div className="flex items-center justify-between gap-3">
                         <h3 className="text-sm font-semibold tracking-tight">Security pillars</h3>
                         <Badge variant="outline" className="rounded-full border-border/70 bg-card px-2.5 py-1 text-[11px] font-medium text-foreground">
@@ -874,7 +870,7 @@ function SecurityOverview({
 
 function ScoreStat({ label, value, className }: { label: string; value: number; className?: string }) {
     return (
-        <div className="rounded-[14px] bg-white/[0.02] border border-white/5 px-3 py-3 text-center">
+        <div className="rounded-[14px] border bg-card/70 px-3 py-3 text-center">
             <span className={cn("text-xl font-semibold tabular-nums", className)}>{value}</span>
             <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
         </div>
@@ -896,9 +892,16 @@ function SignalCard({
 }) {
     const toneClass = toneClasses(tone);
     const isNeutral = tone === "zinc";
+    const cardBg = tone === "amber"
+        ? "border-amber-500/20 bg-amber-500/[0.07] hover:border-amber-500/40"
+        : tone === "red"
+            ? "border-rose-500/20 bg-rose-500/[0.07] hover:border-rose-500/40"
+            : tone === "blue"
+                ? "border-blue-500/20 bg-blue-500/[0.07] hover:border-blue-500/40"
+                : "bg-background/55 hover:border-primary/25 dark:bg-white/[0.025]";
 
     return (
-        <div className="group rounded-[16px] border border-white/5 bg-[#0a0a0a] px-5 py-4 shadow-sm transition-colors hover:border-white/10">
+        <div className={cn("group rounded-[16px] border px-4 py-3.5 shadow-sm transition-colors", cardBg)}>
             <div className="flex items-center justify-between gap-3">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</span>
                 <Icon className={cn("h-4 w-4", isNeutral ? "text-muted-foreground" : toneClass.text)} />
@@ -911,34 +914,79 @@ function SignalCard({
     );
 }
 
+function ScoreRing({
+    score,
+    band,
+}: {
+    score: number;
+    band: "healthy" | "warning" | "critical";
+}) {
+    const r = 50;
+    const circ = 2 * Math.PI * r;
+    const offset = circ - (score / 100) * circ;
+    const color = band === "healthy" ? "#10b981" : band === "warning" ? "#f59e0b" : "#f43f5e";
+    const textClass = band === "healthy" ? "text-emerald-400" : band === "warning" ? "text-amber-400" : "text-rose-400";
+
+    return (
+        <div className="relative flex shrink-0 items-center justify-center">
+            <svg width="120" height="120" viewBox="0 0 120 120">
+                <circle cx="60" cy="60" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="10" />
+                <circle
+                    cx="60" cy="60" r={r}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth="10"
+                    strokeLinecap="round"
+                    strokeDasharray={circ}
+                    strokeDashoffset={offset}
+                    transform="rotate(-90 60 60)"
+                    style={{ transition: "stroke-dashoffset 1s ease" }}
+                />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className={cn("text-3xl font-bold tabular-nums leading-none", textClass)}>{score}</span>
+                <span className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">/100</span>
+            </div>
+        </div>
+    );
+}
+
 function PillarRow({ pillar }: { pillar: AuditReportResponse["report"]["pillars"][number] }) {
     const key = pillar.key as SecurityPillar;
     const meta = PILLAR_META[key];
     const Icon = meta?.icon ?? ShieldCheck;
     const percent = pillar.percent ?? 0;
-    const percentClass = percent >= 80 ? "text-primary" : percent >= 60 ? "text-amber-500" : "text-rose-500";
-    const progressClass = percent >= 80 ? "[&>div]:bg-primary" : percent >= 60 ? "[&>div]:bg-amber-500" : "[&>div]:bg-rose-500";
+    const isGood = percent >= 80;
+    const isWarn = !isGood && percent >= 60;
+
+    const percentClass = isGood ? "text-emerald-400" : isWarn ? "text-amber-400" : "text-rose-400";
+    const barColor = isGood ? "bg-emerald-500" : isWarn ? "bg-amber-500" : "bg-rose-500";
+    const iconClass = isGood
+        ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-400"
+        : isWarn
+            ? "border-amber-500/25 bg-amber-500/10 text-amber-400"
+            : "border-rose-500/25 bg-rose-500/10 text-rose-400";
 
     return (
-        <div className="rounded-[16px] border border-white/5 bg-white/[0.01] p-4 transition-colors hover:border-white/10 hover:bg-white/[0.03]">
-            <div className="flex items-center justify-between gap-4">
-                <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex size-9 shrink-0 items-center justify-center rounded-[10px] border border-border/70 bg-background text-primary">
-                        <Icon className="h-3.5 w-3.5" />
-                    </div>
-                    <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold">{meta?.name ?? pillar.label}</p>
-                        <p className="text-[11px] text-muted-foreground">{pillar.passed}/{pillar.total} checks passed</p>
-                    </div>
+        <div className="flex flex-col gap-3 rounded-[16px] border bg-card/70 p-3.5 transition-colors hover:border-primary/25 hover:bg-muted/20">
+            <div className="flex items-center gap-3">
+                <div className={cn("flex size-8 shrink-0 items-center justify-center rounded-[8px] border", iconClass)}>
+                    <Icon className="h-3.5 w-3.5" />
                 </div>
-                <span className={cn("font-mono text-sm font-semibold", percentClass)}>
+                <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold">{meta?.name ?? pillar.label}</p>
+                    <p className="text-[11px] text-muted-foreground">{pillar.passed}/{pillar.total} checks passed</p>
+                </div>
+                <span className={cn("shrink-0 font-mono text-sm font-bold tabular-nums", percentClass)}>
                     {percent}%
                 </span>
             </div>
-            <Progress value={percent} className={cn(
-                "mt-3 h-1 bg-muted/45",
-                progressClass
-            )} />
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+                <div
+                    className={cn("h-full rounded-full transition-all duration-700", barColor)}
+                    style={{ width: `${percent}%` }}
+                />
+            </div>
         </div>
     );
 }
@@ -961,7 +1009,7 @@ function WorkloadOverview({
     return (
         <SectionCard title="Workload Snapshot" description="Recent containers and biggest compose stacks on this Docker host.">
             <div className="grid gap-4 lg:grid-cols-2">
-                <div className="overflow-hidden rounded-[20px] border border-white/5 bg-[#0a0a0a]">
+                <div className="overflow-hidden rounded-xl border bg-card">
                     <ListHeader icon={ContainerIcon} title="Recent Containers" action={<Link to="/agents/$id/containers" params={{ id }} className="text-xs font-medium text-primary hover:underline">View all</Link>} />
                     <div className="divide-y divide-border/40">
                         {isContainersLoading ? (
@@ -995,7 +1043,7 @@ function WorkloadOverview({
                     </div>
                 </div>
 
-                <div className="overflow-hidden rounded-[20px] border border-white/5 bg-[#0a0a0a]">
+                <div className="overflow-hidden rounded-xl border bg-card">
                     <ListHeader icon={SquareStack} title="Compose Stacks" action={<Link to="/agents/$id/stacks" params={{ id }} className="text-xs font-medium text-primary hover:underline">View stacks</Link>} />
                     <div className="divide-y divide-border/40">
                         {isStacksLoading ? (
@@ -1017,7 +1065,14 @@ function WorkloadOverview({
                                             </div>
                                             <Badge variant="outline" className="font-mono text-[10px] border-border/50 bg-muted/10">{pct}%</Badge>
                                         </div>
-                                        <Progress value={pct} className={cn("mt-3 h-1 bg-muted/30", pct === 100 ? "[&>div]:bg-primary" : pct > 0 ? "[&>div]:bg-amber-500" : "[&>div]:bg-zinc-500")} />
+                                        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+                                            <div
+                                                className={cn("h-full rounded-full transition-all",
+                                                    pct === 100 ? "bg-emerald-500" : pct > 0 ? "bg-amber-500" : "bg-zinc-600"
+                                                )}
+                                                style={{ width: `${pct}%` }}
+                                            />
+                                        </div>
                                     </Link>
                                 );
                             })
@@ -1034,15 +1089,14 @@ function WorkloadOverview({
 function ActionPanel({ id, agent, latestAudit }: { id: string; agent: Agent; latestAudit: AuditResponse | null }) {
     return (
         <SectionCard title="Control Dock" description="Fast actions for this host.">
-            <div className="rounded-[20px] border border-white/5 bg-[#0a0a0a] p-5 grid gap-4">
-                <div className="grid gap-2">
+            <div className="grid gap-2">
                 <Button className="w-full justify-between shadow-sm" asChild>
                     <Link to="/agents/$id/audit" params={{ id }}>
                         <span className="inline-flex items-center gap-2"><ShieldCheck className="h-4 w-4" />Run CIS Audit</span>
                         <ArrowUpRight className="h-4 w-4" />
                     </Link>
                 </Button>
-                
+
                 <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-1">
                     <Button variant="outline" className="w-full justify-between hover:bg-muted/50" asChild>
                         <Link to="/agents/$id/containers" params={{ id }}>
@@ -1085,21 +1139,20 @@ function ActionPanel({ id, agent, latestAudit }: { id: string; agent: Agent; lat
                     </Button>
                 </div>
             </div>
-                <div className="mt-2 flex flex-col gap-2 rounded-xl bg-white/[0.02] p-4 border border-white/5">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Connection Status</span>
-                    <div className="flex flex-col gap-2 text-sm mt-1">
-                        <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">Mode</span>
-                            <Badge variant="outline" className="font-mono text-[10px]">{agent.access_mode}</Badge>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">Status</span>
-                            <Badge variant="outline" className="font-mono text-[10px]">{agent.status}</Badge>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">Last Seen</span>
-                            <span className="font-mono text-xs font-semibold">{relativeTime(agent.last_seen)}</span>
-                        </div>
+            <div className="mt-4 flex flex-col gap-2 rounded-xl border bg-muted/20 p-3.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Connection Status</span>
+                <div className="flex flex-col gap-1.5 text-sm">
+                    <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Mode</span>
+                        <Badge variant="outline" className="font-mono text-[10px]">{agent.access_mode}</Badge>
+                    </div>
+                    <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Status</span>
+                        <Badge variant="outline" className="font-mono text-[10px]">{agent.status}</Badge>
+                    </div>
+                    <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Last Seen</span>
+                        <span className="font-mono text-xs font-semibold">{relativeTime(agent.last_seen)}</span>
                     </div>
                 </div>
             </div>
@@ -1193,7 +1246,7 @@ function FailingRuleRow({
         : result.rule.severity === "Medium"
             ? "border-amber-500/50 bg-amber-500/5"
             : "border-muted/50 bg-muted/5";
-            
+
     const textSeverityClass = result.rule.severity === "High"
         ? "text-rose-500"
         : result.rule.severity === "Medium"
@@ -1201,7 +1254,7 @@ function FailingRuleRow({
             : "text-muted-foreground";
 
     const remediationLabel = result.remediation_kind === "auto" ? "Auto-fix" : result.remediation_kind;
-    const rowClassName = "group relative block overflow-hidden rounded-[16px] border border-white/5 bg-[#0a0a0a] p-5 transition-all hover:border-white/10 hover:bg-white/[0.02]";
+    const rowClassName = "group relative block overflow-hidden rounded-xl border bg-card p-4 transition-all hover:border-primary/40 hover:bg-muted/30";
     const content = (
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div className={cn("absolute inset-y-0 left-0 w-1", severityClass.replace("bg-", "").replace("border-", "bg-").split(" ")[0])} />
@@ -1215,7 +1268,7 @@ function FailingRuleRow({
                     {result.rule.title}
                 </h3>
             </div>
-            
+
             <div className="flex shrink-0 flex-wrap items-center gap-4 text-[11px] md:flex-col md:items-end md:gap-1.5">
                 <div className="flex items-center gap-1.5 font-medium text-muted-foreground">
                     <PillarIcon className="h-3.5 w-3.5" />
@@ -1266,21 +1319,19 @@ function HostFacts({ dockerInfo }: { dockerInfo: DockerInfo }) {
 
     return (
         <SectionCard title="Host Facts">
-            <div className="rounded-[20px] border border-white/5 bg-[#0a0a0a] p-5">
-                <div className="grid grid-cols-2 gap-y-1 lg:grid-cols-1">
-                    {infoRows.map((row) => {
-                        const Icon = row.icon;
-                        return (
-                            <div key={row.label} className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between text-sm transition-colors hover:bg-white/[0.02] p-2.5 -mx-2.5 rounded-xl">
-                                <span className="text-muted-foreground flex items-center gap-2.5">
-                                    <Icon className="h-4 w-4" />
-                                    {row.label}
-                                </span>
-                                <span className="font-mono text-xs font-medium">{row.value}</span>
-                            </div>
-                        );
-                    })}
-                </div>
+            <div className="grid grid-cols-2 gap-y-3 lg:grid-cols-1">
+                {infoRows.map((row) => {
+                    const Icon = row.icon;
+                    return (
+                        <div key={row.label} className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between text-sm transition-colors hover:bg-muted/30 p-2 -mx-2 rounded-lg">
+                            <span className="text-muted-foreground flex items-center gap-2">
+                                <Icon className="h-4 w-4" />
+                                {row.label}
+                            </span>
+                            <span className="font-mono text-xs font-medium">{row.value}</span>
+                        </div>
+                    );
+                })}
             </div>
         </SectionCard>
     );
@@ -1298,13 +1349,14 @@ function SectionCard({
     children: React.ReactNode;
 }) {
     return (
-        <section className="relative">
-            <div className="mb-5 flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between px-1">
+        <section className="relative overflow-hidden rounded-2xl border bg-card p-5">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
+            <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h2 className="text-xl font-bold tracking-tight text-white">{title}</h2>
-                    {description ? <p className="text-sm font-medium text-zinc-400 mt-1">{description}</p> : null}
+                    <h2 className="text-lg font-bold tracking-tight">{title}</h2>
+                    {description ? <p className="text-sm font-medium text-muted-foreground">{description}</p> : null}
                 </div>
-                {action ? <div className="shrink-0 mb-0.5">{action}</div> : null}
+                {action ? <div className="shrink-0">{action}</div> : null}
             </div>
             {children}
         </section>
