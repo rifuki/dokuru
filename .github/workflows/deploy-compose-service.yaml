@@ -172,7 +172,7 @@ jobs:
 
           cd "${DOKURU_DEPLOY_PATH}"
 
-          git pull
+          git pull --ff-only
 
           test -f docker-compose.yaml
 
