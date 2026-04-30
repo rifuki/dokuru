@@ -81,11 +81,35 @@ function SeverityBadge({ severity, status }: { severity: string; status?: "Pass"
   );
 }
 
+function failedSeverityTone(severity: string) {
+  if (severity === "High") {
+    return {
+      borderLeft: "border-l-red-400",
+      cardTone: "border-red-500/35 bg-red-500/[0.025] hover:bg-red-500/[0.04]",
+      icon: "text-red-500",
+    };
+  }
+
+  if (severity === "Medium") {
+    return {
+      borderLeft: "border-l-amber-400",
+      cardTone: "border-amber-500/35 bg-amber-500/[0.025] hover:bg-amber-500/[0.04]",
+      icon: "text-amber-400",
+    };
+  }
+
+  return {
+    borderLeft: "border-l-muted-foreground/40",
+    cardTone: "border-border bg-card hover:bg-muted/20",
+    icon: "text-muted-foreground",
+  };
+}
+
 // ── Status indicator ─────────────────────────────────────────────────────────
 
-function StatusIcon({ status }: { status: "Pass" | "Fail" | "Error" }) {
+function StatusIcon({ status, severity }: { status: "Pass" | "Fail" | "Error"; severity?: string }) {
   if (status === "Pass") return <ShieldCheck className="h-5 w-5 text-green-500 shrink-0" />;
-  if (status === "Fail") return <ShieldX className="h-5 w-5 text-red-500 shrink-0" />;
+  if (status === "Fail") return <ShieldX className={cn("h-5 w-5 shrink-0", failedSeverityTone(severity ?? "Low").icon)} />;
   return <Shield className="h-5 w-5 text-orange-500 shrink-0" />;
 }
 
@@ -256,14 +280,16 @@ function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, 
     return () => window.clearTimeout(timeout);
   }, [isFocused]);
 
+  const failTone = failedSeverityTone(rule.severity);
+
   const borderLeft = status === "Pass"
     ? "border-l-emerald-500/50"
     : status === "Fail"
-      ? "border-l-red-400"
+      ? failTone.borderLeft
       : "border-l-amber-500/50";
 
   const cardTone = status === "Fail"
-    ? "border-red-500/35 bg-red-500/[0.025] hover:bg-red-500/[0.04]"
+    ? failTone.cardTone
     : "border-border bg-card";
 
   const pillar = getRulePillar(rule.id);
@@ -283,7 +309,7 @@ function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, 
       {/* Header row */}
       <div className="px-4 py-3 flex items-center gap-3">
         <button onClick={() => setOpen(v => !v)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
-          <StatusIcon status={status} />
+          <StatusIcon status={status} severity={rule.severity} />
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-1.5 mb-1">
               <span className="font-mono text-[11px] font-bold text-muted-foreground/70 bg-muted/40 px-1.5 py-0.5 rounded">
@@ -505,6 +531,10 @@ function SectionHeader({ section, total, passed }: { section: string; total: num
 
 function scoreTone(score: number) {
   return score >= 80 ? "text-emerald-400" : score >= 60 ? "text-amber-400" : "text-rose-400";
+}
+
+function progressTone(percent: number) {
+  return percent === 100 ? "bg-emerald-500" : percent >= 50 ? "bg-amber-500" : "bg-rose-500";
 }
 
 function BeforeAfterComparison({
@@ -1155,7 +1185,7 @@ function AuditDetailPage() {
                         </div>
                         <div className="h-2 bg-muted/40 rounded-full overflow-hidden">
                           <div
-                            className={cn("h-full rounded-full transition-all duration-700", meta.barColor)}
+                            className={cn("h-full rounded-full transition-all duration-700", progressTone(pct))}
                             style={{ width: `${pct}%` }}
                           />
                         </div>

@@ -71,8 +71,8 @@ pub(crate) const AUDIT_SECTIONS: &[AuditSection] = &[
     AuditSection {
         name: "Namespace Isolation",
         icon: IconKind::Box,
-        color: "text-blue-400 border-blue-500/30",
-        bar_color: "bg-blue-500",
+        color: "text-[#2496ED] border-[#2496ED]/25",
+        bar_color: "bg-[#2496ED]",
         passed: 1,
         total: 5,
         rules: &[
@@ -93,8 +93,8 @@ pub(crate) const AUDIT_SECTIONS: &[AuditSection] = &[
     AuditSection {
         name: "Cgroup Controls",
         icon: IconKind::Gauge,
-        color: "text-amber-400 border-amber-500/30",
-        bar_color: "bg-amber-500",
+        color: "text-[#2496ED] border-[#2496ED]/25",
+        bar_color: "bg-[#2496ED]",
         passed: 2,
         total: 5,
         rules: &[AuditRule {
@@ -107,8 +107,8 @@ pub(crate) const AUDIT_SECTIONS: &[AuditSection] = &[
     AuditSection {
         name: "Runtime Hardening",
         icon: IconKind::Shield,
-        color: "text-rose-400 border-rose-500/30",
-        bar_color: "bg-rose-500",
+        color: "text-[#2496ED] border-[#2496ED]/25",
+        bar_color: "bg-[#2496ED]",
         passed: 3,
         total: 6,
         rules: &[AuditRule {

@@ -30,7 +30,7 @@ pub(crate) fn audit_panel() -> impl IntoView {
                     <div>
                         <div class="font-mono text-[9px] uppercase tracking-[0.2em] text-zinc-500 mb-1">"audit score"</div>
                         <div class="flex items-baseline gap-1 font-heading">
-                            <span class="text-4xl font-black text-emerald-400 leading-none" data-testid="audit-score-value">"78"</span>
+                            <span class="text-4xl font-black text-amber-400 leading-none" data-testid="audit-score-value">"78"</span>
                             <span class="text-base text-zinc-600 font-bold">"/ 100"</span>
                         </div>
                         <div class="mt-1 text-[10px] text-zinc-500 font-mono">"CIS-aligned · 42 rules evaluated"</div>

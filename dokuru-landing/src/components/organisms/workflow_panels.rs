@@ -84,7 +84,7 @@ pub(crate) fn audit_preview_panel() -> impl IntoView {
                 <div class="flex items-end justify-between border-b border-white/5 pb-5">
                     <div>
                         <div class="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500 mb-1.5">"audit score"</div>
-                        <div class="flex items-baseline gap-1 font-heading"><span class="text-5xl font-black text-emerald-400 leading-none">"78"</span><span class="text-lg text-zinc-600 font-bold">"/ 100"</span></div>
+                        <div class="flex items-baseline gap-1 font-heading"><span class="text-5xl font-black text-amber-400 leading-none">"78"</span><span class="text-lg text-zinc-600 font-bold">"/ 100"</span></div>
                         <div class="mt-2 text-xs text-zinc-500 font-mono">"CIS-aligned · 42 rules evaluated"</div>
                     </div>
                     <div class="flex flex-col items-end gap-1.5 text-right">
@@ -95,9 +95,9 @@ pub(crate) fn audit_preview_panel() -> impl IntoView {
                 </div>
                 <div class="space-y-3">
                     <div class="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">"security pillars"</div>
-                    {audit_stats::preview_pillar(IconKind::Box, "Namespace Isolation", "text-blue-400 border-blue-500/30", "1/5", "bg-blue-500", "20%")}
-                    {audit_stats::preview_pillar(IconKind::Gauge, "Cgroup Controls", "text-amber-400 border-amber-500/30", "2/5", "bg-amber-500", "40%")}
-                    {audit_stats::preview_pillar(IconKind::Shield, "Runtime Hardening", "text-rose-400 border-rose-500/30", "3/6", "bg-rose-500", "50%")}
+                    {audit_stats::preview_pillar(IconKind::Box, "Namespace Isolation", "text-[#2496ED] border-[#2496ED]/25", "1/5", "bg-[#2496ED]", "20%")}
+                    {audit_stats::preview_pillar(IconKind::Gauge, "Cgroup Controls", "text-[#2496ED] border-[#2496ED]/25", "2/5", "bg-[#2496ED]", "40%")}
+                    {audit_stats::preview_pillar(IconKind::Shield, "Runtime Hardening", "text-[#2496ED] border-[#2496ED]/25", "3/6", "bg-[#2496ED]", "50%")}
                 </div>
                 <div class="flex items-center justify-between border-t border-white/5 pt-4">
                     <div class="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-600">"run · 2s ago"</div>

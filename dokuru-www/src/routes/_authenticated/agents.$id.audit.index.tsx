@@ -30,15 +30,15 @@ export const Route = createFileRoute("/_authenticated/agents/$id/audit/")({
 // ── Section metadata ────────────────────────────────────────────────────────
 
 const SECTION_META: Record<string, { label: string; num: string; color: string; bg: string; border: string }> = {
-    "Host Configuration":     { label: "Host",    num: "S1", color: "text-blue-500",   bg: "bg-blue-500/10",   border: "border-blue-500/30" },
-    "Daemon Configuration":   { label: "Daemon",  num: "S2", color: "text-violet-500", bg: "bg-violet-500/10", border: "border-violet-500/30" },
-    "Config File Permissions":{ label: "Files",   num: "S3", color: "text-orange-500", bg: "bg-orange-500/10", border: "border-orange-500/30" },
-    "Container Images":       { label: "Images",  num: "S4", color: "text-teal-500",   bg: "bg-teal-500/10",   border: "border-teal-500/30" },
-    "Container Runtime":      { label: "Runtime", num: "S5", color: "text-indigo-500", bg: "bg-indigo-500/10", border: "border-indigo-500/30" },
+    "Host Configuration":     { label: "Host",    num: "S1", color: "text-muted-foreground", bg: "bg-muted/30", border: "border-border" },
+    "Daemon Configuration":   { label: "Daemon",  num: "S2", color: "text-muted-foreground", bg: "bg-muted/30", border: "border-border" },
+    "Config File Permissions":{ label: "Files",   num: "S3", color: "text-muted-foreground", bg: "bg-muted/30", border: "border-border" },
+    "Container Images":       { label: "Images",  num: "S4", color: "text-muted-foreground", bg: "bg-muted/30", border: "border-border" },
+    "Container Runtime":      { label: "Runtime", num: "S5", color: "text-muted-foreground", bg: "bg-muted/30", border: "border-border" },
 };
 
 function sectionMeta(section: string) {
-    return SECTION_META[section] ?? { label: section, color: "text-gray-500", bg: "bg-gray-500/10", border: "border-gray-500/30" };
+    return SECTION_META[section] ?? { label: section, color: "text-muted-foreground", bg: "bg-muted/30", border: "border-border" };
 }
 
 
@@ -55,8 +55,8 @@ function SeverityBadge({ severity, status }: { severity: string; status?: "Pass"
 
     const map: Record<string, string> = {
         High: "bg-red-500/15 text-red-500 border-red-500/30",
-        Medium: "bg-yellow-500/15 text-yellow-600 border-yellow-500/30",
-        Low: "bg-blue-500/15 text-blue-500 border-blue-500/30",
+        Medium: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+        Low: "bg-muted/40 text-muted-foreground border-border",
     };
     return (
         <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase border", map[severity] ?? "bg-muted text-muted-foreground")}>
@@ -65,11 +65,35 @@ function SeverityBadge({ severity, status }: { severity: string; status?: "Pass"
     );
 }
 
+function failedSeverityTone(severity: string) {
+    if (severity === "High") {
+        return {
+            borderLeft: "border-l-red-500/60",
+            hover: "hover:bg-red-500/5",
+            icon: "text-red-500",
+        };
+    }
+
+    if (severity === "Medium") {
+        return {
+            borderLeft: "border-l-amber-500/70",
+            hover: "hover:bg-amber-500/5",
+            icon: "text-amber-400",
+        };
+    }
+
+    return {
+        borderLeft: "border-l-muted-foreground/40",
+        hover: "hover:bg-muted/30",
+        icon: "text-muted-foreground",
+    };
+}
+
 // ── Status indicator ─────────────────────────────────────────────────────────
 
-function StatusIcon({ status }: { status: "Pass" | "Fail" | "Error" }) {
+function StatusIcon({ status, severity }: { status: "Pass" | "Fail" | "Error"; severity?: string }) {
     if (status === "Pass") return <ShieldCheck className="h-5 w-5 text-green-500 shrink-0" />;
-    if (status === "Fail") return <ShieldX className="h-5 w-5 text-red-500 shrink-0" />;
+    if (status === "Fail") return <ShieldX className={cn("h-5 w-5 shrink-0", failedSeverityTone(severity ?? "Low").icon)} />;
     return <Shield className="h-5 w-5 text-orange-500 shrink-0" />;
 }
 
@@ -238,10 +262,12 @@ function RuleCard({ result, agentId, agentUrl, agentAccessMode, token, container
     const steps = getFixSteps(rule.id);
     const needsRestart = requiresDockerRestart(rule.id);
 
+    const failTone = failedSeverityTone(rule.severity);
+
     const borderLeft = status === "Pass"
         ? "border-l-green-500/60"
         : status === "Fail"
-        ? "border-l-red-500/60"
+        ? failTone.borderLeft
         : "border-l-orange-500/60";
 
     const openConfirm = (e: React.MouseEvent) => {
@@ -428,13 +454,13 @@ function RuleCard({ result, agentId, agentUrl, agentAccessMode, token, container
             <div
                 className={cn(
                     "px-4 py-3.5 flex items-start gap-3",
-                    status === "Pass" ? "hover:bg-green-500/5" : status === "Fail" ? "hover:bg-red-500/5" : "hover:bg-orange-500/5",
+                    status === "Pass" ? "hover:bg-green-500/5" : status === "Fail" ? failTone.hover : "hover:bg-orange-500/5",
                     "rounded-xl transition-colors"
                 )}
             >
                 {/* Clickable area */}
                 <button onClick={() => setOpen(v => !v)} className="flex items-start gap-3 flex-1 min-w-0 text-left">
-                    <StatusIcon status={status} />
+                    <StatusIcon status={status} severity={rule.severity} />
                     <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-1.5 mb-1">
                             <span className="font-mono text-[11px] font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">

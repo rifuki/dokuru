@@ -10,14 +10,6 @@ pub(crate) fn hero() -> impl IntoView {
             <div class="absolute inset-0 bg-grid-fine mask-fade-b pointer-events-none animate-fade-in"/>
 
             <div class="relative max-w-7xl mx-auto px-6 md:px-10 w-full">
-                <div class="animate-enter-soft-down flex flex-wrap items-center gap-x-3 gap-y-2 mb-8 md:mb-10" style="--motion-delay: 200ms">
-                    <span class="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.2em] text-[#2496ED] border border-[#2496ED]/20 rounded-full px-3 py-1.5 bg-[#2496ED]/5">
-                        <span class="w-1.5 h-1.5 rounded-full bg-[#2496ED] pulse-dot"/>
-                        "CIS Docker Benchmark v1.8.0 aligned"
-                    </span>
-                    <span class="hidden sm:inline font-mono text-[11px] text-zinc-600">"// agent-based · namespace · cgroup · runtime"</span>
-                </div>
-
                 <div class="grid lg:grid-cols-12 gap-10 lg:gap-14 items-center">
                     <div class="lg:col-span-7">
                         <h1 data-testid="hero-headline" class="animate-enter-up font-heading text-5xl sm:text-6xl lg:text-[64px] xl:text-[72px] font-bold tracking-tight leading-[1.05] text-white" style="--motion-delay: 300ms; --motion-duration: 800ms">
