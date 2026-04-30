@@ -2,12 +2,29 @@ use axum::extract::State;
 use bollard::container::ListContainersOptions;
 use bollard::image::ListImagesOptions;
 use serde::Serialize;
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::LazyLock,
+    time::{Duration, Instant},
+};
+use tokio::sync::{Mutex, RwLock};
 
 use crate::api::infrastructure::web::response::{ApiError, ApiResult, ApiSuccess};
 use crate::api::state::AppState;
 
-#[derive(Debug, Serialize)]
+const INFO_CACHE_TTL: Duration = Duration::from_secs(5);
+
+static INFO_CACHE: LazyLock<RwLock<Option<CachedEnvironmentInfo>>> =
+    LazyLock::new(|| RwLock::new(None));
+static INFO_REFRESH_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+#[derive(Debug, Clone)]
+struct CachedEnvironmentInfo {
+    value: EnvironmentInfo,
+    refreshed_at: Instant,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct ContainerStats {
     pub total: usize,
     pub running: usize,
@@ -16,7 +33,7 @@ pub struct ContainerStats {
     pub unhealthy: usize,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct EnvironmentInfo {
     pub docker_version: String,
     pub api_version: Option<String>,
@@ -37,12 +54,62 @@ pub struct EnvironmentInfo {
 }
 
 pub async fn get_info(State(state): State<AppState>) -> ApiResult<EnvironmentInfo> {
+    if let Some(info) = cached_environment_info().await {
+        return Ok(ApiSuccess::default().with_data(info));
+    }
+
+    let _guard = INFO_REFRESH_LOCK.lock().await;
+    if let Some(info) = cached_environment_info().await {
+        return Ok(ApiSuccess::default().with_data(info));
+    }
+
+    let info = fetch_environment_info(&state).await?;
+    *INFO_CACHE.write().await = Some(CachedEnvironmentInfo {
+        value: info.clone(),
+        refreshed_at: Instant::now(),
+    });
+
+    Ok(ApiSuccess::default().with_data(info))
+}
+
+async fn cached_environment_info() -> Option<EnvironmentInfo> {
+    let cache = INFO_CACHE.read().await;
+    cache
+        .as_ref()
+        .filter(|entry| entry.refreshed_at.elapsed() < INFO_CACHE_TTL)
+        .map(|entry| entry.value.clone())
+}
+
+async fn fetch_environment_info(state: &AppState) -> Result<EnvironmentInfo, ApiError> {
     let docker = &state.docker;
 
-    // System info
-    let sys = docker
-        .info()
-        .await
+    let info_fut = docker.info();
+    let version_fut = async {
+        Ok::<Option<String>, bollard::errors::Error>(
+            docker.version().await.ok().and_then(|v| v.api_version),
+        )
+    };
+    let containers_fut = docker.list_containers(Some(ListContainersOptions::<String> {
+        all: true,
+        ..Default::default()
+    }));
+    let volumes_fut = docker.list_volumes::<String>(None);
+    let images_fut = docker.list_images(Some(ListImagesOptions::<String> {
+        all: false,
+        filters: HashMap::new(),
+        ..Default::default()
+    }));
+    let networks_fut = docker.list_networks::<String>(None);
+
+    let (sys, api_version, all_containers, volumes_response, images_response, networks_response) =
+        tokio::try_join!(
+            info_fut,
+            version_fut,
+            containers_fut,
+            volumes_fut,
+            images_fut,
+            networks_fut,
+        )
         .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
     let cpu_count = sys.ncpu.unwrap_or(0);
@@ -57,16 +124,6 @@ pub async fn get_info(State(state): State<AppState>) -> ApiResult<EnvironmentInf
     let docker_root_dir = sys.docker_root_dir;
     let storage_driver = sys.driver;
     let logging_driver = sys.logging_driver;
-    let api_version = docker.version().await.ok().and_then(|v| v.api_version);
-
-    // Containers
-    let all_containers = docker
-        .list_containers(Some(ListContainersOptions::<String> {
-            all: true,
-            ..Default::default()
-        }))
-        .await
-        .map_err(|e| ApiError::default().with_message(e.to_string()))?;
 
     let mut running = 0usize;
     let mut stopped = 0usize;
@@ -94,34 +151,11 @@ pub async fn get_info(State(state): State<AppState>) -> ApiResult<EnvironmentInf
         }
     }
 
-    // Volumes
-    let volumes = docker
-        .list_volumes::<String>(None)
-        .await
-        .map_err(|e| ApiError::default().with_message(e.to_string()))?
-        .volumes
-        .unwrap_or_default()
-        .len();
+    let volumes = volumes_response.volumes.unwrap_or_default().len();
+    let images = images_response.len();
+    let networks = networks_response.len();
 
-    // Images
-    let images = docker
-        .list_images(Some(ListImagesOptions::<String> {
-            all: false,
-            filters: HashMap::new(),
-            ..Default::default()
-        }))
-        .await
-        .map_err(|e| ApiError::default().with_message(e.to_string()))?
-        .len();
-
-    // Networks
-    let networks = docker
-        .list_networks::<String>(None)
-        .await
-        .map_err(|e| ApiError::default().with_message(e.to_string()))?
-        .len();
-
-    Ok(ApiSuccess::default().with_data(EnvironmentInfo {
+    Ok(EnvironmentInfo {
         docker_version,
         api_version,
         os,
@@ -144,5 +178,5 @@ pub async fn get_info(State(state): State<AppState>) -> ApiResult<EnvironmentInf
         networks,
         cpu_count,
         memory_total,
-    }))
+    })
 }

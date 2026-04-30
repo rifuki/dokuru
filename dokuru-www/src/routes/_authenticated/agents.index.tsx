@@ -373,6 +373,7 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
 function AgentsList() {
   const navigate = useNavigate();
   const { agents, isLoading, fetchAgents, updateAgent, agentInfos, setAgentInfo, setAgentInfoLoading, setAgentInfoError, agentOnlineStatus, agentConnectingStatus, agentConnectionError } = useAgentStore();
+  const infoRequestsRef = useRef(new Set<string>());
   const previousOnlineStatusRef = useRef<Record<string, boolean | undefined>>({});
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSetupGuideOpen, setIsSetupGuideOpen] = useState(false);
@@ -399,7 +400,8 @@ function AgentsList() {
 
   function loadDockerInfo(agent: Agent, force = false) {
     const cached = agentInfos[agent.id];
-    if (!force && (cached?.loading || cached?.info)) return;
+    if (infoRequestsRef.current.has(agent.id) || cached?.loading) return;
+    if (!force && cached?.info) return;
 
     const token = agent.access_mode === "relay" ? dockerCredential(agent) : agent.token ?? getAgentToken(agent.id);
     if (!token) {
@@ -407,10 +409,12 @@ function AgentsList() {
       return;
     }
 
+    infoRequestsRef.current.add(agent.id);
     setAgentInfoLoading(agent.id, true);
     agentDirectApi.getInfo(agent.url, token)
       .then((info) => setAgentInfo(agent.id, info))
-      .catch((error) => setAgentInfoError(agent.id, getDockerInfoErrorMessage(error)));
+      .catch((error) => setAgentInfoError(agent.id, getDockerInfoErrorMessage(error)))
+      .finally(() => infoRequestsRef.current.delete(agent.id));
   }
 
   const copyInstallCommand = async () => {
