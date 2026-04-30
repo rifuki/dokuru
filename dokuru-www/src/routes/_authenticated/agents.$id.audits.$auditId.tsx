@@ -85,7 +85,7 @@ function failedSeverityTone(severity: string) {
   if (severity === "High") {
     return {
       borderLeft: "border-l-red-400",
-      cardTone: "border-red-500/35 bg-red-500/[0.025] hover:bg-red-500/[0.04]",
+      cardTone: "border-border bg-card/95 hover:bg-muted/[0.08]",
       icon: "text-red-500",
     };
   }
@@ -93,14 +93,14 @@ function failedSeverityTone(severity: string) {
   if (severity === "Medium") {
     return {
       borderLeft: "border-l-amber-400",
-      cardTone: "border-amber-500/35 bg-amber-500/[0.025] hover:bg-amber-500/[0.04]",
+      cardTone: "border-border bg-card/95 hover:bg-muted/[0.08]",
       icon: "text-amber-400",
     };
   }
 
   return {
     borderLeft: "border-l-muted-foreground/40",
-    cardTone: "border-border bg-card hover:bg-muted/20",
+    cardTone: "border-border bg-card/95 hover:bg-muted/[0.08]",
     icon: "text-muted-foreground",
   };
 }
@@ -305,24 +305,24 @@ function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, 
   ].filter(t => t.show);
 
   return (
-    <div ref={cardRef} className={cn("rounded-lg border border-l-[3px] transition-colors", borderLeft, cardTone, isFocused && "ring-2 ring-primary/40")}>
+    <div ref={cardRef} className={cn("overflow-hidden rounded-xl border border-l-[3px] shadow-sm transition-colors", borderLeft, cardTone, isFocused && "ring-2 ring-primary/40")}>
       {/* Header row */}
-      <div className="px-4 py-3 flex items-center gap-3">
+      <div className="px-5 py-4 flex items-center gap-3">
         <button onClick={() => setOpen(v => !v)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
           <StatusIcon status={status} severity={rule.severity} />
           <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-1.5 mb-1">
-              <span className="font-mono text-[11px] font-bold text-muted-foreground/70 bg-muted/40 px-1.5 py-0.5 rounded">
+            <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+              <span className="inline-flex h-6 items-center rounded-md border border-border/70 bg-muted/35 px-2 font-mono text-[11px] font-bold text-muted-foreground/80">
                 {rule.id}
               </span>
-              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded border bg-muted/30 border-border text-muted-foreground">
+              <span className="inline-flex h-6 items-center gap-1.5 rounded-md border border-border/70 bg-muted/25 px-2 text-xs font-medium text-muted-foreground">
                 <PillarIcon size={10} className={pillarMeta.color} />
                 {pillarMeta.name}
               </span>
               <SeverityBadge severity={rule.severity} status={status} />
               {affected.length > 0 && (
-                <span className="inline-flex items-center gap-1 text-[10px] text-amber-400 border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.5 rounded font-medium">
-                  <AlertTriangle className="h-2.5 w-2.5" />
+                <span className="inline-flex h-6 items-center gap-1 rounded-md border border-border/70 bg-muted/25 px-2 text-xs font-medium text-muted-foreground">
+                  <AlertTriangle className="h-3 w-3 text-muted-foreground/65" />
                   {affected.length} affected
                 </span>
               )}
