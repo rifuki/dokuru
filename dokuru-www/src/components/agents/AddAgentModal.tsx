@@ -222,17 +222,17 @@ export function AddAgentModal({ open, onOpenChange, onOpenSetupGuide }: AddAgent
                             </div>
 
                             <div className="space-y-1.5">
-                                <Label htmlFor="token" className="text-sm font-medium">Agent Token</Label>
+                                <Label htmlFor="add-agent-token" className="text-sm font-medium">Agent Token</Label>
                                 <Input
-                                    id="token"
-                                    name="agent_access_token"
-                                    type="text"
+                                    id="add-agent-token"
+                                    name="dokuru_agent_secret_new"
+                                    type="password"
                                     inputMode="text"
                                     placeholder="dok_..."
                                     value={token}
                                     onChange={(e) => setToken(e.target.value.trim())}
                                     disabled={isLoading}
-                                    autoComplete="new-password"
+                                    autoComplete="one-time-code"
                                     autoCorrect="off"
                                     autoCapitalize="off"
                                     spellCheck={false}

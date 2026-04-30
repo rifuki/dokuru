@@ -169,14 +169,14 @@ export function EditAgentModal({
                                 <div className="relative">
                                     <Input
                                         id="edit-agent-token"
-                                        name="agent_access_token"
+                                        name="dokuru_agent_secret_edit"
                                         type={showToken ? "text" : "password"}
                                         inputMode="text"
                                         placeholder="New token (optional)"
                                         value={token}
                                         onChange={(event) => onTokenChange(event.target.value.trim())}
                                         disabled={isSaving}
-                                        autoComplete="new-password"
+                                        autoComplete="one-time-code"
                                         autoCorrect="off"
                                         autoCapitalize="off"
                                         spellCheck={false}
