@@ -1,9 +1,9 @@
 import {
-    Sheet, SheetContent, SheetHeader,
+    Sheet, SheetClose, SheetContent, SheetHeader,
 } from "@/components/ui/sheet";
 import {
-    AlertTriangle, CheckCircle2, Loader2, XCircle, Zap,
-    RefreshCw, Check, ShieldAlert,
+    AlertTriangle, CheckCircle2, Loader2, XCircle,
+    RefreshCw, Check, ShieldAlert, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isNamespaceRecreateRule } from "@/features/audit/hooks/useFix";
@@ -19,27 +19,39 @@ const STEPS: { key: FixAllStep; label: string }[] = [
 
 function StepIndicator({ current }: { current: FixAllStep }) {
     const idx = STEPS.findIndex(s => s.key === current);
+    const progress = idx <= 0 ? 0 : (idx / (STEPS.length - 1)) * 100;
+
     return (
-        <div className="grid grid-cols-3 gap-1 rounded-xl border border-white/10 bg-white/[0.025] p-1">
-            {STEPS.map((s, i) => (
+        <div className="space-y-3" aria-label="Fix progress">
+            <div className="h-1 overflow-hidden rounded-full bg-white/10">
                 <div
-                    key={s.key}
-                    className={cn(
-                        "flex items-center justify-center gap-2 rounded-lg px-2 py-2 transition-colors",
-                        i === idx ? "bg-[#2496ED] text-white" : i < idx ? "text-white/70" : "text-white/25"
-                    )}
-                >
-                    <span className={cn(
-                        "flex h-5 w-5 items-center justify-center rounded-full border text-[10px] font-mono font-bold",
-                        i === idx ? "border-white/30 bg-white/15" : i < idx ? "border-[#2496ED]/40 bg-[#2496ED]/10 text-[#2496ED]" : "border-white/15"
-                    )}>
-                        {i < idx ? <Check size={10} strokeWidth={3} /> : i + 1}
-                    </span>
-                    <span className="font-mono text-[9px] uppercase tracking-[0.16em] whitespace-nowrap">
-                        {s.label}
-                    </span>
-                </div>
-            ))}
+                    className="h-full rounded-full bg-[#2496ED] transition-all duration-500"
+                    style={{ width: `${progress}%` }}
+                />
+            </div>
+            <div className="grid grid-cols-3 text-xs">
+                {STEPS.map((s, i) => (
+                    <div
+                        key={s.key}
+                        className={cn(
+                            "flex items-center gap-2",
+                            i === 1 && "justify-center",
+                            i === 2 && "justify-end"
+                        )}
+                    >
+                        <span className={cn(
+                            "h-2 w-2 rounded-full transition-colors",
+                            i <= idx ? "bg-[#2496ED]" : "bg-white/18"
+                        )} />
+                        <span className={cn(
+                            "font-medium",
+                            i === idx ? "text-white" : i < idx ? "text-white/55" : "text-white/35"
+                        )}>
+                            {s.label}
+                        </span>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }
@@ -93,24 +105,24 @@ function RuleRow({
                 <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-mono font-bold text-white/60 text-[11px]">{rs.ruleId}</span>
                     {isRecreate && (
-                        <span className="text-[9px] font-mono text-amber-400/70 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">
+                        <span className="rounded border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-300/80">
                             recreate
                         </span>
                     )}
                     {rs.highRisk && (
-                        <span className="inline-flex items-center gap-1 text-[9px] font-mono text-rose-400/75 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded">
+                        <span className="inline-flex items-center gap-1 rounded border border-rose-500/20 bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-medium text-rose-300/85">
                             <ShieldAlert className="h-2.5 w-2.5" /> risky
                         </span>
                     )}
                 </div>
                 <p className={cn(
-                    "text-[11px] mt-0.5 leading-snug truncate",
+                    "mt-1 truncate text-xs leading-snug",
                     skipped
                         ? "text-white/22"
                         : rs.state === "done"
                         ? applied ? "text-emerald-400/80" : "text-rose-400/80"
                         : rs.state === "applying" ? "text-white/80"
-                        : "text-white/30"
+                        : rs.selected ? "text-white/60" : "text-white/35"
                 )}>
                     {skipped
                         ? "Skipped by selection"
@@ -131,9 +143,9 @@ function RuleRow({
                     {applied ? "applied" : "blocked"}
                 </span>
             )}
-            {!showOutcome && rs.state === "pending" && (
-                <span className="text-[9px] font-mono text-white/20 shrink-0">
-                    {rs.selected ? "selected" : "skipped"}
+            {!showOutcome && rs.state === "pending" && !rs.selected && (
+                <span className="shrink-0 text-[10px] text-white/25">
+                    skipped
                 </span>
             )}
         </button>
@@ -158,13 +170,13 @@ function ConfirmStep({
     return (
         <div className="flex flex-col gap-5">
             {highRiskCount > 0 && (
-                <div className="flex items-start gap-3 rounded-lg border border-rose-500/30 bg-rose-500/8 px-4 py-3">
+                <div className="flex items-start gap-3 rounded-xl border border-rose-500/25 bg-rose-500/[0.06] px-4 py-3.5">
                     <ShieldAlert className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
                     <div className="space-y-0.5">
-                        <p className="text-xs font-semibold text-rose-400">
+                        <p className="text-sm font-semibold text-white/90">
                             Risky auto-fixes are not selected by default
                         </p>
-                        <p className="text-xs text-rose-400/70 leading-relaxed">
+                        <p className="text-sm text-white/62 leading-relaxed">
                             Recreate/user namespace fixes like 5.31 can restart containers. Select them manually only when you are ready.
                         </p>
                     </div>
@@ -172,13 +184,13 @@ function ConfirmStep({
             )}
 
             {recreateCount > 0 && (
-                <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/8 px-4 py-3">
+                <div className="flex items-start gap-3 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-4 py-3.5">
                     <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
                     <div className="space-y-0.5">
-                        <p className="text-xs font-semibold text-amber-400">
+                        <p className="text-sm font-semibold text-white/90">
                             {recreateCount} rule{recreateCount > 1 ? "s" : ""} require container restart
                         </p>
-                        <p className="text-xs text-amber-400/70 leading-relaxed">
+                        <p className="text-sm text-white/62 leading-relaxed">
                             Namespace and privileged flags require stop → recreate → start. Expect ~5 seconds of downtime per affected container.
                         </p>
                     </div>
@@ -187,24 +199,24 @@ function ConfirmStep({
 
             <div>
                 <div className="mb-2 flex items-center justify-between gap-3">
-                    <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/40">
-                        {selectedCount}/{ruleStatuses.length} rules selected
+                    <p className="text-sm font-medium text-white/45">
+                        {selectedCount} of {ruleStatuses.length} rules selected
                     </p>
                     <div className="flex items-center gap-2">
                         <button
                             type="button"
                             onClick={() => onSetAllSelected(true)}
-                            className="text-[10px] font-mono uppercase tracking-[0.14em] text-[#2496ED]/70 hover:text-[#2496ED]"
+                            className="text-sm font-medium text-[#2496ED]/75 hover:text-[#2496ED]"
                         >
-                            select all
+                            Select all
                         </button>
                         <span className="text-white/15">/</span>
                         <button
                             type="button"
                             onClick={() => onSetAllSelected(false)}
-                            className="text-[10px] font-mono uppercase tracking-[0.14em] text-white/35 hover:text-white/70"
+                            className="text-sm font-medium text-white/35 hover:text-white/70"
                         >
-                            clear
+                            Clear
                         </button>
                     </div>
                 </div>
@@ -233,7 +245,6 @@ function ConfirmStep({
                     disabled={selectedCount === 0}
                     className="flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-[#2496ED] hover:bg-[#1e80cc] disabled:bg-white/10 disabled:text-white/25 disabled:shadow-none px-4 py-2.5 text-sm font-semibold text-white shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] transition-all hover:shadow-[0_0_24px_-4px_rgba(36,150,237,0.65)] active:scale-[0.98]"
                 >
-                    <Zap className="h-3.5 w-3.5" />
                     Apply {selectedCount} Selected
                 </button>
             </div>
@@ -388,11 +399,19 @@ export function FixAllWizard({
         <Sheet open={open} onOpenChange={(v) => { if (!v && step !== "applying") onClose(); }}>
             <SheetContent
                 side="right"
+                showCloseButton={false}
                 className="w-full sm:max-w-[520px] bg-[#09090B] border-l border-white/8 p-0 flex flex-col gap-0 overflow-hidden"
             >
+                <SheetClose
+                    disabled={step === "applying"}
+                    className="absolute right-5 top-5 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/55 transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white disabled:pointer-events-none disabled:opacity-30"
+                >
+                    <X className="h-4 w-4" />
+                    <span className="sr-only">Close</span>
+                </SheetClose>
                 {/* Header */}
                 <SheetHeader className="px-6 pt-6 pb-5 border-b border-white/8 space-y-5">
-                    <div className="flex items-start justify-between gap-4 pr-8">
+                    <div className="pr-12">
                         <div className="min-w-0 space-y-1.5">
                             <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/35">
                                 Bulk remediation
@@ -403,9 +422,6 @@ export function FixAllWizard({
                             <p className="text-xs text-white/45">
                                 {selectedCount} of {ruleStatuses.length} rules selected
                             </p>
-                        </div>
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#2496ED]/25 bg-[#2496ED]/10 text-[#2496ED]">
-                            <Zap className="h-4 w-4" />
                         </div>
                     </div>
                     <StepIndicator current={step} />

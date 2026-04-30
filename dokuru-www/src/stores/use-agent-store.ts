@@ -52,13 +52,57 @@ function agentInfoCacheKey(agentId: string) {
 
 function readCachedAgentInfo(agent: Agent): DockerInfo | null {
   try {
-    const raw = localStorage.getItem(agentInfoCacheKey(agent.id));
+    const key = agentInfoCacheKey(agent.id);
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
-    const cached = JSON.parse(raw) as CachedAgentInfo;
-    return cached.url === agent.url ? cached.info : null;
+    const cached = JSON.parse(raw) as unknown;
+    if (!isCachedAgentInfo(cached) || cached.url !== agent.url) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return cached.info;
   } catch {
     return null;
   }
+}
+
+function isCachedAgentInfo(value: unknown): value is CachedAgentInfo {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.url === "string" &&
+    typeof value.cachedAt === "number" &&
+    Number.isFinite(value.cachedAt) &&
+    isDockerInfo(value.info)
+  );
+}
+
+function isDockerInfo(value: unknown): value is DockerInfo {
+  if (!isRecord(value) || !isRecord(value.containers)) return false;
+
+  return (
+    typeof value.docker_version === "string" &&
+    typeof value.os === "string" &&
+    typeof value.architecture === "string" &&
+    isFiniteNumber(value.stacks) &&
+    isFiniteNumber(value.images) &&
+    isFiniteNumber(value.volumes) &&
+    isFiniteNumber(value.networks) &&
+    isFiniteNumber(value.cpu_count) &&
+    isFiniteNumber(value.memory_total) &&
+    isFiniteNumber(value.containers.total) &&
+    isFiniteNumber(value.containers.running) &&
+    isFiniteNumber(value.containers.stopped) &&
+    isFiniteNumber(value.containers.healthy) &&
+    isFiniteNumber(value.containers.unhealthy)
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function writeCachedAgentInfo(agentId: string, info: DockerInfo | null) {

@@ -8,8 +8,9 @@ use axum::{
 use bollard::system::EventsOptions;
 use futures_util::{SinkExt, StreamExt};
 use serde::Serialize;
+use tokio::sync::mpsc;
 use tokio::time::{Duration, interval};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::api::{feature::info, state::AppState};
 
@@ -51,19 +52,27 @@ struct InfoErrorMessage {
     message: String,
 }
 
+enum InfoWsMessage {
+    Update(InfoUpdateMessage),
+    Error(InfoErrorMessage),
+}
+
 async fn handle_socket(socket: WebSocket, state: AppState) {
     info!("WebSocket client connected");
 
     let (mut sender, mut receiver) = socket.split();
-    if send_info_update(&mut sender, &state, "connected")
-        .await
-        .is_err()
-    {
-        return;
-    }
 
-    let mut docker_events = state.docker.events(None::<EventsOptions<String>>);
+    let (info_request_tx, info_request_rx) = mpsc::channel::<&'static str>(8);
+    let (info_message_tx, mut info_message_rx) = mpsc::channel::<InfoWsMessage>(8);
+    spawn_info_refresh_worker(state.clone(), info_request_rx, info_message_tx);
+
+    let (docker_event_tx, mut docker_event_rx) = mpsc::channel::<()>(32);
+    spawn_docker_event_watcher(state.clone(), docker_event_tx);
+
+    let _ = info_request_tx.try_send("connected");
     let mut info_update_pending = false;
+    let mut info_channel_open = true;
+    let mut docker_event_channel_open = true;
 
     // 15 s interval — well under Cloudflare Tunnel's ~60 s idle timeout.
     let mut ticker = interval(Duration::from_secs(15));
@@ -85,18 +94,25 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                     break;
                 }
             }
-            event = docker_events.next() => {
-                match event {
-                    Some(Ok(_)) => info_update_pending = true,
-                    Some(Err(e)) => debug!("Docker event stream error: {e}"),
-                    None => break,
+            message = info_message_rx.recv(), if info_channel_open => {
+                match message {
+                    Some(message) => {
+                        if send_info_message(&mut sender, message).await.is_err() {
+                            break;
+                        }
+                    }
+                    None => info_channel_open = false,
+                }
+            }
+            docker_event = docker_event_rx.recv(), if docker_event_channel_open => {
+                match docker_event {
+                    Some(()) => info_update_pending = true,
+                    None => docker_event_channel_open = false,
                 }
             }
             _ = info_update_ticker.tick(), if info_update_pending => {
                 info_update_pending = false;
-                if send_info_update(&mut sender, &state, "docker-event").await.is_err() {
-                    break;
-                }
+                let _ = info_request_tx.try_send("docker-event");
             }
         }
     }
@@ -104,33 +120,61 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     info!("WebSocket client disconnected");
 }
 
-async fn send_info_update(
-    sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
-    state: &AppState,
-    reason: &'static str,
-) -> Result<(), axum::Error> {
+fn spawn_info_refresh_worker(
+    state: AppState,
+    mut request_rx: mpsc::Receiver<&'static str>,
+    message_tx: mpsc::Sender<InfoWsMessage>,
+) {
+    tokio::spawn(async move {
+        while let Some(reason) = request_rx.recv().await {
+            let message = info_update_message(&state, reason).await;
+            if message_tx.send(message).await.is_err() {
+                break;
+            }
+        }
+    });
+}
+
+fn spawn_docker_event_watcher(state: AppState, event_tx: mpsc::Sender<()>) {
+    tokio::spawn(async move {
+        let mut docker_events = state.docker.events(None::<EventsOptions<String>>);
+
+        while let Some(event) = docker_events.next().await {
+            match event {
+                Ok(_) => {
+                    if event_tx.send(()).await.is_err() {
+                        break;
+                    }
+                }
+                Err(error) => debug!("Docker event stream error: {error}"),
+            }
+        }
+
+        warn!("Docker event stream ended; keeping status WebSocket alive without event pushes");
+    });
+}
+
+async fn info_update_message(state: &AppState, reason: &'static str) -> InfoWsMessage {
     match info::refresh_environment_info_snapshot(state).await {
-        Ok(data) => {
-            send_json(
-                sender,
-                &InfoUpdateMessage {
-                    r#type: "info:update",
-                    reason,
-                    data,
-                },
-            )
-            .await
-        }
-        Err(error) => {
-            send_json(
-                sender,
-                &InfoErrorMessage {
-                    r#type: "info:error",
-                    message: error.message,
-                },
-            )
-            .await
-        }
+        Ok(data) => InfoWsMessage::Update(InfoUpdateMessage {
+            r#type: "info:update",
+            reason,
+            data,
+        }),
+        Err(error) => InfoWsMessage::Error(InfoErrorMessage {
+            r#type: "info:error",
+            message: error.message,
+        }),
+    }
+}
+
+async fn send_info_message(
+    sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
+    message: InfoWsMessage,
+) -> Result<(), axum::Error> {
+    match message {
+        InfoWsMessage::Update(update) => send_json(sender, &update).await,
+        InfoWsMessage::Error(error) => send_json(sender, &error).await,
     }
 }
 
@@ -154,4 +198,63 @@ async fn send_keepalive_ping(
     // Tunnel treats as keepalive activity.
     debug!("Sending protocol ping to WS client");
     sender.send(Message::Ping(vec![].into())).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_info() -> info::handlers::EnvironmentInfo {
+        info::handlers::EnvironmentInfo {
+            docker_version: "29.4.1".to_string(),
+            api_version: Some("1.45".to_string()),
+            os: "linux".to_string(),
+            architecture: "x86_64".to_string(),
+            hostname: Some("test-host".to_string()),
+            kernel_version: Some("6.8".to_string()),
+            docker_root_dir: Some("/var/lib/docker".to_string()),
+            storage_driver: Some("overlay2".to_string()),
+            logging_driver: Some("json-file".to_string()),
+            containers: info::handlers::ContainerStats {
+                total: 2,
+                running: 1,
+                stopped: 1,
+                healthy: 1,
+                unhealthy: 0,
+            },
+            stacks: 1,
+            volumes: 3,
+            images: 4,
+            networks: 5,
+            cpu_count: 2,
+            memory_total: 4 * 1024 * 1024 * 1024,
+        }
+    }
+
+    #[test]
+    fn info_update_message_contract_is_stable() {
+        let value = serde_json::to_value(InfoUpdateMessage {
+            r#type: "info:update",
+            reason: "connected",
+            data: sample_info(),
+        })
+        .expect("message should serialize");
+
+        assert_eq!(value["type"], "info:update");
+        assert_eq!(value["reason"], "connected");
+        assert_eq!(value["data"]["docker_version"], "29.4.1");
+        assert_eq!(value["data"]["containers"]["running"], 1);
+    }
+
+    #[test]
+    fn info_error_message_contract_is_stable() {
+        let value = serde_json::to_value(InfoErrorMessage {
+            r#type: "info:error",
+            message: "docker unavailable".to_string(),
+        })
+        .expect("message should serialize");
+
+        assert_eq!(value["type"], "info:error");
+        assert_eq!(value["message"], "docker unavailable");
+    }
 }
