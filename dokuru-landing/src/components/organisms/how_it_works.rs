@@ -21,7 +21,7 @@ pub(crate) fn HowItWorks() -> impl IntoView {
             <div class="max-w-7xl mx-auto px-6 md:px-10">
                 <div node_ref=heading_ref class="reveal mb-14 max-w-3xl">
                     <div class="font-mono text-[11px] uppercase tracking-[0.22em] text-[#2496ED] mb-4">"/ how it works"</div>
-                    <h2 class="font-heading text-4xl md:text-5xl font-extrabold tracking-tighter text-white leading-[1.08]">
+                    <h2 class="font-heading text-3xl md:text-4xl font-bold tracking-tight text-white leading-[1.1]">
                         "Three steps from"
                         <br class="hidden sm:block"/>
                         "install to audit."

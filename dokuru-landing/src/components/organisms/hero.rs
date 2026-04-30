@@ -21,25 +21,25 @@ pub(crate) fn Hero() -> impl IntoView {
 
                 <div class="grid lg:grid-cols-12 gap-10 lg:gap-14 items-start">
                     <div class="lg:col-span-7">
-                        <h1 data-testid="hero-headline" class="animate-enter-up font-heading text-4xl sm:text-5xl lg:text-7xl font-extrabold tracking-tighter leading-[0.98] text-white" style="--motion-delay: 300ms; --motion-duration: 800ms">
-                            "Monitor Docker"
+                        <h1 data-testid="hero-headline" class="animate-enter-up font-heading text-4xl sm:text-5xl lg:text-[56px] font-bold tracking-tight leading-[1.05] text-white" style="--motion-delay: 300ms; --motion-duration: 800ms">
+                            "Focused Docker"
                             <br/>
-                            "security across"
+                            "security audits."
                             <br/>
-                            <span class="relative inline-block">
-                                <span>"your infrastructure."</span>
-                                <span class="hero-underline absolute -bottom-2 left-0 right-0 h-px bg-white/25 origin-left"/>
+                            <span class="relative inline-block mt-1">
+                                <span class="text-zinc-300">"Made actionable."</span>
+                                <span class="hero-underline absolute -bottom-2 left-0 right-0 h-px bg-[#2496ED]/50 origin-left"/>
                             </span>
                         </h1>
 
-                        <p data-testid="hero-subheadline" class="animate-enter-up mt-7 text-lg md:text-xl text-zinc-400 leading-relaxed max-w-2xl" style="--motion-delay: 500ms; --motion-duration: 600ms">
-                            "Dokuru audits Docker hosts using CIS-aligned checks focused on "
-                            <span class="text-zinc-200">"namespace isolation"</span>
+                        <p data-testid="hero-subheadline" class="animate-enter-up mt-6 text-[17px] md:text-[18px] text-zinc-400 leading-relaxed max-w-xl" style="--motion-delay: 500ms; --motion-duration: 600ms">
+                            "Dokuru validates your hosts against CIS benchmarks, zeroing in on "
+                            <span class="text-zinc-200 font-medium">"namespace isolation"</span>
                             ", "
-                            <span class="text-zinc-200">"cgroup controls"</span>
+                            <span class="text-zinc-200 font-medium">"cgroups"</span>
                             ", and "
-                            <span class="text-zinc-200">"critical runtime hardening"</span>
-                            "."
+                            <span class="text-zinc-200 font-medium">"runtime flags"</span>
+                            " — with proof for every finding."
                         </p>
 
                         <div class="animate-enter-up mt-9 flex flex-wrap items-center gap-3" style="--motion-delay: 700ms; --motion-duration: 600ms">
