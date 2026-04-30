@@ -60,13 +60,11 @@ pub async fn get_info(State(state): State<AppState>) -> ApiResult<EnvironmentInf
     Ok(ApiSuccess::default().with_data(info))
 }
 
-pub(crate) async fn environment_info_snapshot(
-    state: &AppState,
-) -> Result<EnvironmentInfo, ApiError> {
+pub async fn environment_info_snapshot(state: &AppState) -> Result<EnvironmentInfo, ApiError> {
     get_cached_or_fetch(|| fetch_environment_info(state)).await
 }
 
-pub(crate) async fn refresh_environment_info_snapshot(
+pub async fn refresh_environment_info_snapshot(
     state: &AppState,
 ) -> Result<EnvironmentInfo, ApiError> {
     let _guard = INFO_REFRESH_LOCK.lock().await;

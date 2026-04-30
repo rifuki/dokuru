@@ -53,7 +53,7 @@ struct InfoErrorMessage {
 }
 
 enum InfoWsMessage {
-    Update(InfoUpdateMessage),
+    Update(Box<InfoUpdateMessage>),
     Error(InfoErrorMessage),
 }
 
@@ -156,11 +156,11 @@ fn spawn_docker_event_watcher(state: AppState, event_tx: mpsc::Sender<()>) {
 
 async fn info_update_message(state: &AppState, reason: &'static str) -> InfoWsMessage {
     match info::refresh_environment_info_snapshot(state).await {
-        Ok(data) => InfoWsMessage::Update(InfoUpdateMessage {
+        Ok(data) => InfoWsMessage::Update(Box::new(InfoUpdateMessage {
             r#type: "info:update",
             reason,
             data,
-        }),
+        })),
         Err(error) => InfoWsMessage::Error(InfoErrorMessage {
             r#type: "info:error",
             message: error.message,
@@ -178,7 +178,7 @@ async fn send_info_message(
     }
 }
 
-async fn send_json<T: Serialize>(
+async fn send_json<T: Serialize + Sync>(
     sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
     value: &T,
 ) -> Result<(), axum::Error> {
