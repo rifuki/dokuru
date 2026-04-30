@@ -17,7 +17,7 @@ import {
     Play, Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
     Terminal, Wrench, ExternalLink, AlertTriangle, Info, Server,
     Clock, Cpu, Container, RefreshCw, Zap, BookOpen, CheckCircle2,
-    RotateCcw, ShieldAlert, XCircle, ListChecks, ArrowDownToLine,
+    RotateCcw, ShieldAlert, XCircle, ListChecks,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -687,38 +687,48 @@ function AuditRunTerminal({
     }, [autoScroll, current, error, lines.length]);
 
     return (
-        <div className="flex h-full w-full animate-in flex-col overflow-hidden bg-[#03070C] text-left fade-in zoom-in-95 duration-500">
-            <div className="flex items-center justify-between gap-4 border-b border-white/8 bg-white/[0.025] px-5 py-4">
+        <div className="flex h-full w-full animate-in flex-col overflow-hidden bg-card text-left fade-in zoom-in-95 duration-500">
+            <div className="flex items-center justify-between gap-4 border-b border-border bg-muted/10 px-5 py-4">
                 <div className="flex min-w-0 items-center gap-3">
                     <div className="flex shrink-0 items-center gap-1.5" aria-hidden="true">
                         <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f56]" />
                         <span className="h-2.5 w-2.5 rounded-full bg-[#ffbd2e]" />
                         <span className="h-2.5 w-2.5 rounded-full bg-[#27c93f]" />
                     </div>
-                    <div className="h-5 w-px shrink-0 bg-white/10" />
-                    <Terminal className="h-4 w-4 shrink-0 text-[#2496ED]" />
+                    <div className="h-5 w-px shrink-0 bg-border" />
+                    <Terminal className="h-4 w-4 shrink-0 text-primary" />
                     <div className="min-w-0">
-                        <h3 className="truncate text-sm font-semibold text-white">Live security audit</h3>
-                        <p className="mt-0.5 truncate font-mono text-[10px] uppercase tracking-[0.18em] text-[#2496ED]">
+                        <h3 className="truncate text-sm font-semibold text-foreground">Live security audit</h3>
+                        <p className="mt-0.5 truncate font-mono text-[10px] uppercase tracking-[0.18em] text-primary">
                             CIS Docker Benchmark v1.8.0
                         </p>
                     </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
-                    <button
-                        type="button"
-                        onClick={() => setAutoScroll((value) => !value)}
-                        className={cn(
-                            "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] transition-colors",
-                            autoScroll
-                                ? "border-[#2496ED]/35 bg-[#2496ED]/10 text-[#2496ED]"
-                                : "border-white/10 bg-white/[0.03] text-white/45 hover:text-white/70",
-                        )}
-                    >
-                        <ArrowDownToLine className="h-3 w-3" />
-                        Auto scroll {autoScroll ? "on" : "off"}
-                    </button>
-                    <span className="font-mono text-[11px] text-white/45">
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-muted-foreground">Auto Scroll</span>
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={autoScroll}
+                            aria-label="Toggle audit terminal auto scroll"
+                            onClick={() => setAutoScroll((value) => !value)}
+                            className={cn(
+                                "relative h-5 w-9 rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                                autoScroll
+                                    ? "border-emerald-400/30 bg-emerald-500"
+                                    : "border-border bg-muted",
+                            )}
+                        >
+                            <span
+                                className={cn(
+                                    "absolute left-0.5 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-white shadow-sm transition-transform",
+                                    autoScroll ? "translate-x-4" : "translate-x-0",
+                                )}
+                            />
+                        </button>
+                    </div>
+                    <span className="font-mono text-[11px] text-muted-foreground">
                         {current}/{total || "?"} · {pct}%
                     </span>
                 </div>
@@ -727,7 +737,7 @@ function AuditRunTerminal({
             <div className="flex min-h-0 flex-1 flex-col gap-4 px-5 py-4">
                 <div className="space-y-1.5">
                     <div className="flex items-center justify-between gap-3">
-                        <p className="font-mono text-xs text-white/70 truncate">
+                        <p className="font-mono text-xs text-muted-foreground truncate">
                             {error
                                 ? "audit stream failed"
                                 : latest
@@ -737,10 +747,10 @@ function AuditRunTerminal({
                         {error ? (
                             <XCircle className="h-4 w-4 text-rose-400 shrink-0" />
                         ) : (
-                            <Loader2 className="h-4 w-4 animate-spin text-[#2496ED] shrink-0" />
+                            <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
                         )}
                     </div>
-                    <div className="h-2 rounded-full bg-white/7 overflow-hidden">
+                    <div className="h-2 rounded-full bg-muted/50 overflow-hidden">
                         <div
                             className={cn("h-full rounded-full transition-all duration-500", error ? "bg-rose-500" : "bg-[#2496ED]")}
                             style={{ width: `${pct}%` }}
@@ -748,23 +758,23 @@ function AuditRunTerminal({
                     </div>
                 </div>
 
-                <div ref={logRef} className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-white/8 bg-black/35 p-4 font-mono text-[11px] leading-relaxed shadow-inner">
+                <div ref={logRef} className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-zinc-950 p-4 font-mono text-[11px] leading-relaxed">
                     {lines.length === 0 && !error && (
-                        <p className="text-white/35">$ connecting to dokuru-agent audit websocket...</p>
+                        <p className="text-muted-foreground/50">$ connecting to dokuru-agent audit websocket...</p>
                     )}
                     {lines.slice(-8).map(line => (
-                        <div key={`${line.ruleId}-${line.index}`} className="space-y-0.5 border-b border-white/5 py-1.5 last:border-b-0">
+                        <div key={`${line.ruleId}-${line.index}`} className="space-y-0.5 border-b border-border/50 py-1.5 last:border-b-0">
                             <div className="flex items-center gap-2">
-                                <span className="text-white/25">[{line.index.toString().padStart(2, "0")}/{line.total}]</span>
+                                <span className="text-muted-foreground/40">[{line.index.toString().padStart(2, "0")}/{line.total}]</span>
                                 <span className={cn(
                                     "font-bold",
                                     line.status === "Pass" ? "text-emerald-400" : line.status === "Fail" ? "text-rose-400" : "text-amber-400",
                                 )}>{line.status.toUpperCase()}</span>
                                 <span className="text-[#2496ED]">{line.ruleId}</span>
-                                <span className="truncate text-white/60">{line.title}</span>
+                                <span className="truncate text-zinc-300">{line.title}</span>
                             </div>
-                            {line.command && <p className="pl-16 text-white/28 truncate">$ {line.command}</p>}
-                            <p className="pl-16 text-white/42 truncate">{line.message}</p>
+                            {line.command && <p className="pl-16 text-zinc-600 truncate">$ {line.command}</p>}
+                            <p className="pl-16 text-zinc-500 truncate">{line.message}</p>
                         </div>
                     ))}
                     {error && <p className="text-rose-400">! {error}</p>}
@@ -1091,9 +1101,9 @@ function AuditPage() {
                 <>
                     {/* ── Run New Audit Card ────────────────────────────── */}
                     <div className={cn(
-                        "relative overflow-hidden rounded-3xl border shadow-[0_30px_110px_-82px_rgba(0,0,0,0.95)] backdrop-blur-sm transition-all duration-500 ease-out",
+                        "relative overflow-hidden rounded-3xl border transition-all duration-500 ease-out",
                         isRunning
-                            ? "h-[500px] border-primary/20 bg-[#03070C] shadow-[0_36px_120px_-72px_rgba(14,165,233,0.45)] sm:h-[520px] md:h-[540px]"
+                            ? "h-[500px] border-border bg-card sm:h-[520px] md:h-[540px]"
                             : "h-[340px] border-border/70 bg-card/90 px-4 py-4 sm:h-[350px] md:h-[360px]",
                     )}>
                         <div className={cn("pointer-events-none absolute inset-0 transition-opacity duration-500", isRunning ? "opacity-0" : "bg-white/[0.018] opacity-100")} />
