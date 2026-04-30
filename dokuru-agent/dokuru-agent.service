@@ -7,7 +7,7 @@ Requires=docker.service
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/dokuru agent --server wss://api.dokuru.rifuki.dev/ws/agent --token YOUR_TOKEN_HERE
+ExecStart=/usr/local/bin/dokuru serve
 Restart=always
 RestartSec=10
 StandardOutput=journal
