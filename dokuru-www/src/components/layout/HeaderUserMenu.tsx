@@ -34,7 +34,7 @@ export function HeaderUserMenu() {
     const { theme, setTheme } = useTheme();
     const displayName = user?.name || user?.email?.split("@")[0] || "User";
     const email = user?.email || "No email set";
-    const menuItemClass = "h-9 rounded-[8px] px-3 text-sm font-medium focus:bg-muted/70 focus:text-foreground dark:focus:bg-white/[0.06] [&_svg]:text-muted-foreground focus:[&_svg]:text-foreground";
+    const menuItemClass = "h-11 cursor-pointer rounded-none px-5 text-sm font-medium focus:bg-primary/15 focus:text-primary dark:focus:bg-primary/20 [&_svg]:text-muted-foreground focus:[&_svg]:text-primary";
 
     return (
         <DropdownMenu>
@@ -48,8 +48,8 @@ export function HeaderUserMenu() {
                     </Avatar>
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 overflow-hidden rounded-[14px] p-1 shadow-xl" sideOffset={8}>
-                <DropdownMenuLabel className="px-2.5 py-3 font-normal">
+            <DropdownMenuContent align="end" className="w-56 overflow-hidden rounded-[14px] p-0 shadow-xl" sideOffset={8}>
+                <DropdownMenuLabel className="px-5 py-4 font-normal">
                     <div className="flex min-w-0 items-center gap-2.5">
                         <Avatar className="h-9 w-9 shrink-0 object-cover">
                             <AvatarImage src={getAvatarUrl(user?.avatar_url)} className="object-cover" />
@@ -63,14 +63,14 @@ export function HeaderUserMenu() {
                         </div>
                     </div>
                 </DropdownMenuLabel>
-                <DropdownMenuSeparator className="-mx-1 my-1" />
+                <DropdownMenuSeparator className="mx-0 my-0" />
                 <DropdownMenuGroup>
                     <DropdownMenuItem onClick={() => navigate({ to: "/settings/profile" })} className={menuItemClass}>
                         <Settings className="mr-2 h-4 w-4" />
                         <span>User Settings</span>
                     </DropdownMenuItem>
                 </DropdownMenuGroup>
-                <DropdownMenuSeparator className="-mx-1 my-1" />
+                <DropdownMenuSeparator className="mx-0 my-0" />
                 <DropdownMenuGroup>
                     <DropdownMenuSub>
                         <DropdownMenuSubTrigger className={menuItemClass}>
@@ -78,7 +78,7 @@ export function HeaderUserMenu() {
                             <span>Theme</span>
                         </DropdownMenuSubTrigger>
                         <DropdownMenuPortal>
-                            <DropdownMenuSubContent className="w-40 rounded-[12px] p-1">
+                            <DropdownMenuSubContent className="w-40 overflow-hidden rounded-[12px] p-0">
                                 <DropdownMenuItem onClick={() => setTheme("light")} className={menuItemClass}>
                                     <Sun className="mr-2 h-4 w-4" />
                                     <span>Light</span>
@@ -98,8 +98,8 @@ export function HeaderUserMenu() {
                         </DropdownMenuPortal>
                     </DropdownMenuSub>
                 </DropdownMenuGroup>
-                <DropdownMenuSeparator className="-mx-1 my-1" />
-                <DropdownMenuItem onClick={() => logout.mutate()} className="h-9 rounded-[8px] px-3 text-sm font-medium text-destructive focus:bg-destructive/10 focus:text-destructive">
+                <DropdownMenuSeparator className="mx-0 my-0" />
+                <DropdownMenuItem onClick={() => logout.mutate()} className="h-11 cursor-pointer rounded-none px-5 text-sm font-medium text-destructive focus:bg-destructive/10 focus:text-destructive">
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Log out</span>
                 </DropdownMenuItem>
