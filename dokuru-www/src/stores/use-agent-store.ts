@@ -7,7 +7,16 @@ export interface AgentInfoEntry {
   info: DockerInfo | null;
   loading: boolean;
   error: string | null;
+  stale: boolean;
 }
+
+type CachedAgentInfo = {
+  url: string;
+  cachedAt: number;
+  info: DockerInfo;
+};
+
+const AGENT_INFO_CACHE_PREFIX = "agent_info_";
 
 interface AgentState {
   agents: Agent[];
@@ -37,6 +46,40 @@ function cacheAgentToken(agent: Agent) {
   }
 }
 
+function agentInfoCacheKey(agentId: string) {
+  return `${AGENT_INFO_CACHE_PREFIX}${agentId}`;
+}
+
+function readCachedAgentInfo(agent: Agent): DockerInfo | null {
+  try {
+    const raw = localStorage.getItem(agentInfoCacheKey(agent.id));
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as CachedAgentInfo;
+    return cached.url === agent.url ? cached.info : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedAgentInfo(agentId: string, info: DockerInfo | null) {
+  try {
+    if (!info) {
+      localStorage.removeItem(agentInfoCacheKey(agentId));
+      return;
+    }
+
+    const agent = useAgentStore.getState().agents.find((item) => item.id === agentId);
+    if (!agent) return;
+
+    localStorage.setItem(
+      agentInfoCacheKey(agentId),
+      JSON.stringify({ url: agent.url, cachedAt: Date.now(), info } satisfies CachedAgentInfo),
+    );
+  } catch {
+    // Local cache is best-effort only.
+  }
+}
+
 export const useAgentStore = create<AgentState>((set) => ({
   agents: [],
   isLoading: false,
@@ -51,7 +94,17 @@ export const useAgentStore = create<AgentState>((set) => ({
     try {
       const agents = await agentApi.list();
       agents.forEach(cacheAgentToken);
-      set({ agents, isLoading: false });
+      set((state) => {
+        const nextInfos = { ...state.agentInfos };
+        for (const agent of agents) {
+          if (nextInfos[agent.id]?.info) continue;
+          const cached = readCachedAgentInfo(agent);
+          if (cached) {
+            nextInfos[agent.id] = { info: cached, loading: false, error: null, stale: true };
+          }
+        }
+        return { agents, agentInfos: nextInfos, isLoading: false };
+      });
     } catch (err) {
       set({ error: (err as Error).message, isLoading: false });
     }
@@ -84,6 +137,7 @@ export const useAgentStore = create<AgentState>((set) => ({
     set({ isLoading: true, error: null });
     try {
       await agentApi.delete(id);
+      localStorage.removeItem(agentInfoCacheKey(id));
       set((state) => ({
         agents: state.agents.filter((a) => a.id !== id),
         isLoading: false,
@@ -106,9 +160,12 @@ export const useAgentStore = create<AgentState>((set) => ({
     set((state) => ({ agentConnectionError: { ...state.agentConnectionError, [id]: error } })),
 
   setAgentInfo: (id, info) =>
-    set((state) => ({
-      agentInfos: { ...state.agentInfos, [id]: { info, loading: false, error: null } },
-    })),
+    set((state) => {
+      writeCachedAgentInfo(id, info);
+      return {
+        agentInfos: { ...state.agentInfos, [id]: { info, loading: false, error: null, stale: false } },
+      };
+    }),
 
   setAgentInfoLoading: (id, loading) =>
     set((state) => ({
@@ -118,6 +175,7 @@ export const useAgentStore = create<AgentState>((set) => ({
           info: state.agentInfos[id]?.info ?? null,
           loading,
           error: loading ? null : state.agentInfos[id]?.error ?? null,
+          stale: state.agentInfos[id]?.stale ?? false,
         },
       },
     })),
@@ -126,7 +184,12 @@ export const useAgentStore = create<AgentState>((set) => ({
     set((state) => ({
       agentInfos: {
         ...state.agentInfos,
-        [id]: { info: state.agentInfos[id]?.info ?? null, loading: false, error },
+        [id]: {
+          info: state.agentInfos[id]?.info ?? null,
+          loading: false,
+          error,
+          stale: state.agentInfos[id]?.stale ?? false,
+        },
       },
     })),
 }));

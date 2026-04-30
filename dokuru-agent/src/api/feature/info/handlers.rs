@@ -14,6 +14,7 @@ use crate::api::infrastructure::web::response::{ApiError, ApiResult, ApiSuccess}
 use crate::api::state::AppState;
 
 const INFO_CACHE_TTL: Duration = Duration::from_secs(5);
+const INFO_EVENT_REFRESH_COALESCE: Duration = Duration::from_secs(1);
 
 static INFO_CACHE: LazyLock<RwLock<Option<CachedEnvironmentInfo>>> =
     LazyLock::new(|| RwLock::new(None));
@@ -55,8 +56,32 @@ pub struct EnvironmentInfo {
 }
 
 pub async fn get_info(State(state): State<AppState>) -> ApiResult<EnvironmentInfo> {
-    let info = get_cached_or_fetch(|| fetch_environment_info(&state)).await?;
+    let info = environment_info_snapshot(&state).await?;
     Ok(ApiSuccess::default().with_data(info))
+}
+
+pub(crate) async fn environment_info_snapshot(
+    state: &AppState,
+) -> Result<EnvironmentInfo, ApiError> {
+    get_cached_or_fetch(|| fetch_environment_info(state)).await
+}
+
+pub(crate) async fn refresh_environment_info_snapshot(
+    state: &AppState,
+) -> Result<EnvironmentInfo, ApiError> {
+    let _guard = INFO_REFRESH_LOCK.lock().await;
+
+    if let Some(info) = cached_environment_info_with_ttl(INFO_EVENT_REFRESH_COALESCE).await {
+        return Ok(info);
+    }
+
+    let info = fetch_environment_info(state).await?;
+    *INFO_CACHE.write().await = Some(CachedEnvironmentInfo {
+        value: info.clone(),
+        refreshed_at: Instant::now(),
+    });
+
+    Ok(info)
 }
 
 async fn get_cached_or_fetch<F, Fut>(fetch: F) -> Result<EnvironmentInfo, ApiError>
@@ -83,10 +108,14 @@ where
 }
 
 async fn cached_environment_info() -> Option<EnvironmentInfo> {
+    cached_environment_info_with_ttl(INFO_CACHE_TTL).await
+}
+
+async fn cached_environment_info_with_ttl(ttl: Duration) -> Option<EnvironmentInfo> {
     let cache = INFO_CACHE.read().await;
     cache
         .as_ref()
-        .filter(|entry| entry.refreshed_at.elapsed() < INFO_CACHE_TTL)
+        .filter(|entry| entry.refreshed_at.elapsed() < ttl)
         .map(|entry| entry.value.clone())
 }
 

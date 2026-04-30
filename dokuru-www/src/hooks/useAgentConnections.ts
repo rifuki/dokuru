@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useAgentStore, getAgentToken } from "@/stores/use-agent-store";
+import type { DockerInfo } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
 
 const RECONNECT_BASE_MS = 2_000;
@@ -17,11 +18,13 @@ const RECONNECT_MAX_MS  = 30_000;
  * (agent:connected / agent:disconnected events in useRealtimeAgents).
  */
 export function useAgentConnections(agents: Agent[]) {
-    const { setAgentOnline, setAgentConnecting, setAgentConnectionError } = useAgentStore();
+    const { setAgentOnline, setAgentConnecting, setAgentConnectionError, setAgentInfo, setAgentInfoError } = useAgentStore();
 
     const setOnlineRef      = useRef(setAgentOnline);
     const setConnectingRef  = useRef(setAgentConnecting);
     const setConnErrRef     = useRef(setAgentConnectionError);
+    const setInfoRef        = useRef(setAgentInfo);
+    const setInfoErrRef     = useRef(setAgentInfoError);
 
     const wsMap      = useRef(new Map<string, WebSocket>());
     const timerMap   = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -33,6 +36,8 @@ export function useAgentConnections(agents: Agent[]) {
         setOnlineRef.current     = setAgentOnline;
         setConnectingRef.current = setAgentConnecting;
         setConnErrRef.current    = setAgentConnectionError;
+        setInfoRef.current       = setAgentInfo;
+        setInfoErrRef.current    = setAgentInfoError;
         agentsRef.current = agents;
     });
 
@@ -98,9 +103,13 @@ export function useAgentConnections(agents: Agent[]) {
 
         ws.onmessage = (ev) => {
             try {
-                const msg = JSON.parse(ev.data as string) as { type: string };
+                const msg = JSON.parse(ev.data as string) as AgentWsMessage;
                 if (msg.type === "ping") {
                     console.debug(`[WS] ping       ← ${agent.name}`);
+                } else if (msg.type === "info:update") {
+                    setInfoRef.current(agent.id, msg.data);
+                } else if (msg.type === "info:error") {
+                    setInfoErrRef.current(agent.id, msg.message);
                 }
             } catch { /* ignore non-JSON */ }
         };
@@ -204,6 +213,11 @@ export function useAgentConnections(agents: Agent[]) {
         };
     }, []);
 }
+
+type AgentWsMessage =
+    | { type: "ping" }
+    | { type: "info:update"; reason?: string; data: DockerInfo }
+    | { type: "info:error"; message: string };
 
 function resolveCloseReason(code: number): string {
     switch (code) {

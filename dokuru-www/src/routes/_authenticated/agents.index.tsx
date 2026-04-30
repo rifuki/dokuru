@@ -401,7 +401,7 @@ function AgentsList() {
   function loadDockerInfo(agent: Agent, force = false) {
     const cached = agentInfos[agent.id];
     if (infoRequestsRef.current.has(agent.id) || cached?.loading) return;
-    if (!force && cached?.info) return;
+    if (!force && cached?.info && !cached.stale) return;
 
     const token = agent.access_mode === "relay" ? dockerCredential(agent) : agent.token ?? getAgentToken(agent.id);
     if (!token) {
