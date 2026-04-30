@@ -292,7 +292,7 @@ export function AppSidebar() {
 
                         {!isIconMode && (
                           <CollapsibleContent>
-                            <div className="border-t border-sidebar-border/60 pb-1.5 pt-1">
+                            <div className="border-t border-sidebar-border/60">
                               {agentNavItems(agent.id).map((item) => {
                                 const active = isActive(item.href);
                                 const disabled = item.requiresOnline && !isOnline;
@@ -300,21 +300,21 @@ export function AppSidebar() {
                                   <span
                                     key={item.href}
                                     title="Agent offline"
-                                     className="flex items-center gap-3 py-2 text-sm px-3 mx-1.5 rounded-[6px] text-sidebar-foreground/30 cursor-not-allowed select-none"
+                                     className="flex cursor-not-allowed select-none items-center gap-3 border-l-[3px] border-transparent px-3 py-2 text-sm text-sidebar-foreground/30"
                                   >
                                     <item.icon className="size-4 shrink-0" />
                                     <span>{item.title}</span>
                                   </span>
                                 ) : (
                                   <Link
-                                    key={item.href}
-                                    to={item.href}
-                                    className={`flex items-center gap-3 py-1.5 text-sm transition-colors ${
-                                      active
-                                        ? "px-3 mx-0 rounded-none border-l-[3px] border-miku-primary bg-miku-primary/18 text-miku-primary font-medium"
-                                        : "px-3 mx-1.5 rounded-[6px] text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
-                                    }`}
-                                  >
+                                     key={item.href}
+                                     to={item.href}
+                                     className={`flex items-center gap-3 text-sm transition-colors ${
+                                       active
+                                         ? "border-l-[3px] border-miku-primary bg-miku-primary/18 px-3 py-2 font-medium text-miku-primary"
+                                         : "border-l-[3px] border-transparent px-3 py-2 text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                                     }`}
+                                   >
                                     <item.icon className="size-4 shrink-0" />
                                     <span>{item.title}</span>
                                   </Link>
