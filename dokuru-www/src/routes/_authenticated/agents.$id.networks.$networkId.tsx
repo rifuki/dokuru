@@ -16,6 +16,7 @@ import {
   Hash,
   Network,
   Router,
+  Tag,
 } from "lucide-react";
 import {
   DetailPageSkeleton,
@@ -244,33 +245,34 @@ function NetworkDetailPage() {
         )}
       </DetailSection>
 
-      <DetailSection title="Network Details" icon={Hash}>
-        <DetailRow label="Full ID" value={network?.Id} mono />
-        <DetailRow label="Created" value={created} />
-        <DetailRow label="Driver" value={network?.Driver} mono />
-        <DetailRow
-          label="Scope"
-          value={
-            network?.Scope ? (
-              <Badge variant="outline" className="font-mono text-xs">
-                {network.Scope}
-              </Badge>
-            ) : null
-          }
-        />
-        <DetailRow label="IPAM Driver" value={network?.IPAM?.Driver} mono />
-        <DetailRow label="Subnet" value={primaryConfig?.Subnet} mono />
-        <DetailRow label="Gateway" value={primaryConfig?.Gateway} mono />
-        <DetailRow label="IP Range" value={primaryConfig?.IPRange} mono />
-        <DetailRow label="Attachable" value={formatBool(network?.Attachable)} />
-        <DetailRow label="IPv6" value={formatBool(network?.EnableIPv6)} />
-        <DetailRow label="Ingress" value={formatBool(network?.Ingress)} />
-      </DetailSection>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <DetailSection title="Network Details" icon={Hash}>
+          <DetailRow label="Full ID" value={network?.Id} mono />
+          <DetailRow label="Created" value={created} />
+          <DetailRow label="Driver" value={network?.Driver} mono />
+          <DetailRow
+            label="Scope"
+            value={
+              network?.Scope ? (
+                <Badge variant="outline" className="font-mono text-xs">
+                  {network.Scope}
+                </Badge>
+              ) : null
+            }
+          />
+          <DetailRow label="IPAM Driver" value={network?.IPAM?.Driver} mono />
+          <DetailRow label="Subnet" value={primaryConfig?.Subnet} mono />
+          <DetailRow label="Gateway" value={primaryConfig?.Gateway} mono />
+          <DetailRow label="IP Range" value={primaryConfig?.IPRange} mono />
+          <DetailRow label="Attachable" value={formatBool(network?.Attachable)} />
+          <DetailRow label="IPv6" value={formatBool(network?.EnableIPv6)} />
+          <DetailRow label="Ingress" value={formatBool(network?.Ingress)} />
+        </DetailSection>
 
-      {(labelEntries.length > 0 || optionEntries.length > 0) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {(labelEntries.length > 0 || optionEntries.length > 0) && (
+          <div className="space-y-6">
           {labelEntries.length > 0 && (
-            <DetailSection title="Labels" icon={Hash} contentClassName="space-y-2">
+            <DetailSection title={`Labels (${labelEntries.length})`} icon={Tag} contentClassName="space-y-2">
               {labelEntries.map(([key, value]) => (
                 <div key={key} className="rounded-lg bg-muted/40 p-3 min-w-0">
                   <p className="font-mono text-xs text-primary break-all">{key}</p>
@@ -298,8 +300,9 @@ function NetworkDetailPage() {
               ))}
             </DetailSection>
           )}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
       {ipamConfig.length > 1 && (
         <DetailSection title="Additional IPAM Config" icon={Router} contentClassName="space-y-2">
