@@ -1,21 +1,75 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { canUseDockerAgent, dockerApi, dockerCredential } from "@/services/docker-api";
 import { agentApi } from "@/lib/api/agent";
 import { Badge } from "@/components/ui/badge";
-import { Network, Container } from "lucide-react";
+import {
+  ChevronRight,
+  Clock,
+  Container,
+  Globe,
+  Hash,
+  Network,
+  Router,
+} from "lucide-react";
+import {
+  DetailPageSkeleton,
+  DetailRow,
+  DetailSection,
+  DetailStat,
+  RawJsonDetails,
+} from "@/components/ui/detail-layout";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/networks/$networkId")({
   component: NetworkDetailPage,
 });
 
 type NetworkInspect = {
-  Containers?: Record<string, { Name: string; IPv4Address: string }>;
+  Containers?: Record<
+    string,
+    {
+      EndpointID?: string;
+      IPv4Address?: string;
+      IPv6Address?: string;
+      MacAddress?: string;
+      Name?: string;
+    }
+  >;
+  Created?: string;
+  EnableIPv6?: boolean;
   Name?: string;
   Id?: string;
   Driver?: string;
+  IPAM?: {
+    Driver?: string;
+    Config?: Array<{
+      Subnet?: string;
+      Gateway?: string;
+      IPRange?: string;
+      AuxAddress?: Record<string, string>;
+    }>;
+  };
+  Internal?: boolean;
+  Attachable?: boolean;
+  Ingress?: boolean;
   Scope?: string;
+  Labels?: Record<string, string>;
+  Options?: Record<string, string>;
 };
+
+function formatDate(value?: string) {
+  if (!value) return null;
+  return new Date(value).toLocaleString();
+}
+
+function formatBool(value?: boolean) {
+  if (value === undefined) return null;
+  return value ? "yes" : "no";
+}
+
+function shortValue(value?: string) {
+  return value ? value.slice(0, 12) : null;
+}
 
 function NetworkDetailPage() {
   const { id, networkId } = Route.useParams();
@@ -37,62 +91,176 @@ function NetworkDetailPage() {
   });
 
   if (isLoading) {
-    return <div className="animate-pulse h-32 bg-card rounded-lg" />;
+    return <DetailPageSkeleton />;
   }
 
   const containers = network?.Containers || {};
+  const containerEntries = Object.entries(containers);
+  const ipamConfig = network?.IPAM?.Config ?? [];
+  const primaryConfig = ipamConfig[0];
+  const created = formatDate(network?.Created);
+  const title = network?.Name || networkId;
+  const shortId = shortValue(network?.Id) ?? shortValue(networkId);
+  const labelEntries = Object.entries(network?.Labels ?? {});
+  const optionEntries = Object.entries(network?.Options ?? {});
 
   return (
-    <div className="max-w-7xl mx-auto w-full space-y-6">
-      <div className="min-w-0">
-        <h2 className="text-3xl font-bold tracking-tight flex items-center gap-3 min-w-0">
-          <Network className="h-8 w-8 shrink-0" />
-          <span className="truncate">{network?.Name || networkId}</span>
-        </h2>
-        <p className="text-muted-foreground text-sm mt-1">Network Details</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="space-y-4 p-6 rounded-lg border bg-card min-w-0">
-          <h3 className="font-semibold text-lg">Network Information</h3>
-          <div className="space-y-3 text-sm">
-            <div className="min-w-0">
-              <span className="text-muted-foreground">ID:</span>
-              <p className="font-mono text-xs break-all">{network?.Id}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Driver:</span>
-              <p className="font-mono">{network?.Driver}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Scope:</span>
-              <Badge variant="outline">{network?.Scope}</Badge>
-            </div>
+    <div className="max-w-5xl mx-auto w-full space-y-6">
+      <div className="flex items-start gap-4">
+        <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 text-primary shrink-0">
+          <Network className="h-6 w-6" />
+        </div>
+        <div className="min-w-0">
+          <h2 className="text-2xl font-bold tracking-tight truncate">{title}</h2>
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            {shortId && (
+              <span className="font-mono text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                {shortId}
+              </span>
+            )}
+            {network?.Driver && (
+              <Badge variant="outline" className="text-xs">
+                {network.Driver}
+              </Badge>
+            )}
+            {network?.Internal && (
+              <Badge variant="outline" className="text-xs text-muted-foreground">
+                internal
+              </Badge>
+            )}
           </div>
         </div>
+      </div>
 
-        <div className="space-y-4 p-6 rounded-lg border bg-card min-w-0">
-          <h3 className="font-semibold text-lg flex items-center gap-2">
-            <Container className="h-5 w-5" />
-            Containers ({Object.keys(containers).length})
-          </h3>
-          <div className="space-y-2">
-            {Object.entries(containers).map(([cid, info]) => (
-              <div key={cid} className="p-3 rounded-lg bg-muted/50 min-w-0">
-                <p className="font-mono text-sm truncate">{info.Name}</p>
-                <p className="text-xs text-muted-foreground mt-1">{info.IPv4Address}</p>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <DetailStat icon={Router} label="Driver" value={network?.Driver ?? "N/A"} />
+        <DetailStat icon={Globe} label="Scope" value={network?.Scope ?? "N/A"} />
+        <DetailStat icon={Container} label="Containers" value={containerEntries.length} />
+        <DetailStat icon={Clock} label="Created" value={created ?? "N/A"} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <DetailSection title="Network Details" icon={Hash}>
+          <DetailRow label="Full ID" value={network?.Id} mono />
+          <DetailRow label="Created" value={created} />
+          <DetailRow label="Driver" value={network?.Driver} mono />
+          <DetailRow
+            label="Scope"
+            value={
+              network?.Scope ? (
+                <Badge variant="outline" className="font-mono text-xs">
+                  {network.Scope}
+                </Badge>
+              ) : null
+            }
+          />
+          <DetailRow label="IPAM Driver" value={network?.IPAM?.Driver} mono />
+          <DetailRow label="Subnet" value={primaryConfig?.Subnet} mono />
+          <DetailRow label="Gateway" value={primaryConfig?.Gateway} mono />
+          <DetailRow label="IP Range" value={primaryConfig?.IPRange} mono />
+          <DetailRow label="Attachable" value={formatBool(network?.Attachable)} />
+          <DetailRow label="IPv6" value={formatBool(network?.EnableIPv6)} />
+          <DetailRow label="Ingress" value={formatBool(network?.Ingress)} />
+        </DetailSection>
+
+        <DetailSection
+          title={`Connected Containers (${containerEntries.length})`}
+          icon={Container}
+          contentClassName="space-y-2 max-h-[28rem] overflow-y-auto"
+        >
+          {containerEntries.length > 0 ? (
+            containerEntries.map(([cid, info]) => (
+              <Link
+                key={cid}
+                to="/agents/$id/containers/$containerId"
+                params={{ id, containerId: cid }}
+                className="group flex items-center gap-3 rounded-lg border bg-muted/20 px-3.5 py-3 min-w-0 transition-colors hover:border-primary/45 hover:bg-primary/5"
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
+                  <Container className="h-4 w-4" />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <p className="font-mono text-sm font-medium truncate">
+                      {info.Name || shortValue(cid)}
+                    </p>
+                    <span className="font-mono text-[11px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
+                      {shortValue(cid)}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {info.IPv4Address && (
+                      <Badge variant="outline" className="font-mono text-xs">
+                        {info.IPv4Address}
+                      </Badge>
+                    )}
+                    {info.IPv6Address && (
+                      <Badge variant="outline" className="font-mono text-xs">
+                        {info.IPv6Address}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+              </Link>
+            ))
+          ) : (
+            <p className="text-sm text-muted-foreground italic">No containers connected.</p>
+          )}
+        </DetailSection>
+      </div>
+
+      {(labelEntries.length > 0 || optionEntries.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {labelEntries.length > 0 && (
+            <DetailSection title="Labels" icon={Hash} contentClassName="space-y-2">
+              {labelEntries.map(([key, value]) => (
+                <div key={key} className="rounded-lg bg-muted/40 p-3 min-w-0">
+                  <p className="font-mono text-xs text-primary break-all">{key}</p>
+                  {value && (
+                    <p className="font-mono text-xs text-muted-foreground break-all mt-1">
+                      {value}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </DetailSection>
+          )}
+
+          {optionEntries.length > 0 && (
+            <DetailSection title="Options" icon={Globe} contentClassName="space-y-2">
+              {optionEntries.map(([key, value]) => (
+                <div key={key} className="rounded-lg bg-muted/40 p-3 min-w-0">
+                  <p className="font-mono text-xs text-primary break-all">{key}</p>
+                  {value && (
+                    <p className="font-mono text-xs text-muted-foreground break-all mt-1">
+                      {value}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </DetailSection>
+          )}
+        </div>
+      )}
+
+      {ipamConfig.length > 1 && (
+        <DetailSection title="Additional IPAM Config" icon={Router} contentClassName="space-y-2">
+          {ipamConfig.slice(1).map((config, index) => (
+            <div key={index} className="rounded-lg bg-muted/40 p-3 min-w-0">
+              <div className="grid gap-1 text-sm">
+                {config.Subnet && <p className="font-mono break-all">subnet: {config.Subnet}</p>}
+                {config.Gateway && <p className="font-mono break-all">gateway: {config.Gateway}</p>}
+                {config.IPRange && <p className="font-mono break-all">range: {config.IPRange}</p>}
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
+            </div>
+          ))}
+        </DetailSection>
+      )}
 
-      <div className="p-6 rounded-lg border bg-card">
-        <h3 className="font-semibold text-lg mb-4">Raw JSON</h3>
-        <pre className="bg-muted/50 p-4 rounded-lg overflow-x-auto overflow-y-auto max-h-96 text-xs font-mono max-w-full">
-          {JSON.stringify(network, null, 2)}
-        </pre>
-      </div>
+      <RawJsonDetails data={network} />
     </div>
   );
 }
