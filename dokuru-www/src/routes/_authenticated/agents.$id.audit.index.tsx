@@ -17,7 +17,7 @@ import {
     Play, Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
     Terminal, Wrench, ExternalLink, AlertTriangle, Info, Server,
     Clock, Cpu, Container, RefreshCw, Zap, BookOpen, CheckCircle2,
-    RotateCcw, ShieldAlert, XCircle, ListChecks,
+    RotateCcw, ShieldAlert, XCircle, ListChecks, ArrowDownToLine,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -676,6 +676,15 @@ function AuditRunTerminal({
 }) {
     const pct = total > 0 ? Math.round((current / total) * 100) : 0;
     const latest = lines.at(-1);
+    const [autoScroll, setAutoScroll] = useState(true);
+    const logRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!autoScroll) return;
+        const log = logRef.current;
+        if (!log) return;
+        log.scrollTo({ top: log.scrollHeight, behavior: "smooth" });
+    }, [autoScroll, current, error, lines.length]);
 
     return (
         <div className="flex h-full w-full animate-in flex-col overflow-hidden bg-[#03070C] text-left fade-in zoom-in-95 duration-500">
@@ -695,9 +704,24 @@ function AuditRunTerminal({
                         </p>
                     </div>
                 </div>
-                <span className="font-mono text-[11px] text-white/45">
-                    {current}/{total || "?"} · {pct}%
-                </span>
+                <div className="flex shrink-0 items-center gap-3">
+                    <button
+                        type="button"
+                        onClick={() => setAutoScroll((value) => !value)}
+                        className={cn(
+                            "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] transition-colors",
+                            autoScroll
+                                ? "border-[#2496ED]/35 bg-[#2496ED]/10 text-[#2496ED]"
+                                : "border-white/10 bg-white/[0.03] text-white/45 hover:text-white/70",
+                        )}
+                    >
+                        <ArrowDownToLine className="h-3 w-3" />
+                        Auto scroll {autoScroll ? "on" : "off"}
+                    </button>
+                    <span className="font-mono text-[11px] text-white/45">
+                        {current}/{total || "?"} · {pct}%
+                    </span>
+                </div>
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col gap-4 px-5 py-4">
@@ -724,7 +748,7 @@ function AuditRunTerminal({
                     </div>
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-white/8 bg-black/35 p-4 font-mono text-[11px] leading-relaxed shadow-inner">
+                <div ref={logRef} className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-white/8 bg-black/35 p-4 font-mono text-[11px] leading-relaxed shadow-inner">
                     {lines.length === 0 && !error && (
                         <p className="text-white/35">$ connecting to dokuru-agent audit websocket...</p>
                     )}
