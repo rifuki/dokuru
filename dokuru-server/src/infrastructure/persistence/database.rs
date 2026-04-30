@@ -14,6 +14,9 @@ pub struct Database {
 
 impl Database {
     /// Create new database connection pool
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn new(config: &Config) -> Result<Self, sqlx::Error> {
         let database_url = &config.database.url;
 
@@ -40,17 +43,24 @@ impl Database {
     }
 
     /// Get raw pool for auto-commit operations
+    #[must_use]
     pub const fn pool(&self) -> &PgPool {
         &self.pool
     }
 
     /// Begin a transaction for manual control
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn begin_transaction(&self) -> Result<Transaction<'_, Postgres>, sqlx::Error> {
         self.pool.begin().await
     }
 
     /// Execute operations within a transaction closure
     /// Auto-commit on success, rollback on error
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn transaction<F, Fut, T>(&self, f: F) -> Result<T, sqlx::Error>
     where
         F: FnOnce(&mut Transaction<'_, Postgres>) -> Fut,
@@ -70,7 +80,8 @@ impl Database {
         }
     }
 
-    /// Create from existing pool — used by integration tests (sqlx::test provides the pool)
+    /// Create from existing pool — used by integration tests (`sqlx::test` provides the pool)
+    #[must_use]
     pub const fn from_pool(pool: PgPool) -> Self {
         Self { pool }
     }

@@ -1,11 +1,124 @@
 // Section 5: Container Runtime Configuration
 // Namespace & Cgroup rules — CIS Docker Benchmark v1.8.0
-#![allow(clippy::needless_raw_string_hashes, clippy::too_many_lines)]
 use super::RuleDefinition;
 use crate::audit::{
     fix_helpers,
     types::{CheckResult, CheckStatus, CisRule, RemediationKind, RuleCategory, Severity},
 };
+
+const RULE_5_5_GUIDE: &str = r"Recreate the container without --privileged.
+
+Example (incorrect — avoid):
+  docker run --privileged nginx
+
+Example (correct):
+  docker run nginx
+
+If specific kernel capabilities are required, grant only the minimum capability with --cap-add instead of enabling full privileged mode.";
+
+const RULE_5_10_GUIDE: &str = r"Do not pass --network=host when starting containers.
+Use the default bridge network or a custom user-defined network instead.
+Dokuru will stop, recreate and restart the container without --network=host.
+
+Example (correct):
+  docker run -p 8080:80 nginx
+
+Example (incorrect — avoid):
+  docker run --network=host nginx";
+
+const RULE_5_11_GUIDE: &str = r"Set a memory limit when starting containers using --memory flag.
+
+Dokuru can apply this live with Docker update using a default 256 MiB limit.
+
+Example:
+  docker update --memory=256m <container>
+  docker run --memory=512m nginx
+
+Or in docker-compose.yml:
+  services:
+    app:
+      mem_limit: 512m";
+
+const RULE_5_12_GUIDE: &str = r"Set CPU shares when starting containers using --cpu-shares flag.
+Dokuru can apply this live with Docker update using a default value of 512.
+
+Default value is 1024. Higher values = higher priority.
+
+Example:
+  docker update --cpu-shares=512 <container>
+  docker run --cpu-shares=512 nginx    # half priority
+  docker run --cpu-shares=1024 nginx   # normal priority
+  docker run --cpu-shares=2048 app     # double priority
+
+Or in docker-compose.yml:
+  services:
+    app:
+      cpu_shares: 512";
+
+const RULE_5_16_GUIDE: &str = r"Do not pass --pid=host when starting containers.
+By default containers get their own isolated PID namespace.
+Dokuru will stop, recreate and restart the container without --pid=host.
+
+Example (incorrect — avoid):
+  docker run --pid=host nginx
+
+To inspect processes in a container, use docker exec instead:
+  docker exec -it <container> ps aux";
+
+const RULE_5_17_GUIDE: &str = r"Do not pass --ipc=host when starting containers.
+Use private IPC namespace (default) or shareable between specific containers.
+Dokuru will stop, recreate and restart the container with --ipc=private.
+
+Example (incorrect — avoid):
+  docker run --ipc=host nginx
+
+Example (acceptable for inter-container sharing):
+  docker run --ipc=shareable app1
+  docker run --ipc=container:app1 app2";
+
+const RULE_5_21_GUIDE: &str = r"Do not pass --uts=host when starting containers.
+Dokuru will stop, recreate and restart the container without --uts=host.
+
+Example (incorrect — avoid):
+  docker run --uts=host nginx
+
+By default, each container gets its own UTS namespace with an isolated hostname.";
+
+const RULE_5_25_GUIDE: &str = r"Ensure containers run with at least one cgroup resource limit.
+Setting memory, CPU, or PIDs limits activates proper cgroup confinement.
+
+Example:
+  docker run --memory=256m --cpu-shares=512 --pids-limit=100 nginx";
+
+const RULE_5_29_GUIDE: &str = r"Set a PIDs limit when starting containers using --pids-limit flag.
+Dokuru can apply this live with Docker update using a default limit of 100.
+
+Example:
+  docker update --pids-limit=100 <container>
+  docker run --pids-limit=100 nginx
+
+Or in docker-compose.yml:
+  services:
+    app:
+      pids_limit: 100
+
+A reasonable value for most workloads is 50-200.";
+
+const RULE_5_31_GUIDE: &str = r#"Do not pass --userns=host when starting containers.
+This flag disables user namespace remapping and gives the container root = host root.
+Dokuru will stop, recreate and restart the container without --userns=host.
+
+Note: rule 2.10 can pass while this rule still fails. Rule 2.10 checks that the Docker daemon supports/remaps user namespaces globally; rule 5.31 checks each running container and fails any container that explicitly opts out with userns=host.
+
+Example (incorrect — avoid):
+  docker run --userns=host nginx
+
+To enable user namespace remapping globally (recommended), configure the Docker daemon:
+  /etc/docker/daemon.json:
+  {
+    "userns-remap": "default"
+  }
+Then restart Docker: sudo systemctl restart docker"#;
 
 pub struct Section5;
 
@@ -40,6 +153,39 @@ impl Section5 {
         )
     }
 
+    fn no_running_containers_result(
+        id: &str,
+        title: &str,
+        category: RuleCategory,
+        severity: Severity,
+        description: &str,
+        remediation: &str,
+        remediation_kind: RemediationKind,
+    ) -> CheckResult {
+        CheckResult {
+            rule: CisRule {
+                id: id.into(),
+                title: title.into(),
+                category,
+                severity,
+                section: "Container Runtime".into(),
+                description: description.into(),
+                remediation: remediation.into(),
+            },
+            status: CheckStatus::Pass,
+            message: "No running containers to check".into(),
+            affected: vec![],
+            remediation_kind,
+            audit_command: None,
+            raw_output: None,
+            references: None,
+            rationale: None,
+            impact: None,
+            tags: None,
+            ..Default::default()
+        }
+    }
+
     // ── 5.5 — Privileged Containers ───────────────────────────────────────────
 
     /// 5.5 - Ensure that privileged containers are not used
@@ -60,28 +206,15 @@ impl Section5 {
                 let containers = containers.to_vec();
                 Box::pin(async move {
                     if containers.is_empty() {
-                        return Ok(CheckResult {
-                            rule: CisRule {
-                                id: "5.5".into(),
-                                title: "Ensure that privileged containers are not used".into(),
-                                category: RuleCategory::Runtime,
-                                severity: Severity::High,
-                                section: "Container Runtime".into(),
-                                description: "Privileged container runtime flag".into(),
-                                remediation: "Recreate containers without --privileged".into(),
-                            },
-                            status: CheckStatus::Pass,
-                            message: "No running containers to check".into(),
-                            affected: vec![],
-                            remediation_kind: RemediationKind::Auto,
-                            audit_command: None,
-                            raw_output: None,
-                            references: None,
-                            rationale: None,
-                            impact: None,
-                            tags: None,
-                            ..Default::default()
-                        });
+                        return Ok(Self::no_running_containers_result(
+                            "5.5",
+                            "Ensure that privileged containers are not used",
+                            RuleCategory::Runtime,
+                            Severity::High,
+                            "Privileged container runtime flag",
+                            "Recreate containers without --privileged",
+                            RemediationKind::Auto,
+                        ));
                     }
 
                     let mut failing = Vec::new();
@@ -143,15 +276,7 @@ impl Section5 {
                     Box::pin(fix_helpers::apply_privileged_fix(&docker, "5.5")).await
                 })
             }),
-            remediation_guide: r#"Recreate the container without --privileged.
-
-Example (incorrect — avoid):
-  docker run --privileged nginx
-
-Example (correct):
-  docker run nginx
-
-If specific kernel capabilities are required, grant only the minimum capability with --cap-add instead of enabling full privileged mode."#.into(),
+            remediation_guide: RULE_5_5_GUIDE.into(),
             requires_restart: true,
             requires_elevation: false,
 
@@ -264,15 +389,7 @@ If specific kernel capabilities are required, grant only the minimum capability 
                     Box::pin(fix_helpers::apply_namespace_fix(&docker, "5.10")).await
                 })
             }),
-            remediation_guide: r#"Do not pass --network=host when starting containers.
-Use the default bridge network or a custom user-defined network instead.
-Dokuru will stop, recreate and restart the container without --network=host.
-
-Example (correct):
-  docker run -p 8080:80 nginx
-
-Example (incorrect — avoid):
-  docker run --network=host nginx"#.into(),
+            remediation_guide: RULE_5_10_GUIDE.into(),
             requires_restart: true,
             requires_elevation: false,
 
@@ -385,18 +502,7 @@ Example (incorrect — avoid):
                     fix_helpers::apply_default_cgroup_resource_fix(&docker, "5.11").await
                 })
             }),
-            remediation_guide: r#"Set a memory limit when starting containers using --memory flag.
-
-Dokuru can apply this live with Docker update using a default 256 MiB limit.
-
-Example:
-  docker update --memory=256m <container>
-  docker run --memory=512m nginx
-
-Or in docker-compose.yml:
-  services:
-    app:
-      mem_limit: 512m"#.into(),
+            remediation_guide: RULE_5_11_GUIDE.into(),
             requires_restart: false,
             requires_elevation: false,
 
@@ -510,21 +616,7 @@ Or in docker-compose.yml:
                     fix_helpers::apply_default_cgroup_resource_fix(&docker, "5.12").await
                 })
             }),
-            remediation_guide: r#"Set CPU shares when starting containers using --cpu-shares flag.
-Dokuru can apply this live with Docker update using a default value of 512.
-
-Default value is 1024. Higher values = higher priority.
-
-Example:
-  docker update --cpu-shares=512 <container>
-  docker run --cpu-shares=512 nginx    # half priority
-  docker run --cpu-shares=1024 nginx   # normal priority
-  docker run --cpu-shares=2048 app     # double priority
-
-Or in docker-compose.yml:
-  services:
-    app:
-      cpu_shares: 512"#.into(),
+            remediation_guide: RULE_5_12_GUIDE.into(),
             requires_restart: false,
             requires_elevation: false,
 
@@ -637,15 +729,7 @@ Or in docker-compose.yml:
                     Box::pin(fix_helpers::apply_namespace_fix(&docker, "5.16")).await
                 })
             }),
-            remediation_guide: r#"Do not pass --pid=host when starting containers.
-By default containers get their own isolated PID namespace.
-Dokuru will stop, recreate and restart the container without --pid=host.
-
-Example (incorrect — avoid):
-  docker run --pid=host nginx
-
-To inspect processes in a container, use docker exec instead:
-  docker exec -it <container> ps aux"#.into(),
+            remediation_guide: RULE_5_16_GUIDE.into(),
             requires_restart: true,
             requires_elevation: false,
 
@@ -758,16 +842,7 @@ To inspect processes in a container, use docker exec instead:
                     Box::pin(fix_helpers::apply_namespace_fix(&docker, "5.17")).await
                 })
             }),
-            remediation_guide: r#"Do not pass --ipc=host when starting containers.
-Use private IPC namespace (default) or shareable between specific containers.
-Dokuru will stop, recreate and restart the container with --ipc=private.
-
-Example (incorrect — avoid):
-  docker run --ipc=host nginx
-
-Example (acceptable for inter-container sharing):
-  docker run --ipc=shareable app1
-  docker run --ipc=container:app1 app2"#.into(),
+            remediation_guide: RULE_5_17_GUIDE.into(),
             requires_restart: true,
             requires_elevation: false,
 
@@ -880,13 +955,7 @@ Example (acceptable for inter-container sharing):
                     Box::pin(fix_helpers::apply_namespace_fix(&docker, "5.21")).await
                 })
             }),
-            remediation_guide: r#"Do not pass --uts=host when starting containers.
-Dokuru will stop, recreate and restart the container without --uts=host.
-
-Example (incorrect — avoid):
-  docker run --uts=host nginx
-
-By default, each container gets its own UTS namespace with an isolated hostname."#.into(),
+            remediation_guide: RULE_5_21_GUIDE.into(),
             requires_restart: true,
             requires_elevation: false,
 
@@ -920,28 +989,15 @@ By default, each container gets its own UTS namespace with an isolated hostname.
                 let containers = containers.to_vec();
                 Box::pin(async move {
                     if containers.is_empty() {
-                        return Ok(CheckResult {
-                            rule: CisRule {
-                                id: "5.25".into(),
-                                title: "Ensure that cgroup usage is confirmed".into(),
-                                category: RuleCategory::Cgroup,
-                                severity: Severity::Medium,
-                                section: "Container Runtime".into(),
-                                description: "Container cgroup confinement".into(),
-                                remediation: "Ensure containers are running under proper cgroup hierarchy".into(),
-                            },
-                            status: CheckStatus::Pass,
-                            message: "No running containers to check".into(),
-                            affected: vec![],
-                            remediation_kind: RemediationKind::Manual,
-                            audit_command: None,
-                            raw_output: None,
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                ..Default::default()
-                        });
+                        return Ok(Self::no_running_containers_result(
+                            "5.25",
+                            "Ensure that cgroup usage is confirmed",
+                            RuleCategory::Cgroup,
+                            Severity::Medium,
+                            "Container cgroup confinement",
+                            "Ensure containers are running under proper cgroup hierarchy",
+                            RemediationKind::Manual,
+                        ));
                     }
 
                     // A container has proper cgroup confinement if it has at least one
@@ -1006,11 +1062,7 @@ By default, each container gets its own UTS namespace with an isolated hostname.
 
             remediation_kind: RemediationKind::Manual,
             fix_fn: None,
-            remediation_guide: r#"Ensure containers run with at least one cgroup resource limit.
-Setting memory, CPU, or PIDs limits activates proper cgroup confinement.
-
-Example:
-  docker run --memory=256m --cpu-shares=512 --pids-limit=100 nginx"#.into(),
+            remediation_guide: RULE_5_25_GUIDE.into(),
             requires_restart: true,
             requires_elevation: false,
 
@@ -1124,19 +1176,7 @@ Example:
                     fix_helpers::apply_default_cgroup_resource_fix(&docker, "5.29").await
                 })
             }),
-            remediation_guide: r#"Set a PIDs limit when starting containers using --pids-limit flag.
-Dokuru can apply this live with Docker update using a default limit of 100.
-
-Example:
-  docker update --pids-limit=100 <container>
-  docker run --pids-limit=100 nginx
-
-Or in docker-compose.yml:
-  services:
-    app:
-      pids_limit: 100
-
-A reasonable value for most workloads is 50-200."#.into(),
+            remediation_guide: RULE_5_29_GUIDE.into(),
             requires_restart: false,
             requires_elevation: false,
 
@@ -1249,21 +1289,7 @@ A reasonable value for most workloads is 50-200."#.into(),
                     Box::pin(fix_helpers::apply_namespace_fix(&docker, "5.31")).await
                 })
             }),
-            remediation_guide: r#"Do not pass --userns=host when starting containers.
-This flag disables user namespace remapping and gives the container root = host root.
-Dokuru will stop, recreate and restart the container without --userns=host.
-
-Note: rule 2.10 can pass while this rule still fails. Rule 2.10 checks that the Docker daemon supports/remaps user namespaces globally; rule 5.31 checks each running container and fails any container that explicitly opts out with userns=host.
-
-Example (incorrect — avoid):
-  docker run --userns=host nginx
-
-To enable user namespace remapping globally (recommended), configure the Docker daemon:
-  /etc/docker/daemon.json:
-  {
-    "userns-remap": "default"
-  }
-Then restart Docker: sudo systemctl restart docker"#.into(),
+            remediation_guide: RULE_5_31_GUIDE.into(),
             requires_restart: true,
             requires_elevation: false,
 

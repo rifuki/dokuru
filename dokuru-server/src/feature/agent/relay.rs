@@ -111,6 +111,9 @@ pub enum WsMessage {
     Pong,
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn send_command(
     registry: &AgentRegistry,
     agent_id: Uuid,

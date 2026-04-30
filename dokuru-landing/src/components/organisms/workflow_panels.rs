@@ -1,9 +1,11 @@
-use crate::components::atoms::{Icon, IconKind};
-use crate::components::molecules::{MockField, PreviewCount, PreviewPillar};
+use crate::components::{
+    atoms::{icon::icon, IconKind},
+    molecules::{audit_stats, mock_field},
+};
 use leptos::prelude::*;
 
-#[component]
-pub(crate) fn TerminalInstallPanel(
+#[must_use]
+pub(crate) fn terminal_install_panel(
     copied: RwSignal<bool>,
     handle_copy: impl Fn(leptos::ev::MouseEvent) + Copy + 'static,
 ) -> impl IntoView {
@@ -13,8 +15,8 @@ pub(crate) fn TerminalInstallPanel(
                 <div class="flex gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-zinc-700"/><span class="w-2.5 h-2.5 rounded-full bg-zinc-700"/><span class="w-2.5 h-2.5 rounded-full bg-zinc-700"/></div>
                 <span class="font-mono text-[11px] text-zinc-500 ml-3">"bash · docker-host-01"</span>
                 <button on:click=handle_copy class="ml-auto inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-400 hover:text-white border border-white/10 hover:border-white/25 rounded px-2 py-1 transition-colors">
-                    <span class=move || if copied.get() { "inline-flex items-center gap-1.5" } else { "hidden" }><Icon kind=IconKind::Check size=11/> "copied"</span>
-                    <span class=move || if copied.get() { "hidden" } else { "inline-flex items-center gap-1.5" }><Icon kind=IconKind::Copy size=11/> "copy"</span>
+                    <span class=move || if copied.get() { "inline-flex items-center gap-1.5" } else { "hidden" }>{icon(IconKind::Check, 11, "", "2")} "copied"</span>
+                    <span class=move || if copied.get() { "hidden" } else { "inline-flex items-center gap-1.5" }>{icon(IconKind::Copy, 11, "", "2")} "copy"</span>
                 </button>
             </div>
             <div class="p-6 font-mono text-[13px] leading-7 space-y-3 overflow-x-auto">
@@ -40,8 +42,8 @@ pub(crate) fn TerminalInstallPanel(
     }
 }
 
-#[component]
-pub(crate) fn AddAgentPanel() -> impl IntoView {
+#[must_use]
+pub(crate) fn add_agent_panel() -> impl IntoView {
     view! {
         <>
             <div class="flex items-center px-4 py-3 border-b border-white/10 bg-[#0d0d0f]">
@@ -51,12 +53,12 @@ pub(crate) fn AddAgentPanel() -> impl IntoView {
             <div class="p-6 space-y-5">
                 <div><h3 class="text-xl font-bold text-white mb-1">"Add Docker Agent"</h3><p class="text-sm text-zinc-400">"Connect a new Docker agent to start auditing."</p></div>
                 <div class="space-y-4">
-                    <MockField label="Name" value="Production Server" value_class="text-zinc-400"/>
+                    {mock_field::mock_field("Name", "Production Server", "text-zinc-400")}
                     <div>
                         <label class="block text-sm font-medium text-zinc-300 mb-2">"Access Mode"</label>
                         <div class="bg-[#0d0d0f] border border-[#2496ED]/30 rounded-lg px-3 py-2.5 text-zinc-300 text-sm flex items-center gap-2"><span class="text-[#2496ED]">"☁"</span> "Cloudflare Tunnel (Recommended)"</div>
                     </div>
-                    <MockField label="Agent URL" value="https://xxx.trycloudflare.com" value_class="text-[#00E5FF] text-sm font-mono"/>
+                    {mock_field::mock_field("Agent URL", "https://xxx.trycloudflare.com", "text-[#00E5FF] text-sm font-mono")}
                     <div>
                         <label class="block text-sm font-medium text-zinc-300 mb-2">"Agent Token"</label>
                         <div class="bg-[#0d0d0f] border border-white/10 rounded-lg px-3 py-2.5 text-amber-300 text-sm font-mono">"dok_••••••••••••••••"</div>
@@ -69,8 +71,8 @@ pub(crate) fn AddAgentPanel() -> impl IntoView {
     }
 }
 
-#[component]
-pub(crate) fn AuditPreviewPanel() -> impl IntoView {
+#[must_use]
+pub(crate) fn audit_preview_panel() -> impl IntoView {
     view! {
         <>
             <div class="flex items-center px-4 py-3 border-b border-white/10 bg-[#121214]">
@@ -86,16 +88,16 @@ pub(crate) fn AuditPreviewPanel() -> impl IntoView {
                         <div class="mt-2 text-xs text-zinc-500 font-mono">"CIS-aligned · 42 rules evaluated"</div>
                     </div>
                     <div class="flex flex-col items-end gap-1.5 text-right">
-                        <PreviewCount color="bg-rose-500" text_color="text-rose-400" count="7" label="failed"/>
-                        <PreviewCount color="bg-amber-400" text_color="text-amber-400" count="3" label="warnings"/>
-                        <PreviewCount color="bg-emerald-400" text_color="text-emerald-400" count="32" label="passed"/>
+                        {audit_stats::preview_count("bg-rose-500", "text-rose-400", "7", "failed")}
+                        {audit_stats::preview_count("bg-amber-400", "text-amber-400", "3", "warnings")}
+                        {audit_stats::preview_count("bg-emerald-400", "text-emerald-400", "32", "passed")}
                     </div>
                 </div>
                 <div class="space-y-3">
                     <div class="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">"security pillars"</div>
-                    <PreviewPillar icon=IconKind::Box label="Namespace Isolation" color="text-blue-400 border-blue-500/30" count="1/5" bar="bg-blue-500" width="20%"/>
-                    <PreviewPillar icon=IconKind::Gauge label="Cgroup Controls" color="text-amber-400 border-amber-500/30" count="2/5" bar="bg-amber-500" width="40%"/>
-                    <PreviewPillar icon=IconKind::Shield label="Runtime Hardening" color="text-rose-400 border-rose-500/30" count="3/6" bar="bg-rose-500" width="50%"/>
+                    {audit_stats::preview_pillar(IconKind::Box, "Namespace Isolation", "text-blue-400 border-blue-500/30", "1/5", "bg-blue-500", "20%")}
+                    {audit_stats::preview_pillar(IconKind::Gauge, "Cgroup Controls", "text-amber-400 border-amber-500/30", "2/5", "bg-amber-500", "40%")}
+                    {audit_stats::preview_pillar(IconKind::Shield, "Runtime Hardening", "text-rose-400 border-rose-500/30", "3/6", "bg-rose-500", "50%")}
                 </div>
                 <div class="flex items-center justify-between border-t border-white/5 pt-4">
                     <div class="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-600">"run · 2s ago"</div>

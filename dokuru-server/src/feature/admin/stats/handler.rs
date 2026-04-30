@@ -9,6 +9,9 @@ use crate::{
 /// GET /api/v1/admin/stats
 ///
 /// Get dashboard statistics (admin only).
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn get_dashboard_stats(
     State(state): State<AppState>,
 ) -> ApiResult<DashboardStatsResponse> {

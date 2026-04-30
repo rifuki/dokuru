@@ -35,6 +35,7 @@ pub struct DeviceInfo {
 
 impl DeviceInfo {
     /// Parse user agent to get device name
+    #[must_use]
     pub fn from_user_agent(user_agent: &str, ip: &str) -> Self {
         let (name, device_type) = Self::parse_user_agent(user_agent);
 

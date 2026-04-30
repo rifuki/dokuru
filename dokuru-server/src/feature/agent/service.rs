@@ -17,6 +17,9 @@ impl AgentService {
         Self { agent_repo }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn create_agent(
         &self,
         pool: &PgPool,
@@ -45,11 +48,17 @@ impl AgentService {
         Ok(Self::to_response_with_token(created, Some(plain_token)))
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn list_agents(&self, pool: &PgPool, user_id: Uuid) -> Result<Vec<AgentResponse>> {
         let agents = self.agent_repo.find_by_user_id(pool, user_id).await?;
         Ok(agents.into_iter().map(Self::to_response).collect())
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn get_agent(
         &self,
         pool: &PgPool,
@@ -67,6 +76,9 @@ impl AgentService {
         Ok(None)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn update_agent(
         &self,
         pool: &PgPool,
@@ -90,6 +102,9 @@ impl AgentService {
         Ok(agent.map(Self::to_response))
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn delete_agent(&self, pool: &PgPool, id: Uuid, user_id: Uuid) -> Result<bool> {
         self.agent_repo.delete(pool, id, user_id).await
     }

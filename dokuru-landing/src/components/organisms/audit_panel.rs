@@ -1,10 +1,12 @@
-use crate::components::atoms::Icon;
-use crate::components::molecules::{AuditCount, RemediationPill, SeverityChip};
+use crate::components::{
+    atoms::icon::icon,
+    molecules::{audit_stats, status_badges},
+};
 use crate::content::AUDIT_SECTIONS;
 use leptos::prelude::*;
 
-#[component]
-pub(crate) fn AuditPanel() -> impl IntoView {
+#[must_use]
+pub(crate) fn audit_panel() -> impl IntoView {
     view! {
         <div data-testid="hero-audit-panel" class="relative w-full rounded-xl border border-white/10 bg-[#09090B] shadow-[0_40px_80px_-20px_rgba(0,0,0,0.8)] overflow-hidden">
             <div class="pointer-events-none absolute inset-0 overflow-hidden opacity-40">
@@ -34,9 +36,9 @@ pub(crate) fn AuditPanel() -> impl IntoView {
                         <div class="mt-1 text-[10px] text-zinc-500 font-mono">"CIS-aligned · 42 rules evaluated"</div>
                     </div>
                     <div class="flex flex-col items-end gap-1 text-right">
-                        <AuditCount color="bg-rose-500" text_color="text-rose-400" count="7" label="failed"/>
-                        <AuditCount color="bg-amber-400" text_color="text-amber-400" count="3" label="warnings"/>
-                        <AuditCount color="bg-emerald-400" text_color="text-emerald-400" count="32" label="passed"/>
+                        {audit_stats::audit_count("bg-rose-500", "text-rose-400", "7", "failed")}
+                        {audit_stats::audit_count("bg-amber-400", "text-amber-400", "3", "warnings")}
+                        {audit_stats::audit_count("bg-emerald-400", "text-emerald-400", "32", "passed")}
                     </div>
                 </div>
 
@@ -48,7 +50,7 @@ pub(crate) fn AuditPanel() -> impl IntoView {
                                 <div class="flex items-center justify-between">
                                     <div class="flex items-center gap-1.5">
                                         <span class=format!("inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.14em] px-1.5 py-0.5 rounded border {} bg-white/[0.02]", section.color)>
-                                            <Icon kind=section.icon size=10/>
+                                            {icon(section.icon, 10, "", "2")}
                                             {section.name}
                                         </span>
                                         <span class="font-mono text-[9px] text-zinc-600">{format!("{}/{}", section.passed, section.total)}</span>
@@ -61,13 +63,13 @@ pub(crate) fn AuditPanel() -> impl IntoView {
                                     view! {
                                         <div class="flex items-center justify-between gap-2 p-1.5 rounded bg-white/[0.02] border border-white/5">
                                             <div class="flex items-center gap-1.5 min-w-0 flex-1">
-                                                <SeverityChip kind=rule.sev/>
+                                                {status_badges::severity_chip(rule.sev)}
                                                 <div class="min-w-0 flex-1">
                                                     <div class="font-mono text-[10px] text-zinc-200 truncate">{rule.rule}</div>
                                                     <div class="font-mono text-[9px] text-zinc-500 truncate">{rule.detail}</div>
                                                 </div>
                                             </div>
-                                            <RemediationPill kind=rule.rem/>
+                                            {status_badges::remediation_pill(rule.rem)}
                                         </div>
                                     }
                                 }).collect_view()}

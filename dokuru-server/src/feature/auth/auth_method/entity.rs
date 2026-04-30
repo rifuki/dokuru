@@ -14,6 +14,7 @@ pub enum AuthProvider {
 }
 
 impl AuthProvider {
+    #[must_use]
     pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Password => "password",
@@ -62,14 +63,19 @@ pub struct AuthMethod {
 }
 
 impl AuthMethod {
+    #[must_use]
     pub fn is_password(&self) -> bool {
         self.provider == "password"
     }
 
+    #[must_use]
     pub fn is_oauth(&self) -> bool {
         self.provider != "password"
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub fn verify_password(&self, password: &str) -> Result<bool, argon2::password_hash::Error> {
         use argon2::{
             Argon2,

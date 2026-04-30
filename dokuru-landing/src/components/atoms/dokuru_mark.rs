@@ -1,7 +1,7 @@
 use leptos::prelude::*;
 
-#[component]
-pub(crate) fn DokuruMark(#[prop(default = "h-7 w-7")] class: &'static str) -> impl IntoView {
+#[must_use]
+pub(crate) fn dokuru_mark(class: &'static str) -> impl IntoView {
     view! {
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" class=class aria-hidden="true">
             <defs>

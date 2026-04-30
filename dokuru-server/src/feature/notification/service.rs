@@ -34,6 +34,9 @@ impl NotificationService {
         Self { repo }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn list_for_user(
         &self,
         pool: &PgPool,
@@ -55,10 +58,16 @@ impl NotificationService {
             .collect())
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn unread_count(&self, pool: &PgPool, user_id: Uuid) -> Result<i64> {
         self.repo.unread_count(pool, user_id).await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn summary_for_user(
         &self,
         pool: &PgPool,
@@ -81,6 +90,9 @@ impl NotificationService {
         })
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn list_preferences(
         &self,
         pool: &PgPool,
@@ -109,6 +121,9 @@ impl NotificationService {
             .collect())
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn set_preference(
         &self,
         pool: &PgPool,
@@ -133,10 +148,16 @@ impl NotificationService {
         ))
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn reset_preferences(&self, pool: &PgPool, user_id: Uuid) -> Result<u64> {
         self.repo.reset_preferences(pool, user_id).await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn mark_read(
         &self,
         pool: &PgPool,
@@ -150,6 +171,9 @@ impl NotificationService {
             .map(NotificationResponse::from))
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn mark_all_read(&self, pool: &PgPool, user_id: Uuid) -> Result<u64> {
         self.repo.mark_all_read(pool, user_id).await
     }
@@ -220,6 +244,9 @@ impl NotificationService {
         Ok(())
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn notify_user_registered(
         &self,
         pool: &PgPool,
@@ -254,6 +281,9 @@ impl NotificationService {
         .await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn notify_email_verified(&self, pool: &PgPool, user: &User) -> Result<()> {
         self.notify_user(
             pool,
@@ -281,6 +311,9 @@ impl NotificationService {
         .await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn notify_password_changed(&self, pool: &PgPool, user_id: Uuid) -> Result<()> {
         self.notify_user(
             pool,
@@ -308,6 +341,9 @@ impl NotificationService {
         .await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn notify_agent_created(
         &self,
         pool: &PgPool,
@@ -341,6 +377,9 @@ impl NotificationService {
         .await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn notify_agent_connected(
         &self,
         pool: &PgPool,
@@ -375,6 +414,9 @@ impl NotificationService {
         .await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn notify_audit_saved(
         &self,
         pool: &PgPool,
@@ -427,6 +469,9 @@ impl NotificationService {
         .await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn notify_bootstrap_admin(&self, pool: &PgPool, user_id: Uuid) -> Result<()> {
         self.notify_user(
             pool,

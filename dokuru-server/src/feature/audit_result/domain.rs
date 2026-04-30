@@ -9,6 +9,7 @@ pub struct AuditSummary {
 }
 
 impl AuditSummary {
+    #[must_use]
     pub fn from_wire(total: usize, passed: usize, failed: usize, score: u8) -> Self {
         Self {
             total: usize_to_i32_or_zero(total),
@@ -18,6 +19,7 @@ impl AuditSummary {
         }
     }
 
+    #[must_use]
     pub const fn from_record(total: i32, passed: i32, failed: i32, score: i32) -> Self {
         Self {
             total,
@@ -28,10 +30,12 @@ impl AuditSummary {
     }
 }
 
+#[must_use]
 pub fn usize_to_i32_or_zero(value: usize) -> i32 {
     i32::try_from(value).unwrap_or(0)
 }
 
+#[must_use]
 pub fn calculate_score(total: usize, passed: usize) -> u8 {
     if total == 0 {
         return 100;
@@ -41,10 +45,12 @@ pub fn calculate_score(total: usize, passed: usize) -> u8 {
     u8::try_from(percentage.min(100)).unwrap_or(100)
 }
 
+#[must_use]
 pub fn parse_ran_at_or_now(timestamp: &str) -> DateTime<Utc> {
     DateTime::parse_from_rfc3339(timestamp).map_or_else(|_| Utc::now(), |dt| dt.with_timezone(&Utc))
 }
 
+#[must_use]
 pub fn parse_ran_at(timestamp: &str) -> Option<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(timestamp)
         .ok()

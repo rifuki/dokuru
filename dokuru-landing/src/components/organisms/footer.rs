@@ -1,10 +1,10 @@
-use crate::components::atoms::{DokuruMark, Icon, IconKind};
+use crate::components::atoms::{dokuru_mark::dokuru_mark, icon::icon, IconKind};
 use crate::content::FOOTER_COLUMNS;
 use crate::utils::reveal::reveal_ref;
 use leptos::{html, prelude::*};
 
-#[component]
-pub(crate) fn Footer() -> impl IntoView {
+#[must_use]
+pub(crate) fn footer() -> impl IntoView {
     let brand_ref = reveal_ref::<html::Div>();
 
     view! {
@@ -12,10 +12,10 @@ pub(crate) fn Footer() -> impl IntoView {
             <div class="max-w-7xl mx-auto px-6 md:px-10">
                 <div class="grid lg:grid-cols-12 gap-10">
                     <div node_ref=brand_ref class="reveal lg:col-span-4">
-                        <div class="flex items-center gap-2.5"><DokuruMark class="h-7 w-7"/><span class="font-heading font-black text-white text-lg tracking-tight">"dokuru"</span></div>
+                        <div class="flex items-center gap-2.5">{dokuru_mark("h-7 w-7")}<span class="font-heading font-black text-white text-lg tracking-tight">"dokuru"</span></div>
                         <p class="mt-4 text-zinc-400 text-[14px] leading-relaxed max-w-sm">"Agent-based Docker security auditing. CIS-aligned checks focused on namespace isolation, cgroup controls, and runtime hardening."</p>
                         <div class="mt-6 flex items-center gap-3">
-                            <a href="https://github.com/rifuki/dokuru" target="_blank" rel="noopener noreferrer" data-testid="footer-social-github" class="w-9 h-9 rounded-md border border-white/10 hover:border-white/30 grid place-items-center text-zinc-400 hover:text-white transition-all hover:scale-110 active:scale-90" aria-label="GitHub"><Icon kind=IconKind::Github size=16/></a>
+                            <a href="https://github.com/rifuki/dokuru" target="_blank" rel="noopener noreferrer" data-testid="footer-social-github" class="w-9 h-9 rounded-md border border-white/10 hover:border-white/30 grid place-items-center text-zinc-400 hover:text-white transition-all hover:scale-110 active:scale-90" aria-label="GitHub">{icon(IconKind::Github, 16, "", "2")}</a>
                         </div>
                     </div>
                     <div class="lg:col-span-8 grid grid-cols-2 md:grid-cols-4 gap-8">

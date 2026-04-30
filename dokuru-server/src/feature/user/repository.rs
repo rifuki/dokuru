@@ -56,7 +56,7 @@ pub trait UserRepository: Send + Sync {
         username: Option<&str>,
     ) -> Result<Option<User>, sqlx::Error>;
 
-    /// Delete user (cascades to profiles, auth_methods, sessions)
+    /// Delete user (cascades to profiles, `auth_methods`, sessions)
     async fn delete(&self, pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error>;
 
     /// Check if email exists
@@ -147,6 +147,7 @@ pub trait UserRepository: Send + Sync {
 pub struct UserRepositoryImpl;
 
 impl UserRepositoryImpl {
+    #[must_use]
     pub const fn new() -> Self {
         Self
     }
@@ -519,6 +520,7 @@ pub trait UserProfileRepository: Send + Sync {
 pub struct UserProfileRepositoryImpl;
 
 impl UserProfileRepositoryImpl {
+    #[must_use]
     pub const fn new() -> Self {
         Self
     }

@@ -67,6 +67,7 @@ pub trait ApiKeyRepository: Send + Sync {
 pub struct ApiKeyRepositoryImpl;
 
 impl ApiKeyRepositoryImpl {
+    #[must_use]
     pub const fn new() -> Self {
         Self
     }

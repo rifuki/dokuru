@@ -1,23 +1,23 @@
 use crate::components::organisms::{
-    Coverage, Features, FinalCta, Footer, Header, Hero, HowItWorks, Problem, WhyDokuru,
+    coverage, features, final_cta, footer, header, hero, how_it_works, problem, why_dokuru,
 };
 use leptos::prelude::*;
 
-#[component]
-pub(crate) fn Landing() -> impl IntoView {
+#[must_use]
+pub(crate) fn landing() -> impl IntoView {
     view! {
         <div data-testid="landing-root" class="min-h-screen bg-[#050505] text-white selection:bg-[#2496ED]/30">
-            <Header/>
+            {header::header()}
             <main>
-                <Hero/>
-                <Problem/>
-                <Features/>
-                <HowItWorks/>
-                <Coverage/>
-                <WhyDokuru/>
-                <FinalCta/>
+                {hero::hero()}
+                {problem::problem()}
+                {features::features()}
+                {how_it_works::how_it_works()}
+                {coverage::coverage()}
+                {why_dokuru::why_dokuru()}
+                {final_cta::final_cta()}
             </main>
-            <Footer/>
+            {footer::footer()}
         </div>
     }
 }

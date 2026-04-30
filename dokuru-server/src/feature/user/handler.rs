@@ -11,6 +11,9 @@ use crate::{
 };
 
 /// GET /api/v1/users/me — get current user profile
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn get_me(
     State(state): State<AppState>,
     auth_user: axum::Extension<AuthUser>,
@@ -41,6 +44,9 @@ pub async fn get_me(
 }
 
 /// PATCH /api/v1/users/me — update current user profile
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn update_me(
     State(state): State<AppState>,
     auth_user: axum::Extension<AuthUser>,

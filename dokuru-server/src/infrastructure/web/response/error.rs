@@ -45,7 +45,7 @@ impl ApiError {
         self
     }
 
-    /// Set structured error code (e.g. AUTH_001)
+    /// Set structured error code (e.g. `AUTH_001`)
     #[must_use]
     pub fn with_error_code(mut self, error_code: ErrorCode) -> Self {
         self.error_code = Some(error_code.to_string());
@@ -90,6 +90,7 @@ impl ApiError {
 
 // Getters
 impl ApiError {
+    #[must_use]
     pub fn status_code(&self) -> StatusCode {
         StatusCode::from_u16(self.code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
     }

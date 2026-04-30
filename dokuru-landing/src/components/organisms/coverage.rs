@@ -1,10 +1,10 @@
-use crate::components::molecules::CoverageCard;
+use crate::components::molecules::coverage_card;
 use crate::content::COVERAGE_GROUPS;
 use crate::utils::reveal::reveal_ref;
 use leptos::{html, prelude::*};
 
-#[component]
-pub(crate) fn Coverage() -> impl IntoView {
+#[must_use]
+pub(crate) fn coverage() -> impl IntoView {
     let heading_ref = reveal_ref::<html::Div>();
     let grid_ref = reveal_ref::<html::Div>();
 
@@ -20,7 +20,7 @@ pub(crate) fn Coverage() -> impl IntoView {
                     <span class="font-mono text-[10px] uppercase tracking-[0.22em] text-zinc-500 border border-white/10 rounded px-3 py-1.5 bg-white/[0.02]">"CIS Docker Benchmark v1.8.0 · aligned, not certified"</span>
                 </div>
                 <div node_ref=grid_ref class="reveal grid md:grid-cols-3 gap-px bg-white/10 border border-white/10 rounded-xl overflow-hidden" data-reveal="fade" style="--motion-duration: 300ms">
-                    {COVERAGE_GROUPS.iter().enumerate().map(|(i, group)| view! { <CoverageCard group=group index=i/> }).collect_view()}
+                    {COVERAGE_GROUPS.iter().enumerate().map(|(i, group)| coverage_card::coverage_card(group, i)).collect_view()}
                 </div>
             </div>
         </section>

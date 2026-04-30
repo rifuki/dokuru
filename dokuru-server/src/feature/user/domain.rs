@@ -2,26 +2,32 @@ use crate::feature::{auth::types::Role, user::entity::UserProfile};
 
 pub const DEFAULT_ROLE: Role = Role::User;
 
+#[must_use]
 pub fn parse_role_or_default(role: &str) -> Role {
     Role::try_from(role).unwrap_or(DEFAULT_ROLE)
 }
 
+#[must_use]
 pub fn is_valid_role(role: &str) -> bool {
     Role::try_from(role).is_ok()
 }
 
+#[must_use]
 pub fn normalize_email(email: &str) -> String {
     email.trim().to_lowercase()
 }
 
+#[must_use]
 pub fn normalize_username(username: &str) -> String {
     username.trim().to_lowercase()
 }
 
+#[must_use]
 pub const fn is_user_active(is_active: bool, email_verified: bool) -> bool {
     is_active && email_verified
 }
 
+#[must_use]
 pub fn is_profile_complete(profile: &UserProfile) -> bool {
     profile
         .full_name

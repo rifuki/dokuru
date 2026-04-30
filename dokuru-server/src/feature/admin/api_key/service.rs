@@ -24,6 +24,9 @@ impl ApiKeyService {
 
     /// Generate a new API key
     /// Returns the key with plain text (shown only once)
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn generate_key(
         &self,
         name: &str,
@@ -59,6 +62,9 @@ impl ApiKeyService {
     }
 
     /// Validate an API key
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn validate_key(&self, plain_key: &str) -> Result<ApiKey, ApiKeyError> {
         let key_hash = domain::hash_key(plain_key);
 
@@ -82,6 +88,9 @@ impl ApiKeyService {
     }
 
     /// List all API keys
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn list_keys(
         &self,
         limit: i64,
@@ -92,12 +101,18 @@ impl ApiKeyService {
     }
 
     /// Get key by ID
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn get_key(&self, id: Uuid) -> Result<Option<ApiKeyResponse>, ApiKeyError> {
         let key = self.repo.find_by_id(self.db.pool(), id).await?;
         Ok(key.map(ApiKeyResponse::from))
     }
 
     /// Update key
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn update_key(
         &self,
         id: Uuid,
@@ -108,11 +123,17 @@ impl ApiKeyService {
     }
 
     /// Delete key
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn delete_key(&self, id: Uuid) -> Result<bool, ApiKeyError> {
         self.repo.delete(self.db.pool(), id).await
     }
 
-    /// Revoke key (set is_active = false)
+    /// Revoke key (set `is_active` = false)
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn revoke_key(&self, id: Uuid) -> Result<Option<ApiKeyResponse>, ApiKeyError> {
         let payload = UpdateApiKey {
             name: None,
@@ -123,6 +144,9 @@ impl ApiKeyService {
     }
 
     /// Refresh key (revoke old, create new)
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn refresh_key(
         &self,
         id: Uuid,

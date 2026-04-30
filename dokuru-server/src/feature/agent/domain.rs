@@ -15,6 +15,7 @@ pub enum AccessMode {
 }
 
 impl AccessMode {
+    #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Direct => "direct",
@@ -24,6 +25,9 @@ impl AccessMode {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub fn parse(value: &str) -> Result<Self, AgentValidationError> {
         match value {
             "direct" => Ok(Self::Direct),
@@ -43,6 +47,7 @@ pub enum AgentStatus {
 }
 
 impl AgentStatus {
+    #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Online => "online",
@@ -51,6 +56,9 @@ impl AgentStatus {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub fn parse(value: &str) -> Result<Self, AgentValidationError> {
         match value {
             "online" => Ok(Self::Online),
@@ -79,6 +87,9 @@ pub enum AgentValidationError {
     InvalidStoredTokenUtf8,
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub fn validate_agent_name(name: &str) -> Result<(), AgentValidationError> {
     let len = name.trim().chars().count();
     if (MIN_AGENT_NAME_LEN..=MAX_AGENT_NAME_LEN).contains(&len) {
@@ -88,6 +99,9 @@ pub fn validate_agent_name(name: &str) -> Result<(), AgentValidationError> {
     }
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub fn validate_agent_url(agent_url: &str) -> Result<(), AgentValidationError> {
     if agent_url == RELAY_AGENT_URL {
         return Ok(());
@@ -98,14 +112,23 @@ pub fn validate_agent_url(agent_url: &str) -> Result<(), AgentValidationError> {
         .map_err(|_| AgentValidationError::InvalidUrl)
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub fn validate_access_mode(mode: &str) -> Result<AccessMode, AgentValidationError> {
     AccessMode::parse(mode)
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub fn validate_status(status: &str) -> Result<AgentStatus, AgentValidationError> {
     AgentStatus::parse(status)
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub const fn validate_token(token: &str) -> Result<(), AgentValidationError> {
     if token.is_empty() {
         Err(AgentValidationError::EmptyToken)
@@ -114,6 +137,7 @@ pub const fn validate_token(token: &str) -> Result<(), AgentValidationError> {
     }
 }
 
+#[must_use]
 pub fn hash_token(token: &str) -> String {
     use sha2::{Digest, Sha256};
 
@@ -122,12 +146,16 @@ pub fn hash_token(token: &str) -> String {
     hex::encode(hasher.finalize())
 }
 
+#[must_use]
 pub fn encode_token(token: &str) -> String {
     use base64::{Engine as _, engine::general_purpose};
 
     general_purpose::STANDARD.encode(token.as_bytes())
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub fn decode_token(encoded: &str) -> Result<String, AgentValidationError> {
     use base64::{Engine as _, engine::general_purpose};
 
@@ -138,12 +166,14 @@ pub fn decode_token(encoded: &str) -> Result<String, AgentValidationError> {
     String::from_utf8(decoded).map_err(|_| AgentValidationError::InvalidStoredTokenUtf8)
 }
 
+#[must_use]
 pub fn is_agent_online_at(last_seen: Option<DateTime<Utc>>, now: DateTime<Utc>) -> bool {
     last_seen.is_some_and(|last_seen| {
         now.signed_duration_since(last_seen) < Duration::minutes(ONLINE_THRESHOLD_MINUTES)
     })
 }
 
+#[must_use]
 pub fn is_agent_online(last_seen: Option<DateTime<Utc>>) -> bool {
     is_agent_online_at(last_seen, Utc::now())
 }

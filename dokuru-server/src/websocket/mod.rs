@@ -31,6 +31,7 @@ impl Default for WsManager {
 }
 
 impl WsManager {
+    #[must_use]
     pub fn new() -> Self {
         let (tx, _) = broadcast::channel(100);
         Self {

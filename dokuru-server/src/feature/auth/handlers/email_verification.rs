@@ -24,6 +24,9 @@ pub struct VerifyEmailResponse {
     message: String,
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn verify_email(
     State(state): State<AppState>,
     Query(query): Query<VerifyEmailQuery>,
@@ -82,6 +85,9 @@ pub struct ResendVerificationRequest {
     email: String,
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn resend_verification(
     State(state): State<AppState>,
     headers: HeaderMap,

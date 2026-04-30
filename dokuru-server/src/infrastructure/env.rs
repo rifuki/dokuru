@@ -1,5 +1,8 @@
 use std::path::PathBuf;
 
+/// # Panics
+///
+/// Panics if required runtime invariants are violated.
 pub fn load() {
     let api_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let workspace_dir = api_dir.parent().expect("api dir must be in workspace");

@@ -42,7 +42,6 @@ pub enum SeverityKind {
     Warn,
 }
 
-#[allow(dead_code)]
 #[derive(Clone, Copy)]
 pub enum RemediationKind {
     Auto,

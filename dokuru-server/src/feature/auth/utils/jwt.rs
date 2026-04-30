@@ -56,6 +56,9 @@ pub struct TokenPair {
 }
 
 /// Create token pair with existing session (for refresh)
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub fn create_token_pair_with_session(
     user_id: Uuid,
     _email: &str,
@@ -146,6 +149,9 @@ fn create_refresh_token_with_session(
 }
 
 /// Create both tokens with session tracking
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub fn create_token_pair(
     user_id: Uuid,
     _email: &str,
@@ -167,6 +173,9 @@ pub fn create_token_pair(
 }
 
 /// Validate access token
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub fn validate_access_token(token: &str) -> Result<Claims, JwtError> {
     let validation = Validation::default();
 
@@ -184,6 +193,9 @@ pub fn validate_access_token(token: &str) -> Result<Claims, JwtError> {
 }
 
 /// Validate refresh token with absolute session timeout check
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub fn validate_refresh_token(token: &str) -> Result<Claims, JwtError> {
     let validation = Validation::default();
 
@@ -209,11 +221,15 @@ pub fn validate_refresh_token(token: &str) -> Result<Claims, JwtError> {
 }
 
 /// Extract user ID from claims
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub fn extract_user_id(claims: &Claims) -> Result<Uuid, JwtError> {
     Uuid::parse_str(&claims.sub).map_err(|_| JwtError::Invalid)
 }
 
 /// Extract session ID from claims
+#[must_use]
 pub fn extract_session_id(claims: &Claims) -> String {
     claims.sid.clone()
 }

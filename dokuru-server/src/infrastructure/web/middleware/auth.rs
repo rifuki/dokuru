@@ -14,6 +14,9 @@ use crate::{
 
 /// Require valid JWT. Injects `AuthUser` into request extensions.
 /// Returns 401 if token is missing, invalid, or blacklisted.
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn auth_middleware(
     Extension(blacklist): Extension<Option<Arc<dyn SessionBlacklist>>>,
     mut request: Request,
@@ -110,7 +113,10 @@ pub async fn optional_auth_middleware(
 }
 
 /// Require `Role::Admin`. Must run AFTER `auth_middleware`.
-/// Returns 401 if no AuthUser, 403 if not admin.
+/// Returns 401 if no `AuthUser`, 403 if not admin.
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn admin_middleware(request: Request, next: Next) -> Result<Response, StatusCode> {
     let auth_user = request
         .extensions()

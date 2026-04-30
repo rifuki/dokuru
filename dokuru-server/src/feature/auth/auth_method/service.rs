@@ -30,6 +30,9 @@ impl AuthMethodService {
         Self { db, repo }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn create_password_auth(
         &self,
         user_id: uuid::Uuid,
@@ -51,6 +54,9 @@ impl AuthMethodService {
             .await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn create_oauth_auth(
         &self,
         input: CreateOAuthAuthInput<'_>,
@@ -71,10 +77,16 @@ impl AuthMethodService {
             .await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn find_by_id(&self, id: uuid::Uuid) -> Result<Option<AuthMethod>, sqlx::Error> {
         self.repo.find_by_id(self.db.pool(), id).await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn find_by_provider_id(
         &self,
         provider: AuthProvider,
@@ -85,6 +97,9 @@ impl AuthMethodService {
             .await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn find_by_user_and_provider(
         &self,
         user_id: uuid::Uuid,
@@ -95,10 +110,16 @@ impl AuthMethodService {
             .await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn list_by_user(&self, user_id: uuid::Uuid) -> Result<Vec<AuthMethod>, sqlx::Error> {
         self.repo.list_by_user(self.db.pool(), user_id).await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn find_primary(
         &self,
         user_id: uuid::Uuid,
@@ -106,6 +127,9 @@ impl AuthMethodService {
         self.repo.find_primary(self.db.pool(), user_id).await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn update_password(
         &self,
         auth_method_id: uuid::Uuid,
@@ -117,10 +141,16 @@ impl AuthMethodService {
             .await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn delete(&self, auth_method_id: uuid::Uuid) -> Result<bool, sqlx::Error> {
         self.repo.delete(self.db.pool(), auth_method_id).await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn touch(&self, auth_method_id: uuid::Uuid) -> Result<(), sqlx::Error> {
         self.repo.touch(self.db.pool(), auth_method_id).await
     }

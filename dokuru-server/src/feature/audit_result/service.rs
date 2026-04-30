@@ -18,6 +18,9 @@ impl AuditResultService {
         Self { repo }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn save(
         &self,
         pool: &PgPool,
@@ -53,6 +56,9 @@ impl AuditResultService {
         Ok(Self::to_response(saved))
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn get_latest(
         &self,
         pool: &PgPool,
@@ -63,6 +69,9 @@ impl AuditResultService {
         Ok(record.map(Self::to_response))
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn get_by_id(
         &self,
         pool: &PgPool,
@@ -77,6 +86,9 @@ impl AuditResultService {
         Ok(record.map(Self::to_response))
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn list(
         &self,
         pool: &PgPool,
@@ -87,6 +99,9 @@ impl AuditResultService {
         Ok(records.into_iter().map(Self::to_response).collect())
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn get_report(
         &self,
         pool: &PgPool,

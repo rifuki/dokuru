@@ -214,10 +214,14 @@ impl std::fmt::Debug for AppState {
 }
 
 impl AppState {
+    #[must_use]
     pub fn port(&self) -> u16 {
         self.config.server.port
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn new(config: Config, log_reload_handle: ReloadFilterHandle) -> eyre::Result<Self> {
         let db = Database::new(&config)
             .await
@@ -238,7 +242,8 @@ impl AppState {
         ))
     }
 
-    /// Build AppState from an existing Database — used by integration tests
+    /// Build `AppState` from an existing Database — used by integration tests
+    #[must_use]
     pub fn new_for_test(config: Config, db: &Database) -> Self {
         use tracing_subscriber::{EnvFilter, Registry, reload};
 

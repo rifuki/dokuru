@@ -1,10 +1,10 @@
-use crate::components::molecules::WhyCard;
+use crate::components::molecules::why_card;
 use crate::content::WHY_POINTS;
 use crate::utils::reveal::reveal_ref;
 use leptos::{html, prelude::*};
 
-#[component]
-pub(crate) fn WhyDokuru() -> impl IntoView {
+#[must_use]
+pub(crate) fn why_dokuru() -> impl IntoView {
     let intro_ref = reveal_ref::<html::Div>();
     let scope_ref = reveal_ref::<html::Div>();
     let points_ref = reveal_ref::<html::Ul>();
@@ -24,7 +24,7 @@ pub(crate) fn WhyDokuru() -> impl IntoView {
                     </div>
                     <div class="lg:col-span-8">
                         <ul node_ref=points_ref class="reveal grid sm:grid-cols-2 gap-px bg-white/10 border border-white/10 rounded-xl overflow-hidden" data-reveal="fade" style="--motion-duration: 300ms">
-                            {WHY_POINTS.iter().enumerate().map(|(i, point)| view! { <WhyCard point=point index=i/> }).collect_view()}
+                            {WHY_POINTS.iter().enumerate().map(|(i, point)| why_card::why_card(point, i)).collect_view()}
                         </ul>
                     </div>
                 </div>

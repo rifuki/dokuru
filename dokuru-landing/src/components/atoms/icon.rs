@@ -101,12 +101,12 @@ const fn icon_markup(kind: IconKind) -> &'static str {
     }
 }
 
-#[component]
-pub(crate) fn Icon(
+#[must_use]
+pub(crate) fn icon(
     kind: IconKind,
-    #[prop(default = 20)] size: u16,
-    #[prop(default = "")] class: &'static str,
-    #[prop(default = "2")] stroke_width: &'static str,
+    size: u16,
+    class: &'static str,
+    stroke_width: &'static str,
 ) -> impl IntoView {
     view! {
         <svg

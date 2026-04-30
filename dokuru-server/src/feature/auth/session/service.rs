@@ -21,6 +21,9 @@ impl SessionService {
     }
 
     /// Create a new session
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn create_session(
         &self,
         user_id: Uuid,
@@ -33,7 +36,10 @@ impl SessionService {
             .await
     }
 
-    /// Get session by session_id
+    /// Get session by `session_id`
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn get_session(
         &self,
         session_id: &str,
@@ -44,6 +50,9 @@ impl SessionService {
     }
 
     /// List all active sessions for a user
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn list_sessions(
         &self,
         user_id: Uuid,
@@ -52,6 +61,9 @@ impl SessionService {
     }
 
     /// Update last active timestamp
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn touch_session(&self, session_id: &str) -> Result<(), SessionRepositoryError> {
         self.repo
             .update_last_active(self.db.pool(), session_id)
@@ -59,6 +71,9 @@ impl SessionService {
     }
 
     /// Update resolved session location
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn update_location(
         &self,
         id: Uuid,
@@ -70,6 +85,9 @@ impl SessionService {
     }
 
     /// Revoke a specific session by internal UUID
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn revoke_session(
         &self,
         session_id: Uuid,
@@ -78,7 +96,10 @@ impl SessionService {
         self.repo.revoke(self.db.pool(), session_id, reason).await
     }
 
-    /// Revoke session by session_id string (JWT sid claim)
+    /// Revoke session by `session_id` string (JWT sid claim)
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn revoke_by_session_id(
         &self,
         session_id: &str,
@@ -97,6 +118,9 @@ impl SessionService {
     }
 
     /// Revoke all sessions except current
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn revoke_all_except(
         &self,
         user_id: Uuid,
@@ -108,6 +132,9 @@ impl SessionService {
     }
 
     /// Revoke all sessions (e.g., on password change)
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn revoke_all_sessions(
         &self,
         user_id: Uuid,
@@ -117,6 +144,9 @@ impl SessionService {
     }
 
     /// Check if session is valid and active
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn is_session_valid(&self, session_id: &str) -> Result<bool, SessionRepositoryError> {
         match self
             .repo
@@ -137,11 +167,17 @@ impl SessionService {
     }
 
     /// Get active session count for user
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn get_session_count(&self, user_id: Uuid) -> Result<i64, SessionRepositoryError> {
         self.repo.count_active(self.db.pool(), user_id).await
     }
 
     /// Clean up expired sessions
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn cleanup_expired(&self) -> Result<u64, SessionRepositoryError> {
         self.repo.cleanup_expired(self.db.pool()).await
     }

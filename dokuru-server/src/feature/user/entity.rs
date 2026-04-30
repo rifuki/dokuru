@@ -20,6 +20,7 @@ pub struct User {
 }
 
 impl User {
+    #[must_use]
     pub fn role(&self) -> Role {
         domain::parse_role_or_default(&self.role)
     }
@@ -92,6 +93,7 @@ pub struct UserWithProfile {
 }
 
 impl UserWithProfile {
+    #[must_use]
     pub fn role(&self) -> Role {
         domain::parse_role_or_default(&self.role)
     }

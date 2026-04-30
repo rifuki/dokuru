@@ -24,6 +24,9 @@ use crate::{
 /// GET /api/v1/admin/users
 ///
 /// List all users (admin only)
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn list_users(State(state): State<AppState>) -> ApiResult<Vec<AdminUserResponse>> {
     let users = state
         .admin_user_repo
@@ -42,6 +45,9 @@ pub async fn list_users(State(state): State<AppState>) -> ApiResult<Vec<AdminUse
 ///
 /// Update a user's role (admin only).
 /// Cannot change your own role (prevents self-demotion).
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn update_user_role(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -84,6 +90,9 @@ pub async fn update_user_role(
 
 /// POST /api/v1/admin/users/:id/status
 /// Update active status for a user and revoke active sessions when blocked.
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn update_user_status(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -142,6 +151,9 @@ pub async fn update_user_status(
 
 /// POST /api/v1/admin/users/:id/reset-password
 /// Generate a password reset token and send the existing reset email flow.
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn send_password_reset(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -203,6 +215,9 @@ pub async fn send_password_reset(
 
 /// DELETE /api/v1/admin/users/:id
 /// Permanently remove a user account.
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn delete_user(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,

@@ -27,6 +27,9 @@ pub struct ChangeEmailResponse {
     message: String,
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn request_email_change(
     State(state): State<AppState>,
     axum::Extension(auth_user): axum::Extension<AuthUser>,
@@ -111,6 +114,9 @@ pub struct VerifyEmailChangeQuery {
     token: String,
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn verify_email_change(
     State(state): State<AppState>,
     axum::extract::Query(query): axum::extract::Query<VerifyEmailChangeQuery>,

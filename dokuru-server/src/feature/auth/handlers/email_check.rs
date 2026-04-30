@@ -14,6 +14,9 @@ pub struct CheckEmailQuery {
 /// GET /api/v1/auth/check-email?email=xxx
 ///
 /// Check if email is available (public endpoint)
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn check_email_availability(
     State(state): State<AppState>,
     Query(query): Query<CheckEmailQuery>,

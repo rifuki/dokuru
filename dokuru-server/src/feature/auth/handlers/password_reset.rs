@@ -57,6 +57,12 @@ pub(crate) fn build_password_reset_url(
     format!("{origin}/reset-password?token={token}")
 }
 
+/// # Panics
+///
+/// Panics if required runtime invariants are violated.
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn forgot_password(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -138,6 +144,9 @@ pub struct ResetPasswordResponse {
     message: String,
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn reset_password(
     State(state): State<AppState>,
     Json(req): Json<ResetPasswordRequest>,

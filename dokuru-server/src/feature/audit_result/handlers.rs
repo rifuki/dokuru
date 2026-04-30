@@ -27,6 +27,9 @@ use crate::{
     state::AppState,
 };
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn save_audit(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -53,6 +56,9 @@ pub async fn save_audit(
         .with_data(result))
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn run_relay_audit(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -108,6 +114,9 @@ pub async fn relay_audit_stream_ws(
     })
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn run_relay_fix(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -173,6 +182,9 @@ pub struct RelayFixStreamQuery {
     payload: String,
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn relay_fix_preview(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -191,6 +203,9 @@ pub async fn relay_fix_preview(
     .map_err(|error| relay_error_to_api_error(&error))
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn relay_fix_verify(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -209,6 +224,9 @@ pub async fn relay_fix_verify(
     .map_err(|error| relay_error_to_api_error(&error))
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn relay_fix_history(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -226,6 +244,9 @@ pub async fn relay_fix_history(
     .map_err(|error| relay_error_to_api_error(&error))
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn relay_fix_rollback(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -368,6 +389,9 @@ pub struct RelayExecQuery {
     shell: Option<String>,
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn relay_host_shell_info(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -473,6 +497,9 @@ pub async fn relay_docker_events_ws(
     })
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn relay_health(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -614,6 +641,9 @@ fn relay_error_to_api_error(error: &RelayCommandError) -> ApiError {
         .with_message(error.to_string())
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn get_latest_audit(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -641,6 +671,9 @@ pub async fn get_latest_audit(
     Ok(ApiSuccess::default().with_data(result))
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn list_audits(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -667,6 +700,9 @@ pub async fn list_audits(
     Ok(ApiSuccess::default().with_data(results))
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn get_audit_by_id(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -700,6 +736,9 @@ pub async fn get_audit_by_id(
     )
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn get_audit_report(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,

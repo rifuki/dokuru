@@ -1,10 +1,10 @@
-use crate::components::atoms::Icon;
+use crate::components::atoms::icon::icon;
 use crate::content::Feature;
 use crate::utils::reveal::reveal_ref;
 use leptos::{html, prelude::*};
 
-#[component]
-pub(crate) fn FeatureCard(feature: &'static Feature, index: usize) -> impl IntoView {
+#[must_use]
+pub(crate) fn feature_card(feature: &'static Feature, index: usize) -> impl IntoView {
     let card_ref = reveal_ref::<html::Div>();
 
     view! {
@@ -13,7 +13,7 @@ pub(crate) fn FeatureCard(feature: &'static Feature, index: usize) -> impl IntoV
             <span class="absolute bottom-0 right-0 h-3 w-3 border-b border-r border-[#2496ED]/50"/>
             <div class="flex items-center justify-between mb-6">
                 <div class="hover-rotate w-11 h-11 rounded-lg bg-[#2496ED]/10 border border-[#2496ED]/20 grid place-items-center text-[#2496ED] group-hover:bg-[#2496ED]/15 transition-colors">
-                    <Icon kind=feature.icon size=20 stroke_width="1.75"/>
+                    {icon(feature.icon, 20, "", "1.75")}
                 </div>
                 <span class="font-mono text-[10px] uppercase tracking-[0.22em] text-zinc-500">{feature.label}</span>
             </div>

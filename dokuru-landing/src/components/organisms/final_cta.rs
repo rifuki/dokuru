@@ -1,9 +1,9 @@
-use crate::components::atoms::{Icon, IconKind};
+use crate::components::atoms::{icon::icon, IconKind};
 use crate::utils::reveal::reveal_ref;
 use leptos::{html, prelude::*};
 
-#[component]
-pub(crate) fn FinalCta() -> impl IntoView {
+#[must_use]
+pub(crate) fn final_cta() -> impl IntoView {
     let card_ref = reveal_ref::<html::Div>();
     let label_ref = reveal_ref::<html::Div>();
     let heading_ref = reveal_ref::<html::H2>();
@@ -22,8 +22,8 @@ pub(crate) fn FinalCta() -> impl IntoView {
                             <h2 node_ref=heading_ref class="reveal font-heading text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight text-white leading-[1.06]" style="--motion-delay: 100ms; --motion-duration: 500ms">"Start auditing Docker"<br class="hidden sm:block"/>"security with Dokuru."</h2>
                             <p node_ref=body_ref class="reveal mt-4 text-zinc-400 text-base md:text-[17px] max-w-xl" style="--motion-delay: 200ms; --motion-duration: 500ms">"Connect your Docker hosts, run isolation-focused audits, and apply supported fixes — from one dashboard."</p>
                             <div node_ref=actions_ref class="reveal mt-8 flex flex-wrap items-center gap-3" style="--motion-delay: 300ms; --motion-duration: 500ms">
-                                <a href="#register" data-testid="final-cta-primary" class="group inline-flex items-center gap-2 bg-[#2496ED] hover:bg-[#1C7CBA] text-white font-medium px-6 py-3.5 rounded-xl shadow-sm transition-colors active:scale-[0.98]">"Get Started" <Icon kind=IconKind::ArrowRight size=16 class="transition-transform group-hover:translate-x-0.5"/></a>
-                                <a href="#how-it-works" data-testid="final-cta-secondary" class="inline-flex items-center gap-2 bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-white/25 text-white font-medium px-6 py-3.5 rounded-xl transition-colors active:scale-[0.98]"><Icon kind=IconKind::Terminal size=16 class="text-[#2496ED]"/>"View Audit Workflow"</a>
+                                <a href="#register" data-testid="final-cta-primary" class="group inline-flex items-center gap-2 bg-[#2496ED] hover:bg-[#1C7CBA] text-white font-medium px-6 py-3.5 rounded-xl shadow-sm transition-colors active:scale-[0.98]">"Get Started" {icon(IconKind::ArrowRight, 16, "transition-transform group-hover:translate-x-0.5", "2")}</a>
+                                <a href="#how-it-works" data-testid="final-cta-secondary" class="inline-flex items-center gap-2 bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-white/25 text-white font-medium px-6 py-3.5 rounded-xl transition-colors active:scale-[0.98]">{icon(IconKind::Terminal, 16, "text-[#2496ED]", "2")}"View Audit Workflow"</a>
                             </div>
                         </div>
                         <div node_ref=preview_ref class="reveal lg:col-span-5" data-reveal="left" style="--motion-delay: 200ms; --motion-duration: 600ms">

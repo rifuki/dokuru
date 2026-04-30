@@ -14,6 +14,7 @@ pub enum AdminUserAction {
     Delete,
 }
 
+#[must_use]
 pub fn normalize_admin_role(role: &str) -> Option<String> {
     let role = user::domain::normalize_username(role);
 
@@ -24,10 +25,12 @@ pub fn normalize_admin_role(role: &str) -> Option<String> {
     }
 }
 
+#[must_use]
 pub const fn is_self_action(target_user_id: Uuid, actor_user_id: Uuid) -> bool {
     target_user_id.as_u128() == actor_user_id.as_u128()
 }
 
+#[must_use]
 pub const fn self_action_message(action: AdminUserAction) -> &'static str {
     match action {
         AdminUserAction::ChangeRole => "Cannot change your own role",
@@ -39,6 +42,7 @@ pub const fn self_action_message(action: AdminUserAction) -> &'static str {
     }
 }
 
+#[must_use]
 pub const fn status_update_message(is_active: bool) -> &'static str {
     if is_active {
         "User account restored"
@@ -47,6 +51,7 @@ pub const fn status_update_message(is_active: bool) -> &'static str {
     }
 }
 
+#[must_use]
 pub fn password_reset_expires_at(now: DateTime<Utc>) -> DateTime<Utc> {
     now + Duration::hours(1)
 }

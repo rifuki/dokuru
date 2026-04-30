@@ -77,6 +77,9 @@ pub struct EmailConfig {
 }
 
 impl TomlConfig {
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub fn load() -> eyre::Result<Self> {
         ConfigBuilder::builder()
             .add_source(File::from_str(
@@ -99,18 +102,24 @@ impl TomlConfig {
     }
 }
 
+#[must_use]
 pub fn config_dir() -> PathBuf {
     PathBuf::from("config")
 }
 
+#[must_use]
 pub fn local_config_path() -> PathBuf {
     config_dir().join("local.toml")
 }
 
+#[must_use]
 pub fn secrets_config_path() -> PathBuf {
     config_dir().join("secrets.toml")
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub fn read_toml_document(path: &std::path::Path) -> eyre::Result<Option<DocumentMut>> {
     if !path.exists() {
         return Ok(None);
@@ -126,6 +135,7 @@ pub fn read_toml_document(path: &std::path::Path) -> eyre::Result<Option<Documen
     Ok(Some(value))
 }
 
+#[must_use]
 pub fn value_at_path<'a>(value: &'a DocumentMut, path: &[&str]) -> Option<&'a Item> {
     let mut current: &Item = value.as_item();
 
@@ -136,6 +146,9 @@ pub fn value_at_path<'a>(value: &'a DocumentMut, path: &[&str]) -> Option<&'a It
     Some(current)
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub fn read_local_config_string() -> eyre::Result<String> {
     let path = local_config_path();
     if !path.exists() {
@@ -146,6 +159,9 @@ pub fn read_local_config_string() -> eyre::Result<String> {
         .map_err(|error| eyre::eyre!("Failed to read {}: {error}", path.display()))
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub fn write_local_config_string(content: &str) -> eyre::Result<()> {
     let trimmed = content.trim();
     if !trimmed.is_empty() {
@@ -166,6 +182,12 @@ pub fn write_local_config_string(content: &str) -> eyre::Result<()> {
 
 /// Update a single field inside a TOML config file (local.toml or secrets.toml),
 /// creating the file and any missing tables if needed. Preserves existing content.
+/// # Panics
+///
+/// Panics if required runtime invariants are violated.
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub fn write_field_to_toml(target: &str, path: &[&str], value: &str) -> eyre::Result<()> {
     let file_path = match target {
         "secrets" => secrets_config_path(),

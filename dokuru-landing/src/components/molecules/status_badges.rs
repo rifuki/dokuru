@@ -1,4 +1,4 @@
-use crate::components::atoms::{Icon, IconKind};
+use crate::components::atoms::{icon::icon, IconKind};
 use crate::content::{RemediationKind, SeverityKind};
 use leptos::prelude::*;
 
@@ -45,8 +45,8 @@ const fn remediation_icon(kind: RemediationKind) -> IconKind {
     }
 }
 
-#[component]
-pub(crate) fn SeverityChip(kind: SeverityKind) -> impl IntoView {
+#[must_use]
+pub(crate) fn severity_chip(kind: SeverityKind) -> impl IntoView {
     view! {
         <span class=format!("font-mono text-[10px] uppercase tracking-[0.14em] px-2 py-0.5 rounded border {}", severity_class(kind)) data-testid=format!("severity-{}", severity_label(kind).to_lowercase())>
             {severity_label(kind)}
@@ -54,11 +54,11 @@ pub(crate) fn SeverityChip(kind: SeverityKind) -> impl IntoView {
     }
 }
 
-#[component]
-pub(crate) fn RemediationPill(kind: RemediationKind) -> impl IntoView {
+#[must_use]
+pub(crate) fn remediation_pill(kind: RemediationKind) -> impl IntoView {
     view! {
         <span class=format!("inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.14em] px-2 py-0.5 rounded-full border {}", remediation_class(kind)) data-testid=format!("remediation-{}", remediation_label(kind).to_lowercase())>
-            <Icon kind=remediation_icon(kind) size=10 stroke_width="2.5"/>
+            {icon(remediation_icon(kind), 10, "", "2.5")}
             {remediation_label(kind)}
         </span>
     }

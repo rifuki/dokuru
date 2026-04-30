@@ -15,6 +15,9 @@ use crate::{
     state::AppState,
 };
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn list_agents(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -28,6 +31,9 @@ pub async fn list_agents(
     Ok(ApiSuccess::default().with_data(agents))
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn create_agent(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -57,6 +63,9 @@ pub async fn create_agent(
         .with_data(agent))
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn get_agent(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -78,6 +87,9 @@ pub async fn get_agent(
     )
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn update_agent(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -103,6 +115,9 @@ pub async fn update_agent(
     )
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn delete_agent(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -125,7 +140,10 @@ pub async fn delete_agent(
 
 /// POST /api/v1/agents/:id/heartbeat
 ///
-/// Agent heartbeat to update last_seen timestamp
+/// Agent heartbeat to update `last_seen` timestamp
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn agent_heartbeat(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,

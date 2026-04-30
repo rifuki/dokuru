@@ -25,6 +25,9 @@ pub enum DocumentValidationError {
 }
 
 impl DocumentUpload {
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub fn new(
         file_name: Option<&str>,
         content_type: Option<&str>,
@@ -47,10 +50,14 @@ impl DocumentUpload {
     }
 }
 
+#[must_use]
 pub fn is_pdf(file_name: &str, content_type: &str) -> bool {
     content_type.starts_with(PDF_CONTENT_TYPE) || file_name.to_lowercase().ends_with(".pdf")
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub const fn validate_size(size: usize) -> Result<(), DocumentValidationError> {
     if size == 0 {
         return Err(DocumentValidationError::EmptyFile);
@@ -63,6 +70,7 @@ pub const fn validate_size(size: usize) -> Result<(), DocumentValidationError> {
     Ok(())
 }
 
+#[must_use]
 pub fn clean_file_name(name: &str) -> String {
     let cleaned = name
         .chars()
@@ -78,6 +86,7 @@ pub fn clean_file_name(name: &str) -> String {
     }
 }
 
+#[must_use]
 pub fn content_disposition(file_name: &str) -> String {
     format!("inline; filename=\"{}\"", clean_file_name(file_name))
 }

@@ -1,5 +1,3 @@
-pub mod fixtures;
-
 use axum::{
     body::Body,
     http::{Request, StatusCode, header},

@@ -38,6 +38,7 @@ pub struct RedisCache {
 }
 
 impl RedisCache {
+    #[must_use]
     pub const fn new(pool: RedisPool) -> Self {
         Self { pool }
     }
@@ -96,6 +97,7 @@ pub struct RedisSessionBlacklist {
 }
 
 impl RedisSessionBlacklist {
+    #[must_use]
     pub const fn new(pool: RedisPool) -> Self {
         Self { pool }
     }
@@ -168,24 +170,35 @@ pub struct UserCache {
 }
 
 impl UserCache {
+    #[must_use]
     pub const fn new(cache: RedisCache, ttl_secs: u64) -> Self {
         Self { cache, ttl_secs }
     }
 
+    #[must_use]
     pub fn user_key(user_id: Uuid) -> String {
         format!("user:{user_id}")
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn get_user(&self, user_id: Uuid) -> eyre::Result<Option<String>> {
         self.cache.get(&Self::user_key(user_id)).await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn set_user(&self, user_id: Uuid, user_json: &str) -> eyre::Result<()> {
         self.cache
             .set(&Self::user_key(user_id), user_json, self.ttl_secs)
             .await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn invalidate_user(&self, user_id: Uuid) -> eyre::Result<()> {
         self.cache.delete(&Self::user_key(user_id)).await
     }

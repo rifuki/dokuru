@@ -11,20 +11,24 @@ pub enum Usability {
     Expired,
 }
 
+#[must_use]
 pub fn generate_plain_key() -> String {
     let mut bytes = [0_u8; API_KEY_RANDOM_BYTES];
     rand::thread_rng().fill_bytes(&mut bytes);
     format!("{API_KEY_PREFIX}{}", hex::encode(bytes))
 }
 
+#[must_use]
 pub fn hash_key(plain_key: &str) -> String {
     format!("{:x}", md5::compute(plain_key))
 }
 
+#[must_use]
 pub fn expires_at_from_days(now: DateTime<Utc>, days: i64) -> DateTime<Utc> {
     now + Duration::days(days)
 }
 
+#[must_use]
 pub fn usability(
     is_active: bool,
     expires_at: Option<DateTime<Utc>>,
@@ -41,10 +45,12 @@ pub fn usability(
     Usability::Active
 }
 
+#[must_use]
 pub fn refreshed_expires_days(created_at: DateTime<Utc>, expires_at: DateTime<Utc>) -> i64 {
     (expires_at - created_at).num_days()
 }
 
+#[must_use]
 pub fn refreshed_name(name: &str) -> String {
     format!("{name} (refreshed)")
 }

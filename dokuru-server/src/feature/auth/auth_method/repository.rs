@@ -91,6 +91,7 @@ pub trait AuthMethodRepository: Send + Sync {
 pub struct AuthMethodRepositoryImpl;
 
 impl AuthMethodRepositoryImpl {
+    #[must_use]
     pub const fn new() -> Self {
         Self
     }

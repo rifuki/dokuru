@@ -23,6 +23,9 @@ impl StatsService {
     }
 
     /// Get dashboard statistics
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn get_dashboard_stats(
         &self,
         pool: &PgPool,

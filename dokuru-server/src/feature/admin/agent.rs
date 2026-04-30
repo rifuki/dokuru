@@ -29,6 +29,9 @@ pub struct AdminAgentListResponse {
     pub total: i64,
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn list_agents(State(state): State<AppState>) -> ApiResult<AdminAgentListResponse> {
     let agents = sqlx::query_as::<_, AdminAgentListItem>(
         r"

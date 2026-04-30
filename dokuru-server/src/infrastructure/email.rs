@@ -22,6 +22,7 @@ struct ResendEmail {
 }
 
 impl EmailService {
+    #[must_use]
     pub fn new(config: EmailConfig) -> Self {
         Self {
             config,
@@ -29,18 +30,27 @@ impl EmailService {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn send_verification_email(&self, to: &str, verification_url: &str) -> Result<()> {
         let html = VERIFY_EMAIL_TEMPLATE.replace("{{verification_url}}", verification_url);
         self.send_email(to, "Verify Your Email - Dokuru", &html)
             .await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn send_password_reset_email(&self, to: &str, reset_url: &str) -> Result<()> {
         let html = RESET_PASSWORD_TEMPLATE.replace("{{reset_url}}", reset_url);
         self.send_email(to, "Reset Your Password - Dokuru", &html)
             .await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn send_email_change_verification(
         &self,
         to: &str,

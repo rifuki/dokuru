@@ -22,6 +22,9 @@ fn extension_for(content_type: &str) -> Option<&'static str> {
 }
 
 /// POST /api/v1/users/avatar — upload avatar
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn upload_avatar(
     State(state): State<AppState>,
     auth_user: axum::Extension<AuthUser>,
@@ -119,6 +122,9 @@ pub async fn upload_avatar(
 }
 
 /// DELETE /api/v1/users/avatar — remove avatar
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn delete_avatar(
     State(state): State<AppState>,
     auth_user: axum::Extension<AuthUser>,

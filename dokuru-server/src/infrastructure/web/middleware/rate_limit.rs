@@ -29,6 +29,7 @@ struct RateLimiterInner {
 }
 
 impl RateLimiter {
+    #[must_use]
     pub fn new(max: u32, window: Duration) -> Self {
         Self {
             inner: Arc::new(RateLimiterInner {

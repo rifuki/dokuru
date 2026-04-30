@@ -10,6 +10,7 @@ use tracing_subscriber::{
 
 pub type ReloadFilterHandle = Handle<EnvFilter, Registry>;
 
+#[must_use]
 pub fn resolve_log_dir() -> PathBuf {
     let primary = PathBuf::from("/var/log/dokuru");
     if primary.is_dir() {

@@ -14,6 +14,9 @@ use crate::{
 };
 
 /// Start the server: build app, bind listener, serve with graceful shutdown
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn serve(state: AppState) -> eyre::Result<()> {
     let port = state.port();
     let cors = build_cors_layer(&state.config);

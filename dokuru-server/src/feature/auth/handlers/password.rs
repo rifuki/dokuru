@@ -14,6 +14,9 @@ use crate::{
 };
 
 /// POST /api/v1/auth/change-password
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn change_password(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,

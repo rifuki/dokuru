@@ -9,6 +9,9 @@ use crate::infrastructure::config::Config;
 pub type RedisPool = bb8::Pool<RedisConnectionManager>;
 
 /// Create Redis connection pool with health check
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn create_redis_pool(config: &Config) -> eyre::Result<RedisPool> {
     let redis_url = config
         .redis_url

@@ -17,6 +17,9 @@ use crate::{
 };
 
 /// GET /api/v1/auth/sessions
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn list_sessions(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -86,6 +89,9 @@ pub async fn list_sessions(
 }
 
 /// DELETE /api/v1/auth/sessions - Logout all sessions
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn logout_all_sessions(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -106,7 +112,10 @@ pub async fn logout_all_sessions(
 }
 
 /// DELETE /api/v1/auth/sessions/:id - Revoke specific session
-/// Note: :id is the internal UUID (row id), not the JWT session_id
+/// Note: :id is the internal UUID (row id), not the JWT `session_id`
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn revoke_session(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,

@@ -1,9 +1,7 @@
-use crate::pages::Landing;
+use crate::pages::landing;
 use leptos::prelude::*;
 
-#[component]
-pub fn App() -> impl IntoView {
-    view! {
-        <Landing/>
-    }
+#[must_use]
+pub fn app() -> impl IntoView {
+    view! { {landing::landing()} }
 }

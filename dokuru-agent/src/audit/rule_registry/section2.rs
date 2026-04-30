@@ -1,10 +1,29 @@
 // Section 2: Docker Daemon Configuration
-#![allow(clippy::too_many_lines)]
 use super::RuleDefinition;
 use crate::audit::{
     fix_helpers,
     types::{CheckResult, CheckStatus, CisRule, RemediationKind, RuleCategory, Severity},
 };
+
+const RULE_2_10_GUIDE: &str = r#"STEP 1: Create sub-UID and sub-GID mappings
+   sudo touch /etc/subuid /etc/subgid
+   sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 dockremap
+
+STEP 2: Edit /etc/docker/daemon.json:
+   {
+     "userns-remap": "default"
+   }
+
+STEP 3: Restart Docker daemon:
+   sudo systemctl restart docker
+
+STEP 4: Verify configuration:
+   docker info | grep userns
+   ps -h -p $(docker inspect --format='{{ .State.Pid }}' <container>) -o pid,user
+
+STEP 5: Recreate existing containers with new user namespace mapping
+
+⚠️  WARNING: Existing containers will need to be recreated. Volume permissions may need adjustment."#;
 
 /// Section 2: Docker Daemon Configuration
 /// CIS Docker Benchmark v1.8.0
@@ -116,26 +135,7 @@ impl Section2 {
                     }
                 })
             }),
-            remediation_guide: r#"STEP 1: Create sub-UID and sub-GID mappings
-   sudo touch /etc/subuid /etc/subgid
-   sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 dockremap
-
-STEP 2: Edit /etc/docker/daemon.json:
-   {
-     "userns-remap": "default"
-   }
-
-STEP 3: Restart Docker daemon:
-   sudo systemctl restart docker
-
-STEP 4: Verify configuration:
-   docker info | grep userns
-   ps -h -p $(docker inspect --format='{{ .State.Pid }}' <container>) -o pid,user
-
-STEP 5: Recreate existing containers with new user namespace mapping
-
-⚠️  WARNING: Existing containers will need to be recreated. Volume permissions may need adjustment."#
-                .into(),
+            remediation_guide: RULE_2_10_GUIDE.into(),
             requires_restart: true,
             requires_elevation: true,
 

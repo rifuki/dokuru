@@ -134,6 +134,9 @@ pub struct ReloadConfigResponse {
     pub restart_required: Vec<&'static str>,
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn get_effective_config(
     State(_state): State<AppState>,
 ) -> ApiResult<EffectiveConfigResponse> {
@@ -141,6 +144,9 @@ pub async fn get_effective_config(
     Ok(ApiSuccess::default().with_data(config_snapshot(&config)))
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn get_local_config() -> ApiResult<LocalConfigResponse> {
     let path = toml_config::local_config_path();
     let exists = path.exists();
@@ -154,6 +160,9 @@ pub async fn get_local_config() -> ApiResult<LocalConfigResponse> {
     }))
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn save_local_config(
     Json(req): Json<SaveLocalConfigRequest>,
 ) -> ApiResult<LocalConfigResponse> {
@@ -173,6 +182,9 @@ pub async fn save_local_config(
         .with_message("Local config saved"))
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn reload_config() -> ApiResult<ReloadConfigResponse> {
     let config = tokio::task::spawn_blocking(Config::load)
         .await
@@ -198,6 +210,9 @@ pub async fn reload_config() -> ApiResult<ReloadConfigResponse> {
     }))
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn update_config_field(
     Json(req): Json<UpdateConfigFieldRequest>,
 ) -> ApiResult<LocalConfigResponse> {

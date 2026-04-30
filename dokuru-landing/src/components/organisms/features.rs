@@ -1,10 +1,10 @@
-use crate::components::molecules::FeatureCard;
+use crate::components::molecules::feature_card;
 use crate::content::FEATURES;
 use crate::utils::reveal::reveal_ref;
 use leptos::{html, prelude::*};
 
-#[component]
-pub(crate) fn Features() -> impl IntoView {
+#[must_use]
+pub(crate) fn features() -> impl IntoView {
     let heading_ref = reveal_ref::<html::Div>();
 
     view! {
@@ -22,7 +22,7 @@ pub(crate) fn Features() -> impl IntoView {
 
                 <div class="grid md:grid-cols-2 gap-6">
                     {FEATURES.iter().enumerate().map(|(i, feature)| {
-                        view! { <FeatureCard feature=feature index=i/> }
+                        feature_card::feature_card(feature, i)
                     }).collect_view()}
                 </div>
             </div>

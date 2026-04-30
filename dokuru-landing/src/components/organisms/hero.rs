@@ -1,11 +1,10 @@
-use super::AuditPanel;
-use crate::components::atoms::{Icon, IconKind};
-use crate::components::molecules::SupportItem;
+use super::audit_panel::audit_panel;
+use crate::components::atoms::{icon::icon, IconKind};
 use crate::content::APP_URL;
 use leptos::prelude::*;
 
-#[component]
-pub(crate) fn Hero() -> impl IntoView {
+#[must_use]
+pub(crate) fn hero() -> impl IntoView {
     view! {
         <section id="top" data-testid="hero-section" class="relative min-h-[100svh] flex flex-col justify-center pt-24 pb-20 md:pb-28 overflow-hidden">
             <div class="absolute inset-0 bg-grid-fine mask-fade-b pointer-events-none animate-fade-in"/>
@@ -45,25 +44,25 @@ pub(crate) fn Hero() -> impl IntoView {
                         <div class="animate-enter-up mt-10 flex flex-wrap items-center gap-4" style="--motion-delay: 700ms; --motion-duration: 600ms">
                             <a href=APP_URL target="_blank" rel="noopener noreferrer" data-testid="hero-cta-primary" class="group inline-flex items-center gap-2 bg-[#2496ED] hover:bg-[#1C7CBA] text-white font-medium px-6 py-3.5 rounded-xl shadow-[0_0_20px_rgba(36,150,237,0.2)] hover:shadow-[0_0_30px_rgba(36,150,237,0.3)] transition-all active:scale-[0.98]">
                                 "Enter App"
-                                <Icon kind=IconKind::ArrowRight size=16 class="transition-transform group-hover:translate-x-1"/>
+                                {icon(IconKind::ArrowRight, 16, "transition-transform group-hover:translate-x-1", "2")}
                             </a>
                             <a href="#how-it-works" data-testid="hero-cta-secondary" class="inline-flex items-center gap-2 bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-white/25 text-white font-medium px-6 py-3.5 rounded-xl transition-colors active:scale-[0.98]">
-                                <Icon kind=IconKind::Terminal size=16 class="text-[#2496ED]"/>
+                                {icon(IconKind::Terminal, 16, "text-[#2496ED]", "2")}
                                 "See How It Works"
                             </a>
                         </div>
-                        
+
                         <div class="animate-enter-up mt-10 flex items-center gap-6 text-sm text-zinc-500 font-medium" style="--motion-delay: 800ms; --motion-duration: 600ms">
-                            <span class="flex items-center gap-2"><Icon kind=IconKind::Check size=14 class="text-emerald-500"/> "No vague scores"</span>
-                            <span class="flex items-center gap-2"><Icon kind=IconKind::Check size=14 class="text-emerald-500"/> "Rule-level evidence"</span>
-                            <span class="flex items-center gap-2"><Icon kind=IconKind::Check size=14 class="text-emerald-500"/> "One-click fixes"</span>
+                            <span class="flex items-center gap-2">{icon(IconKind::Check, 14, "text-emerald-500", "2")} "No vague scores"</span>
+                            <span class="flex items-center gap-2">{icon(IconKind::Check, 14, "text-emerald-500", "2")} "Rule-level evidence"</span>
+                            <span class="flex items-center gap-2">{icon(IconKind::Check, 14, "text-emerald-500", "2")} "One-click fixes"</span>
                         </div>
                     </div>
 
                     <div class="animate-enter-right lg:col-span-5 relative lg:pl-4" style="--motion-delay: 600ms">
                         <div class="absolute inset-0 bg-[#2496ED]/10 blur-[100px] rounded-full scale-90"/>
                         <div class="relative rounded-xl border border-white/10 bg-[#050505] shadow-[0_0_40px_rgba(0,0,0,0.8)] overflow-hidden">
-                            <AuditPanel/>
+                            {audit_panel()}
                         </div>
                         <div class="mt-4 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-600">
                             <span>"// fig.01 — audit summary"</span>

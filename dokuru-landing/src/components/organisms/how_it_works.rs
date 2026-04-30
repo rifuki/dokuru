@@ -1,11 +1,11 @@
-use super::{AddAgentPanel, AuditPreviewPanel, TerminalInstallPanel};
+use super::workflow_panels::{add_agent_panel, audit_preview_panel, terminal_install_panel};
 use crate::content::STEPS;
 use crate::utils::clipboard::{copy_install_command, reset_copied_after};
 use crate::utils::reveal::reveal_ref;
 use leptos::{html, prelude::*};
 
-#[component]
-pub(crate) fn HowItWorks() -> impl IntoView {
+#[must_use]
+pub(crate) fn how_it_works() -> impl IntoView {
     let active_step = RwSignal::new(0usize);
     let copied = RwSignal::new(false);
     let heading_ref = reveal_ref::<html::Div>();
@@ -52,13 +52,13 @@ pub(crate) fn HowItWorks() -> impl IntoView {
 
                     <div node_ref=panel_ref class="reveal lg:col-span-7" data-reveal="left" style="--motion-delay: 200ms">
                         <div class=move || if active_step.get() == 0 { "workflow-panel rounded-xl border border-white/10 bg-[#050505] shadow-[0_40px_80px_-20px_rgba(0,0,0,0.8)] overflow-hidden" } else { "hidden rounded-xl border border-white/10 bg-[#050505] shadow-[0_40px_80px_-20px_rgba(0,0,0,0.8)] overflow-hidden" }>
-                            <TerminalInstallPanel copied=copied handle_copy=handle_copy/>
+                            {terminal_install_panel(copied, handle_copy)}
                         </div>
                         <div class=move || if active_step.get() == 1 { "workflow-panel rounded-xl border border-white/10 bg-[#050505] shadow-[0_40px_80px_-20px_rgba(0,0,0,0.8)] overflow-hidden" } else { "hidden rounded-xl border border-white/10 bg-[#050505] shadow-[0_40px_80px_-20px_rgba(0,0,0,0.8)] overflow-hidden" }>
-                            <AddAgentPanel/>
+                            {add_agent_panel()}
                         </div>
                         <div class=move || if active_step.get() == 2 { "workflow-panel rounded-xl border border-white/10 bg-[#09090B] shadow-[0_40px_80px_-20px_rgba(0,0,0,0.8)] overflow-hidden" } else { "hidden rounded-xl border border-white/10 bg-[#09090B] shadow-[0_40px_80px_-20px_rgba(0,0,0,0.8)] overflow-hidden" }>
-                            <AuditPreviewPanel/>
+                            {audit_preview_panel()}
                         </div>
                         <div class="mt-3 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-600 flex justify-between">
                             <span>"// click steps to preview"</span>

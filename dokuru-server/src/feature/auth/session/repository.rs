@@ -28,7 +28,7 @@ pub trait SessionRepository: Send + Sync {
         expires_at: DateTime<Utc>,
     ) -> Result<UserSession, SessionRepositoryError>;
 
-    /// Find session by session_id
+    /// Find session by `session_id`
     async fn find_by_session_id(
         &self,
         pool: &PgPool,
@@ -103,6 +103,7 @@ pub trait SessionRepository: Send + Sync {
 pub struct SessionRepositoryImpl;
 
 impl SessionRepositoryImpl {
+    #[must_use]
     pub const fn new() -> Self {
         Self
     }

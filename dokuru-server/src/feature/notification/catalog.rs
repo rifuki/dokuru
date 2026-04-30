@@ -5,6 +5,7 @@ pub enum NotificationAudience {
 }
 
 impl NotificationAudience {
+    #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::User => "user",
@@ -21,6 +22,7 @@ pub enum NotificationSeverity {
 }
 
 impl NotificationSeverity {
+    #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Info => "info",
@@ -64,10 +66,12 @@ const ALL_NOTIFICATION_KINDS: [NotificationKind; 13] = [
 ];
 
 impl NotificationKind {
+    #[must_use]
     pub const fn all() -> &'static [Self] {
         &ALL_NOTIFICATION_KINDS
     }
 
+    #[must_use]
     pub const fn from_str(kind: &str) -> Option<Self> {
         match kind.as_bytes() {
             b"user.welcome" => Some(Self::UserWelcome),
@@ -87,6 +91,7 @@ impl NotificationKind {
         }
     }
 
+    #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::UserWelcome => "user.welcome",
@@ -105,10 +110,12 @@ impl NotificationKind {
         }
     }
 
+    #[must_use]
     pub const fn is_admin(self) -> bool {
         matches!(self.audience(), NotificationAudience::Admin)
     }
 
+    #[must_use]
     pub const fn is_configurable(self) -> bool {
         !matches!(
             self,
@@ -116,6 +123,7 @@ impl NotificationKind {
         )
     }
 
+    #[must_use]
     pub const fn audience(self) -> NotificationAudience {
         match self {
             Self::AdminUserRegistered
@@ -134,6 +142,7 @@ impl NotificationKind {
         }
     }
 
+    #[must_use]
     pub const fn severity(self) -> NotificationSeverity {
         match self {
             Self::SecurityPasswordChanged | Self::AdminPasswordChanged => {
@@ -153,6 +162,7 @@ impl NotificationKind {
         }
     }
 
+    #[must_use]
     pub const fn target_hint(self) -> &'static str {
         match self {
             Self::UserWelcome | Self::AgentCreated | Self::AgentConnected => "agents",

@@ -1,8 +1,8 @@
-use crate::components::atoms::{Icon, IconKind};
+use crate::components::atoms::{icon::icon, IconKind};
 use leptos::prelude::*;
 
-#[component]
-pub(crate) fn AuditCount(
+#[must_use]
+pub(crate) fn audit_count(
     color: &'static str,
     text_color: &'static str,
     count: &'static str,
@@ -16,8 +16,8 @@ pub(crate) fn AuditCount(
     }
 }
 
-#[component]
-pub(crate) fn PreviewCount(
+#[must_use]
+pub(crate) fn preview_count(
     color: &'static str,
     text_color: &'static str,
     count: &'static str,
@@ -28,9 +28,9 @@ pub(crate) fn PreviewCount(
     }
 }
 
-#[component]
-pub(crate) fn PreviewPillar(
-    icon: IconKind,
+#[must_use]
+pub(crate) fn preview_pillar(
+    icon_kind: IconKind,
     label: &'static str,
     color: &'static str,
     count: &'static str,
@@ -40,7 +40,7 @@ pub(crate) fn PreviewPillar(
     view! {
         <div class="space-y-2">
             <div class="flex items-center justify-between">
-                <span class=format!("inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] px-2 py-1 rounded border {} bg-white/[0.02]", color)><Icon kind=icon size=11/>{label}</span>
+                <span class=format!("inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] px-2 py-1 rounded border {} bg-white/[0.02]", color)>{icon(icon_kind, 11, "", "2")}{label}</span>
                 <span class="font-mono text-[10px] text-zinc-600">{count}</span>
             </div>
             <div class="h-1 bg-white/5 rounded-full overflow-hidden"><div class=format!("h-full {}", bar) style=format!("width: {}", width)/></div>

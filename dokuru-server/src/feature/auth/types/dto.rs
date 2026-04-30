@@ -74,6 +74,9 @@ pub struct ChangePasswordRequest {
 }
 
 /// Hash password using Argon2
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub fn hash_password(
     password: &str,
 ) -> Result<String, crate::feature::auth::repository::AuthError> {

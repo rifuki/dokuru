@@ -38,6 +38,7 @@ impl Default for AuditResultRepositoryImpl {
 }
 
 impl AuditResultRepositoryImpl {
+    #[must_use]
     pub const fn new() -> Self {
         Self
     }

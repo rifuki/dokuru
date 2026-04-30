@@ -34,6 +34,9 @@ impl DocumentService {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn current_document(&self) -> Result<Option<Document>, DocumentServiceError> {
         self.repository
             .get_current()
@@ -41,6 +44,9 @@ impl DocumentService {
             .map_err(DocumentServiceError::Database)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn current_file(&self) -> Result<Option<(Document, Bytes)>, DocumentServiceError> {
         let Some(document) = self.current_document().await? else {
             return Ok(None);
@@ -50,6 +56,9 @@ impl DocumentService {
         Ok(Some((document, Bytes::from(bytes))))
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn replace_document(
         &self,
         file_name: Option<&str>,
@@ -90,6 +99,9 @@ impl DocumentService {
         Ok(document)
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn delete_current_if_matches(&self, id: Uuid) -> Result<bool, DocumentServiceError> {
         let Some(document) = self.current_document().await? else {
             return Ok(false);

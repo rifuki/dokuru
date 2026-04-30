@@ -14,6 +14,9 @@ pub struct CheckUsernameQuery {
 /// GET /api/v1/auth/check-username?username=xxx
 ///
 /// Check if username is available (public endpoint)
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn check_username_availability(
     State(state): State<AppState>,
     Query(query): Query<CheckUsernameQuery>,

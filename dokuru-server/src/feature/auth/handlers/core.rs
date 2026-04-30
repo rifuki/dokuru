@@ -24,6 +24,9 @@ use crate::{
 };
 
 /// POST /api/v1/auth/register
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn register(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -133,6 +136,9 @@ pub async fn register(
 }
 
 /// POST /api/v1/auth/login
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn login(
     State(state): State<AppState>,
     jar: CookieJar,
@@ -176,6 +182,9 @@ pub async fn login(
 }
 
 /// POST /api/v1/auth/refresh
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn refresh(State(state): State<AppState>, jar: CookieJar) -> ApiResult<TokenResponse> {
     let refresh_token = jar
         .get(REFRESH_TOKEN_COOKIE)
@@ -213,6 +222,9 @@ pub async fn refresh(State(state): State<AppState>, jar: CookieJar) -> ApiResult
 }
 
 /// POST /api/v1/auth/logout
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn logout(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
@@ -244,6 +256,9 @@ pub async fn logout(
 }
 
 /// GET /api/v1/auth/me
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn me(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,

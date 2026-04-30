@@ -66,6 +66,7 @@ pub fn client_ip_from_headers(headers: &HeaderMap) -> String {
         .unwrap_or_else(|| "0.0.0.0".to_string())
 }
 
+#[must_use]
 pub fn display_ip_address(ip: &str) -> String {
     normalized_ip(ip).unwrap_or_else(|| ip.to_string())
 }

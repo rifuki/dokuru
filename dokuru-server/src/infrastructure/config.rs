@@ -304,6 +304,9 @@ pub struct Config {
 }
 
 impl Config {
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub fn load() -> Result<Self> {
         let toml = TomlConfig::load()?;
         let rust_env = get_rust_env(&toml.app.rust_env)?;
@@ -328,6 +331,9 @@ impl Config {
     }
 }
 
+/// # Panics
+///
+/// Panics if required runtime invariants are violated.
 pub fn auth_runtime() -> &'static AuthConfig {
     AUTH_RUNTIME
         .get()

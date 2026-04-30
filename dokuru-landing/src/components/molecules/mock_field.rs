@@ -1,7 +1,7 @@
 use leptos::prelude::*;
 
-#[component]
-pub(crate) fn MockField(
+#[must_use]
+pub(crate) fn mock_field(
     label: &'static str,
     value: &'static str,
     value_class: &'static str,

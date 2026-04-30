@@ -1,10 +1,10 @@
-use crate::components::atoms::{Icon, IconKind};
+use crate::components::atoms::{icon::icon, IconKind};
 use crate::content::PAINS;
 use crate::utils::reveal::reveal_ref;
 use leptos::{html, prelude::*};
 
-#[component]
-pub(crate) fn Problem() -> impl IntoView {
+#[must_use]
+pub(crate) fn problem() -> impl IntoView {
     let intro_ref = reveal_ref::<html::Div>();
 
     view! {
@@ -13,7 +13,7 @@ pub(crate) fn Problem() -> impl IntoView {
                 <div class="grid lg:grid-cols-12 gap-10">
                     <div node_ref=intro_ref class="reveal lg:col-span-5">
                         <div class="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.22em] text-[#2496ED] mb-5">
-                            <Icon kind=IconKind::AlertTriangle size=12/>
+                            {icon(IconKind::AlertTriangle, 12, "", "2")}
                             <span>"/ the problem"</span>
                         </div>
                         <h2 class="font-heading text-3xl md:text-4xl font-bold tracking-tight leading-[1.1] text-white">

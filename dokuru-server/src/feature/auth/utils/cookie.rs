@@ -16,11 +16,12 @@ pub const REFRESH_COOKIE_PATH: &str = "/api/v1/auth";
 /// SECURITY NOTES:
 /// - httpOnly: prevents XSS attacks from reading cookie
 /// - secure: only sent over HTTPS (in production or when explicitly enabled)
-/// - same_site:
+/// - `same_site`:
 ///   - Strict: same domain only (most secure)
 ///   - Lax: allows top-level navigation (good for cross-port dev)
 ///   - None: cross-domain with HTTPS (requires Secure=true)
 /// - path: limited to auth endpoints only
+#[must_use]
 pub fn create_refresh_cookie(token: &str, config: &Config) -> Cookie<'static> {
     let cookie_config = &config.cookie;
 
@@ -34,6 +35,7 @@ pub fn create_refresh_cookie(token: &str, config: &Config) -> Cookie<'static> {
 }
 
 /// Create a cleared (expired) refresh token cookie for logout
+#[must_use]
 pub fn create_cleared_cookie(config: &Config) -> Cookie<'static> {
     let cookie_config = &config.cookie;
 

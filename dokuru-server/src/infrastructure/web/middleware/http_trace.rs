@@ -67,6 +67,9 @@ const fn log_emoji_for_status(status: StatusCode) -> &'static str {
 }
 
 /// HTTP middleware to trace requests and log responses conditionally.
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn http_trace_middleware(
     ConnectInfo(client_ip): ConnectInfo<SocketAddr>,
     req: Request,

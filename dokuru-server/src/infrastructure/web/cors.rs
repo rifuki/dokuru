@@ -3,6 +3,9 @@ use tower_http::cors::{Any, CorsLayer};
 
 use crate::infrastructure::config::Config;
 
+/// # Panics
+///
+/// Panics if required runtime invariants are violated.
 pub fn build_cors_layer(config: &Config) -> CorsLayer {
     // Handle wildcard (*) or specific origins
     let origins = &config.server.cors_allowed_origins;

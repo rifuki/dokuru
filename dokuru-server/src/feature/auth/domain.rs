@@ -20,6 +20,9 @@ pub enum AuthValidationError {
     InvalidHash,
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub fn validate_email(email: &str) -> Result<(), AuthValidationError> {
     let Some((local, domain)) = email.split_once('@') else {
         return Err(AuthValidationError::InvalidEmail);
@@ -32,6 +35,9 @@ pub fn validate_email(email: &str) -> Result<(), AuthValidationError> {
     Ok(())
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub fn validate_username(username: &str) -> Result<(), AuthValidationError> {
     let len = username.chars().count();
     if !(MIN_USERNAME_LEN..=MAX_USERNAME_LEN).contains(&len) {
@@ -48,6 +54,9 @@ pub fn validate_username(username: &str) -> Result<(), AuthValidationError> {
     Ok(())
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub fn validate_password(password: &str) -> Result<(), AuthValidationError> {
     if password.chars().count() < MIN_PASSWORD_LEN {
         Err(AuthValidationError::PasswordTooShort)
@@ -56,6 +65,9 @@ pub fn validate_password(password: &str) -> Result<(), AuthValidationError> {
     }
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub fn generate_token_hex(length: usize) -> Result<String, AuthValidationError> {
     if length == 0 {
         return Err(AuthValidationError::InvalidTokenLength);
@@ -65,6 +77,9 @@ pub fn generate_token_hex(length: usize) -> Result<String, AuthValidationError> 
     Ok(hex::encode(bytes))
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub fn hash_password(password: &str) -> Result<String, AuthValidationError> {
     use argon2::{
         Argon2, PasswordHasher,
@@ -78,6 +93,9 @@ pub fn hash_password(password: &str) -> Result<String, AuthValidationError> {
         .map_err(|_| AuthValidationError::HashError)
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub fn verify_password(password: &str, hash: &str) -> Result<bool, AuthValidationError> {
     use argon2::{
         Argon2,

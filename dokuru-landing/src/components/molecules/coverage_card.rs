@@ -1,13 +1,13 @@
-use crate::components::atoms::Icon;
+use crate::components::atoms::icon::icon;
 use crate::content::CoverageGroup;
 use leptos::prelude::*;
 
-#[component]
-pub(crate) fn CoverageCard(group: &'static CoverageGroup, index: usize) -> impl IntoView {
+#[must_use]
+pub(crate) fn coverage_card(group: &'static CoverageGroup, index: usize) -> impl IntoView {
     view! {
         <div data-testid=format!("coverage-group-{}", index) class="hover-rise bg-[#09090B] p-8 flex flex-col">
             <div class="flex items-center justify-between mb-6">
-                <div class="hover-rotate w-10 h-10 rounded-md bg-[#2496ED]/10 border border-[#2496ED]/20 grid place-items-center text-[#2496ED]"><Icon kind=group.icon size=18 stroke_width="1.75"/></div>
+                <div class="hover-rotate w-10 h-10 rounded-md bg-[#2496ED]/10 border border-[#2496ED]/20 grid place-items-center text-[#2496ED]">{icon(group.icon, 18, "", "1.75")}</div>
                 <span class="font-mono text-[10px] uppercase tracking-[0.22em] text-zinc-500">{group.label}</span>
             </div>
             <h3 class="font-heading text-xl md:text-2xl font-bold text-white">{group.title}</h3>

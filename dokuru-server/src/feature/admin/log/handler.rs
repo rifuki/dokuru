@@ -8,6 +8,9 @@ use crate::{
     state::AppState,
 };
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn get_logs(State(state): State<AppState>) -> ApiResult<AdminLogsResponse> {
     let log_file = logging::latest_log_file_path();
     let lines = if let Some(path) = &log_file {
@@ -45,6 +48,9 @@ pub async fn get_logs(State(state): State<AppState>) -> ApiResult<AdminLogsRespo
 ///
 /// Dynamically change log level at runtime without restart.
 /// Protected: requires valid JWT with Admin role.
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn set_log_level(
     State(state): State<AppState>,
     Json(req): Json<SetLogLevelRequest>,

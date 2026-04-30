@@ -7,16 +7,23 @@ pub struct DocumentRepository {
 }
 
 impl DocumentRepository {
+    #[must_use]
     pub const fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn get_current(&self) -> Result<Option<Document>, sqlx::Error> {
         sqlx::query_as::<_, Document>("SELECT * FROM documents ORDER BY uploaded_at DESC LIMIT 1")
             .fetch_optional(&self.pool)
             .await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn create(
         &self,
         name: String,
@@ -35,6 +42,9 @@ impl DocumentRepository {
         .await
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn delete(&self, id: Uuid) -> Result<(), sqlx::Error> {
         sqlx::query("DELETE FROM documents WHERE id = $1")
             .bind(id)
@@ -43,6 +53,9 @@ impl DocumentRepository {
         Ok(())
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn delete_all(&self) -> Result<(), sqlx::Error> {
         sqlx::query("DELETE FROM documents")
             .execute(&self.pool)

@@ -31,6 +31,9 @@ pub struct AdminAuditListResponse {
     pub total: i64,
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn list_audits(State(state): State<AppState>) -> ApiResult<AdminAuditListResponse> {
     let audits = sqlx::query_as::<_, AdminAuditListItem>(
         r"

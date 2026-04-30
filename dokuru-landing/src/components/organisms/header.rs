@@ -1,9 +1,9 @@
-use crate::components::atoms::{DokuruMark, Icon, IconKind};
+use crate::components::atoms::{dokuru_mark::dokuru_mark, icon::icon, IconKind};
 use crate::content::{APP_URL, NAV};
 use leptos::prelude::*;
 
-#[component]
-pub(crate) fn Header() -> impl IntoView {
+#[must_use]
+pub(crate) fn header() -> impl IntoView {
     let open = RwSignal::new(false);
     let scrolled = RwSignal::new(false);
 
@@ -46,7 +46,7 @@ pub(crate) fn Header() -> impl IntoView {
         >
             <div class="max-w-7xl mx-auto px-6 md:px-10 h-16 flex items-center justify-between">
                 <a href="#top" data-testid="header-logo" class="flex items-center gap-2.5 group transition-opacity hover:opacity-90">
-                    <DokuruMark class="h-7 w-7"/>
+                    {dokuru_mark("h-7 w-7")}
                     <span class="font-heading font-black text-white text-lg tracking-tight">"dokuru"</span>
                     <span class="hidden sm:inline-block font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500 border border-white/10 rounded px-1.5 py-0.5 ml-1">"v1"</span>
                 </a>
@@ -71,8 +71,8 @@ pub(crate) fn Header() -> impl IntoView {
                         class="md:hidden text-zinc-400 hover:text-white"
                         aria-label="Toggle menu"
                     >
-                        <span class=move || if open.get() { "hidden" } else { "block" }><Icon kind=IconKind::Menu size=20/></span>
-                        <span class=move || if open.get() { "block" } else { "hidden" }><Icon kind=IconKind::X size=20/></span>
+                        <span class=move || if open.get() { "hidden" } else { "block" }>{icon(IconKind::Menu, 20, "", "2")}</span>
+                        <span class=move || if open.get() { "block" } else { "hidden" }>{icon(IconKind::X, 20, "", "2")}</span>
                     </button>
                 </div>
             </div>

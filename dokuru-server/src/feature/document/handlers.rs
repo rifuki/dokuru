@@ -41,6 +41,9 @@ pub async fn serve_document_file(State(state): State<AppState>) -> Response {
     (StatusCode::OK, headers, bytes).into_response()
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn get_current_document(State(state): State<AppState>) -> ApiResult<Option<Document>> {
     let doc = state
         .document_service
@@ -56,6 +59,9 @@ pub async fn get_current_document(State(state): State<AppState>) -> ApiResult<Op
     Ok(ApiSuccess::default().with_data(doc))
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn upload_document(
     State(state): State<AppState>,
     mut multipart: Multipart,
@@ -90,6 +96,9 @@ pub async fn upload_document(
     ))
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn delete_document(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResult<()> {
     state
         .document_service

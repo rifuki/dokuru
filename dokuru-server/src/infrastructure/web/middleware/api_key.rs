@@ -4,7 +4,10 @@ use axum::{extract::Request, http::StatusCode, middleware::Next, response::Respo
 
 const API_KEY_HEADER: &str = "x-api-key";
 
-/// Middleware: validate X-Api-Key header against API_KEY env var
+/// Middleware: validate X-Api-Key header against `API_KEY` env var
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn api_key_middleware(req: Request, next: Next) -> Result<Response, StatusCode> {
     let expected = env::var("API_KEY").unwrap_or_default();
 

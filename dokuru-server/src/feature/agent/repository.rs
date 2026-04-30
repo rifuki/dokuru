@@ -37,6 +37,7 @@ impl Default for AgentRepositoryImpl {
 }
 
 impl AgentRepositoryImpl {
+    #[must_use]
     pub const fn new() -> Self {
         Self
     }

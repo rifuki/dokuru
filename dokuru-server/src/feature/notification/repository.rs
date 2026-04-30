@@ -67,6 +67,7 @@ pub trait NotificationRepository: Send + Sync {
 pub struct NotificationRepositoryImpl;
 
 impl NotificationRepositoryImpl {
+    #[must_use]
     pub const fn new() -> Self {
         Self
     }

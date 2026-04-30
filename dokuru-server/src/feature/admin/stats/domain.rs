@@ -4,6 +4,7 @@ use crate::feature::admin::stats::dto::{ComponentHealth, HealthStatus};
 
 const HEALTHY_RESPONSE_TIME_THRESHOLD_MS: u64 = 50;
 
+#[must_use]
 pub const fn component_health(is_available: bool, response_time_ms: u64) -> ComponentHealth {
     let status = if !is_available {
         HealthStatus::Down
@@ -19,10 +20,12 @@ pub const fn component_health(is_available: bool, response_time_ms: u64) -> Comp
     }
 }
 
+#[must_use]
 pub fn duration_millis_u64(duration: Duration) -> u64 {
     u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
 }
 
+#[must_use]
 pub fn relay_agents_count(count: usize) -> i64 {
     i64::try_from(count).unwrap_or(i64::MAX)
 }

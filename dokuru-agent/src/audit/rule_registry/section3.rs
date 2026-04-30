@@ -1,6 +1,5 @@
 // Section 3: Docker Daemon Configuration File Permissions
 // CIS Docker Benchmark v1.8.0
-#![allow(clippy::too_many_lines)]
 use super::RuleDefinition;
 use crate::audit::{
     fix_helpers,

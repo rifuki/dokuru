@@ -32,6 +32,7 @@ pub trait AdminUserRepository: Send + Sync {
 pub struct AdminUserRepositoryImpl;
 
 impl AdminUserRepositoryImpl {
+    #[must_use]
     pub const fn new() -> Self {
         Self
     }

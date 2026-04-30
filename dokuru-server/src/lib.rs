@@ -1,10 +1,3 @@
-// Allow overly noisy pedantic/nursery lints
-#![allow(clippy::must_use_candidate)] // Too many false positives on getters
-#![allow(clippy::doc_markdown)] // Backticks in docs - style preference
-#![allow(clippy::missing_panics_doc)] // Most panics are in test/setup code
-#![allow(clippy::module_name_repetitions)] // e.g. ApiKeyService in api_key module is fine
-#![allow(clippy::missing_errors_doc)] // Would require 70+ doc comments - add gradually
-
 pub mod bootstrap;
 pub mod feature;
 pub mod infrastructure;

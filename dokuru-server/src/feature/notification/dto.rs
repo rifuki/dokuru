@@ -103,6 +103,7 @@ pub struct NotificationPreferenceResponse {
 }
 
 impl NotificationPreferenceResponse {
+    #[must_use]
     pub fn new(kind: NotificationKind, enabled: bool) -> Self {
         Self {
             kind: kind.as_str().to_owned(),
