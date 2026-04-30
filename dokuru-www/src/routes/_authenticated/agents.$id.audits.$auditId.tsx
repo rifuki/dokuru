@@ -922,13 +922,6 @@ function AuditDetailPage() {
     if (a.status !== b.status) return a.status === "Fail" ? -1 : 1;
     return a.rule.id.localeCompare(b.rule.id, undefined, { numeric: true });
   });
-  const statusCounts = {
-    failed: baseResults.filter(r => r.status === "Fail").length,
-    passed: baseResults.filter(r => r.status === "Pass").length,
-    errors: baseResults.filter(r => r.status === "Error").length,
-    total: baseResults.length,
-  };
-
   // Group sections
   const sections: string[] = report
     ? report.sections.map(section => section.key)
@@ -962,16 +955,25 @@ function AuditDetailPage() {
     return pctA - pctB;
   });
 
-  const filteredResults = baseResults.filter(r => {
-    const statusOk = statusFilter === "all" || r.status === statusFilter;
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const scopedResults = baseResults.filter(r => {
     const sectionOk = sectionFilter === "all" || r.rule.section === sectionFilter;
     const pillarOk = pillarFilter === "all" || getRulePillar(r.rule.id) === pillarFilter;
-    const searchOk = !searchQuery ||
-      r.rule.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.rule.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.message.toLowerCase().includes(searchQuery.toLowerCase());
-    return statusOk && sectionOk && pillarOk && searchOk;
-  }) ?? [];
+    const searchOk = !normalizedSearchQuery ||
+      r.rule.id.toLowerCase().includes(normalizedSearchQuery) ||
+      r.rule.title.toLowerCase().includes(normalizedSearchQuery) ||
+      r.message.toLowerCase().includes(normalizedSearchQuery);
+    return sectionOk && pillarOk && searchOk;
+  });
+
+  const statusCounts = {
+    failed: scopedResults.filter(r => r.status === "Fail").length,
+    passed: scopedResults.filter(r => r.status === "Pass").length,
+    errors: scopedResults.filter(r => r.status === "Error").length,
+    total: scopedResults.length,
+  };
+
+  const filteredResults = scopedResults.filter(r => statusFilter === "all" || r.status === statusFilter);
 
   const pillarSummaries = report?.pillars ?? (Object.keys(PILLAR_META) as SecurityPillar[]).map(pillar => {
     const pillarRules = baseResults.filter(r => getRulePillar(r.rule.id) === pillar);
