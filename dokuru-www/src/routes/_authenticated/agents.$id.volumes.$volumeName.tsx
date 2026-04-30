@@ -1,9 +1,22 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { canUseDockerAgent, dockerApi, dockerCredential } from "@/services/docker-api";
+import {
+  canUseDockerAgent,
+  dockerApi,
+  dockerCredential,
+  type Container as DockerContainer,
+} from "@/services/docker-api";
 import { agentApi } from "@/lib/api/agent";
 import { Badge } from "@/components/ui/badge";
-import { Clock, FolderOpen, HardDrive, Hash, Tag } from "lucide-react";
+import {
+  ChevronRight,
+  Clock,
+  Container as ContainerIcon,
+  FolderOpen,
+  HardDrive,
+  Hash,
+  Tag,
+} from "lucide-react";
 import {
   DetailPageSkeleton,
   DetailRow,
@@ -26,6 +39,30 @@ type VolumeInspect = {
   Options?: Record<string, string>;
 };
 
+type ContainerMount = {
+  Type?: string;
+  Name?: string;
+  Source?: string;
+  Destination?: string;
+  RW?: boolean;
+};
+
+type ContainerInspect = {
+  Id?: string;
+  Name?: string;
+  Config?: { Image?: string };
+  State?: { Status?: string };
+  Mounts?: ContainerMount[];
+};
+
+type VolumeContainerUsage = {
+  id: string;
+  name: string;
+  image?: string;
+  state?: string;
+  mounts: ContainerMount[];
+};
+
 function formatDate(value?: string) {
   if (!value) return null;
   return new Date(value).toLocaleString();
@@ -33,6 +70,40 @@ function formatDate(value?: string) {
 
 function shortValue(value?: string) {
   return value ? value.slice(0, 12) : null;
+}
+
+function cleanContainerName(value?: string) {
+  return value?.replace(/^\/+/, "") || null;
+}
+
+function containerName(container: DockerContainer, inspect?: ContainerInspect) {
+  return (
+    cleanContainerName(container.names[0]) ??
+    cleanContainerName(inspect?.Name) ??
+    container.id.slice(0, 12)
+  );
+}
+
+function stateColor(state?: string) {
+  switch (state?.toLowerCase()) {
+    case "running":
+      return "bg-primary/10 text-primary border-primary/25";
+    case "exited":
+      return "bg-gray-500/10 text-gray-500 border-gray-500/20";
+    case "paused":
+      return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
+    case "restarting":
+      return "bg-blue-500/10 text-blue-500 border-blue-500/20";
+    default:
+      return "bg-muted text-muted-foreground border-muted";
+  }
+}
+
+function mountMatchesVolume(mount: ContainerMount, volumeName: string, mountpoint?: string) {
+  if (!volumeName) return false;
+  if (mount.Name === volumeName) return true;
+  if (mountpoint && mount.Source === mountpoint) return true;
+  return mount.Type === "volume" && mount.Source?.endsWith(`/volumes/${volumeName}/_data`);
 }
 
 function VolumeDetailPage() {
@@ -52,6 +123,43 @@ function VolumeDetailPage() {
       return res.data as VolumeInspect;
     },
     enabled: canUseDockerAgent(agent),
+  });
+
+  const targetVolumeName = volume?.Name || volumeName;
+  const targetMountpoint = volume?.Mountpoint;
+
+  const { data: usedContainers = [], isLoading: usedContainersLoading } = useQuery({
+    queryKey: ["volume-containers", id, targetVolumeName, targetMountpoint],
+    queryFn: async () => {
+      const credential = dockerCredential(agent);
+      if (!agent || !credential) throw new Error("Agent token not available");
+
+      const res = await dockerApi.listContainers(agent.url, credential, true);
+      const inspected = await Promise.allSettled(
+        res.data.map(async (container) => {
+          const inspectRes = await dockerApi.inspectContainer(agent.url, credential, container.id);
+          const inspect = inspectRes.data as ContainerInspect;
+          const mounts = (inspect.Mounts ?? []).filter((mount) =>
+            mountMatchesVolume(mount, targetVolumeName, targetMountpoint),
+          );
+
+          if (mounts.length === 0) return null;
+
+          return {
+            id: container.id,
+            name: containerName(container, inspect),
+            image: container.image || inspect.Config?.Image,
+            state: container.state || inspect.State?.Status,
+            mounts,
+          } satisfies VolumeContainerUsage;
+        }),
+      );
+
+      return inspected.flatMap((result) =>
+        result.status === "fulfilled" && result.value ? [result.value] : [],
+      );
+    },
+    enabled: canUseDockerAgent(agent) && !!volume,
   });
 
   if (isLoading) {
@@ -97,12 +205,76 @@ function VolumeDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <DetailStat icon={HardDrive} label="Driver" value={volume?.Driver ?? "N/A"} />
         <DetailStat icon={Hash} label="Scope" value={volume?.Scope ?? "N/A"} />
+        <DetailStat
+          icon={ContainerIcon}
+          label="Containers"
+          value={usedContainersLoading ? "..." : usedContainers.length}
+        />
         <DetailStat icon={Tag} label="Labels" value={labelEntries.length} />
         <DetailStat icon={Clock} label="Created" value={created ?? "N/A"} />
       </div>
+
+      <DetailSection
+        title={`Used by Containers (${usedContainers.length})`}
+        icon={ContainerIcon}
+        contentClassName="space-y-2"
+      >
+        {usedContainersLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map((item) => (
+              <div key={item} className="h-16 rounded-lg bg-muted animate-pulse" />
+            ))}
+          </div>
+        ) : usedContainers.length > 0 ? (
+          usedContainers.map((container) => (
+            <Link
+              key={container.id}
+              to="/agents/$id/containers/$containerId"
+              params={{ id, containerId: container.id }}
+              className="group flex items-center gap-3 rounded-lg border bg-muted/20 px-3.5 py-3 min-w-0 transition-colors hover:border-primary/45 hover:bg-primary/5"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
+                <ContainerIcon className="h-4 w-4" />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 min-w-0">
+                  <p className="font-mono text-sm font-medium truncate">{container.name}</p>
+                  <span className="font-mono text-[11px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
+                    {shortValue(container.id)}
+                  </span>
+                  {container.state && (
+                    <Badge variant="outline" className={`text-xs shrink-0 ${stateColor(container.state)}`}>
+                      {container.state}
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {container.image && (
+                    <span className="font-mono text-xs text-muted-foreground truncate max-w-full">
+                      {container.image}
+                    </span>
+                  )}
+                  {container.mounts.map((mount, index) => (
+                    <Badge key={`${mount.Destination}-${index}`} variant="outline" className="font-mono text-xs">
+                      {mount.Destination ?? "mounted"}{mount.RW === false ? ":ro" : ""}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+            </Link>
+          ))
+        ) : (
+          <p className="text-sm text-muted-foreground italic">
+            No containers currently mount this volume.
+          </p>
+        )}
+      </DetailSection>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <DetailSection title="Volume Details" icon={HardDrive}>
