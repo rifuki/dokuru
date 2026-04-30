@@ -20,26 +20,24 @@ const STEPS: { key: FixAllStep; label: string }[] = [
 function StepIndicator({ current }: { current: FixAllStep }) {
     const idx = STEPS.findIndex(s => s.key === current);
     return (
-        <div className="flex items-center gap-0">
+        <div className="grid grid-cols-3 gap-1 rounded-xl border border-white/10 bg-white/[0.025] p-1">
             {STEPS.map((s, i) => (
-                <div key={s.key} className="flex items-center">
-                    <div className="flex flex-col items-center gap-1.5">
-                        <div className={cn(
-                            "w-6 h-6 rounded-full border flex items-center justify-center text-[10px] font-mono font-bold transition-all",
-                            i < idx  ? "bg-[#2496ED] border-[#2496ED] text-white"
-                            : i === idx ? "border-[#2496ED] text-[#2496ED] bg-[#2496ED]/10"
-                            : "border-white/15 text-white/20 bg-transparent"
-                        )}>
-                            {i < idx ? <Check size={10} strokeWidth={3} /> : i + 1}
-                        </div>
-                        <span className={cn(
-                            "text-[9px] uppercase tracking-[0.18em] font-mono whitespace-nowrap",
-                            i === idx ? "text-[#2496ED]" : i < idx ? "text-white/50" : "text-white/20"
-                        )}>{s.label}</span>
-                    </div>
-                    {i < STEPS.length - 1 && (
-                        <div className={cn("w-10 h-px mx-1 mb-4 transition-all", i < idx ? "bg-[#2496ED]/60" : "bg-white/10")} />
+                <div
+                    key={s.key}
+                    className={cn(
+                        "flex items-center justify-center gap-2 rounded-lg px-2 py-2 transition-colors",
+                        i === idx ? "bg-[#2496ED] text-white" : i < idx ? "text-white/70" : "text-white/25"
                     )}
+                >
+                    <span className={cn(
+                        "flex h-5 w-5 items-center justify-center rounded-full border text-[10px] font-mono font-bold",
+                        i === idx ? "border-white/30 bg-white/15" : i < idx ? "border-[#2496ED]/40 bg-[#2496ED]/10 text-[#2496ED]" : "border-white/15"
+                    )}>
+                        {i < idx ? <Check size={10} strokeWidth={3} /> : i + 1}
+                    </span>
+                    <span className="font-mono text-[9px] uppercase tracking-[0.16em] whitespace-nowrap">
+                        {s.label}
+                    </span>
                 </div>
             ))}
         </div>
@@ -393,20 +391,22 @@ export function FixAllWizard({
                 className="w-full sm:max-w-[520px] bg-[#09090B] border-l border-white/8 p-0 flex flex-col gap-0 overflow-hidden"
             >
                 {/* Header */}
-                <SheetHeader className="px-6 pt-6 pb-5 border-b border-white/8 space-y-4">
-                    <div className="space-y-2 pr-8">
-                        <div className="flex items-center gap-2.5">
-                            <span className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.15em] text-[#2496ED] bg-[#2496ED]/10 border border-[#2496ED]/25 px-2.5 py-1 rounded">
-                                <Zap className="h-3 w-3" />
-                                Fix All
-                            </span>
-                            <span className="text-[10px] font-mono text-white/30 uppercase tracking-[0.15em]">
-                                {selectedCount}/{ruleStatuses.length} selected · auto fix
-                            </span>
+                <SheetHeader className="px-6 pt-6 pb-5 border-b border-white/8 space-y-5">
+                    <div className="flex items-start justify-between gap-4 pr-8">
+                        <div className="min-w-0 space-y-1.5">
+                            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/35">
+                                Bulk remediation
+                            </p>
+                            <p className="text-lg font-semibold text-white leading-snug">
+                                Apply selected fixes
+                            </p>
+                            <p className="text-xs text-white/45">
+                                {selectedCount} of {ruleStatuses.length} rules selected
+                            </p>
                         </div>
-                        <p className="text-base font-semibold text-white leading-snug">
-                            Apply All Auto-Fixable Issues
-                        </p>
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#2496ED]/25 bg-[#2496ED]/10 text-[#2496ED]">
+                            <Zap className="h-4 w-4" />
+                        </div>
                     </div>
                     <StepIndicator current={step} />
                 </SheetHeader>

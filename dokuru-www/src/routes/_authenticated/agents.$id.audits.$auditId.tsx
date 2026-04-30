@@ -576,24 +576,29 @@ function BeforeAfterComparison({
             <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Before</p>
             <span className="text-xs font-mono text-muted-foreground/60">{fmtDate(before.timestamp)}</span>
           </div>
-          <div className="flex items-end gap-3">
-            <span className={cn("text-4xl font-black tabular-nums leading-none", scoreTone(before.summary.score))}>
-              {before.summary.score}
-            </span>
-            <span className="pb-1 text-sm font-mono text-muted-foreground">/ 100</span>
-          </div>
-          <div className="grid grid-cols-3 divide-x divide-border overflow-hidden rounded-[12px] border border-border/80 bg-muted/20">
-            <div className="px-4 py-3 text-center">
-              <p className="text-xl font-black leading-none text-emerald-400">{before.summary.passed}</p>
-              <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Pass</p>
+          <div className="grid gap-3 lg:grid-cols-[132px_1fr] lg:items-stretch">
+            <div className="flex min-h-[92px] flex-col justify-center rounded-[12px] border border-border/80 bg-muted/20 px-4 py-3">
+              <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Score</p>
+              <div className="mt-2 flex items-end gap-2">
+                <span className={cn("text-4xl font-black tabular-nums leading-none", scoreTone(before.summary.score))}>
+                  {before.summary.score}
+                </span>
+                <span className="pb-1 text-sm font-mono text-muted-foreground">/100</span>
+              </div>
             </div>
-            <div className="px-4 py-3 text-center">
-              <p className="text-xl font-black leading-none text-rose-400">{before.summary.failed}</p>
-              <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fail</p>
-            </div>
-            <div className="px-4 py-3 text-center">
-              <p className="text-xl font-black leading-none text-foreground/80">{before.summary.total}</p>
-              <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Total</p>
+            <div className="grid min-h-[92px] grid-cols-3 divide-x divide-border overflow-hidden rounded-[12px] border border-border/80 bg-muted/20">
+              <div className="flex flex-col items-center justify-center px-4 py-3 text-center">
+                <p className="text-xl font-black leading-none text-emerald-400">{before.summary.passed}</p>
+                <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Pass</p>
+              </div>
+              <div className="flex flex-col items-center justify-center px-4 py-3 text-center">
+                <p className="text-xl font-black leading-none text-rose-400">{before.summary.failed}</p>
+                <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fail</p>
+              </div>
+              <div className="flex flex-col items-center justify-center px-4 py-3 text-center">
+                <p className="text-xl font-black leading-none text-foreground/80">{before.summary.total}</p>
+                <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Total</p>
+              </div>
             </div>
           </div>
         </div>
@@ -603,30 +608,35 @@ function BeforeAfterComparison({
             <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">After</p>
             <span className="text-xs font-mono text-muted-foreground/60">{fmtDate(after.timestamp)}</span>
           </div>
-          <div className="flex items-end gap-3">
-            <span className={cn("text-4xl font-black tabular-nums leading-none", scoreTone(after.summary.score))}>
-              {after.summary.score}
-            </span>
-            <span className="pb-1 text-sm font-mono text-muted-foreground">/ 100</span>
-          </div>
-          <div className="grid grid-cols-3 divide-x divide-border overflow-hidden rounded-[12px] border border-border/80 bg-muted/20">
-            <div className="px-4 py-3 text-center">
-              <p className="text-xl font-black leading-none text-emerald-400">
-                {after.summary.passed}
-                {passDelta !== 0 && <span className={cn("ml-1 text-xs font-bold", passDeltaTone)}>{signed(passDelta)}</span>}
-              </p>
-              <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Pass</p>
+          <div className="grid gap-3 lg:grid-cols-[132px_1fr] lg:items-stretch">
+            <div className="flex min-h-[92px] flex-col justify-center rounded-[12px] border border-border/80 bg-muted/20 px-4 py-3">
+              <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Score</p>
+              <div className="mt-2 flex items-end gap-2">
+                <span className={cn("text-4xl font-black tabular-nums leading-none", scoreTone(after.summary.score))}>
+                  {after.summary.score}
+                </span>
+                <span className="pb-1 text-sm font-mono text-muted-foreground">/100</span>
+              </div>
             </div>
-            <div className="px-4 py-3 text-center">
-              <p className="text-xl font-black leading-none text-rose-400">
-                {after.summary.failed}
-                {failDelta !== 0 && <span className={cn("ml-1 text-xs font-bold", failDeltaTone)}>{signed(failDelta)}</span>}
-              </p>
-              <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fail</p>
-            </div>
-            <div className="px-4 py-3 text-center">
-              <p className="text-xl font-black leading-none text-emerald-400">{fixedRules.length}</p>
-              <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fixed</p>
+            <div className="grid min-h-[92px] grid-cols-3 divide-x divide-border overflow-hidden rounded-[12px] border border-border/80 bg-muted/20">
+              <div className="flex flex-col items-center justify-center px-4 py-3 text-center">
+                <p className="text-xl font-black leading-none text-emerald-400">
+                  {after.summary.passed}
+                  {passDelta !== 0 && <span className={cn("ml-1 text-xs font-bold", passDeltaTone)}>{signed(passDelta)}</span>}
+                </p>
+                <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Pass</p>
+              </div>
+              <div className="flex flex-col items-center justify-center px-4 py-3 text-center">
+                <p className="text-xl font-black leading-none text-rose-400">
+                  {after.summary.failed}
+                  {failDelta !== 0 && <span className={cn("ml-1 text-xs font-bold", failDeltaTone)}>{signed(failDelta)}</span>}
+                </p>
+                <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fail</p>
+              </div>
+              <div className="flex flex-col items-center justify-center px-4 py-3 text-center">
+                <p className="text-xl font-black leading-none text-emerald-400">{fixedRules.length}</p>
+                <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fixed</p>
+              </div>
             </div>
           </div>
         </div>
