@@ -55,11 +55,15 @@ interface AuditState {
     // so the scan keeps running when the audit route unmounts.
     auditStreams: Record<string, AuditStreamState>;
 
+    // Last completed audit result the user already opened per agentId.
+    viewedAuditResults: Record<string, string>;
+
     // Actions
     setRunning: (agentId: string, running: boolean) => void;
     setAuditHistory: (agentId: string, history: AuditResponse[]) => void;
     setFixing: (agentId: string, ruleId: string, fixing: boolean) => void;
     setFixOutcome: (agentId: string, ruleId: string, outcome: FixOutcome | null) => void;
+    markAuditResultViewed: (agentId: string, auditId: string) => void;
     startAudit: (agent: Agent, token?: string) => Promise<AuditResponse>;
 }
 
@@ -69,6 +73,7 @@ export const useAuditStore = create<AuditState>((set) => ({
     fixingRules: {},
     fixOutcomes: {},
     auditStreams: {},
+    viewedAuditResults: {},
 
     setRunning: (agentId, running) =>
         set((s) => ({
@@ -94,6 +99,11 @@ export const useAuditStore = create<AuditState>((set) => ({
                 ...s.fixOutcomes,
                 [agentId]: { ...s.fixOutcomes[agentId], [ruleId]: outcome },
             },
+        })),
+
+    markAuditResultViewed: (agentId, auditId) =>
+        set((s) => ({
+            viewedAuditResults: { ...s.viewedAuditResults, [agentId]: auditId },
         })),
 
     startAudit: (agent, token) => {

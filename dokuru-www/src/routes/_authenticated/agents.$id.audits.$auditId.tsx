@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { PILLAR_META, getRulePillar, type SecurityPillar } from "@/lib/audit-pillars";
 import { userDocumentApi } from "@/lib/api/document";
 import { getOrFetchPdfBlob } from "@/lib/pdf-cache";
+import { useAuditStore } from "@/stores/use-audit-store";
 import { FixWizard } from "@/features/audit/components/FixWizard";
 import { FixAllWizard } from "@/features/audit/components/FixAllWizard";
 import { FixHistoryPanel } from "@/features/audit/components/FixHistoryPanel";
@@ -748,6 +749,7 @@ function AuditDetailPage() {
   const { id, auditId } = Route.useParams();
   const { ruleId: focusedRuleId } = Route.useSearch();
   const navigate = useNavigate();
+  const markAuditResultViewed = useAuditStore((state) => state.markAuditResultViewed);
   const [agent, setAgent] = useState<Agent | null>(null);
   const [token, setToken] = useState<string | undefined>();
   const [containers, setContainers] = useState<DockerContainer[]>([]);
@@ -799,6 +801,10 @@ function AuditDetailPage() {
     agentAccessMode: agent?.access_mode,
     token,
   });
+
+  useEffect(() => {
+    markAuditResultViewed(id, auditId);
+  }, [auditId, id, markAuditResultViewed]);
 
   useEffect(() => {
     const loadData = async () => {

@@ -112,6 +112,7 @@ export function AppSidebar() {
   const location = useLocation();
   const { agents, fetchAgents, agentOnlineStatus, agentConnectingStatus, setAgentOnline } = useAgentStore();
   const auditStreams = useAuditStore((state) => state.auditStreams);
+  const viewedAuditResults = useAuditStore((state) => state.viewedAuditResults);
   const { state: sidebarState } = useSidebar();
   const isIconMode = sidebarState === "collapsed";
   const [openAgents, setOpenAgents] = useState<Record<string, boolean>>({});
@@ -351,9 +352,11 @@ export function AppSidebar() {
                             <div className="border-t border-sidebar-border/60 overflow-hidden">
                               {agentNavItems(agent.id).map((item) => {
                                 const auditStream = item.title === "Audit" ? auditStreams[agent.id] : undefined;
-                                const auditStatus = auditSidebarStatus(auditStream);
-                                const auditResultHref = auditStream?.status === "complete" && auditStream.savedAudit?.id
-                                  ? `/agents/${agent.id}/audits/${auditStream.savedAudit.id}`
+                                const completedAuditId = auditStream?.status === "complete" ? auditStream.savedAudit?.id : undefined;
+                                const completedAuditViewed = !!completedAuditId && viewedAuditResults[agent.id] === completedAuditId;
+                                const auditStatus = completedAuditViewed ? null : auditSidebarStatus(auditStream);
+                                const auditResultHref = completedAuditId && !completedAuditViewed
+                                  ? `/agents/${agent.id}/audits/${completedAuditId}`
                                   : item.href;
                                 const active = isActive(item.href);
                                 const disabled = item.requiresOnline && !isOnline;
