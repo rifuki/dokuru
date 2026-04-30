@@ -122,6 +122,18 @@ function ContainerDetailPage() {
 
   const anyPending = startMutation.isPending || stopMutation.isPending || restartMutation.isPending || removeMutation.isPending;
 
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    if (hasAuditBack) {
+      navigate({ to: "/agents/$id/audits/$auditId", params: { id, auditId: auditId! }, search: { ruleId } });
+      return;
+    }
+    navigate({ to: "/agents/$id/containers", params: { id } });
+  };
+
   if (isLoading) {
     return (
       <div className="max-w-7xl mx-auto w-full space-y-4">
@@ -197,18 +209,9 @@ function ContainerDetailPage() {
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-2 shrink-0 flex-wrap">
-          <Button asChild variant="outline" size="sm" className="shrink-0">
-            {hasAuditBack ? (
-              <Link to="/agents/$id/audits/$auditId" params={{ id, auditId }} search={{ ruleId }}>
-                <ArrowLeft className="h-4 w-4" />
-                Back
-              </Link>
-            ) : (
-              <Link to="/agents/$id/containers" params={{ id }}>
-                <ArrowLeft className="h-4 w-4" />
-                Back
-              </Link>
-            )}
+          <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={handleBack}>
+            <ArrowLeft className="h-4 w-4" />
+            Back
           </Button>
           {isRunning ? (
             <>

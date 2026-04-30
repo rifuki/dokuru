@@ -173,6 +173,14 @@ function NetworkDetailPage() {
     containersById.set(container.id, container);
   }
 
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    navigate({ to: "/agents/$id/networks", params: { id } });
+  };
+
   function containerMeta(containerId: string) {
     return (
       containersById.get(containerId) ??
@@ -233,11 +241,9 @@ function NetworkDetailPage() {
           </div>
         </div>
         <div className="flex items-center justify-end gap-2 shrink-0 flex-wrap">
-          <Button asChild variant="outline" size="sm">
-            <Link to="/agents/$id/networks" params={{ id }}>
-              <ArrowLeft className="h-4 w-4" />
-              Back
-            </Link>
+          <Button type="button" variant="outline" size="sm" onClick={handleBack}>
+            <ArrowLeft className="h-4 w-4" />
+            Back
           </Button>
           <Button size="sm" variant="destructive" onClick={() => setRemoveDialogOpen(true)} disabled={removeMutation.isPending}>
             <Trash2 className="h-4 w-4 mr-1.5" />

@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
 import { canUseDockerAgent, dockerApi, dockerCredential, type ImageHistoryItem } from "@/services/docker-api";
@@ -225,6 +225,14 @@ function ImageDetailPage() {
 
   const hasConfig = cmd || entrypoint || workdir || exposedPorts.length > 0 || envs.length > 0;
 
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    navigate({ to: "/agents/$id/images", params: { id } });
+  };
+
   return (
     <>
     <AlertDialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
@@ -276,11 +284,9 @@ function ImageDetailPage() {
           </div>
         </div>
         <div className="flex items-center justify-end gap-2 shrink-0 flex-wrap">
-          <Button asChild variant="outline" size="sm">
-            <Link to="/agents/$id/images" params={{ id }}>
-              <ArrowLeft className="h-4 w-4" />
-              Back
-            </Link>
+          <Button type="button" variant="outline" size="sm" onClick={handleBack}>
+            <ArrowLeft className="h-4 w-4" />
+            Back
           </Button>
           <Button size="sm" variant="destructive" onClick={() => setRemoveDialogOpen(true)} disabled={removeMutation.isPending}>
             <Trash2 className="h-4 w-4 mr-1.5" />
