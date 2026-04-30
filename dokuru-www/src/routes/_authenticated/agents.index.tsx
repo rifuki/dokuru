@@ -73,6 +73,7 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
   //   isOffline    = WS disconnected/failed
   const isOnline = !isConnecting && wsOnline === true;
   const isOffline = !isConnecting && wsOnline === false;
+  const isStatusPending = !isConnecting && wsOnline === undefined;
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -208,10 +209,12 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-400" />
                 <span className="text-[12px] text-blue-400/80">Connecting to agent...</span>
               </div>
-            ) : infoLoading && !info ? (
+            ) : (infoLoading || isOnline || isStatusPending) && !info && !isOffline ? (
               <div className="flex items-center gap-2 mt-3">
                 <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-miku-primary" />
-                <span className="text-[12px] text-muted-foreground/70">Fetching Docker info...</span>
+                <span className="text-[12px] text-muted-foreground/70">
+                  {isOnline ? "Loading Docker info..." : "Checking agent status..."}
+                </span>
               </div>
             ) : info && isOnline ? (
               // Only show stats when agent is online
@@ -386,7 +389,7 @@ function AgentsList() {
       setAgentInfoLoading(agent.id, true);
       agentDirectApi.getInfo(agent.url, token)
         .then((info) => setAgentInfo(agent.id, info))
-        .catch(() => setAgentInfo(agent.id, null));
+        .catch(() => setAgentInfoLoading(agent.id, false));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agents]);
@@ -397,9 +400,10 @@ function AgentsList() {
       if (agentOnlineStatus[agent.id] === true) {
         const token = agent.access_mode === "relay" ? dockerCredential(agent) : agent.token ?? getAgentToken(agent.id);
         if (!token) continue;
+        setAgentInfoLoading(agent.id, true);
         agentDirectApi.getInfo(agent.url, token)
           .then((info) => setAgentInfo(agent.id, info))
-          .catch(() => { /* keep stale info */ });
+          .catch(() => setAgentInfoLoading(agent.id, false));
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
