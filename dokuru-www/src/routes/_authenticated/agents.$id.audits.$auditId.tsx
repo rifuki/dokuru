@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useReducer, useRef, useState } from "react";
+import { type ReactNode, useEffect, useReducer, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { agentApi } from "@/lib/api/agent";
 import { agentDirectApi, type AuditReportResponse, type AuditResponse, type AuditResult } from "@/lib/api/agent-direct";
@@ -507,29 +507,52 @@ function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, 
   );
 }
 
-// ── Section group header ─────────────────────────────────────────────────────
+// ── Audit breakdown rows ─────────────────────────────────────────────────────
 
-function SectionHeader({ section, total, passed }: { section: string; total: number; passed: number }) {
-  const meta = sectionMeta(section);
+function AuditBreakdownRow({
+  leading,
+  label,
+  total,
+  passed,
+}: {
+  leading: ReactNode;
+  label: string;
+  total: number;
+  passed: number;
+}) {
   const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <span className="font-mono text-[10px] leading-none font-bold px-1.5 py-0.5 rounded border shrink-0 bg-muted/30 border-border text-muted-foreground">
-          {meta.num}
+        <span className="flex h-5 w-9 shrink-0 items-center justify-start">
+          {leading}
         </span>
-        <span className="text-sm font-semibold text-foreground/90">{meta.label}</span>
+        <span className="text-sm font-semibold leading-5 text-foreground/90">{label}</span>
         <span className="text-xs text-muted-foreground/60 font-mono ml-auto">{passed}<span className="text-muted-foreground/40">/</span>{total}</span>
       </div>
-      <div className="h-1.5 bg-muted/40 rounded-full overflow-hidden">
+      <div className="h-2 bg-muted/40 rounded-full overflow-hidden">
         <div
-          className={cn("h-full rounded-full transition-all duration-700",
-            pct === 100 ? "bg-emerald-500" : pct >= 50 ? "bg-amber-500" : "bg-red-500"
-          )}
+          className={cn("h-full rounded-full transition-all duration-700", progressTone(pct))}
           style={{ width: `${pct}%` }}
         />
       </div>
     </div>
+  );
+}
+
+function SectionHeader({ section, total, passed }: { section: string; total: number; passed: number }) {
+  const meta = sectionMeta(section);
+  return (
+    <AuditBreakdownRow
+      leading={(
+        <span className="inline-flex h-5 min-w-7 items-center justify-center rounded border border-border bg-muted/30 px-1.5 font-mono text-[10px] font-bold leading-none text-muted-foreground">
+          {meta.num}
+        </span>
+      )}
+      label={meta.label}
+      total={total}
+      passed={passed}
+    />
   );
 }
 
@@ -1161,21 +1184,21 @@ function AuditDetailPage() {
               {/* Right: Pillar/Section breakdown with toggle */}
               <div className="p-6 space-y-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
                       {viewMode === "pillar" ? "Security Pillars" : "CIS Sections"}
                     </p>
-                    <p className="mt-1 text-xs text-muted-foreground/70">
-                      View audit progress by {viewMode === "pillar" ? "security area" : "CIS benchmark section"}.
+                    <p className="mt-1 truncate text-xs text-muted-foreground/70">
+                      {viewMode === "pillar" ? "Grouped by security area." : "Grouped by CIS section."}
                     </p>
                   </div>
-                  <div className="inline-flex w-fit items-center gap-1 rounded-[10px] border border-border bg-muted/25 p-1">
+                  <div className="inline-flex w-fit shrink-0 items-stretch overflow-hidden rounded-[10px] border border-border bg-muted/25">
                     <button
                       type="button"
                       onClick={() => setViewMode("pillar")}
                       aria-pressed={viewMode === "pillar"}
                       className={cn(
-                        "inline-flex items-center gap-1.5 rounded-[7px] px-3 py-1.5 text-xs font-semibold transition-colors",
+                        "inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold transition-colors",
                         viewMode === "pillar" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                       )}
                     >
@@ -1187,7 +1210,7 @@ function AuditDetailPage() {
                       onClick={() => setViewMode("section")}
                       aria-pressed={viewMode === "section"}
                       className={cn(
-                        "inline-flex items-center gap-1.5 rounded-[7px] px-3 py-1.5 text-xs font-semibold transition-colors",
+                        "inline-flex items-center gap-1.5 border-l border-border/60 px-3 py-2 text-xs font-semibold transition-colors",
                         viewMode === "section" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                       )}
                     >
@@ -1197,40 +1220,33 @@ function AuditDetailPage() {
                   </div>
                 </div>
 
-                {viewMode === "pillar" ? (
-                  pillarSummaries.map(pillarSummary => {
-                    const pillar = pillarSummary.key as SecurityPillar;
-                    const meta = PILLAR_META[pillar];
-                    if (!meta) return null;
-                    const Icon = meta.icon;
-                    const total = pillarSummary.total;
-                    const passed = pillarSummary.passed;
-                    const pct = pillarSummary.percent;
+                <div className="min-h-[244px] space-y-4">
+                  {viewMode === "pillar" ? (
+                    pillarSummaries.map(pillarSummary => {
+                      const pillar = pillarSummary.key as SecurityPillar;
+                      const meta = PILLAR_META[pillar];
+                      if (!meta) return null;
+                      const Icon = meta.icon;
 
-                    return (
-                      <div key={pillar} className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Icon size={14} className={meta.color} />
-                          <span className="text-sm font-semibold text-foreground/90">{meta.name}</span>
-                          <span className="text-xs text-muted-foreground/60 font-mono ml-auto">{passed}<span className="text-muted-foreground/40">/</span>{total}</span>
-                        </div>
-                        <div className="h-2 bg-muted/40 rounded-full overflow-hidden">
-                          <div
-                            className={cn("h-full rounded-full transition-all duration-700", progressTone(pct))}
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  sortedSections.map(s => (
-                    <SectionHeader key={s} section={s}
-                      total={sectionStats[s]?.total ?? 0}
-                      passed={sectionStats[s]?.passed ?? 0}
-                    />
-                  ))
-                )}
+                      return (
+                        <AuditBreakdownRow
+                          key={pillar}
+                          leading={<Icon className={cn("h-3.5 w-3.5", meta.color)} />}
+                          label={meta.name}
+                          total={pillarSummary.total}
+                          passed={pillarSummary.passed}
+                        />
+                      );
+                    })
+                  ) : (
+                    sortedSections.map(s => (
+                      <SectionHeader key={s} section={s}
+                        total={sectionStats[s]?.total ?? 0}
+                        passed={sectionStats[s]?.passed ?? 0}
+                      />
+                    ))
+                  )}
+                </div>
 
                 {/* Quick Stats */}
                 <div className="pt-4 mt-4 border-t border-border grid grid-cols-2 gap-2">
