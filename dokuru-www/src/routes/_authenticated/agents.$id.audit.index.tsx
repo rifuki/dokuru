@@ -1,10 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAgentStore } from "@/stores/use-agent-store";
-import { useAuditStore } from "@/stores/use-audit-store";
+import { useAuditStore, type AuditProgressLine } from "@/stores/use-audit-store";
 import { useEffect, useRef, useState } from "react";
 import { agentApi } from "@/lib/api/agent";
-import { agentDirectApi, type AuditResponse, type AuditResult, type AuditStreamMessage, type FixOutcome } from "@/lib/api/agent-direct";
+import { agentDirectApi, type AuditResponse, type AuditResult, type FixOutcome } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
 import { dockerApi, dockerCredential, type Container as DockerContainer } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
@@ -663,17 +663,6 @@ function SectionHeader({ section, total, passed }: { section: string; total: num
 
 type StatusFilter = "all" | "Pass" | "Fail";
 
-type AuditProgressLine = {
-    index: number;
-    total: number;
-    ruleId: string;
-    title: string;
-    status: "Pass" | "Fail" | "Error";
-    message: string;
-    command?: string;
-    timestamp: string;
-};
-
 function AuditRunTerminal({
     total,
     current,
@@ -758,21 +747,22 @@ function AuditPage() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const { agentOnlineStatus } = useAgentStore();
-    const { runningAudits, auditHistories, setRunning, setAuditHistory } = useAuditStore();
+    const { auditHistories, setAuditHistory, startAudit } = useAuditStore();
+    const auditStream = useAuditStore((state) => state.auditStreams[id]);
     const isOnline = !!agentOnlineStatus[id];
     const [agent, setAgent] = useState<Agent | null>(null);
     const [token, setToken] = useState<string | undefined>();
     const [containers, setContainers] = useState<DockerContainer[]>([]);
     const [auditData] = useState<AuditResponse | null>(null);
-    const isRunning = runningAudits[id] ?? false;
+    const isRunning = auditStream?.status === "running" || auditStream?.status === "saving";
     const auditHistory = auditHistories[id] ?? [];
     const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
     const [sectionFilter, setSectionFilter] = useState<string>("all");
-    const [auditTotal, setAuditTotal] = useState(0);
-    const [auditCurrent, setAuditCurrent] = useState(0);
-    const [auditProgressLines, setAuditProgressLines] = useState<AuditProgressLine[]>([]);
-    const [auditStreamError, setAuditStreamError] = useState<string | null>(null);
-    const auditSocketRef = useRef<WebSocket | null>(null);
+    const auditTotal = auditStream?.total ?? 0;
+    const auditCurrent = auditStream?.current ?? 0;
+    const auditProgressLines = auditStream?.lines ?? [];
+    const auditStreamError = auditStream?.error ?? null;
+    const mountedRef = useRef(false);
 
     useEffect(() => {
         agentApi.getById(id).then(a => {
@@ -791,93 +781,21 @@ function AuditPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]);
 
-    useEffect(() => () => {
-        auditSocketRef.current?.close();
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+        };
     }, []);
-
-    const runAuditViaStream = () => new Promise<AuditResponse>((resolve, reject) => {
-        if (!agent) {
-            reject(new Error("Agent not loaded"));
-            return;
-        }
-
-        const url = agent.access_mode === "relay"
-            ? agentApi.auditStreamUrl(agent.id)
-            : agentDirectApi.auditStreamUrl(agent.url, token);
-        const socket = new WebSocket(url);
-        auditSocketRef.current = socket;
-        let settled = false;
-
-        socket.onmessage = (event) => {
-            try {
-                const message = JSON.parse(String(event.data)) as AuditStreamMessage;
-                if (message.type === "started") {
-                    setAuditTotal(message.total);
-                    setAuditCurrent(0);
-                    return;
-                }
-                if (message.type === "progress") {
-                    setAuditTotal(message.total);
-                    setAuditCurrent(message.index);
-                    setAuditProgressLines(lines => [...lines, {
-                        index: message.index,
-                        total: message.total,
-                        ruleId: message.data.rule.id,
-                        title: message.data.rule.title,
-                        status: message.data.status,
-                        message: message.data.message,
-                        command: message.data.audit_command,
-                        timestamp: new Date().toISOString(),
-                    }]);
-                    return;
-                }
-                if (message.type === "complete") {
-                    settled = true;
-                    resolve(message.data);
-                    socket.close();
-                    return;
-                }
-                if (message.type === "error") {
-                    settled = true;
-                    reject(new Error(message.message));
-                    socket.close();
-                }
-            } catch (error) {
-                settled = true;
-                reject(error instanceof Error ? error : new Error("Invalid audit stream message"));
-                socket.close();
-            }
-        };
-
-        socket.onerror = () => {
-            if (!settled) {
-                settled = true;
-                reject(new Error("Audit progress stream failed"));
-            }
-        };
-
-        socket.onclose = () => {
-            if (auditSocketRef.current === socket) auditSocketRef.current = null;
-            if (!settled) {
-                settled = true;
-                reject(new Error("Audit progress stream closed before completion"));
-            }
-        };
-    });
 
     const handleRunAudit = async () => {
         if (!agent) return;
         if (agent.access_mode !== "relay" && !token) {
             return toast.error("Agent token not found. Edit this agent and paste the token once to sync it across devices.");
         }
-        setRunning(id, true);
-        setAuditTotal(0);
-        setAuditCurrent(0);
-        setAuditProgressLines([]);
-        setAuditStreamError(null);
         try {
-            const streamedAudit = await runAuditViaStream();
-            const savedAudit = await agentApi.saveAudit(agent.id, streamedAudit);
+            const savedAudit = await startAudit(agent, token);
+            if (!mountedRef.current) return;
             try {
                 toast.success(`Audit complete — ${savedAudit.summary.score}/100`);
                 await queryClient.invalidateQueries({ queryKey: ["audits", id] });
@@ -891,11 +809,9 @@ function AuditPage() {
                 toast.error("Failed to open audit result");
             }
         } catch (error) {
+            if (!mountedRef.current) return;
             const message = error instanceof Error ? error.message : "Audit failed";
-            setAuditStreamError(message);
             toast.error(message);
-        } finally {
-            setRunning(id, false);
         }
     };
 
