@@ -795,7 +795,7 @@ function CisPdfDialog({ open, onClose }: { open: boolean; onClose: () => void })
 
 // ── Main Page ────────────────────────────────────────────────────────────────
 
-type StatusFilter = "all" | "Pass" | "Fail";
+type StatusFilter = "all" | "Pass" | "Fail" | "Error";
 type ViewMode = "pillar" | "section";
 
 function AuditDetailPage() {
@@ -922,6 +922,12 @@ function AuditDetailPage() {
     if (a.status !== b.status) return a.status === "Fail" ? -1 : 1;
     return a.rule.id.localeCompare(b.rule.id, undefined, { numeric: true });
   });
+  const statusCounts = {
+    failed: baseResults.filter(r => r.status === "Fail").length,
+    passed: baseResults.filter(r => r.status === "Pass").length,
+    errors: baseResults.filter(r => r.status === "Error").length,
+    total: baseResults.length,
+  };
 
   // Group sections
   const sections: string[] = report
@@ -1415,6 +1421,47 @@ function AuditDetailPage() {
                   </button>
                 )}
               </div>
+            </div>
+
+            <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
+              <span className="text-xs text-muted-foreground/60 font-semibold shrink-0">Status:</span>
+              <button
+                onClick={() => setStatusFilter("all")}
+                className={cn("shrink-0 inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg border font-bold transition-all",
+                  statusFilter === "all" ? "bg-muted/50 text-foreground border-border" : "bg-muted/20 border-border text-muted-foreground hover:bg-muted/40")}
+              >
+                All
+                <span className="font-mono text-[10px] opacity-70">{statusCounts.total}</span>
+              </button>
+              <button
+                onClick={() => setStatusFilter(f => f === "Fail" ? "all" : "Fail")}
+                className={cn("shrink-0 inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-bold transition-all",
+                  statusFilter === "Fail" ? "bg-rose-500/10 text-rose-400 border-rose-500/30" : "bg-muted/20 border-border text-muted-foreground hover:bg-muted/40")}
+              >
+                <ShieldX className="h-3 w-3" />
+                Needs fix
+                <span className="font-mono text-[10px] opacity-70">{statusCounts.failed}</span>
+              </button>
+              <button
+                onClick={() => setStatusFilter(f => f === "Pass" ? "all" : "Pass")}
+                className={cn("shrink-0 inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-bold transition-all",
+                  statusFilter === "Pass" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : "bg-muted/20 border-border text-muted-foreground hover:bg-muted/40")}
+              >
+                <ShieldCheck className="h-3 w-3" />
+                Passed
+                <span className="font-mono text-[10px] opacity-70">{statusCounts.passed}</span>
+              </button>
+              {statusCounts.errors > 0 && (
+                <button
+                  onClick={() => setStatusFilter(f => f === "Error" ? "all" : "Error")}
+                  className={cn("shrink-0 inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-bold transition-all",
+                    statusFilter === "Error" ? "bg-amber-500/10 text-amber-400 border-amber-500/30" : "bg-muted/20 border-border text-muted-foreground hover:bg-muted/40")}
+                >
+                  <AlertTriangle className="h-3 w-3" />
+                  Error
+                  <span className="font-mono text-[10px] opacity-70">{statusCounts.errors}</span>
+                </button>
+              )}
             </div>
 
             {/* Row 2: Filter pills — scrollable */}
