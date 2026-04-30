@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useAuthUser } from "@/stores/use-auth-store";
 import { useAgentStore, getAgentToken, type AgentInfoEntry } from "@/stores/use-agent-store";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -61,11 +61,28 @@ type AgentWithInfo = {
   connectionError: string | null; // last WS close reason
 };
 
-function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick: () => void; onUpdated: (agent: Agent) => void }) {
+function getDockerInfoErrorMessage(error: unknown) {
+  const fallback = "Docker info unavailable";
+  if (error && typeof error === "object" && "response" in error) {
+    const response = (error as { response?: { status?: number; data?: { message?: string; debug?: string } } }).response;
+    if (response?.data?.message) return response.data.message;
+    if (response?.status === 401) return "Docker info auth failed";
+    if (response?.status === 404) return "Docker info endpoint not found";
+    if (response?.status) return `Docker info failed (HTTP ${response.status})`;
+  }
+  if (error instanceof Error && error.message) {
+    if (error.message.toLowerCase().includes("timeout")) return "Docker info request timed out";
+    return error.message;
+  }
+  return fallback;
+}
+
+function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWithInfo; onClick: () => void; onUpdated: (agent: Agent) => void; onRefreshInfo: () => void }) {
   const { agent, infoEntry, wsOnline, isConnecting, connectionError } = data;
   const { deleteAgent } = useAgentStore();
   const info = infoEntry?.info ?? null;
   const infoLoading = infoEntry?.loading ?? true;
+  const infoError = infoEntry?.error ?? null;
 
   // Tri-state connection:
   //   isConnecting = WS is in the process of connecting (blink blue)
@@ -73,7 +90,6 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
   //   isOffline    = WS disconnected/failed
   const isOnline = !isConnecting && wsOnline === true;
   const isOffline = !isConnecting && wsOnline === false;
-  const isStatusPending = !isConnecting && wsOnline === undefined;
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -151,7 +167,7 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
   };
 
   return (
-    <div className="group rounded-[14px] border border-border bg-card p-4 shadow-sm transition-colors">
+    <div className={`group rounded-[14px] border border-border bg-card p-4 shadow-sm transition-colors ${isConnecting ? "border-blue-500/40 shadow-blue-500/10" : ""}`}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 gap-4">
           <div className="flex w-14 items-center justify-center shrink-0 relative">
@@ -175,7 +191,7 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
               <span
                 className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-[11px] font-semibold uppercase ${
                   isConnecting
-                    ? "border-blue-500/30 bg-blue-500/10 text-blue-400"
+                    ? "animate-pulse border-blue-500/30 bg-blue-500/10 text-blue-400"
                     : isOnline
                     ? "border-primary/35 bg-primary/10 text-primary"
                     : "border-red-500/30 bg-red-500/10 text-red-400"
@@ -209,15 +225,15 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-400" />
                 <span className="text-[12px] text-blue-400/80">Connecting to agent...</span>
               </div>
-            ) : (infoLoading || isOnline || isStatusPending) && !info && !isOffline ? (
+            ) : infoLoading && !info && !isOffline ? (
               <div className="flex items-center gap-2 mt-3">
                 <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-miku-primary" />
                 <span className="text-[12px] text-muted-foreground/70">
                   {isOnline ? "Loading Docker info..." : "Checking agent status..."}
                 </span>
               </div>
-            ) : info && isOnline ? (
-              // Only show stats when agent is online
+            ) : info && !isOffline ? (
+              // Keep the last successful stats visible while the WS reconnects.
               <div className="flex items-center mt-3 text-[12px] font-medium flex-wrap divide-x divide-border text-muted-foreground">
                 <div className="flex items-center gap-1.5 pr-3">
                   <Container className="w-3.5 h-3.5" />
@@ -260,7 +276,17 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
             ) : (
               <div className="mt-3 inline-flex w-fit items-center gap-2 rounded-[6px] border border-amber-600/25 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 dark:border-amber-400/25 dark:bg-amber-500/10 dark:text-amber-300">
                 <AlertTriangle className="h-3.5 w-3.5" />
-                <span>Docker info unavailable</span>
+                <span>{infoError ?? "Docker info unavailable"}</span>
+                <button
+                  type="button"
+                  className="ml-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-amber-900 underline-offset-2 hover:underline dark:text-amber-200"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRefreshInfo();
+                  }}
+                >
+                  Retry
+                </button>
               </div>
             )}
           </div>
@@ -346,7 +372,8 @@ function AgentCard({ data, onClick, onUpdated }: { data: AgentWithInfo; onClick:
 
 function AgentsList() {
   const navigate = useNavigate();
-  const { agents, isLoading, fetchAgents, updateAgent, agentInfos, setAgentInfo, setAgentInfoLoading, agentOnlineStatus, agentConnectingStatus, agentConnectionError } = useAgentStore();
+  const { agents, isLoading, fetchAgents, updateAgent, agentInfos, setAgentInfo, setAgentInfoLoading, setAgentInfoError, agentOnlineStatus, agentConnectingStatus, agentConnectionError } = useAgentStore();
+  const previousOnlineStatusRef = useRef<Record<string, boolean | undefined>>({});
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSetupGuideOpen, setIsSetupGuideOpen] = useState(false);
   const [installCommandCopied, setInstallCommandCopied] = useState(false);
@@ -365,7 +392,26 @@ function AgentsList() {
 
   useEffect(() => { fetchAgents(); }, [fetchAgents]);
 
-  const handleAgentUpdated = (updated: Agent) => { updateAgent(updated); };
+  const handleAgentUpdated = (updated: Agent) => {
+    updateAgent(updated);
+    loadDockerInfo(updated, true);
+  };
+
+  function loadDockerInfo(agent: Agent, force = false) {
+    const cached = agentInfos[agent.id];
+    if (!force && (cached?.loading || cached?.info)) return;
+
+    const token = agent.access_mode === "relay" ? dockerCredential(agent) : agent.token ?? getAgentToken(agent.id);
+    if (!token) {
+      setAgentInfoError(agent.id, "Agent token not available");
+      return;
+    }
+
+    setAgentInfoLoading(agent.id, true);
+    agentDirectApi.getInfo(agent.url, token)
+      .then((info) => setAgentInfo(agent.id, info))
+      .catch((error) => setAgentInfoError(agent.id, getDockerInfoErrorMessage(error)));
+  }
 
   const copyInstallCommand = async () => {
     try {
@@ -378,36 +424,36 @@ function AgentsList() {
     }
   };
 
-  // Initial Docker info fetch — runs once when agents load.
+  const refreshAgents = async () => {
+    await fetchAgents();
+    for (const agent of agents) loadDockerInfo(agent, true);
+  };
+
+  // Initial Docker info fetch. Failed requests stay retryable instead of being treated as cached.
   useEffect(() => {
     if (agents.length === 0) return;
     for (const agent of agents) {
-      const cached = agentInfos[agent.id];
-      if (cached && !cached.loading) continue;
-      const token = agent.access_mode === "relay" ? dockerCredential(agent) : agent.token ?? getAgentToken(agent.id);
-      if (!token) { setAgentInfo(agent.id, null); continue; }
-      setAgentInfoLoading(agent.id, true);
-      agentDirectApi.getInfo(agent.url, token)
-        .then((info) => setAgentInfo(agent.id, info))
-        .catch(() => setAgentInfoLoading(agent.id, false));
+      loadDockerInfo(agent);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agents]);
 
   // Re-fetch Docker info when an agent comes back online.
   useEffect(() => {
+    const nextOnlineStatus: Record<string, boolean | undefined> = {};
+
     for (const agent of agents) {
-      if (agentOnlineStatus[agent.id] === true) {
-        const token = agent.access_mode === "relay" ? dockerCredential(agent) : agent.token ?? getAgentToken(agent.id);
-        if (!token) continue;
-        setAgentInfoLoading(agent.id, true);
-        agentDirectApi.getInfo(agent.url, token)
-          .then((info) => setAgentInfo(agent.id, info))
-          .catch(() => setAgentInfoLoading(agent.id, false));
+      const isOnlineNow = agentOnlineStatus[agent.id] === true;
+      nextOnlineStatus[agent.id] = agentOnlineStatus[agent.id];
+
+      if (isOnlineNow && previousOnlineStatusRef.current[agent.id] !== true) {
+        loadDockerInfo(agent, true);
       }
     }
+
+    previousOnlineStatusRef.current = nextOnlineStatus;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agentOnlineStatus]);
+  }, [agentOnlineStatus, agents]);
 
   // Collect available Docker versions for the version filter dropdown.
   const availableVersions = Array.from(
@@ -499,7 +545,7 @@ function AgentsList() {
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            onClick={() => fetchAgents()}
+            onClick={() => void refreshAgents()}
             disabled={isLoading}
             className="border-primary/30 text-primary hover:bg-primary/10"
           >
@@ -742,6 +788,7 @@ function AgentsList() {
                 }}
                 onClick={() => navigate({ to: `/agents/${agent.id}` })}
                 onUpdated={handleAgentUpdated}
+                onRefreshInfo={() => loadDockerInfo(agent, true)}
               />
             ))}
           </div>

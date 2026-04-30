@@ -6,6 +6,7 @@ import type { DockerInfo } from "@/lib/api/agent-direct";
 export interface AgentInfoEntry {
   info: DockerInfo | null;
   loading: boolean;
+  error: string | null;
 }
 
 interface AgentState {
@@ -27,6 +28,7 @@ interface AgentState {
   setAgentConnectionError: (id: string, error: string | null) => void;
   setAgentInfo: (id: string, info: DockerInfo | null) => void;
   setAgentInfoLoading: (id: string, loading: boolean) => void;
+  setAgentInfoError: (id: string, error: string) => void;
 }
 
 function cacheAgentToken(agent: Agent) {
@@ -105,14 +107,26 @@ export const useAgentStore = create<AgentState>((set) => ({
 
   setAgentInfo: (id, info) =>
     set((state) => ({
-      agentInfos: { ...state.agentInfos, [id]: { info, loading: false } },
+      agentInfos: { ...state.agentInfos, [id]: { info, loading: false, error: null } },
     })),
 
   setAgentInfoLoading: (id, loading) =>
     set((state) => ({
       agentInfos: {
         ...state.agentInfos,
-        [id]: { info: state.agentInfos[id]?.info ?? null, loading },
+        [id]: {
+          info: state.agentInfos[id]?.info ?? null,
+          loading,
+          error: loading ? null : state.agentInfos[id]?.error ?? null,
+        },
+      },
+    })),
+
+  setAgentInfoError: (id, error) =>
+    set((state) => ({
+      agentInfos: {
+        ...state.agentInfos,
+        [id]: { info: state.agentInfos[id]?.info ?? null, loading: false, error },
       },
     })),
 }));

@@ -310,7 +310,9 @@ export function AppSidebar() {
                           isIconMode
                             ? ""
                             : `rounded-[12px] border overflow-hidden transition-colors ${
-                                isAgentActive
+                                isConnecting
+                                  ? "border-blue-500/45 shadow-[0_0_0_1px_rgba(14,165,233,0.12)]"
+                                  : isAgentActive
                                   ? "border-miku-primary/40"
                                   : "border-sidebar-border"
                               }`
@@ -320,7 +322,7 @@ export function AppSidebar() {
                           {isIconMode ? (
                             <SidebarMenuButton tooltip={agent.name} isActive={isAgentActive}>
                               {isConnecting
-                                ? <Loader2 className="size-5 text-blue-400 animate-spin" />
+                                ? <span className="flex size-5 items-center justify-center animate-pulse"><Loader2 className="size-5 text-blue-400 animate-spin" /></span>
                                 : <AgentIcon className={`size-5 ${iconColor}`} />
                               }
                             </SidebarMenuButton>
@@ -328,13 +330,15 @@ export function AppSidebar() {
                             <button
                               type="button"
                               className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-none transition-colors ${
-                                isAgentActive
+                                isConnecting
+                                  ? "text-blue-400 hover:bg-blue-500/10"
+                                  : isAgentActive
                                   ? "text-miku-primary"
                                   : "text-sidebar-foreground hover:bg-sidebar-accent/40"
                               }`}
                             >
                               {isConnecting
-                                ? <Loader2 className="size-5 shrink-0 text-blue-400 animate-spin" />
+                                ? <span className="flex size-5 shrink-0 items-center justify-center animate-pulse"><Loader2 className="size-5 text-blue-400 animate-spin" /></span>
                                 : <AgentIcon className={`size-5 shrink-0 ${iconColor}`} />
                               }
                               <span className="flex-1 truncate text-left">{agent.name}</span>

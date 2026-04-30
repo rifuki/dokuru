@@ -229,8 +229,10 @@ export const agentDirectApi = {
       return response.data;
     }
 
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    const response = await axios.get(`${agentUrl}/api/v1/info`, { headers, timeout: 10000 });
+    const response = await axios.get(`${agentUrl}/api/v1/info`, {
+      params: token ? { token } : undefined,
+      timeout: 10000,
+    });
     return response.data.data;
   },
 
