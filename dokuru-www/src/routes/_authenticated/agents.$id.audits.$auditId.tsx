@@ -81,36 +81,51 @@ function SeverityBadge({ severity, status }: { severity: string; status?: "Pass"
   );
 }
 
-function failedSeverityTone(severity: string) {
-  if (severity === "High") {
+function ruleStatusTone(status: "Pass" | "Fail" | "Error") {
+  if (status === "Pass") {
     return {
-      borderLeft: "border-l-red-400",
-      cardTone: "border-border bg-card/95 hover:bg-muted/[0.08]",
-      icon: "text-red-500",
+      borderLeft: "border-l-emerald-500/60",
+      cardTone: "border-border bg-card/85 hover:bg-muted/[0.06]",
+      icon: "text-emerald-400",
     };
   }
 
-  if (severity === "Medium") {
+  if (status === "Fail") {
     return {
-      borderLeft: "border-l-amber-400",
+      borderLeft: "border-l-rose-500/70",
       cardTone: "border-border bg-card/95 hover:bg-muted/[0.08]",
-      icon: "text-amber-400",
+      icon: "text-rose-400",
     };
   }
 
   return {
-    borderLeft: "border-l-muted-foreground/40",
+    borderLeft: "border-l-amber-500/60",
     cardTone: "border-border bg-card/95 hover:bg-muted/[0.08]",
-    icon: "text-muted-foreground",
+    icon: "text-amber-400",
   };
+}
+
+function RuleStatusBadge({ status }: { status: "Pass" | "Fail" | "Error" }) {
+  const config = {
+    Pass: { label: "Passed", cls: "border-emerald-500/20 bg-emerald-500/10 text-emerald-400", dot: "bg-emerald-400" },
+    Fail: { label: "Needs fix", cls: "border-rose-500/25 bg-rose-500/10 text-rose-400", dot: "bg-rose-400" },
+    Error: { label: "Error", cls: "border-amber-500/20 bg-amber-500/10 text-amber-400", dot: "bg-amber-400" },
+  }[status];
+
+  return (
+    <span className={cn("inline-flex h-6 items-center gap-1.5 rounded-md border px-2 text-xs font-semibold", config.cls)}>
+      <span className={cn("h-1.5 w-1.5 rounded-full", config.dot)} />
+      {config.label}
+    </span>
+  );
 }
 
 // ── Status indicator ─────────────────────────────────────────────────────────
 
-function StatusIcon({ status, severity }: { status: "Pass" | "Fail" | "Error"; severity?: string }) {
-  if (status === "Pass") return <ShieldCheck className="h-5 w-5 text-green-500 shrink-0" />;
-  if (status === "Fail") return <ShieldX className={cn("h-5 w-5 shrink-0", failedSeverityTone(severity ?? "Low").icon)} />;
-  return <Shield className="h-5 w-5 text-orange-500 shrink-0" />;
+function StatusIcon({ status }: { status: "Pass" | "Fail" | "Error" }) {
+  if (status === "Pass") return <ShieldCheck className={cn("h-5 w-5 shrink-0", ruleStatusTone(status).icon)} />;
+  if (status === "Fail") return <ShieldX className={cn("h-5 w-5 shrink-0", ruleStatusTone(status).icon)} />;
+  return <Shield className={cn("h-5 w-5 shrink-0", ruleStatusTone(status).icon)} />;
 }
 
 async function copyText(text: string) {
@@ -280,17 +295,7 @@ function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, 
     return () => window.clearTimeout(timeout);
   }, [isFocused]);
 
-  const failTone = failedSeverityTone(rule.severity);
-
-  const borderLeft = status === "Pass"
-    ? "border-l-emerald-500/50"
-    : status === "Fail"
-      ? failTone.borderLeft
-      : "border-l-amber-500/50";
-
-  const cardTone = status === "Fail"
-    ? failTone.cardTone
-    : "border-border bg-card";
+  const statusTone = ruleStatusTone(status);
 
   const pillar = getRulePillar(rule.id);
   const pillarMeta = PILLAR_META[pillar];
@@ -305,13 +310,14 @@ function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, 
   ].filter(t => t.show);
 
   return (
-    <div ref={cardRef} className={cn("overflow-hidden rounded-xl border border-l-[3px] shadow-sm transition-colors", borderLeft, cardTone, isFocused && "ring-2 ring-primary/40")}>
+    <div ref={cardRef} className={cn("overflow-hidden rounded-xl border border-l-[3px] shadow-sm transition-colors", statusTone.borderLeft, statusTone.cardTone, isFocused && "ring-2 ring-primary/40")}>
       {/* Header row */}
       <div className="px-5 py-4 flex items-center gap-3">
         <button onClick={() => setOpen(v => !v)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
-          <StatusIcon status={status} severity={rule.severity} />
+          <StatusIcon status={status} />
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+              <RuleStatusBadge status={status} />
               <span className="inline-flex h-6 items-center rounded-md border border-border/70 bg-muted/35 px-2 font-mono text-[11px] font-bold text-muted-foreground/80">
                 {rule.id}
               </span>
