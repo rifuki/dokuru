@@ -872,21 +872,18 @@ async fn update_compose_file(
     name: &str,
     payload: &DockerCommandPayload,
 ) -> Result<DockerCommandResponse> {
-    let request = match payload
+    let Some(request) = payload
         .body
         .clone()
         .and_then(|body| serde_json::from_value::<UpdateComposeFileRequest>(body).ok())
-    {
-        Some(request) => request,
-        None => {
-            return json_status(
-                400,
-                ComposeErrorResponse {
-                    error: "Invalid compose update payload".to_string(),
-                    detail: "Expected JSON body with a content field".to_string(),
-                },
-            );
-        }
+    else {
+        return json_status(
+            400,
+            ComposeErrorResponse {
+                error: "Invalid compose update payload".to_string(),
+                detail: "Expected JSON body with a content field".to_string(),
+            },
+        );
     };
 
     if request.content.trim().is_empty() {
