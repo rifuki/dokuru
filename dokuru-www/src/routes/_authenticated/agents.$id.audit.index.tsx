@@ -678,20 +678,29 @@ function AuditRunTerminal({
     const latest = lines.at(-1);
 
     return (
-        <div className="flex h-full w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#03070C] text-left shadow-[0_30px_90px_-64px_rgba(0,0,0,0.95)]">
-            <div className="flex items-center justify-between border-b border-white/8 bg-white/[0.025] px-4 py-2.5">
-                <div className="flex items-center gap-2 min-w-0">
-                    <Terminal className="h-4 w-4 text-[#2496ED] shrink-0" />
-                    <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-[#2496ED]">
-                        live audit stream
-                    </span>
+        <div className="flex h-full w-full animate-in flex-col overflow-hidden bg-[#03070C] text-left fade-in zoom-in-95 duration-500">
+            <div className="flex items-center justify-between gap-4 border-b border-white/8 bg-white/[0.025] px-5 py-4">
+                <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex shrink-0 items-center gap-1.5" aria-hidden="true">
+                        <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f56]" />
+                        <span className="h-2.5 w-2.5 rounded-full bg-[#ffbd2e]" />
+                        <span className="h-2.5 w-2.5 rounded-full bg-[#27c93f]" />
+                    </div>
+                    <div className="h-5 w-px shrink-0 bg-white/10" />
+                    <Terminal className="h-4 w-4 shrink-0 text-[#2496ED]" />
+                    <div className="min-w-0">
+                        <h3 className="truncate text-sm font-semibold text-white">Live security audit</h3>
+                        <p className="mt-0.5 truncate font-mono text-[10px] uppercase tracking-[0.18em] text-[#2496ED]">
+                            CIS Docker Benchmark v1.8.0
+                        </p>
+                    </div>
                 </div>
                 <span className="font-mono text-[11px] text-white/45">
                     {current}/{total || "?"} · {pct}%
                 </span>
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col gap-3 px-4 py-3">
+            <div className="flex min-h-0 flex-1 flex-col gap-4 px-5 py-4">
                 <div className="space-y-1.5">
                     <div className="flex items-center justify-between gap-3">
                         <p className="font-mono text-xs text-white/70 truncate">
@@ -715,7 +724,7 @@ function AuditRunTerminal({
                     </div>
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-white/8 bg-black/35 p-3 font-mono text-[11px] leading-relaxed">
+                <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-white/8 bg-black/35 p-4 font-mono text-[11px] leading-relaxed shadow-inner">
                     {lines.length === 0 && !error && (
                         <p className="text-white/35">$ connecting to dokuru-agent audit websocket...</p>
                     )}
@@ -1058,35 +1067,19 @@ function AuditPage() {
                 <>
                     {/* ── Run New Audit Card ────────────────────────────── */}
                     <div className={cn(
-                        "relative overflow-hidden rounded-3xl border border-border/70 bg-card/90 px-4 py-4 shadow-[0_30px_110px_-82px_rgba(0,0,0,0.95)] backdrop-blur-sm transition-[height] duration-500",
-                        isRunning ? "h-[430px] sm:h-[450px] md:h-[470px]" : "h-[340px] sm:h-[350px] md:h-[360px]",
+                        "relative overflow-hidden rounded-3xl border shadow-[0_30px_110px_-82px_rgba(0,0,0,0.95)] backdrop-blur-sm transition-all duration-500 ease-out",
+                        isRunning
+                            ? "h-[500px] border-primary/20 bg-[#03070C] shadow-[0_36px_120px_-72px_rgba(14,165,233,0.45)] sm:h-[520px] md:h-[540px]"
+                            : "h-[340px] border-border/70 bg-card/90 px-4 py-4 sm:h-[350px] md:h-[360px]",
                     )}>
-                        <div className="pointer-events-none absolute inset-0 bg-white/[0.018]" />
+                        <div className={cn("pointer-events-none absolute inset-0 transition-opacity duration-500", isRunning ? "opacity-0" : "bg-white/[0.018] opacity-100")} />
                         {isRunning ? (
-                            <div className="relative z-10 flex h-full flex-col">
-                                <div className="flex items-start gap-4 animate-in fade-in slide-in-from-top-2 duration-500">
-                                    <div className="flex min-w-0 items-center gap-3">
-                                        <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-2 shadow-sm">
-                                            <Shield className="h-5 w-5 text-primary" />
-                                        </div>
-                                        <div className="min-w-0 text-left">
-                                            <h3 className="truncate text-base font-semibold">Live security audit</h3>
-                                            <p className="mt-0.5 text-xs text-muted-foreground">Scanning CIS Docker Benchmark v1.8.0</p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="flex min-h-0 flex-1 items-center justify-center py-4">
-                                    <div className="h-[280px] w-full max-w-3xl animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-500 sm:h-[300px] md:h-[315px]">
-                                        <AuditRunTerminal
-                                            total={auditTotal}
-                                            current={auditCurrent}
-                                            lines={auditProgressLines}
-                                            error={auditStreamError}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
+                            <AuditRunTerminal
+                                total={auditTotal}
+                                current={auditCurrent}
+                                lines={auditProgressLines}
+                                error={auditStreamError}
+                            />
                         ) : (
                             <div className="relative z-10 flex h-full flex-col items-center justify-center gap-4 text-center">
                                 <div className="rounded-full border border-white/10 bg-white/[0.035] p-5 shadow-sm">
