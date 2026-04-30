@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog";
 import {
   Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
   Terminal, Wrench, AlertTriangle, Server,
-  ArrowLeft, Clock, Cpu, Container, Zap, BookOpen,
+  ArrowLeft, Clock, Cpu, Container, BookOpen,
   Search, X, Layers, ArrowLeftRight, Link, FileText,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -344,7 +344,7 @@ function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, 
               onClick={(e) => { e.stopPropagation(); onOpenWizard(result); }}
               className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-md bg-[#2496ED] hover:bg-[#1d7ac7] text-white transition-all shadow-sm"
             >
-              <Zap className="h-3 w-3" />
+              <Wrench className="h-3 w-3" />
               Auto Fix
             </button>
           )}
@@ -1271,7 +1271,7 @@ function AuditDetailPage() {
                   onClick={() => openFixAll(autoFixable)}
                   className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-[#2496ED] hover:bg-[#1e80cc] px-4 py-2.5 text-sm font-bold text-white shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] transition-all hover:shadow-[0_0_24px_-4px_rgba(36,150,237,0.7)] active:scale-[0.98]"
                 >
-                  <Zap className="h-4 w-4" />
+                  <Wrench className="h-4 w-4" />
                   Fix All ({autoFixable.length})
                 </button>
               </div>
@@ -1290,26 +1290,28 @@ function AuditDetailPage() {
           {report?.remediation.total_failed ? (
             <div className="rounded-2xl border border-border bg-card dark:bg-gradient-to-br dark:from-[#0A0A0B] dark:to-[#111113] overflow-hidden">
               <div className="flex flex-col gap-4 border-b border-border px-5 py-4 md:flex-row md:items-center md:justify-between">
-                <div>
+                <div className="max-w-2xl">
                   <h3 className="text-base font-bold tracking-tight">Remediation Plan</h3>
-                  <p className="text-sm text-muted-foreground">Highest-risk failed checks with suggested remediation order.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Top {Math.min(report.remediation.actions.length, 5)} of {report.remediation.total_failed} failed checks from this audit. After a fix and audit rerun, the next failed rule moves into this priority list.
+                  </p>
                 </div>
-                <div className="grid grid-cols-4 gap-2 text-center">
+                <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
                   <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2">
                     <p className="text-lg font-black text-rose-400">{report.remediation.high_impact}</p>
-                    <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">High</p>
+                    <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">High severity</p>
                   </div>
                   <div className="rounded-lg border border-[#2496ED]/20 bg-[#2496ED]/10 px-3 py-2">
                     <p className="text-lg font-black text-[#2496ED]">{report.remediation.auto_fixable}</p>
-                    <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Auto</p>
+                    <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Auto-fixable</p>
                   </div>
-                  <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
-                    <p className="text-lg font-black text-emerald-400">{report.remediation.quick_wins}</p>
-                    <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Quick</p>
+                  <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+                    <p className="text-lg font-black text-foreground">{report.remediation.quick_wins}</p>
+                    <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Quick fixes</p>
                   </div>
-                  <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2">
-                    <p className="text-lg font-black text-amber-400">{report.remediation.manual + report.remediation.guided}</p>
-                    <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Manual</p>
+                  <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+                    <p className="text-lg font-black text-foreground">{report.remediation.manual + report.remediation.guided}</p>
+                    <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Manual review</p>
                   </div>
                 </div>
               </div>
@@ -1319,6 +1321,12 @@ function AuditDetailPage() {
                   const meta = PILLAR_META[pillar];
                   const effortLabel = action.effort === "quick" ? "Quick" : action.effort === "moderate" ? "Moderate" : "Involved";
                   const kindLabel = action.remediation_kind === "auto" ? "Auto fix" : action.remediation_kind === "guided" ? "Guided" : "Manual";
+                  const kindClass = action.remediation_kind === "auto"
+                    ? "border-[#2496ED]/25 bg-[#2496ED]/10 text-[#2496ED]"
+                    : "border-border bg-muted/30 text-muted-foreground";
+                  const scopeLabel = action.affected_count > 0
+                    ? `${action.affected_count} affected item${action.affected_count > 1 ? "s" : ""}`
+                    : "Host-level check";
 
                   return (
                     <div key={action.rule_id} className="grid gap-3 px-5 py-4 md:grid-cols-[auto_1fr_auto] md:items-start">
@@ -1336,7 +1344,7 @@ function AuditDetailPage() {
                               {action.pillar_label}
                             </span>
                           )}
-                          <span className="inline-flex items-center gap-1.5 rounded border border-border bg-muted/30 px-2 py-1 text-xs font-bold text-muted-foreground">
+                          <span className={cn("inline-flex items-center gap-1.5 rounded border px-2 py-1 text-xs font-bold", kindClass)}>
                             <Wrench className="h-3 w-3" />
                             {kindLabel}
                           </span>
@@ -1348,17 +1356,11 @@ function AuditDetailPage() {
                         <p className="font-semibold leading-snug">{action.title}</p>
                         <p className="line-clamp-2 text-sm text-muted-foreground">{action.summary}</p>
                       </div>
-                      <div className="flex items-center gap-3 md:justify-end">
-                        <div className="text-right">
-                          <p className="text-lg font-black text-foreground">{action.risk_score}</p>
-                          <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Risk</p>
-                        </div>
-                        {action.affected_count > 0 && (
-                          <div className="text-right">
-                            <p className="text-lg font-black text-amber-400">{action.affected_count}</p>
-                            <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Affected</p>
-                          </div>
-                        )}
+                      <div className="flex items-center md:min-w-[170px] md:justify-end">
+                        <span className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs font-bold text-muted-foreground">
+                          <Server className="h-3.5 w-3.5 text-muted-foreground/70" />
+                          {scopeLabel}
+                        </span>
                       </div>
                     </div>
                   );
