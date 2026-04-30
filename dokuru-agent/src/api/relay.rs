@@ -772,7 +772,7 @@ async fn host_shell_stream(
     send_stream_data(
         tx,
         id,
-        format!("\r\n\x1b[90mDokuru host shell: {shell}\x1b[0m\r\n").into_bytes(),
+        format!("\x1b[90mDokuru host shell: {shell}\x1b[0m\r\n").into_bytes(),
     )?;
 
     loop {

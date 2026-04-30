@@ -41,7 +41,7 @@ async fn handle_host_shell(socket: WebSocket, query: HostShellQuery) {
     let (mut ws_tx, mut ws_rx) = socket.split();
     let _ = ws_tx
         .send(Message::Binary(
-            format!("\r\n\x1b[90mDokuru host shell: {shell}\x1b[0m\r\n")
+            format!("\x1b[90mDokuru host shell: {shell}\x1b[0m\r\n")
                 .into_bytes()
                 .into(),
         ))
