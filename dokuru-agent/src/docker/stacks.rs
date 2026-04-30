@@ -49,7 +49,10 @@ where
     Router::new()
         .route("/docker/stacks", get(list_stacks))
         .route("/docker/stacks/{name}", get(get_stack))
-        .route("/docker/stacks/{name}/compose", get(get_compose_file))
+        .route(
+            "/docker/stacks/{name}/compose",
+            get(get_compose_file).put(update_compose_file),
+        )
 }
 
 async fn list_stacks() -> Result<Json<Vec<StackResponse>>, StatusCode> {
@@ -203,15 +206,28 @@ struct ComposeErrorResponse {
     detail: String,
 }
 
-fn compose_error(error: impl Into<String>, detail: impl Into<String>) -> Response {
+#[derive(Deserialize)]
+struct UpdateComposeFileRequest {
+    content: String,
+}
+
+fn compose_status(
+    status: StatusCode,
+    error: impl Into<String>,
+    detail: impl Into<String>,
+) -> Response {
     (
-        StatusCode::UNPROCESSABLE_ENTITY,
+        status,
         Json(ComposeErrorResponse {
             error: error.into(),
             detail: detail.into(),
         }),
     )
         .into_response()
+}
+
+fn compose_error(error: impl Into<String>, detail: impl Into<String>) -> Response {
+    compose_status(StatusCode::UNPROCESSABLE_ENTITY, error, detail)
 }
 
 /// Output row from `docker compose ls --all --format json`.
@@ -237,15 +253,7 @@ async fn compose_ls() -> Option<Vec<ComposeLsEntry>> {
     serde_json::from_slice(&out.stdout).ok()
 }
 
-/// Return the content of the compose file for a given stack.
-///
-/// Strategy (same as Dockge):
-/// 1. Run `docker compose ls --all --format json` to get the canonical
-///    `ConfigFiles` path for the requested stack.
-/// 2. Try reading each comma-separated path from `ConfigFiles`.
-/// 3. If that fails, fall back to the `working_dir` label + each accepted
-///    compose filename (`compose.yaml`, `docker-compose.yml`, …).
-async fn get_compose_file(Path(name): Path<String>) -> Response {
+async fn resolve_compose_file(name: &str) -> Result<(PathBuf, String), ComposeErrorResponse> {
     // ── Step 1: get ConfigFiles from `docker compose ls` ──────────────────
     let compose_ls_entry = compose_ls()
         .await
@@ -256,11 +264,7 @@ async fn get_compose_file(Path(name): Path<String>) -> Response {
             let path = PathBuf::from(raw.trim());
             match tokio::fs::read_to_string(&path).await {
                 Ok(content) => {
-                    return Json(ComposeFileResponse {
-                        path: path.to_string_lossy().into_owned(),
-                        content,
-                    })
-                    .into_response();
+                    return Ok((path, content));
                 }
                 Err(e) => {
                     warn!("compose ls path {}: {e}", path.display());
@@ -272,7 +276,12 @@ async fn get_compose_file(Path(name): Path<String>) -> Response {
     // ── Step 2: fall back to working_dir label + accepted filenames ────────
     let docker = match get_docker_client() {
         Ok(d) => d,
-        Err(e) => return compose_error("Docker client error", e.to_string()),
+        Err(e) => {
+            return Err(ComposeErrorResponse {
+                error: "Docker client error".to_string(),
+                detail: e.to_string(),
+            });
+        }
     };
 
     let containers = match docker
@@ -283,12 +292,17 @@ async fn get_compose_file(Path(name): Path<String>) -> Response {
         .await
     {
         Ok(c) => c,
-        Err(e) => return compose_error("Failed to list containers", e.to_string()),
+        Err(e) => {
+            return Err(ComposeErrorResponse {
+                error: "Failed to list containers".to_string(),
+                detail: e.to_string(),
+            });
+        }
     };
 
     let working_dir = containers.iter().find_map(|c| {
         let labels = c.labels.as_ref()?;
-        if labels.get("com.docker.compose.project")?.as_str() != name.as_str() {
+        if labels.get("com.docker.compose.project")?.as_str() != name {
             return None;
         }
         labels
@@ -297,10 +311,10 @@ async fn get_compose_file(Path(name): Path<String>) -> Response {
     });
 
     let Some(working_dir) = working_dir else {
-        return compose_error(
-            "Stack not found",
-            format!("No container found for stack '{name}'"),
-        );
+        return Err(ComposeErrorResponse {
+            error: "Stack not found".to_string(),
+            detail: format!("No container found for stack '{name}'"),
+        });
     };
 
     let base = PathBuf::from(&working_dir);
@@ -310,11 +324,7 @@ async fn get_compose_file(Path(name): Path<String>) -> Response {
         let path = base.join(filename);
         match tokio::fs::read_to_string(&path).await {
             Ok(content) => {
-                return Json(ComposeFileResponse {
-                    path: path.to_string_lossy().into_owned(),
-                    content,
-                })
-                .into_response();
+                return Ok((path, content));
             }
             Err(e) => {
                 tried.push(format!("{}: {e}", path.display()));
@@ -322,8 +332,59 @@ async fn get_compose_file(Path(name): Path<String>) -> Response {
         }
     }
 
-    compose_error(
-        format!("Could not read compose file for stack '{name}'"),
-        tried.join("\n"),
-    )
+    Err(ComposeErrorResponse {
+        error: format!("Could not read compose file for stack '{name}'"),
+        detail: tried.join("\n"),
+    })
+}
+
+/// Return the content of the compose file for a given stack.
+///
+/// Strategy (same as Dockge):
+/// 1. Run `docker compose ls --all --format json` to get the canonical
+///    `ConfigFiles` path for the requested stack.
+/// 2. Try reading each comma-separated path from `ConfigFiles`.
+/// 3. If that fails, fall back to the `working_dir` label + each accepted
+///    compose filename (`compose.yaml`, `docker-compose.yml`, …).
+async fn get_compose_file(Path(name): Path<String>) -> Response {
+    match resolve_compose_file(&name).await {
+        Ok((path, content)) => Json(ComposeFileResponse {
+            path: path.to_string_lossy().into_owned(),
+            content,
+        })
+        .into_response(),
+        Err(error) => compose_error(error.error, error.detail),
+    }
+}
+
+async fn update_compose_file(
+    Path(name): Path<String>,
+    Json(payload): Json<UpdateComposeFileRequest>,
+) -> Response {
+    if payload.content.trim().is_empty() {
+        return compose_status(
+            StatusCode::BAD_REQUEST,
+            "Compose file content is required",
+            "",
+        );
+    }
+
+    let (path, _) = match resolve_compose_file(&name).await {
+        Ok(file) => file,
+        Err(error) => return compose_error(error.error, error.detail),
+    };
+
+    if let Err(error) = tokio::fs::write(&path, &payload.content).await {
+        return compose_status(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Could not write compose file for stack '{name}'"),
+            error.to_string(),
+        );
+    }
+
+    Json(ComposeFileResponse {
+        path: path.to_string_lossy().into_owned(),
+        content: payload.content,
+    })
+    .into_response()
 }

@@ -1,6 +1,6 @@
 use axum::{
     Extension, Json,
-    body::Body,
+    body::{Body, to_bytes},
     extract::{
         Path, Query, State,
         ws::{WebSocket, WebSocketUpgrade},
@@ -306,8 +306,29 @@ pub async fn relay_docker_request(
             .into_response();
     }
 
-    let method = req.method().as_str().to_string();
-    let query = parse_query(req.uri().query());
+    let (parts, body) = req.into_parts();
+    let method = parts.method.as_str().to_string();
+    let query = parse_query(parts.uri.query());
+    let body_json = match to_bytes(body, 1024 * 1024).await {
+        Ok(bytes) if bytes.is_empty() => None,
+        Ok(bytes) => match serde_json::from_slice::<serde_json::Value>(&bytes) {
+            Ok(value) => Some(value),
+            Err(error) => {
+                return ApiError::default()
+                    .with_code(StatusCode::BAD_REQUEST)
+                    .with_message("Invalid JSON request body")
+                    .with_debug(error.to_string())
+                    .into_response();
+            }
+        },
+        Err(error) => {
+            return ApiError::default()
+                .with_code(StatusCode::BAD_REQUEST)
+                .with_message("Failed to read request body")
+                .with_debug(error.to_string())
+                .into_response();
+        }
+    };
 
     let response_value = match relay::send_command(
         &state.agent_registry,
@@ -317,6 +338,7 @@ pub async fn relay_docker_request(
             "method": method,
             "path": format!("/docker/{tail}"),
             "query": query,
+            "body": body_json,
         }),
     )
     .await

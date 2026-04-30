@@ -37,6 +37,8 @@ pub struct DockerCommandPayload {
     path: String,
     #[serde(default)]
     query: HashMap<String, String>,
+    #[serde(default)]
+    body: Option<Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -123,6 +125,11 @@ struct ComposeFileResponse {
     content: String,
 }
 
+#[derive(Deserialize)]
+struct UpdateComposeFileRequest {
+    content: String,
+}
+
 #[derive(Serialize)]
 struct ComposeErrorResponse {
     error: String,
@@ -196,6 +203,9 @@ async fn route(docker: &Docker, payload: &DockerCommandPayload) -> Result<Docker
         ["docker", "stacks", name] if method == "GET" => get_stack(docker, name).await,
         ["docker", "stacks", name, "compose"] if method == "GET" => {
             get_compose_file(docker, name).await
+        }
+        ["docker", "stacks", name, "compose"] if method == "PUT" => {
+            update_compose_file(docker, name, payload).await
         }
 
         _ => Ok(json_response(
@@ -784,7 +794,10 @@ async fn collect_stacks(docker: &Docker) -> Result<Vec<StackResponse>> {
     Ok(result)
 }
 
-async fn get_compose_file(docker: &Docker, name: &str) -> Result<DockerCommandResponse> {
+async fn resolve_compose_file(
+    docker: &Docker,
+    name: &str,
+) -> Result<(PathBuf, String), ComposeErrorResponse> {
     if let Some(entry) = compose_ls()
         .await
         .and_then(|list| list.into_iter().find(|entry| entry.name == name))
@@ -793,10 +806,7 @@ async fn get_compose_file(docker: &Docker, name: &str) -> Result<DockerCommandRe
             let path = PathBuf::from(raw.trim());
             match tokio::fs::read_to_string(&path).await {
                 Ok(content) => {
-                    return json_ok(ComposeFileResponse {
-                        path: path.to_string_lossy().into_owned(),
-                        content,
-                    });
+                    return Ok((path, content));
                 }
                 Err(error) => warn!("compose ls path {}: {error}", path.display()),
             }
@@ -809,7 +819,10 @@ async fn get_compose_file(docker: &Docker, name: &str) -> Result<DockerCommandRe
             ..Default::default()
         }))
         .await
-        .wrap_err("Failed to list containers for compose lookup")?;
+        .map_err(|error| ComposeErrorResponse {
+            error: "Failed to list containers for compose lookup".to_string(),
+            detail: error.to_string(),
+        })?;
     let working_dir = containers.iter().find_map(|container| {
         let labels = container.labels.as_ref()?;
         if labels.get("com.docker.compose.project")?.as_str() != name {
@@ -820,13 +833,10 @@ async fn get_compose_file(docker: &Docker, name: &str) -> Result<DockerCommandRe
             .cloned()
     });
     let Some(working_dir) = working_dir else {
-        return json_status(
-            422,
-            ComposeErrorResponse {
-                error: "Stack not found".to_string(),
-                detail: format!("No container found for stack '{name}'"),
-            },
-        );
+        return Err(ComposeErrorResponse {
+            error: "Stack not found".to_string(),
+            detail: format!("No container found for stack '{name}'"),
+        });
     };
 
     let base = PathBuf::from(&working_dir);
@@ -835,22 +845,79 @@ async fn get_compose_file(docker: &Docker, name: &str) -> Result<DockerCommandRe
         let path = base.join(filename);
         match tokio::fs::read_to_string(&path).await {
             Ok(content) => {
-                return json_ok(ComposeFileResponse {
-                    path: path.to_string_lossy().into_owned(),
-                    content,
-                });
+                return Ok((path, content));
             }
             Err(error) => tried.push(format!("{}: {error}", path.display())),
         }
     }
 
-    json_status(
-        422,
-        ComposeErrorResponse {
-            error: format!("Could not read compose file for stack '{name}'"),
-            detail: tried.join("\n"),
-        },
-    )
+    Err(ComposeErrorResponse {
+        error: format!("Could not read compose file for stack '{name}'"),
+        detail: tried.join("\n"),
+    })
+}
+
+async fn get_compose_file(docker: &Docker, name: &str) -> Result<DockerCommandResponse> {
+    match resolve_compose_file(docker, name).await {
+        Ok((path, content)) => json_ok(ComposeFileResponse {
+            path: path.to_string_lossy().into_owned(),
+            content,
+        }),
+        Err(error) => json_status(422, error),
+    }
+}
+
+async fn update_compose_file(
+    docker: &Docker,
+    name: &str,
+    payload: &DockerCommandPayload,
+) -> Result<DockerCommandResponse> {
+    let request = match payload
+        .body
+        .clone()
+        .and_then(|body| serde_json::from_value::<UpdateComposeFileRequest>(body).ok())
+    {
+        Some(request) => request,
+        None => {
+            return json_status(
+                400,
+                ComposeErrorResponse {
+                    error: "Invalid compose update payload".to_string(),
+                    detail: "Expected JSON body with a content field".to_string(),
+                },
+            );
+        }
+    };
+
+    if request.content.trim().is_empty() {
+        return json_status(
+            400,
+            ComposeErrorResponse {
+                error: "Compose file content is required".to_string(),
+                detail: String::new(),
+            },
+        );
+    }
+
+    let (path, _) = match resolve_compose_file(docker, name).await {
+        Ok(file) => file,
+        Err(error) => return json_status(422, error),
+    };
+
+    if let Err(error) = tokio::fs::write(&path, &request.content).await {
+        return json_status(
+            500,
+            ComposeErrorResponse {
+                error: format!("Could not write compose file for stack '{name}'"),
+                detail: error.to_string(),
+            },
+        );
+    }
+
+    json_ok(ComposeFileResponse {
+        path: path.to_string_lossy().into_owned(),
+        content: request.content,
+    })
 }
 
 async fn compose_ls() -> Option<Vec<ComposeLsEntry>> {

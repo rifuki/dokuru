@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   SquareStack,
   Container,
@@ -12,11 +12,15 @@ import {
   FileCode2,
   Copy,
   Check,
+  Pencil,
+  Save,
+  Loader2,
+  RotateCcw,
 } from "lucide-react";
 import { canUseDockerAgent, dockerApi, dockerCredential, type Stack, type StackContainer } from "@/services/docker-api";
 import { Input } from "@/components/ui/input";
 import { agentApi } from "@/lib/api/agent";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/ui/page-header";
 import {
@@ -26,6 +30,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/stacks/")({
   component: StacksPage,
@@ -51,6 +56,12 @@ function stateDot(state: string) {
   }
 }
 
+function composeErrorMessage(error: unknown, fallback: string) {
+  const data = (error as { response?: { data?: { error?: string; detail?: string } } })?.response?.data;
+  if (data?.error) return data.detail ? `${data.error}: ${data.detail}` : data.error;
+  return fallback;
+}
+
 // ---------- Compose file dialog ----------
 
 function ComposeDialog({
@@ -66,8 +77,11 @@ function ComposeDialog({
   agentUrl: string;
   token: string;
 }) {
+  const queryClient = useQueryClient();
   const [copied, setCopied] = useState(false);
   const [wordWrap, setWordWrap] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState("");
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["stack-compose", agentUrl, stackName],
@@ -79,6 +93,26 @@ function ComposeDialog({
     staleTime: 30_000,
     retry: false,
   });
+
+  const saveMutation = useMutation({
+    mutationFn: async (content: string) => {
+      const res = await dockerApi.updateStackCompose(agentUrl, token, stackName, content);
+      return res.data;
+    },
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["stack-compose", agentUrl, stackName], updated);
+      setDraft(updated.content);
+      setIsEditing(false);
+      toast.success("Compose file saved");
+    },
+    onError: (err) => toast.error(composeErrorMessage(err, "Failed to save compose file")),
+  });
+
+  useEffect(() => {
+    if (!open || data?.content === undefined) return;
+    setDraft(data.content);
+    setIsEditing(false);
+  }, [open, data?.content]);
 
   // Extract error detail from the agent's JSON response if available.
   const errorDetail = (() => {
@@ -101,6 +135,22 @@ function ComposeDialog({
     });
   }
 
+  function handleCancelEdit() {
+    setDraft(data?.content ?? "");
+    setIsEditing(false);
+  }
+
+  function handleSave() {
+    if (!draft.trim()) {
+      toast.error("Compose file cannot be empty");
+      return;
+    }
+    saveMutation.mutate(draft);
+  }
+
+  const hasContent = data?.content !== undefined;
+  const hasChanges = hasContent && draft !== data.content;
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-3xl w-full max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden">
@@ -119,33 +169,77 @@ function ComposeDialog({
                   {data.path}
                 </p>
               )}
+              {isEditing && (
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Save updates the compose file only. Run docker compose up when you want to apply it.
+                </p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {data?.content && (
+            {hasContent && (
               <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs gap-1.5"
-                  onClick={() => setWordWrap(!wordWrap)}
-                >
-                  <FileCode2 className="h-3.5 w-3.5" />
-                  {wordWrap ? "No Wrap" : "Wrap"}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs gap-1.5"
-                  onClick={handleCopy}
-                >
-                  {copied ? (
-                    <Check className="h-3.5 w-3.5 text-green-400" />
-                  ) : (
-                    <Copy className="h-3.5 w-3.5" />
-                  )}
-                  {copied ? "Copied" : "Copy"}
-                </Button>
+                {isEditing ? (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs gap-1.5"
+                      onClick={handleCancelEdit}
+                      disabled={saveMutation.isPending}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      Revert
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-7 px-2 text-xs gap-1.5"
+                      onClick={handleSave}
+                      disabled={!hasChanges || saveMutation.isPending}
+                    >
+                      {saveMutation.isPending ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Save className="h-3.5 w-3.5" />
+                      )}
+                      Save
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs gap-1.5"
+                      onClick={() => setIsEditing(true)}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs gap-1.5"
+                      onClick={() => setWordWrap(!wordWrap)}
+                    >
+                      <FileCode2 className="h-3.5 w-3.5" />
+                      {wordWrap ? "No Wrap" : "Wrap"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs gap-1.5"
+                      onClick={handleCopy}
+                    >
+                      {copied ? (
+                        <Check className="h-3.5 w-3.5 text-green-400" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                      {copied ? "Copied" : "Copy"}
+                    </Button>
+                  </>
+                )}
               </>
             )}
           </div>
@@ -170,6 +264,14 @@ function ComposeDialog({
                 </pre>
               )}
             </div>
+          ) : isEditing ? (
+            <textarea
+              className="block min-h-[55vh] w-full resize-none bg-transparent p-5 text-xs leading-relaxed font-mono text-zinc-100 outline-none selection:bg-cyan-500/30"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              spellCheck={false}
+              wrap={wordWrap ? "soft" : "off"}
+            />
           ) : (
             <pre className={`p-5 text-xs leading-relaxed font-mono text-zinc-200 ${wordWrap ? 'whitespace-pre-wrap break-all' : 'whitespace-pre overflow-x-auto'}`}>
               <YamlHighlight content={data?.content ?? ""} />

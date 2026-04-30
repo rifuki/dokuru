@@ -92,15 +92,17 @@ export function canUseDockerAgent(agent: DockerAgentLike | null | undefined) {
 function dockerRequest<T>(
   agentUrl: string,
   credential: string,
-  method: "GET" | "POST" | "DELETE",
+  method: "GET" | "POST" | "PUT" | "DELETE",
   path: string,
   params?: DockerQuery,
+  data?: unknown,
 ): AxiosPromise<T> {
   if (agentUrl === "relay") {
     return apiClient.request<T>({
       method,
       url: `/agents/${credential}${path}`,
       params,
+      data,
     });
   }
 
@@ -108,6 +110,7 @@ function dockerRequest<T>(
     method,
     url: `${agentUrl}${path}`,
     params,
+    data,
     headers: { Authorization: `Bearer ${credential}` },
   });
 }
@@ -169,6 +172,9 @@ export const dockerApi = {
 
   getStackCompose: (agentUrl: string, token: string, name: string) =>
     dockerRequest<{ path: string; content: string }>(agentUrl, token, "GET", `/docker/stacks/${encodeURIComponent(name)}/compose`),
+
+  updateStackCompose: (agentUrl: string, token: string, name: string, content: string) =>
+    dockerRequest<{ path: string; content: string }>(agentUrl, token, "PUT", `/docker/stacks/${encodeURIComponent(name)}/compose`, undefined, { content }),
 
   // Networks
   listNetworks: (agentUrl: string, token: string) =>
