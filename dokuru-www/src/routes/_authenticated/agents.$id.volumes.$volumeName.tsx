@@ -1,5 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   canUseDockerAgent,
   dockerApi,
@@ -8,7 +8,19 @@ import {
 } from "@/services/docker-api";
 import { agentApi } from "@/lib/api/agent";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  ArrowLeft,
   ChevronRight,
   Clock,
   Container as ContainerIcon,
@@ -16,6 +28,7 @@ import {
   HardDrive,
   Hash,
   Tag,
+  Trash2,
 } from "lucide-react";
 import {
   DetailPageSkeleton,
@@ -24,6 +37,8 @@ import {
   DetailStat,
   RawJsonDetails,
 } from "@/components/ui/detail-layout";
+import { toast } from "sonner";
+import { useState } from "react";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/volumes/$volumeName")({
   component: VolumeDetailPage,
@@ -108,6 +123,9 @@ function mountMatchesVolume(mount: ContainerMount, volumeName: string, mountpoin
 
 function VolumeDetailPage() {
   const { id, volumeName } = Route.useParams();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
 
   const { data: agent } = useQuery({
     queryKey: ["agent", id],
@@ -162,6 +180,21 @@ function VolumeDetailPage() {
     enabled: canUseDockerAgent(agent) && !!volume,
   });
 
+  const removeMutation = useMutation({
+    mutationFn: () => {
+      const credential = dockerCredential(agent);
+      if (!agent || !credential) throw new Error("Agent token not available");
+      return dockerApi.removeVolume(agent.url, credential, targetVolumeName);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["volumes", id] });
+      toast.success("Volume removed");
+      navigate({ to: "/agents/$id/volumes", params: { id } });
+    },
+    onError: () => toast.error("Failed to remove volume"),
+    onSettled: () => setRemoveDialogOpen(false),
+  });
+
   if (isLoading) {
     return <DetailPageSkeleton />;
   }
@@ -178,30 +211,66 @@ function VolumeDetailPage() {
   );
 
   return (
+    <>
+    <AlertDialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remove Volume</AlertDialogTitle>
+          <AlertDialogDescription>
+            Remove volume "{title}"? Docker may block this if containers still use it.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={removeMutation.isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={removeMutation.isPending}
+            onClick={() => removeMutation.mutate()}
+          >
+            {removeMutation.isPending ? "Removing..." : "Remove"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
     <div className="max-w-5xl mx-auto w-full space-y-6">
-      <div className="flex items-start gap-4">
-        <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 text-primary shrink-0">
-          <HardDrive className="h-6 w-6" />
-        </div>
-        <div className="min-w-0">
-          <h2 className="text-2xl font-bold tracking-tight truncate">{title}</h2>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
-            {shortName && (
-              <span className="font-mono text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
-                {shortName}
-              </span>
-            )}
-            {volume?.Driver && (
-              <Badge variant="outline" className="text-xs">
-                {volume.Driver}
-              </Badge>
-            )}
-            {isAnonymous && (
-              <Badge variant="outline" className="text-xs text-muted-foreground">
-                anonymous
-              </Badge>
-            )}
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 text-primary shrink-0">
+            <HardDrive className="h-6 w-6" />
           </div>
+          <div className="min-w-0">
+            <h2 className="text-2xl font-bold tracking-tight truncate">{title}</h2>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              {shortName && (
+                <span className="font-mono text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                  {shortName}
+                </span>
+              )}
+              {volume?.Driver && (
+                <Badge variant="outline" className="text-xs">
+                  {volume.Driver}
+                </Badge>
+              )}
+              {isAnonymous && (
+                <Badge variant="outline" className="text-xs text-muted-foreground">
+                  anonymous
+                </Badge>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2 shrink-0 flex-wrap">
+          <Button asChild variant="outline" size="sm">
+            <Link to="/agents/$id/volumes" params={{ id }}>
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Link>
+          </Button>
+          <Button size="sm" variant="destructive" onClick={() => setRemoveDialogOpen(true)} disabled={removeMutation.isPending}>
+            <Trash2 className="h-4 w-4 mr-1.5" />
+            Remove
+          </Button>
         </div>
       </div>
 
@@ -353,5 +422,6 @@ function VolumeDetailPage() {
 
       <RawJsonDetails data={volume} />
     </div>
+    </>
   );
 }

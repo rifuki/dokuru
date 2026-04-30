@@ -4,11 +4,22 @@ import { canUseDockerAgent, dockerApi, dockerCredential, type Container } from "
 import { agentApi } from "@/lib/api/agent";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Container as ContainerIcon, ArrowLeft, Play, SquareIcon, RotateCw, Trash2 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
 import { ContainerTabPanel } from "@/components/containers/ContainerTabs";
+import { useState } from "react";
 
 type ContainerDetailSearch = {
   from?: "audit" | "containers";
@@ -41,7 +52,7 @@ function ContainerDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const hasAuditBack = from === "audit" && !!auditId;
-  const backLabel = hasAuditBack ? "Back to Audit Rule" : "Back to Containers";
+  const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
 
   const { data: agent } = useQuery({
     queryKey: ["agent", id],
@@ -106,6 +117,7 @@ function ContainerDetailPage() {
       navigate({ to: "/agents/$id/containers", params: { id } });
     },
     onError: () => toast.error("Failed to remove container"),
+    onSettled: () => setRemoveDialogOpen(false),
   });
 
   const anyPending = startMutation.isPending || stopMutation.isPending || restartMutation.isPending || removeMutation.isPending;
@@ -129,10 +141,10 @@ function ContainerDetailPage() {
           <Button asChild className="mt-4" variant="outline">
             {hasAuditBack ? (
               <Link to="/agents/$id/audits/$auditId" params={{ id, auditId }} search={{ ruleId }}>
-                {backLabel}
+                Back
               </Link>
             ) : (
-              <Link to="/agents/$id/containers" params={{ id }}>{backLabel}</Link>
+              <Link to="/agents/$id/containers" params={{ id }}>Back</Link>
             )}
           </Button>
         </div>
@@ -141,23 +153,32 @@ function ContainerDetailPage() {
   }
 
   return (
+    <>
+    <AlertDialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remove Container</AlertDialogTitle>
+          <AlertDialogDescription>
+            Remove container "{name}"? This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={removeMutation.isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={removeMutation.isPending}
+            onClick={() => removeMutation.mutate()}
+          >
+            {removeMutation.isPending ? "Removing..." : "Remove"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
     <div className="max-w-7xl mx-auto w-full space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 min-w-0">
         <div className="flex items-center gap-4 min-w-0">
-          <Button asChild variant="ghost" size="sm" className="shrink-0">
-            {hasAuditBack ? (
-              <Link to="/agents/$id/audits/$auditId" params={{ id, auditId }} search={{ ruleId }}>
-                <ArrowLeft className="h-4 w-4 mr-1" />
-                {backLabel}
-              </Link>
-            ) : (
-              <Link to="/agents/$id/containers" params={{ id }}>
-                <ArrowLeft className="h-4 w-4 mr-1" />
-                {backLabel}
-              </Link>
-            )}
-          </Button>
           <div className="flex items-center gap-3 min-w-0">
             <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 text-primary shrink-0">
               <ContainerIcon className="h-5 w-5" />
@@ -175,7 +196,20 @@ function ContainerDetailPage() {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center justify-end gap-2 shrink-0 flex-wrap">
+          <Button asChild variant="outline" size="sm" className="shrink-0">
+            {hasAuditBack ? (
+              <Link to="/agents/$id/audits/$auditId" params={{ id, auditId }} search={{ ruleId }}>
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </Link>
+            ) : (
+              <Link to="/agents/$id/containers" params={{ id }}>
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </Link>
+            )}
+          </Button>
           {isRunning ? (
             <>
               <Button size="sm" variant="outline" className="hover:!bg-transparent hover:text-destructive hover:border-destructive/30" onClick={() => stopMutation.mutate()} disabled={anyPending}>
@@ -195,9 +229,8 @@ function ContainerDetailPage() {
           )}
           <Button
             size="sm"
-            variant="outline"
-            className="hover:!bg-transparent hover:text-destructive hover:border-destructive/30"
-            onClick={() => { if (confirm(`Remove container "${name}"?`)) removeMutation.mutate(); }}
+            variant="destructive"
+            onClick={() => setRemoveDialogOpen(true)}
             disabled={anyPending}
           >
             <Trash2 className="h-4 w-4 mr-1.5" />
@@ -216,5 +249,6 @@ function ContainerDetailPage() {
         />
       </div>
     </div>
+    </>
   );
 }

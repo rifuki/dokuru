@@ -1,11 +1,23 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
 import { canUseDockerAgent, dockerApi, dockerCredential, type ImageHistoryItem } from "@/services/docker-api";
 import { agentApi } from "@/lib/api/agent";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  ArrowLeft,
   Layers,
   HardDrive,
   Clock,
@@ -16,7 +28,10 @@ import {
   FolderOpen,
   Globe,
   Hash,
+  Trash2,
 } from "lucide-react";
+import { toast } from "sonner";
+import { useState } from "react";
 
 export const Route = createFileRoute(
   "/_authenticated/agents/$id/images/$imageId"
@@ -75,6 +90,9 @@ function Section({ title, icon: Icon, children }: { title: string; icon: React.E
 function ImageDetailPage() {
   const { id, imageId } = Route.useParams();
   const decodedImageId = decodeURIComponent(imageId);
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
 
   const { data: agent } = useQuery({
     queryKey: ["agent", id],
@@ -101,6 +119,21 @@ function ImageDetailPage() {
       return res.data as ImageHistoryItem[];
     },
     enabled: canUseDockerAgent(agent),
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: () => {
+      const credential = dockerCredential(agent);
+      if (!agent || !credential) throw new Error("Agent token not available");
+      return dockerApi.removeImage(agent.url, credential, decodedImageId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["images", id] });
+      toast.success("Image removed");
+      navigate({ to: "/agents/$id/images", params: { id } });
+    },
+    onError: () => toast.error("Failed to remove image"),
+    onSettled: () => setRemoveDialogOpen(false),
   });
 
   if (imageLoading) {
@@ -193,30 +226,66 @@ function ImageDetailPage() {
   const hasConfig = cmd || entrypoint || workdir || exposedPorts.length > 0 || envs.length > 0;
 
   return (
+    <>
+    <AlertDialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remove Image</AlertDialogTitle>
+          <AlertDialogDescription>
+            Remove image "{primaryTag}"? Containers that depend on it may need to pull it again.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={removeMutation.isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={removeMutation.isPending}
+            onClick={() => removeMutation.mutate()}
+          >
+            {removeMutation.isPending ? "Removing..." : "Remove"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
     <div className="max-w-5xl mx-auto w-full space-y-6">
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="flex items-start gap-4">
-        <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 text-primary shrink-0">
-          <Layers className="h-6 w-6" />
-        </div>
-        <div className="min-w-0">
-          <h2 className="text-2xl font-bold tracking-tight truncate">{primaryTag}</h2>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
-            <span className="font-mono text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
-              {shortId}
-            </span>
-            {arch && (
-              <Badge variant="outline" className="text-xs">
-                {os}/{arch}{variant ? `/${variant}` : ""}
-              </Badge>
-            )}
-            {dockerVersion && (
-              <Badge variant="outline" className="text-xs text-muted-foreground">
-                Docker {dockerVersion}
-              </Badge>
-            )}
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 text-primary shrink-0">
+            <Layers className="h-6 w-6" />
           </div>
+          <div className="min-w-0">
+            <h2 className="text-2xl font-bold tracking-tight truncate">{primaryTag}</h2>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <span className="font-mono text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                {shortId}
+              </span>
+              {arch && (
+                <Badge variant="outline" className="text-xs">
+                  {os}/{arch}{variant ? `/${variant}` : ""}
+                </Badge>
+              )}
+              {dockerVersion && (
+                <Badge variant="outline" className="text-xs text-muted-foreground">
+                  Docker {dockerVersion}
+                </Badge>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2 shrink-0 flex-wrap">
+          <Button asChild variant="outline" size="sm">
+            <Link to="/agents/$id/images" params={{ id }}>
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Link>
+          </Button>
+          <Button size="sm" variant="destructive" onClick={() => setRemoveDialogOpen(true)} disabled={removeMutation.isPending}>
+            <Trash2 className="h-4 w-4 mr-1.5" />
+            Remove
+          </Button>
         </div>
       </div>
 
@@ -339,5 +408,6 @@ function ImageDetailPage() {
       </div>
 
     </div>
+    </>
   );
 }
