@@ -467,7 +467,7 @@ function AgentDialogs({
                         <AlertDialogAction
                             onClick={onDelete}
                             disabled={isDeleting}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            variant="destructive"
                         >
                             {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                             Delete Agent

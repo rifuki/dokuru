@@ -1,11 +1,22 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
+import { useState } from "react";
 import { HardDrive, Trash2, Scissors, ExternalLink, FolderOpen } from "lucide-react";
 import { canUseDockerAgent, dockerApi, dockerCredential, type Volume } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -20,6 +31,8 @@ export const Route = createFileRoute("/_authenticated/agents/$id/volumes/")({
 function VolumesPage() {
   const { id } = Route.useParams();
   const queryClient = useQueryClient();
+  const [volumeToRemove, setVolumeToRemove] = useState<string | null>(null);
+  const [pruneDialogOpen, setPruneDialogOpen] = useState(false);
 
   const { data: agent } = useQuery({
     queryKey: ["agent", id],
@@ -69,6 +82,19 @@ function VolumesPage() {
     }
     queryClient.invalidateQueries({ queryKey: ["volumes", id] });
     toast.success(`Removed ${names.length} volume(s)`);
+  };
+
+  const handleRemoveVolume = () => {
+    if (!volumeToRemove) return;
+    removeMutation.mutate(volumeToRemove, {
+      onSettled: () => setVolumeToRemove(null),
+    });
+  };
+
+  const handlePruneVolumes = () => {
+    pruneMutation.mutate(undefined, {
+      onSettled: () => setPruneDialogOpen(false),
+    });
   };
 
   const columns: ColumnDef<Volume>[] = [
@@ -129,8 +155,8 @@ function VolumesPage() {
               <TooltipTrigger asChild>
                 <Button
                   size="sm" variant="ghost"
-                  className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
-                  onClick={() => { if (confirm("Remove this volume?")) removeMutation.mutate(row.original.name); }}
+                  className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => setVolumeToRemove(row.original.name)}
                   disabled={removeMutation.isPending}
                 >
                   <Trash2 className="h-4 w-4" />
@@ -157,16 +183,58 @@ function VolumesPage() {
         ]}
       >
         <Button
-          variant="outline"
+          variant="destructive"
           size="sm"
-          className="h-9 px-3 gap-2"
-          onClick={() => { if (confirm("Prune unused volumes?")) pruneMutation.mutate(); }}
+          className="h-9 px-3 gap-2 shadow-none"
+          onClick={() => setPruneDialogOpen(true)}
           disabled={pruneMutation.isPending || !agent}
         >
           <Scissors className="h-3.5 w-3.5" />
           Prune Unused
         </Button>
       </PageHeader>
+
+      <AlertDialog open={!!volumeToRemove} onOpenChange={(open) => !open && setVolumeToRemove(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Volume</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove volume "{volumeToRemove}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removeMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={removeMutation.isPending}
+              onClick={handleRemoveVolume}
+            >
+              {removeMutation.isPending ? "Removing..." : "Remove"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={pruneDialogOpen} onOpenChange={setPruneDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Prune Unused Volumes</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove all unused Docker volumes on this agent? This can delete data that is no longer attached to containers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pruneMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={pruneMutation.isPending}
+              onClick={handlePruneVolumes}
+            >
+              {pruneMutation.isPending ? "Pruning..." : "Prune Volumes"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div className="space-y-6">
 
