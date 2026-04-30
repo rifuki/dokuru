@@ -1428,7 +1428,7 @@ function AuditDetailPage() {
               <button
                 onClick={() => setStatusFilter("all")}
                 className={cn("shrink-0 inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg border font-bold transition-all",
-                  statusFilter === "all" ? "bg-muted/50 text-foreground border-border" : "bg-muted/20 border-border text-muted-foreground hover:bg-muted/40")}
+                  statusFilter === "all" ? "bg-[#2496ED] text-white border-[#2496ED]/50" : "bg-muted/20 border-border text-muted-foreground hover:bg-muted/40")}
               >
                 All
                 <span className="font-mono text-[10px] opacity-70">{statusCounts.total}</span>
