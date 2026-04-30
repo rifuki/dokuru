@@ -110,7 +110,9 @@ function ComposeDialog({
 
   useEffect(() => {
     if (!open || data?.content === undefined) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDraft(data.content);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsEditing(false);
   }, [open, data?.content]);
 
