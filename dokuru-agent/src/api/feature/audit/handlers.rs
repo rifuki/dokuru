@@ -534,3 +534,59 @@ async fn send_audit_stream_message(socket: &mut WebSocket, message: &AuditStream
         let _ = socket.send(Message::Text(text.into())).await;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_audit_path_validation_valid_ids() {
+        // Valid UUIDs
+        assert!(audit_path("550e8400-e29b-41d4-a716-446655440000").is_ok());
+
+        // Valid alphanumeric
+        assert!(audit_path("abc123").is_ok());
+        assert!(audit_path("AUDIT123").is_ok());
+
+        // Valid with hyphens
+        assert!(audit_path("audit-123-xyz").is_ok());
+        assert!(audit_path("a-b-c-d").is_ok());
+    }
+
+    #[test]
+    fn test_audit_path_validation_invalid_ids() {
+        // Empty
+        assert!(audit_path("").is_err());
+
+        // Special characters
+        assert!(audit_path("audit/123").is_err());
+        assert!(audit_path("audit\\123").is_err());
+        assert!(audit_path("audit;drop").is_err());
+        assert!(audit_path("audit*123").is_err());
+        assert!(audit_path("audit@host").is_err());
+        assert!(audit_path("audit..etc").is_err());
+
+        // Spaces
+        assert!(audit_path("audit 123").is_err());
+
+        // Uppercase should be OK
+        assert!(audit_path("AUDIT").is_ok());
+    }
+
+    #[test]
+    fn test_audit_path_construction() {
+        // Verify path construction is correct and safe
+        let result = audit_path("test-audit-123").unwrap();
+        let path_str = result.to_string_lossy();
+
+        // Should end with .json
+        assert!(path_str.ends_with("test-audit-123.json"));
+
+        // Should not contain traversal sequences
+        assert!(!path_str.contains(".."));
+        assert!(!path_str.contains("./"));
+
+        // Should be in dokuru audit directory
+        assert!(path_str.contains("dokuru") || path_str.contains("audits"));
+    }
+}
