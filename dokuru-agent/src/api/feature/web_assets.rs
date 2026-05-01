@@ -29,15 +29,16 @@ pub async fn serve(OriginalUri(uri): OriginalUri) -> Response {
 }
 
 fn is_api_path(path: &str) -> bool {
-    matches!(
-        path,
-        "/health" | "/health/detail" | "/ws" | "/audit" | "/audit/ws"
-    ) || path.starts_with("/api/")
+    matches!(path, "/health" | "/health/detail" | "/ws")
+        || path.starts_with("/api/")
+        || path.starts_with("/audit")
         || path.starts_with("/docker/")
         || path.starts_with("/fix")
         || path.starts_with("/rules")
         || path.starts_with("/trivy")
         || path.starts_with("/host/")
+        || path.starts_with("/proxy/")
+        || path.starts_with("/environments/")
 }
 
 fn cache_control_for(path: &str) -> &'static str {
