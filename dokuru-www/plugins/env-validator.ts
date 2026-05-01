@@ -32,7 +32,9 @@ export function envValidatorPlugin(): Plugin {
       const appMode = resolveDokuruMode(fileEnv.VITE_DOKURU_MODE || systemEnv.VITE_DOKURU_MODE);
 
       if (appMode === "agent") {
-        console.log("✅ Environment variables validated (agent mode)");
+        console.log(
+          "✅ Agent mode detected - API_BASE_URL optional (defaults to http://localhost:3939)"
+        );
         return;
       }
 
@@ -51,13 +53,18 @@ export function envValidatorPlugin(): Plugin {
         throw new Error(
           [
             "",
-            "❌ Missing required environment variables:",
+            "❌ Cloud mode requires VITE_API_BASE_URL",
+            "",
+            "Missing required environment variables:",
             ...missing.map((v) => `   - ${v}`),
             "",
-            "Please set them via one of these methods:",
+            "ℹ️  To use Agent mode (embedded UI) without external API:",
+            "   Set VITE_DOKURU_MODE=agent",
+            "",
+            "Otherwise, please set the API URL via one of these methods:",
             "",
             "1. Create a .env file:",
-            ...REQUIRED_ENV_VARS.map((v) => `   ${v}=your_value_here`),
+            ...REQUIRED_ENV_VARS.map((v) => `   ${v}=http://your-dokuru-server:9393`),
             "",
             "2. Or copy from .env.example:",
             "   cp .env.example .env",

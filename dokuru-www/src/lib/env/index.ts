@@ -14,16 +14,18 @@ export const IS_LOCAL_AGENT_MODE = DOKURU_MODE === "agent";
 
 function getRequiredEnv(name: string): string {
   const value = import.meta.env[name];
-  
+
   // Only validate in development (production validated at build time)
   if (isDev && !IS_LOCAL_AGENT_MODE && (!value || value.trim() === "")) {
     throw new Error(
       `Missing required environment variable: ${name}\n\n` +
-      `Please add it to your .env file:\n` +
-      `${name}=your_value_here`
+      `For Cloud mode, set in .env file:\n` +
+      `${name}=http://your-dokuru-server:9393\n\n` +
+      `Or use Agent mode (embedded UI):\n` +
+      `VITE_DOKURU_MODE=agent`
     );
   }
-  
+
   return value || "";
 }
 
