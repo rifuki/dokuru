@@ -157,17 +157,13 @@ mod audit_storage {
         // Valid audit IDs
         let valid_ids = vec![
             "550e8400-e29b-41d4-a716-446655440000", // UUID
-            "abc123",                                // alphanumeric
-            "AUDIT123",                              // uppercase
-            "audit-123-xyz",                         // with hyphens
+            "abc123",                               // alphanumeric
+            "AUDIT123",                             // uppercase
+            "audit-123-xyz",                        // with hyphens
         ];
 
         for id in valid_ids {
-            assert!(
-                is_valid_audit_id(id),
-                "Audit ID '{}' should be valid",
-                id
-            );
+            assert!(is_valid_audit_id(id), "Audit ID '{}' should be valid", id);
         }
     }
 
@@ -175,16 +171,16 @@ mod audit_storage {
     fn test_audit_id_validation_invalid() {
         // Invalid audit IDs - path traversal and injection attempts
         let invalid_ids = vec![
-            "",                    // empty
-            "audit/123",          // path traversal
-            "audit\\123",         // backslash
-            "audit;drop",         // SQL injection attempt
-            "audit*123",          // wildcard
-            "audit@host",         // special char
-            "audit..etc",         // directory traversal
-            "audit 123",          // space
-            "../etc/passwd",      // directory traversal
-            "../../secret",       // directory traversal
+            "",              // empty
+            "audit/123",     // path traversal
+            "audit\\123",    // backslash
+            "audit;drop",    // SQL injection attempt
+            "audit*123",     // wildcard
+            "audit@host",    // special char
+            "audit..etc",    // directory traversal
+            "audit 123",     // space
+            "../etc/passwd", // directory traversal
+            "../../secret",  // directory traversal
         ];
 
         for id in invalid_ids {

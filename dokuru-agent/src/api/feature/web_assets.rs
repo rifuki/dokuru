@@ -119,8 +119,14 @@ mod tests {
 
     #[test]
     fn test_cache_control() {
-        assert_eq!(cache_control_for("/assets/main.js"), "public, max-age=31536000, immutable");
-        assert_eq!(cache_control_for("/assets/logo.png"), "public, max-age=31536000, immutable");
+        assert_eq!(
+            cache_control_for("/assets/main.js"),
+            "public, max-age=31536000, immutable"
+        );
+        assert_eq!(
+            cache_control_for("/assets/logo.png"),
+            "public, max-age=31536000, immutable"
+        );
         assert_eq!(cache_control_for("/index.html"), "no-cache");
         assert_eq!(cache_control_for("/"), "no-cache");
         assert_eq!(cache_control_for("/agents"), "no-cache");

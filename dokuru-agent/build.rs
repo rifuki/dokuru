@@ -47,11 +47,14 @@ fn generate_embedded_www() {
 
     println!("cargo:rerun-if-changed={}", dist_dir.display());
     println!("cargo:rerun-if-changed={}", www_dir.join("src").display());
-    println!("cargo:rerun-if-changed={}", www_dir.join("package.json").display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        www_dir.join("package.json").display()
+    );
 
     // Check if dist needs rebuilding or doesn't exist
-    let needs_build = !dist_dir.join("index.html").exists()
-        || needs_www_rebuild(&www_dir, &dist_dir);
+    let needs_build =
+        !dist_dir.join("index.html").exists() || needs_www_rebuild(&www_dir, &dist_dir);
 
     if needs_build {
         build_www(&www_dir);
@@ -154,10 +157,7 @@ fn build_www(www_dir: &Path) {
         Ok(output) => {
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
-                println!(
-                    "cargo:warning=dokuru-www build failed:\n{}",
-                    stderr
-                );
+                println!("cargo:warning=dokuru-www build failed:\n{}", stderr);
             } else {
                 println!("cargo:warning=dokuru-www built successfully");
             }
