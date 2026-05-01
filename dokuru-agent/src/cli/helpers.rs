@@ -104,7 +104,7 @@ pub fn resolve_config(args: SetupArgs) -> InstallerConfig {
         std::env::var("PORT")
             .ok()
             .and_then(|value| value.parse::<u16>().ok())
-            .unwrap_or(3939)
+            .unwrap_or(3399)
     });
 
     let host = args
