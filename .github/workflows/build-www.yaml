@@ -23,6 +23,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/dokuru-www
   PLATFORMS: linux/amd64
+  VITE_DOKURU_MODE: cloud
   VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL || 'https://api.dokuru.rifuki.dev' }}
   VITE_ENABLE_HOST_SHELL: ${{ vars.VITE_ENABLE_HOST_SHELL || 'false' }}
 
@@ -73,5 +74,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
+            VITE_DOKURU_MODE=${{ env.VITE_DOKURU_MODE }}
             VITE_API_BASE_URL=${{ env.VITE_API_BASE_URL }}
             VITE_ENABLE_HOST_SHELL=${{ env.VITE_ENABLE_HOST_SHELL }}

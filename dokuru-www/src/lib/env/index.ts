@@ -2,7 +2,14 @@
 // Build-time validation happens in vite.config.ts
 
 const isDev = import.meta.env.DEV;
-export const DOKURU_MODE = (import.meta.env.VITE_DOKURU_MODE || "cloud").toLowerCase();
+const DEFAULT_DOKURU_MODE = "cloud";
+const rawDokuruMode = import.meta.env.VITE_DOKURU_MODE?.trim().toLowerCase() || DEFAULT_DOKURU_MODE;
+
+if (rawDokuruMode !== "agent" && rawDokuruMode !== "cloud") {
+  throw new Error("Invalid VITE_DOKURU_MODE. Expected 'agent' or 'cloud'.");
+}
+
+export const DOKURU_MODE = rawDokuruMode;
 export const IS_LOCAL_AGENT_MODE = DOKURU_MODE === "agent";
 
 function getRequiredEnv(name: string): string {

@@ -3,6 +3,25 @@ import { loadEnv } from "vite";
 
 // Required environment variables
 const REQUIRED_ENV_VARS = ["VITE_API_BASE_URL"];
+const DEFAULT_DOKURU_MODE = "cloud";
+
+function resolveDokuruMode(value: string | undefined) {
+  const mode = (value || DEFAULT_DOKURU_MODE).trim().toLowerCase();
+  if (mode === "agent" || mode === "cloud") return mode;
+
+  throw new Error(
+    [
+      "",
+      "❌ Invalid VITE_DOKURU_MODE:",
+      `   - ${value}`,
+      "",
+      "Valid values are:",
+      "   - cloud",
+      "   - agent",
+      "",
+    ].join("\n")
+  );
+}
 
 export function envValidatorPlugin(): Plugin {
   return {
@@ -10,7 +29,7 @@ export function envValidatorPlugin(): Plugin {
     config(_config, { mode }) {
       const fileEnv = loadEnv(mode, process.cwd(), "");
       const systemEnv = process.env;
-      const appMode = (fileEnv.VITE_DOKURU_MODE || systemEnv.VITE_DOKURU_MODE || "cloud").toLowerCase();
+      const appMode = resolveDokuruMode(fileEnv.VITE_DOKURU_MODE || systemEnv.VITE_DOKURU_MODE);
 
       if (appMode === "agent") {
         console.log("✅ Environment variables validated (agent mode)");

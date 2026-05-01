@@ -38,6 +38,7 @@ jobs:
       - name: Build frontend
         run: bun run build
         env:
+          VITE_DOKURU_MODE: cloud
           VITE_API_BASE_URL: https://api.dokuru.rifuki.dev
 
   rust-check:
