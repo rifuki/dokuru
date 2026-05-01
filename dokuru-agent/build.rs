@@ -106,7 +106,7 @@ fn needs_www_rebuild(www_dir: &Path, dist_dir: &Path) -> bool {
 
     let dist_mtime = fs::metadata(dist_dir)
         .and_then(|m| m.modified())
-        .unwrap_or_else(|_| std::time::SystemTime::UNIX_EPOCH);
+        .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
 
     let src_dir = www_dir.join("src");
     let package_json = www_dir.join("package.json");
@@ -116,7 +116,7 @@ fn needs_www_rebuild(www_dir: &Path, dist_dir: &Path) -> bool {
         if path.exists() {
             let file_mtime = fs::metadata(path)
                 .and_then(|m| m.modified())
-                .unwrap_or_else(|_| std::time::SystemTime::UNIX_EPOCH);
+                .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
 
             if file_mtime > dist_mtime {
                 return true;
@@ -139,10 +139,7 @@ fn build_www(www_dir: &Path) {
         .output();
 
     if let Err(e) = output {
-        println!(
-            "cargo:warning=Failed to run 'bun install': {}. Continuing with build...",
-            e
-        );
+        println!("cargo:warning=Failed to run 'bun install': {e}. Continuing with build...");
         return;
     }
 
@@ -155,15 +152,15 @@ fn build_www(www_dir: &Path) {
 
     match build_output {
         Ok(output) => {
-            if !output.status.success() {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                println!("cargo:warning=dokuru-www build failed:\n{}", stderr);
-            } else {
+            if output.status.success() {
                 println!("cargo:warning=dokuru-www built successfully");
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                println!("cargo:warning=dokuru-www build failed:\n{stderr}");
             }
         }
         Err(e) => {
-            println!("cargo:warning=Failed to build dokuru-www: {}", e);
+            println!("cargo:warning=Failed to build dokuru-www: {e}");
         }
     }
 }
