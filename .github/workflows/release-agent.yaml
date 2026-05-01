@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'dokuru-agent/**'
+      - 'dokuru-www/**'
       - '.github/workflows/release-agent.yaml'
     tags:
       - 'v*.*.*'
@@ -53,6 +54,19 @@ jobs:
         uses: mlugg/setup-zig@v2
         with:
           version: 0.13.0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Build embedded agent UI
+        working-directory: dokuru-www
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+        env:
+          VITE_DOKURU_MODE: agent
 
       - name: Install cargo-zigbuild
         run: cargo install cargo-zigbuild --locked

@@ -2,12 +2,14 @@
 // Build-time validation happens in vite.config.ts
 
 const isDev = import.meta.env.DEV;
+export const DOKURU_MODE = (import.meta.env.VITE_DOKURU_MODE || "cloud").toLowerCase();
+export const IS_LOCAL_AGENT_MODE = DOKURU_MODE === "agent";
 
 function getRequiredEnv(name: string): string {
   const value = import.meta.env[name];
   
   // Only validate in development (production validated at build time)
-  if (isDev && (!value || value.trim() === "")) {
+  if (isDev && !IS_LOCAL_AGENT_MODE && (!value || value.trim() === "")) {
     throw new Error(
       `Missing required environment variable: ${name}\n\n` +
       `Please add it to your .env file:\n` +
@@ -22,7 +24,9 @@ function getRequiredEnv(name: string): string {
 // REQUIRED
 // ============================================
 
-export const API_URL = getRequiredEnv("VITE_API_BASE_URL");
+export const API_URL = IS_LOCAL_AGENT_MODE
+  ? import.meta.env.VITE_API_BASE_URL || globalThis.location?.origin || "http://localhost:3939"
+  : getRequiredEnv("VITE_API_BASE_URL");
 
 // ============================================
 // OPTIONAL (add more as needed)

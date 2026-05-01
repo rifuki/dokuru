@@ -54,7 +54,7 @@ impl StatusSettings {
 impl Default for StatusSettings {
     fn default() -> Self {
         Self {
-            port: 3399,
+            port: 3939,
             docker_socket: "/var/run/docker.sock".to_string(),
             access_mode: None,
             access_url: "Not configured".to_string(),

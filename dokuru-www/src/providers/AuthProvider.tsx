@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuthActions } from "@/stores/use-auth-store";
 import { authService } from "@/lib/api";
 import { Loader2 } from "lucide-react";
+import { IS_LOCAL_AGENT_MODE } from "@/lib/env";
 
 interface AuthProviderProps {
   children: React.ReactNode;
@@ -18,6 +19,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
     let cancelled = false;
 
     const restoreSession = async () => {
+      if (IS_LOCAL_AGENT_MODE) {
+        login("local-agent", {
+          id: "local-agent",
+          email: "local@dokuru.agent",
+          name: "Local Agent",
+          role: "user",
+          email_verified: true,
+        });
+        setIsChecking(false);
+        return;
+      }
+
       debug("[AuthProvider] Starting auth check...");
 
       try {

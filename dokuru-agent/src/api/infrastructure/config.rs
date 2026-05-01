@@ -65,7 +65,7 @@ impl Default for AccessConfig {
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
-            port: 3399,
+            port: 3939,
             host: "0.0.0.0".to_string(),
             cors_origins: vec!["*".to_string()],
         }

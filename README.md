@@ -358,6 +358,8 @@ bun run build
 bun run lint
 
 # Agent
+cd dokuru-www
+VITE_DOKURU_MODE=agent bun run build  # embeds the dashboard into the agent binary
 cd dokuru-agent
 cargo build --release
 sudo ./target/release/dokuru onboard --skip-service    # local dev

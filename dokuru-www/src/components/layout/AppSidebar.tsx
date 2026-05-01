@@ -50,6 +50,7 @@ import { Loader2 } from "lucide-react";
 import { useRealtimeAgents } from "@/hooks/useRealtimeAgents";
 import { useAgentConnections } from "@/hooks/useAgentConnections";
 import { HOST_SHELL_ENABLED } from "@/lib/host-shell";
+import { IS_LOCAL_AGENT_MODE } from "@/lib/env";
 
 function auditSidebarStatus(stream?: AuditStreamState) {
   if (!stream) return null;
@@ -411,7 +412,7 @@ export function AppSidebar() {
         )}
 
         {/* Settings */}
-        <SidebarGroup>
+        {!IS_LOCAL_AGENT_MODE && <SidebarGroup>
           <SidebarGroupLabel>Settings</SidebarGroupLabel>
           <div className={isIconMode ? "" : "px-2"}>
             <SidebarMenu>
@@ -436,7 +437,7 @@ export function AppSidebar() {
               ))}
             </SidebarMenu>
           </div>
-        </SidebarGroup>
+        </SidebarGroup>}
       </SidebarContent>
       <SidebarRail />
     </Sidebar>

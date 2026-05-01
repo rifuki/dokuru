@@ -10,6 +10,12 @@ export function envValidatorPlugin(): Plugin {
     config(_config, { mode }) {
       const fileEnv = loadEnv(mode, process.cwd(), "");
       const systemEnv = process.env;
+      const appMode = (fileEnv.VITE_DOKURU_MODE || systemEnv.VITE_DOKURU_MODE || "cloud").toLowerCase();
+
+      if (appMode === "agent") {
+        console.log("✅ Environment variables validated (agent mode)");
+        return;
+      }
 
       const missing: string[] = [];
       for (const envVar of REQUIRED_ENV_VARS) {

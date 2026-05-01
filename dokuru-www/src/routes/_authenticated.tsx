@@ -28,6 +28,7 @@ import {
     useUnreadNotificationCount,
 } from "@/features/notifications/hooks/use-notifications";
 import type { Notification } from "@/lib/api";
+import { IS_LOCAL_AGENT_MODE } from "@/lib/env";
 
 // Derive WebSocket URL from API base URL
 const getWsUrl = () => {
@@ -46,7 +47,7 @@ export const Route = createFileRoute("/_authenticated")({
 function AppLayout() {
     return (
         <RequireAuth>
-            <WebSocketProvider url={WS_URL}>
+            <WebSocketProvider url={WS_URL} enabled={!IS_LOCAL_AGENT_MODE}>
                 <DashboardLayout />
             </WebSocketProvider>
         </RequireAuth>
@@ -100,7 +101,7 @@ function DashboardLayout() {
                         <CommandMenuTrigger onClick={() => setCommandOpen(true)} />
                         <CommandMenu open={commandOpen} setOpen={setCommandOpen} />
 
-                        <NotificationsMenu />
+                        {!IS_LOCAL_AGENT_MODE && <NotificationsMenu />}
 
                         {/* User Menu - Available for all */}
                         <HeaderUserMenu />

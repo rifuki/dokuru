@@ -29,6 +29,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { getAvatarUrl } from "@/lib/utils";
+import { IS_LOCAL_AGENT_MODE } from "@/lib/env";
 import {
     Settings,
     Monitor,
@@ -77,13 +78,17 @@ export function HeaderUserMenu() {
                         </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator className="mx-0 my-0" />
-                    <DropdownMenuGroup>
-                        <DropdownMenuItem onClick={() => navigate({ to: "/settings/profile" })} className={menuItemClass}>
-                            <Settings className="mr-2 h-4 w-4" />
-                            <span>User Settings</span>
-                        </DropdownMenuItem>
-                    </DropdownMenuGroup>
-                    <DropdownMenuSeparator className="mx-0 my-0" />
+                    {!IS_LOCAL_AGENT_MODE && (
+                        <>
+                            <DropdownMenuGroup>
+                                <DropdownMenuItem onClick={() => navigate({ to: "/settings/profile" })} className={menuItemClass}>
+                                    <Settings className="mr-2 h-4 w-4" />
+                                    <span>User Settings</span>
+                                </DropdownMenuItem>
+                            </DropdownMenuGroup>
+                            <DropdownMenuSeparator className="mx-0 my-0" />
+                        </>
+                    )}
                     <DropdownMenuGroup>
                         <DropdownMenuSub>
                             <DropdownMenuSubTrigger className={menuItemClass}>
@@ -111,11 +116,15 @@ export function HeaderUserMenu() {
                             </DropdownMenuPortal>
                         </DropdownMenuSub>
                     </DropdownMenuGroup>
-                    <DropdownMenuSeparator className="mx-0 my-0" />
-                    <DropdownMenuItem onSelect={() => setLogoutDialogOpen(true)} className="h-11 cursor-pointer rounded-none px-5 text-sm font-medium text-destructive focus:bg-destructive/10 focus:text-destructive">
-                        <LogOut className="mr-2 h-4 w-4" />
-                        <span>Log out</span>
-                    </DropdownMenuItem>
+                    {!IS_LOCAL_AGENT_MODE && (
+                        <>
+                            <DropdownMenuSeparator className="mx-0 my-0" />
+                            <DropdownMenuItem onSelect={() => setLogoutDialogOpen(true)} className="h-11 cursor-pointer rounded-none px-5 text-sm font-medium text-destructive focus:bg-destructive/10 focus:text-destructive">
+                                <LogOut className="mr-2 h-4 w-4" />
+                                <span>Log out</span>
+                            </DropdownMenuItem>
+                        </>
+                    )}
                 </DropdownMenuContent>
             </DropdownMenu>
 
