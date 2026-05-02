@@ -8,11 +8,15 @@ function normalizeAffectedItem(value: string) {
 }
 
 function affectedIcon(item: string) {
+  const trimmed = item.trim();
   if (item.includes("dockerd") || item.includes("/usr/bin/") || item.includes("daemon")) {
     return Server;
   }
   if (item.includes(".sock") || item.includes(".socket")) {
     return LinkIcon;
+  }
+  if (trimmed.startsWith("/") || trimmed.includes("/")) {
+    return FileText;
   }
   if (item.includes("/etc/") || item.includes(".conf") || item.includes(".json") || item.includes(".service")) {
     return FileText;
@@ -47,8 +51,8 @@ export function AffectedItems({
   return (
     <div className="flex flex-wrap gap-1.5">
       {items.map((item, i) => {
-        const Icon = affectedIcon(item);
         const container = findContainer(containers, item);
+        const Icon = container ? Container : affectedIcon(item);
         const content = (
           <>
             <Icon className="h-3 w-3 shrink-0 text-muted-foreground/50" />

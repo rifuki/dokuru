@@ -995,11 +995,16 @@ function AuditDetailPage() {
     currentIndex: fixAllIndex,
     ruleStatuses,
     selectedCount: fixAllSelectedCount,
+    cgroupTargets: fixAllCgroupTargets,
+    cgroupLoading: fixAllCgroupLoading,
+    selectedCgroupRuleIds: fixAllSelectedCgroupRuleIds,
     openFixAll,
     closeFixAll,
     applyAll,
     toggleRule: toggleFixAllRule,
     setAllSelected: setAllFixAllSelected,
+    updateCgroupTarget: updateFixAllCgroupTarget,
+    backToConfirm: backFixAllToConfirm,
   } = useFixAll({
     agentId: id,
     agentUrl: agent?.url ?? "",
@@ -1767,10 +1772,15 @@ function AuditDetailPage() {
         currentIndex={fixAllIndex}
         ruleStatuses={ruleStatuses}
         selectedCount={fixAllSelectedCount}
+        cgroupTargets={fixAllCgroupTargets}
+        cgroupLoading={fixAllCgroupLoading}
+        selectedCgroupRuleIds={fixAllSelectedCgroupRuleIds}
         onConfirm={() => void applyAll()}
         onClose={closeFixAll}
         onToggleRule={toggleFixAllRule}
         onSetAllSelected={setAllFixAllSelected}
+        onUpdateCgroupTarget={updateFixAllCgroupTarget}
+        onBackToConfirm={backFixAllToConfirm}
         onRerunAudit={() => {
           closeFixAll();
           void navigate({ to: "/agents/$id/audit", params: { id } });

@@ -584,7 +584,6 @@ function ResultStep({
                             <Activity className="h-3.5 w-3.5 text-[#2496ED]" />
                             <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/38">Affected targets</p>
                         </div>
-                        <span className="font-mono text-[10px] text-white/25">click to inspect</span>
                     </div>
                     <AffectedItems
                         items={affectedItems}
