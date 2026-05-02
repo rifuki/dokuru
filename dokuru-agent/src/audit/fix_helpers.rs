@@ -9,7 +9,7 @@ use bollard::{
         Config, CreateContainerOptions, ListContainersOptions, RemoveContainerOptions,
         StartContainerOptions, StopContainerOptions, UpdateContainerOptions,
     },
-    models::{ContainerInspectResponse, ContainerSummary, MountPointTypeEnum},
+    models::{ContainerInspectResponse, ContainerSummary, HealthConfig, MountPointTypeEnum},
 };
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write as _;
@@ -36,8 +36,17 @@ static FIX_HISTORY: LazyLock<RwLock<Vec<FixHistoryEntry>>> =
 const DEFAULT_MEMORY_BYTES: i64 = 256 * 1024 * 1024;
 const DEFAULT_CPU_SHARES: i64 = 512;
 const DEFAULT_PIDS_LIMIT: i64 = 100;
+const DEFAULT_NON_ROOT_USER: &str = "1000:1000";
+const DEFAULT_HEALTHCHECK_TEST: &str = "test -e /proc/1/stat || exit 1";
+const DEFAULT_HEALTHCHECK_INTERVAL_NANOS: i64 = 30_000_000_000;
+const DEFAULT_HEALTHCHECK_TIMEOUT_NANOS: i64 = 10_000_000_000;
+const DEFAULT_HEALTHCHECK_START_PERIOD_NANOS: i64 = 10_000_000_000;
 const AUDIT_RULES_PATH: &str = "/etc/audit/rules.d/docker.rules";
 const AUDIT_FIX_STEPS: u8 = 4;
+const DOCKER_ROOT_PARTITION_RULE_ID: &str = "1.1.1";
+const DOCKER_ROOT_PARTITION_FIX_STEPS: u8 = 9;
+const MIN_DOCKER_ROOT_LV_BYTES: u64 = 10 * 1024 * 1024 * 1024;
+const DOCKER_ROOT_LV_HEADROOM_BYTES: u64 = 1024 * 1024 * 1024;
 const USERNS_SNAPSHOT_PATH: &str = "/tmp/dokuru-userns-remap-snapshot.json";
 const USERNS_REMAP_RULE_ID: &str = "2.10";
 const USERNS_REMAP_TOTAL_STEPS: u8 = 9;
@@ -104,6 +113,10 @@ pub fn supports_cgroup_resource_fix(rule_id: &str) -> bool {
     matches!(rule_id, "5.11" | "5.12" | "5.29" | "cgroup_all")
 }
 
+pub fn supports_image_config_fix(rule_id: &str) -> bool {
+    matches!(rule_id, "4.1" | "4.6")
+}
+
 pub fn suggest_resource_limits(name: &str, image: &str) -> ResourceSuggestion {
     let value = format!("{name} {image}").to_lowercase();
     if value.contains("postgres")
@@ -144,6 +157,27 @@ pub fn fix_steps(rule_id: &str) -> Vec<String> {
             "Verify cgroup limits".to_string(),
         ];
     }
+    if supports_image_config_fix(rule_id) {
+        return match rule_id {
+            "4.1" => vec![
+                "Inspect containers running as root".to_string(),
+                "Save rollback metadata".to_string(),
+                "Stop or update compose service".to_string(),
+                format!("Recreate container with user {DEFAULT_NON_ROOT_USER}"),
+                "Start container".to_string(),
+                "Verify non-root user config".to_string(),
+            ],
+            "4.6" => vec![
+                "Inspect containers without healthcheck".to_string(),
+                "Save rollback metadata".to_string(),
+                "Stop or update compose service".to_string(),
+                "Recreate container with default healthcheck".to_string(),
+                "Start container".to_string(),
+                "Verify healthcheck config".to_string(),
+            ],
+            _ => vec!["Apply fix".to_string(), "Verify result".to_string()],
+        };
+    }
     if supports_namespace_fix(rule_id) || supports_privileged_fix(rule_id) {
         return vec![
             "Inspect container configuration".to_string(),
@@ -152,6 +186,19 @@ pub fn fix_steps(rule_id: &str) -> Vec<String> {
             "Recreate container with hardened isolation".to_string(),
             "Start container".to_string(),
             "Verify isolation".to_string(),
+        ];
+    }
+    if supports_docker_root_partition_fix(rule_id) {
+        return vec![
+            "Preflight Docker root and host storage".to_string(),
+            "Select an unambiguous LVM volume group".to_string(),
+            "Create a dedicated Docker logical volume".to_string(),
+            "Format and mount the new volume temporarily".to_string(),
+            "Copy Docker root data into the new volume".to_string(),
+            "Stop Docker services for final sync".to_string(),
+            "Switch DockerRootDir to the dedicated mount".to_string(),
+            "Persist the mount in /etc/fstab".to_string(),
+            "Restart Docker and verify the mount point".to_string(),
         ];
     }
     if supports_audit_rule_fix(rule_id) {
@@ -510,6 +557,909 @@ pub async fn apply_audit_rule_fix_with_progress(
             restart_command: Some("sudo systemctl reload-or-restart auditd".to_string()),
             requires_elevation: true,
         })
+    }
+}
+
+pub fn supports_docker_root_partition_fix(rule_id: &str) -> bool {
+    rule_id == DOCKER_ROOT_PARTITION_RULE_ID
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LvmVolumeGroup {
+    name: String,
+    free_bytes: u64,
+}
+
+fn parse_lvm_bytes(value: &str) -> Option<u64> {
+    let digits: String = value
+        .trim()
+        .trim_start_matches('<')
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
+    (!digits.is_empty()).then(|| digits.parse().ok()).flatten()
+}
+
+fn parse_vgs_output(output: &str) -> Vec<LvmVolumeGroup> {
+    output
+        .lines()
+        .filter_map(|line| {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                return None;
+            }
+
+            let parts: Vec<&str> = if trimmed.contains(',') {
+                trimmed.split(',').collect()
+            } else {
+                trimmed.split_whitespace().collect()
+            };
+            let name = parts.first()?.trim();
+            let free = parse_lvm_bytes(parts.get(1)?.trim())?;
+            Some(LvmVolumeGroup {
+                name: (*name).to_string(),
+                free_bytes: free,
+            })
+        })
+        .collect()
+}
+
+fn select_lvm_volume_group(
+    groups: &[LvmVolumeGroup],
+    required_bytes: u64,
+) -> Result<LvmVolumeGroup, String> {
+    let eligible: Vec<LvmVolumeGroup> = groups
+        .iter()
+        .filter(|group| group.free_bytes >= required_bytes)
+        .cloned()
+        .collect();
+
+    match eligible.as_slice() {
+        [] => Err(format!(
+            "No LVM volume group has at least {} free space",
+            format_gib(required_bytes)
+        )),
+        [group] => Ok(group.clone()),
+        many => Err(format!(
+            "Multiple LVM volume groups have enough space ({}). Select the target VG manually before running this high-risk remediation.",
+            many.iter()
+                .map(|group| group.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
+    }
+}
+
+fn planned_docker_root_lv_size(used_bytes: u64) -> u64 {
+    let headroom = std::cmp::max(used_bytes / 5, DOCKER_ROOT_LV_HEADROOM_BYTES);
+    std::cmp::max(
+        MIN_DOCKER_ROOT_LV_BYTES,
+        used_bytes.saturating_add(headroom),
+    )
+}
+
+const fn bytes_to_mib_ceil(bytes: u64) -> u64 {
+    const MIB: u64 = 1024 * 1024;
+    bytes.div_ceil(MIB)
+}
+
+fn format_gib(bytes: u64) -> String {
+    const GIB: u64 = 1024 * 1024 * 1024;
+    let whole = bytes / GIB;
+    let tenth = (bytes % GIB) * 10 / GIB;
+    format!("{whole}.{tenth} GiB")
+}
+
+fn parse_du_size(stdout: &str) -> Option<u64> {
+    stdout.split_whitespace().next()?.parse().ok()
+}
+
+async fn estimate_path_size_bytes(path: &str) -> Result<u64, String> {
+    let byte_result = capture_command("du", &["-sb", path]).await;
+    if byte_result.success
+        && let Some(bytes) = parse_du_size(&byte_result.stdout)
+    {
+        return Ok(bytes);
+    }
+
+    let kb_result = capture_command("du", &["-sk", path]).await;
+    if kb_result.success
+        && let Some(kib) = parse_du_size(&kb_result.stdout)
+    {
+        return Ok(kib.saturating_mul(1024));
+    }
+
+    Err(command_output(&byte_result.stderr)
+        .or_else(|| command_output(&kb_result.stderr))
+        .unwrap_or_else(|| format!("Could not estimate size for {path}")))
+}
+
+pub fn mount_entry_for_path(mounts: &str, path: &str) -> Option<String> {
+    mounts
+        .lines()
+        .find(|line| line.split_whitespace().nth(1).is_some_and(|mp| mp == path))
+        .map(ToString::to_string)
+}
+
+fn is_mount_point(path: &str) -> bool {
+    std::fs::read_to_string("/proc/mounts")
+        .ok()
+        .and_then(|mounts| mount_entry_for_path(&mounts, path))
+        .is_some()
+}
+
+fn fstab_field_unescape(value: &str) -> String {
+    value
+        .replace("\\040", " ")
+        .replace("\\011", "\t")
+        .replace("\\012", "\n")
+        .replace("\\134", "\\")
+}
+
+fn fstab_escape(value: &str) -> String {
+    value
+        .replace('\\', "\\134")
+        .replace(' ', "\\040")
+        .replace('\t', "\\011")
+        .replace('\n', "\\012")
+}
+
+fn fstab_has_mountpoint(content: &str, mount_point: &str) -> bool {
+    content.lines().any(|line| {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            return false;
+        }
+        trimmed
+            .split_whitespace()
+            .nth(1)
+            .is_some_and(|field| fstab_field_unescape(field) == mount_point)
+    })
+}
+
+fn docker_root_backup_path(docker_root: &str, timestamp: &str) -> PathBuf {
+    let root = Path::new(docker_root);
+    let filename = root.file_name().map_or_else(
+        || "docker".to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    root.with_file_name(format!("{filename}.dokuru-backup-{timestamp}"))
+}
+
+fn append_docker_root_fstab_entry(
+    docker_root: &str,
+    uuid: &str,
+    timestamp: &str,
+) -> std::io::Result<PathBuf> {
+    let path = Path::new("/etc/fstab");
+    let mut content = std::fs::read_to_string(path)?;
+    let backup = PathBuf::from(format!("/etc/fstab.dokuru-backup-{timestamp}"));
+    std::fs::copy(path, &backup)?;
+
+    if !content.ends_with('\n') {
+        content.push('\n');
+    }
+    let _ = writeln!(
+        content,
+        "UUID={} {} ext4 defaults 0 2",
+        fstab_escape(uuid),
+        fstab_escape(docker_root)
+    );
+    std::fs::write(path, content)?;
+    Ok(backup)
+}
+
+fn partition_progress_event(
+    docker_root: &str,
+    step: u8,
+    action: &str,
+    status: &str,
+    detail: Option<String>,
+    command: Option<String>,
+) -> FixProgress {
+    FixProgress {
+        rule_id: DOCKER_ROOT_PARTITION_RULE_ID.to_string(),
+        container_name: docker_root.to_string(),
+        step,
+        total_steps: DOCKER_ROOT_PARTITION_FIX_STEPS,
+        action: action.to_string(),
+        status: status.to_string(),
+        detail,
+        command,
+        stdout: None,
+        stderr: None,
+    }
+}
+
+fn command_display(cmd: &str, args: &[&str]) -> String {
+    std::iter::once(shell_quote(cmd))
+        .chain(args.iter().map(|arg| shell_quote(arg)))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+async fn run_partition_command(
+    docker_root: &str,
+    progress: Option<&ProgressSender>,
+    step: u8,
+    action: &str,
+    detail: &str,
+    cmd: &str,
+    args: &[&str],
+) -> Result<FixCommandResult, FixOutcome> {
+    let display = command_display(cmd, args);
+    send_progress(
+        progress,
+        partition_progress_event(
+            docker_root,
+            step,
+            action,
+            "in_progress",
+            Some(detail.to_string()),
+            Some(display.clone()),
+        ),
+    );
+
+    let result = capture_command(cmd, args).await;
+    let mut event = partition_progress_event(
+        docker_root,
+        step,
+        action,
+        if result.success { "done" } else { "error" },
+        Some(if result.success {
+            detail.to_string()
+        } else {
+            format!("{detail} failed")
+        }),
+        Some(display),
+    );
+    event.stdout = command_output(&result.stdout);
+    event.stderr = command_output(&result.stderr);
+    send_progress(progress, event);
+
+    if result.success {
+        Ok(result)
+    } else {
+        Err(blocked(
+            DOCKER_ROOT_PARTITION_RULE_ID,
+            &format!("{detail} failed: {}", result.stderr.trim()),
+        ))
+    }
+}
+
+async fn run_partition_shell(
+    docker_root: &str,
+    progress: Option<&ProgressSender>,
+    step: u8,
+    action: &str,
+    detail: &str,
+    script: &str,
+) -> Result<FixCommandResult, FixOutcome> {
+    run_partition_command(
+        docker_root,
+        progress,
+        step,
+        action,
+        detail,
+        "sh",
+        &["-c", script],
+    )
+    .await
+}
+
+async fn restore_docker_root_after_failed_switch(
+    docker_root: &str,
+    backup_path: &Path,
+    progress: Option<&ProgressSender>,
+    reason: &str,
+) -> FixOutcome {
+    let _ = std::fs::remove_dir(docker_root);
+    let _ = std::fs::rename(backup_path, docker_root);
+    let _ = run_partition_shell(
+        docker_root,
+        progress,
+        9,
+        "restore_original_root",
+        "Restoring Docker service against the original root directory",
+        "systemctl start containerd || true; systemctl start docker",
+    )
+    .await;
+
+    blocked(DOCKER_ROOT_PARTITION_RULE_ID, reason)
+}
+
+async fn restart_docker_after_partition_block(
+    docker_root: &str,
+    progress: Option<&ProgressSender>,
+    reason: &str,
+) -> FixOutcome {
+    let _ = run_partition_shell(
+        docker_root,
+        progress,
+        9,
+        "restart_original_docker",
+        "Restarting Docker against the original root after a failed migration step",
+        "systemctl start containerd || true; systemctl start docker",
+    )
+    .await;
+
+    blocked(DOCKER_ROOT_PARTITION_RULE_ID, reason)
+}
+
+async fn guided_after_fstab_failure(
+    docker_root: &str,
+    progress: Option<&ProgressSender>,
+    message: String,
+) -> FixOutcome {
+    let _ = run_partition_shell(
+        docker_root,
+        progress,
+        9,
+        "restart_docker",
+        "Starting Docker after the mount succeeded but fstab persistence failed",
+        "systemctl start containerd || true; systemctl start docker",
+    )
+    .await;
+
+    FixOutcome {
+        rule_id: DOCKER_ROOT_PARTITION_RULE_ID.to_string(),
+        status: FixStatus::Guided,
+        message,
+        requires_restart: false,
+        restart_command: None,
+        requires_elevation: true,
+    }
+}
+
+struct DockerRootPartitionPlan {
+    docker_root: String,
+    vg: LvmVolumeGroup,
+    lv_size_mib: u64,
+    timestamp: String,
+    lv_name: String,
+    lv_path: String,
+    temp_mount: String,
+    backup_path: PathBuf,
+}
+
+async fn validate_docker_root_preconditions(
+    docker_root: &str,
+    progress: Option<&ProgressSender>,
+) -> Result<(), FixOutcome> {
+    let root_path = Path::new(docker_root);
+    if !root_path.is_absolute() || docker_root == "/" {
+        return Err(blocked(
+            DOCKER_ROOT_PARTITION_RULE_ID,
+            &format!("Refusing to manage unsafe DockerRootDir path: {docker_root}"),
+        ));
+    }
+    if is_mount_point(docker_root) {
+        send_progress(
+            progress,
+            partition_progress_event(
+                docker_root,
+                1,
+                "preflight",
+                "done",
+                Some("DockerRootDir is already a mount point".to_string()),
+                None,
+            ),
+        );
+        return Err(applied(
+            DOCKER_ROOT_PARTITION_RULE_ID,
+            &format!("DockerRootDir is already mounted separately at {docker_root}"),
+            false,
+        ));
+    }
+    if !root_path.exists() {
+        return Err(blocked(
+            DOCKER_ROOT_PARTITION_RULE_ID,
+            &format!("DockerRootDir does not exist: {docker_root}"),
+        ));
+    }
+
+    let euid_command = capture_command("id", &["-u"]).await;
+    if !euid_command.success || euid_command.stdout.trim() != "0" {
+        send_progress(
+            progress,
+            partition_progress_event(
+                docker_root,
+                1,
+                "preflight",
+                "error",
+                Some(
+                    "Run dokuru-agent as root to create LVM storage and update /etc/fstab"
+                        .to_string(),
+                ),
+                Some("id -u".to_string()),
+            ),
+        );
+        return Err(blocked(
+            DOCKER_ROOT_PARTITION_RULE_ID,
+            "Root privileges are required to create and mount a Docker data logical volume",
+        ));
+    }
+
+    let required_commands = [
+        "vgs",
+        "lvcreate",
+        "mkfs.ext4",
+        "rsync",
+        "mount",
+        "umount",
+        "blkid",
+        "du",
+        "systemctl",
+    ];
+    let mut missing = Vec::new();
+    for command in required_commands {
+        if !capture_command("which", &[command]).await.success {
+            missing.push(command);
+        }
+    }
+    if !missing.is_empty() {
+        return Err(blocked(
+            DOCKER_ROOT_PARTITION_RULE_ID,
+            &format!("Missing required host command(s): {}", missing.join(", ")),
+        ));
+    }
+
+    let fstab = std::fs::read_to_string("/etc/fstab").map_err(|error| {
+        blocked(
+            DOCKER_ROOT_PARTITION_RULE_ID,
+            &format!("Cannot read /etc/fstab before remediation: {error}"),
+        )
+    })?;
+    if fstab_has_mountpoint(&fstab, docker_root) {
+        return Err(blocked(
+            DOCKER_ROOT_PARTITION_RULE_ID,
+            &format!(
+                "/etc/fstab already has an entry for {docker_root}, but it is not mounted. Fix or mount the existing entry first."
+            ),
+        ));
+    }
+
+    Ok(())
+}
+
+async fn select_docker_root_lvm_plan(
+    docker_root: &str,
+    progress: Option<&ProgressSender>,
+) -> Result<(LvmVolumeGroup, u64), FixOutcome> {
+    let used_bytes = estimate_path_size_bytes(docker_root)
+        .await
+        .map_err(|error| blocked(DOCKER_ROOT_PARTITION_RULE_ID, &error))?;
+    let lv_size_bytes = planned_docker_root_lv_size(used_bytes);
+    send_progress(
+        progress,
+        partition_progress_event(
+            docker_root,
+            1,
+            "preflight",
+            "done",
+            Some(format!(
+                "DockerRootDir uses {}; planned LV size {}",
+                format_gib(used_bytes),
+                format_gib(lv_size_bytes)
+            )),
+            Some(format!("du -sb {}", shell_quote(docker_root))),
+        ),
+    );
+
+    let vgs_result = run_partition_command(
+        docker_root,
+        progress,
+        2,
+        "select_lvm_vg",
+        "Listing LVM volume groups with free space",
+        "vgs",
+        &[
+            "--noheadings",
+            "--units",
+            "b",
+            "--nosuffix",
+            "--separator",
+            ",",
+            "-o",
+            "vg_name,vg_free",
+        ],
+    )
+    .await?;
+    let groups = parse_vgs_output(&vgs_result.stdout);
+    let vg = select_lvm_volume_group(&groups, lv_size_bytes).map_err(|message| {
+        send_progress(
+            progress,
+            partition_progress_event(
+                docker_root,
+                2,
+                "select_lvm_vg",
+                "error",
+                Some(message.clone()),
+                None,
+            ),
+        );
+        blocked(DOCKER_ROOT_PARTITION_RULE_ID, &message)
+    })?;
+    send_progress(
+        progress,
+        partition_progress_event(
+            docker_root,
+            2,
+            "select_lvm_vg",
+            "done",
+            Some(format!(
+                "Selected VG {} with {} free",
+                vg.name,
+                format_gib(vg.free_bytes)
+            )),
+            None,
+        ),
+    );
+
+    Ok((vg, bytes_to_mib_ceil(lv_size_bytes)))
+}
+
+async fn prepare_docker_root_partition_plan(
+    docker: &Docker,
+    progress: Option<&ProgressSender>,
+) -> Result<DockerRootPartitionPlan, FixOutcome> {
+    let info = docker.info().await.map_err(|error| {
+        blocked(
+            DOCKER_ROOT_PARTITION_RULE_ID,
+            &format!("Could not read Docker info: {error}"),
+        )
+    })?;
+    let docker_root = info
+        .docker_root_dir
+        .filter(|path| !path.trim().is_empty())
+        .unwrap_or_else(|| "/var/lib/docker".to_string());
+
+    send_progress(
+        progress,
+        partition_progress_event(
+            &docker_root,
+            1,
+            "preflight",
+            "in_progress",
+            Some("Checking DockerRootDir, privileges, commands, and existing mounts".to_string()),
+            Some("docker info -f '{{ .DockerRootDir }}'".to_string()),
+        ),
+    );
+    validate_docker_root_preconditions(&docker_root, progress).await?;
+    let (vg, lv_size_mib) = select_docker_root_lvm_plan(&docker_root, progress).await?;
+    let timestamp = chrono::Utc::now().format("%Y%m%d%H%M%S").to_string();
+    let lv_name = format!("dokuru_docker_data_{timestamp}");
+    let lv_path = format!("/dev/{}/{}", vg.name, lv_name);
+    let temp_mount = format!("/mnt/dokuru-docker-root-{timestamp}");
+    let backup_path = docker_root_backup_path(&docker_root, &timestamp);
+
+    Ok(DockerRootPartitionPlan {
+        docker_root,
+        vg,
+        lv_size_mib,
+        timestamp,
+        lv_name,
+        lv_path,
+        temp_mount,
+        backup_path,
+    })
+}
+
+async fn create_and_seed_docker_root_volume(
+    plan: &DockerRootPartitionPlan,
+    progress: Option<&ProgressSender>,
+) -> Result<(), FixOutcome> {
+    let lv_size_arg = format!("{}M", plan.lv_size_mib);
+    run_partition_command(
+        &plan.docker_root,
+        progress,
+        3,
+        "create_lvm_volume",
+        "Creating dedicated Docker logical volume",
+        "lvcreate",
+        &["-y", "-L", &lv_size_arg, "-n", &plan.lv_name, &plan.vg.name],
+    )
+    .await?;
+    run_partition_command(
+        &plan.docker_root,
+        progress,
+        4,
+        "format_volume",
+        "Formatting the new logical volume as ext4",
+        "mkfs.ext4",
+        &["-F", &plan.lv_path],
+    )
+    .await?;
+
+    std::fs::create_dir_all(&plan.temp_mount).map_err(|error| {
+        blocked(
+            DOCKER_ROOT_PARTITION_RULE_ID,
+            &format!(
+                "Failed to create temporary mount directory {}: {error}",
+                plan.temp_mount
+            ),
+        )
+    })?;
+    run_partition_command(
+        &plan.docker_root,
+        progress,
+        4,
+        "mount_temporary_volume",
+        "Mounting the new volume for data copy",
+        "mount",
+        &[&plan.lv_path, &plan.temp_mount],
+    )
+    .await?;
+
+    let docker_root_slash = format!("{}/", plan.docker_root);
+    let temp_mount_slash = format!("{}/", plan.temp_mount);
+    if let Err(outcome) = run_partition_command(
+        &plan.docker_root,
+        progress,
+        5,
+        "copy_existing_data",
+        "Copying current Docker data to the new volume",
+        "rsync",
+        &[
+            "-aHAX",
+            "--numeric-ids",
+            &docker_root_slash,
+            &temp_mount_slash,
+        ],
+    )
+    .await
+    {
+        let _ = run_partition_command(
+            &plan.docker_root,
+            progress,
+            5,
+            "cleanup_temporary_mount",
+            "Unmounting temporary volume after initial copy failed",
+            "umount",
+            &[&plan.temp_mount],
+        )
+        .await;
+        return Err(outcome);
+    }
+    Ok(())
+}
+
+async fn switch_docker_root_mount(
+    plan: &DockerRootPartitionPlan,
+    progress: Option<&ProgressSender>,
+) -> Result<(), FixOutcome> {
+    if let Err(error) = std::fs::rename(&plan.docker_root, &plan.backup_path) {
+        return Err(restart_docker_after_partition_block(
+            &plan.docker_root,
+            progress,
+            &format!("Failed to move original DockerRootDir to backup: {error}"),
+        )
+        .await);
+    }
+    if let Err(error) = std::fs::create_dir_all(&plan.docker_root) {
+        return Err(restore_docker_root_after_failed_switch(
+            &plan.docker_root,
+            &plan.backup_path,
+            progress,
+            &format!("Failed to recreate DockerRootDir mountpoint: {error}"),
+        )
+        .await);
+    }
+
+    if let Err(outcome) = run_partition_command(
+        &plan.docker_root,
+        progress,
+        7,
+        "unmount_temporary_volume",
+        "Unmounting temporary Docker data volume",
+        "umount",
+        &[&plan.temp_mount],
+    )
+    .await
+    {
+        return Err(restore_docker_root_after_failed_switch(
+            &plan.docker_root,
+            &plan.backup_path,
+            progress,
+            &outcome.message,
+        )
+        .await);
+    }
+
+    if let Err(outcome) = run_partition_command(
+        &plan.docker_root,
+        progress,
+        7,
+        "mount_docker_root",
+        "Mounting dedicated volume at DockerRootDir",
+        "mount",
+        &[&plan.lv_path, &plan.docker_root],
+    )
+    .await
+    {
+        return Err(restore_docker_root_after_failed_switch(
+            &plan.docker_root,
+            &plan.backup_path,
+            progress,
+            &outcome.message,
+        )
+        .await);
+    }
+    Ok(())
+}
+
+async fn stop_sync_and_switch_docker_root(
+    plan: &DockerRootPartitionPlan,
+    progress: Option<&ProgressSender>,
+) -> Result<(), FixOutcome> {
+    let docker_root_slash = format!("{}/", plan.docker_root);
+    let temp_mount_slash = format!("{}/", plan.temp_mount);
+    run_partition_shell(
+        &plan.docker_root,
+        progress,
+        6,
+        "stop_docker",
+        "Stopping Docker and containerd for the final consistent sync",
+        "systemctl stop docker || true; systemctl stop docker.socket || true; systemctl stop containerd || true; ! systemctl is-active --quiet docker",
+    )
+    .await?;
+    if let Err(outcome) = run_partition_command(
+        &plan.docker_root,
+        progress,
+        7,
+        "final_sync",
+        "Final sync after Docker is stopped",
+        "rsync",
+        &[
+            "-aHAX",
+            "--numeric-ids",
+            "--delete",
+            &docker_root_slash,
+            &temp_mount_slash,
+        ],
+    )
+    .await
+    {
+        let _ = run_partition_command(
+            &plan.docker_root,
+            progress,
+            7,
+            "cleanup_temporary_mount",
+            "Unmounting temporary volume after final sync failed",
+            "umount",
+            &[&plan.temp_mount],
+        )
+        .await;
+        return Err(restart_docker_after_partition_block(
+            &plan.docker_root,
+            progress,
+            &outcome.message,
+        )
+        .await);
+    }
+
+    switch_docker_root_mount(plan, progress).await
+}
+
+async fn persist_restart_and_verify_docker_root(
+    plan: &DockerRootPartitionPlan,
+    progress: Option<&ProgressSender>,
+) -> Result<FixOutcome, FixOutcome> {
+    let filesystem_uuid = run_partition_command(
+        &plan.docker_root,
+        progress,
+        8,
+        "read_volume_uuid",
+        "Reading filesystem UUID for persistent mount",
+        "blkid",
+        &["-s", "UUID", "-o", "value", &plan.lv_path],
+    )
+    .await?;
+    let uuid = filesystem_uuid.stdout.trim();
+    if uuid.is_empty() {
+        return Err(blocked(
+            DOCKER_ROOT_PARTITION_RULE_ID,
+            "Mounted the Docker root volume, but blkid did not return a filesystem UUID",
+        ));
+    }
+
+    let fstab_backup = match append_docker_root_fstab_entry(
+        &plan.docker_root,
+        uuid,
+        &plan.timestamp,
+    ) {
+        Ok(path) => path,
+        Err(error) => {
+            return Err(
+                guided_after_fstab_failure(
+                    &plan.docker_root,
+                    progress,
+                    format!(
+                        "DockerRootDir is mounted separately, but /etc/fstab persistence failed: {error}"
+                    ),
+                )
+                .await,
+            );
+        }
+    };
+    let docker_root = &plan.docker_root;
+    send_progress(
+        progress,
+        partition_progress_event(
+            docker_root,
+            8,
+            "persist_fstab",
+            "done",
+            Some(format!(
+                "Added persistent mount entry; backup saved at {}",
+                fstab_backup.display()
+            )),
+            Some(format!("append UUID={uuid} {docker_root} to /etc/fstab")),
+        ),
+    );
+
+    run_partition_shell(
+        &plan.docker_root,
+        progress,
+        9,
+        "restart_docker",
+        "Starting containerd and Docker after storage migration",
+        "systemctl start containerd || true; systemctl start docker; systemctl is-active --quiet docker",
+    )
+    .await?;
+
+    let mounts = std::fs::read_to_string("/proc/mounts").unwrap_or_default();
+    let Some(mount_entry) = mount_entry_for_path(&mounts, &plan.docker_root) else {
+        return Err(blocked(
+            DOCKER_ROOT_PARTITION_RULE_ID,
+            &format!(
+                "Docker restarted, but {} is still not listed as a mount point",
+                plan.docker_root
+            ),
+        ));
+    };
+    send_progress(
+        progress,
+        partition_progress_event(
+            &plan.docker_root,
+            9,
+            "verify_mount",
+            "done",
+            Some(mount_entry),
+            Some(format!(
+                "grep {} /proc/mounts",
+                shell_quote(&plan.docker_root)
+            )),
+        ),
+    );
+
+    Ok(applied(
+        DOCKER_ROOT_PARTITION_RULE_ID,
+        &format!(
+            "DockerRootDir migrated to dedicated LVM volume {}; original data retained at {}",
+            plan.lv_path,
+            plan.backup_path.display()
+        ),
+        false,
+    ))
+}
+
+pub async fn apply_docker_root_partition_fix_with_progress(
+    docker: &Docker,
+    progress: Option<&ProgressSender>,
+) -> eyre::Result<FixOutcome> {
+    let plan = match prepare_docker_root_partition_plan(docker, progress).await {
+        Ok(plan) => plan,
+        Err(outcome) => return Ok(outcome),
+    };
+    if let Err(outcome) = create_and_seed_docker_root_volume(&plan, progress).await {
+        return Ok(outcome);
+    }
+    if let Err(outcome) = stop_sync_and_switch_docker_root(&plan, progress).await {
+        return Ok(outcome);
+    }
+    match persist_restart_and_verify_docker_root(&plan, progress).await {
+        Ok(outcome) | Err(outcome) => Ok(outcome),
     }
 }
 
@@ -1608,8 +2558,12 @@ pub async fn preview_fix(docker: &Docker, rule_id: &str) -> eyre::Result<FixPrev
         targets,
         requires_restart: supports_namespace_fix(rule_id)
             || supports_privileged_fix(rule_id)
-            || supports_userns_remap_fix(rule_id),
-        requires_elevation: supports_audit_rule_fix(rule_id) || supports_userns_remap_fix(rule_id),
+            || supports_image_config_fix(rule_id)
+            || supports_userns_remap_fix(rule_id)
+            || supports_docker_root_partition_fix(rule_id),
+        requires_elevation: supports_audit_rule_fix(rule_id)
+            || supports_userns_remap_fix(rule_id)
+            || supports_docker_root_partition_fix(rule_id),
         steps: fix_steps(rule_id),
     })
 }
@@ -1794,6 +2748,260 @@ fn fix_outcome(
         requires_restart: false,
         restart_command: None,
         requires_elevation: false,
+    }
+}
+
+pub async fn apply_image_config_fix(docker: &Docker, rule_id: &str) -> eyre::Result<FixOutcome> {
+    Box::pin(apply_image_config_fix_with_progress(
+        docker,
+        rule_id,
+        &[],
+        None,
+    ))
+    .await
+}
+
+pub async fn apply_image_config_fix_with_progress(
+    docker: &Docker,
+    rule_id: &str,
+    targets: &[FixTarget],
+    progress: Option<&ProgressSender>,
+) -> eyre::Result<FixOutcome> {
+    if !supports_image_config_fix(rule_id) {
+        return Ok(blocked(
+            rule_id,
+            "Image config fix only supports rules 4.1 and 4.6",
+        ));
+    }
+
+    let targets = if targets.is_empty() {
+        default_image_config_targets(docker, rule_id).await?
+    } else {
+        targets.to_vec()
+    };
+
+    if targets.is_empty() {
+        return Ok(FixOutcome {
+            rule_id: rule_id.to_string(),
+            status: FixStatus::Applied,
+            message: image_config_noop_message(rule_id).to_string(),
+            requires_restart: false,
+            restart_command: None,
+            requires_elevation: false,
+        });
+    }
+
+    let mut updated = Vec::new();
+    let mut failed = Vec::new();
+    let mut compose_services = HashSet::<String>::new();
+
+    for target in &targets {
+        match Box::pin(apply_image_config_target(
+            docker,
+            rule_id,
+            target,
+            progress,
+            &mut compose_services,
+        ))
+        .await
+        {
+            Ok(Some(label)) => updated.push(label),
+            Ok(None) => {}
+            Err(error) => failed.push(error),
+        }
+    }
+
+    Ok(fix_outcome(
+        rule_id,
+        &updated,
+        &failed,
+        image_config_noop_message(rule_id),
+        image_config_success_message(rule_id, updated.len()),
+    ))
+}
+
+async fn default_image_config_targets(
+    docker: &Docker,
+    rule_id: &str,
+) -> eyre::Result<Vec<FixTarget>> {
+    let containers = docker.list_containers::<String>(None).await?;
+    let mut targets = Vec::new();
+
+    for container in &containers {
+        let Some(id) = container.id.as_deref() else {
+            continue;
+        };
+        let inspect = docker.inspect_container(id, None).await?;
+        if !container_violates_rule(&inspect, rule_id) {
+            continue;
+        }
+        let strategy = if compose_context_from_inspect(&inspect).is_some() {
+            "compose_update"
+        } else {
+            "recreate"
+        };
+        targets.push(FixTarget {
+            container_id: id.to_string(),
+            memory: None,
+            cpu_shares: None,
+            pids_limit: None,
+            strategy: Some(strategy.to_string()),
+        });
+    }
+
+    Ok(targets)
+}
+
+async fn apply_image_config_target(
+    docker: &Docker,
+    rule_id: &str,
+    target: &FixTarget,
+    progress: Option<&ProgressSender>,
+    compose_services: &mut HashSet<String>,
+) -> Result<Option<String>, String> {
+    let container_label = container_label(docker, &target.container_id).await;
+    let inspect = match docker.inspect_container(&target.container_id, None).await {
+        Ok(inspect) => inspect,
+        Err(error) => return Err(format!("{container_label}: inspect failed: {error}")),
+    };
+
+    if !container_violates_rule(&inspect, rule_id) {
+        return Ok(None);
+    }
+
+    emit_progress(
+        progress,
+        rule_id,
+        &container_label,
+        ProgressStep::new(1, 6),
+        "inspect_container",
+        "done",
+        Some(image_config_violation_detail(rule_id).to_string()),
+    );
+
+    if target.strategy.as_deref() == Some("compose_update") {
+        let Some(ctx) = compose_context_from_inspect(&inspect) else {
+            return Err(format!(
+                "{container_label}: compose_update requested but container has no Compose metadata"
+            ));
+        };
+        if !compose_services.insert(ctx.key()) {
+            return Ok(None);
+        }
+        return apply_compose_service_fix(docker, rule_id, &ctx, progress)
+            .await
+            .map(|()| Some(format!("{}:{} (compose)", ctx.project, ctx.service)))
+            .map_err(|error| format!("{container_label}: compose fix failed: {error}"));
+    }
+
+    Box::pin(recreate_with_image_config(
+        docker,
+        &target.container_id,
+        inspect,
+        rule_id,
+        progress,
+        &container_label,
+    ))
+    .await
+    .map(|()| Some(container_label))
+    .map_err(|error| format!("{}: {error}", target.container_id))
+}
+
+async fn recreate_with_image_config(
+    docker: &Docker,
+    id: &str,
+    inspect: ContainerInspectResponse,
+    rule_id: &str,
+    progress: Option<&ProgressSender>,
+    label: &str,
+) -> eyre::Result<()> {
+    let name = inspect
+        .name
+        .as_deref()
+        .unwrap_or("")
+        .trim_start_matches('/')
+        .to_string();
+    let container_config = inspect
+        .config
+        .ok_or_else(|| eyre::eyre!("missing container config"))?;
+    let host_config = inspect.host_config.unwrap_or_default();
+    let mut create_config: Config<String> = container_config.into();
+
+    match rule_id {
+        "4.1" => create_config.user = Some(DEFAULT_NON_ROOT_USER.to_string()),
+        "4.6" => create_config.healthcheck = Some(default_healthcheck_config()),
+        _ => return Err(eyre::eyre!("unsupported image config rule {rule_id}")),
+    }
+    create_config.host_config = Some(host_config);
+
+    recreate_container(
+        docker,
+        rule_id,
+        progress,
+        RecreateContainerRequest {
+            id: id.to_string(),
+            name,
+            label: label.to_string(),
+            create_config,
+            save_detail: "Saved container config before image config recreate".to_string(),
+            recreate_detail: Some(image_config_recreate_detail(rule_id).to_string()),
+            done_detail: image_config_done_detail(rule_id).to_string(),
+        },
+    )
+    .await
+}
+
+fn default_healthcheck_config() -> HealthConfig {
+    HealthConfig {
+        test: Some(vec![
+            "CMD-SHELL".to_string(),
+            DEFAULT_HEALTHCHECK_TEST.to_string(),
+        ]),
+        interval: Some(DEFAULT_HEALTHCHECK_INTERVAL_NANOS),
+        timeout: Some(DEFAULT_HEALTHCHECK_TIMEOUT_NANOS),
+        retries: Some(3),
+        start_period: Some(DEFAULT_HEALTHCHECK_START_PERIOD_NANOS),
+        ..Default::default()
+    }
+}
+
+fn image_config_violation_detail(rule_id: &str) -> &'static str {
+    match rule_id {
+        "4.1" => "Container is running as root or without explicit user",
+        "4.6" => "Container has no healthcheck configured",
+        _ => "Container needs image config remediation",
+    }
+}
+
+fn image_config_recreate_detail(rule_id: &str) -> &'static str {
+    match rule_id {
+        "4.1" => "Set container user to 1000:1000",
+        "4.6" => "Add default container healthcheck",
+        _ => "Apply image config remediation",
+    }
+}
+
+fn image_config_done_detail(rule_id: &str) -> &'static str {
+    match rule_id {
+        "4.1" => "Container restarted with non-root user config",
+        "4.6" => "Container restarted with healthcheck config",
+        _ => "Container restarted with updated image config",
+    }
+}
+
+fn image_config_noop_message(rule_id: &str) -> &'static str {
+    match rule_id {
+        "4.1" => "No containers were running as root",
+        "4.6" => "No containers were missing healthchecks",
+        _ => "No containers needed image config updates",
+    }
+}
+
+fn image_config_success_message(rule_id: &str, updated: usize) -> String {
+    match rule_id {
+        "4.1" => format!("Updated non-root user config for {updated} container(s)"),
+        "4.6" => format!("Added healthcheck config for {updated} container(s)"),
+        _ => format!("Updated image config for {updated} container(s)"),
     }
 }
 
@@ -3179,6 +4387,13 @@ fn update_compose_service_lines(
     target: Option<&FixTarget>,
 ) -> eyre::Result<bool> {
     let changed = match rule_id {
+        "4.1" => set_service_value_text(
+            lines,
+            block,
+            "user",
+            &format!("\"{DEFAULT_NON_ROOT_USER}\""),
+        ),
+        "4.6" => set_healthcheck_text(lines, block),
         "5.5" => set_existing_service_value(lines, block, "privileged", "false"),
         "5.10" => remove_service_keys_text(lines, block, &["network_mode"]),
         "5.16" => remove_service_keys_text(lines, block, &["pid"]),
@@ -3236,6 +4451,27 @@ fn set_cgroup_all_service_values(
     set_service_value_text(lines, block, "mem_limit", &memory)
         | set_service_value_text(lines, block, "cpu_shares", &cpu_shares)
         | set_service_value_text(lines, block, "pids_limit", &pids_limit)
+}
+
+fn set_healthcheck_text(lines: &mut Vec<String>, block: &mut ComposeServiceBlock) -> bool {
+    if service_key_range(lines, block, "healthcheck").is_some() {
+        return false;
+    }
+
+    let indent = " ".repeat(block.body_indent);
+    let child_indent = " ".repeat(block.body_indent + 2);
+    let new_lines = [
+        format!("{indent}healthcheck:"),
+        format!("{child_indent}test: [\"CMD-SHELL\", \"{DEFAULT_HEALTHCHECK_TEST}\"]"),
+        format!("{child_indent}interval: 30s"),
+        format!("{child_indent}timeout: 10s"),
+        format!("{child_indent}retries: 3"),
+        format!("{child_indent}start_period: 10s"),
+    ];
+    let insert_at = service_insert_index(lines, block);
+    lines.splice(insert_at..insert_at, new_lines);
+    block.end += 6;
+    true
 }
 
 fn split_yaml_lines(content: &str) -> Vec<String> {
@@ -3589,6 +4825,16 @@ async fn verify_compose_cgroup_service(
 fn container_violates_rule(inspect: &ContainerInspectResponse, rule_id: &str) -> bool {
     let host_config = inspect.host_config.as_ref();
     match rule_id {
+        "4.1" => inspect
+            .config
+            .as_ref()
+            .and_then(|config| config.user.as_deref())
+            .is_none_or(|user| user.is_empty() || user == "root" || user == "0"),
+        "4.6" => inspect
+            .config
+            .as_ref()
+            .and_then(|config| config.healthcheck.as_ref())
+            .is_none(),
         "5.5" => host_config.and_then(|h| h.privileged).unwrap_or(false),
         "5.10" => host_config.and_then(|h| h.network_mode.as_deref()) == Some("host"),
         "5.16" => host_config.and_then(|h| h.pid_mode.as_deref()) == Some("host"),
@@ -3604,7 +4850,10 @@ pub async fn rollback_plan_for_request(
     request: &FixRequest,
 ) -> eyre::Result<RollbackPlan> {
     if !supports_cgroup_resource_fix(&request.rule_id) {
-        if supports_namespace_fix(&request.rule_id) || supports_privileged_fix(&request.rule_id) {
+        if supports_namespace_fix(&request.rule_id)
+            || supports_privileged_fix(&request.rule_id)
+            || supports_image_config_fix(&request.rule_id)
+        {
             return Ok(RollbackPlan {
                 cgroup_targets: Vec::new(),
                 compose_targets: compose_rollback_targets_for_rule(docker, &request.rule_id)
@@ -3969,6 +5218,72 @@ mod tests {
     use super::*;
 
     #[test]
+    fn parse_vgs_output_accepts_comma_and_decimal_bytes() {
+        let groups = parse_vgs_output("  vg0,<21474836480.00\nvg1,1073741824\n");
+
+        assert_eq!(
+            groups,
+            vec![
+                LvmVolumeGroup {
+                    name: "vg0".to_string(),
+                    free_bytes: 21_474_836_480,
+                },
+                LvmVolumeGroup {
+                    name: "vg1".to_string(),
+                    free_bytes: 1_073_741_824,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn select_lvm_volume_group_rejects_ambiguous_targets() {
+        let groups = vec![
+            LvmVolumeGroup {
+                name: "fast".to_string(),
+                free_bytes: 20 * 1024 * 1024 * 1024,
+            },
+            LvmVolumeGroup {
+                name: "bulk".to_string(),
+                free_bytes: 30 * 1024 * 1024 * 1024,
+            },
+        ];
+
+        let error = select_lvm_volume_group(&groups, 10 * 1024 * 1024 * 1024).unwrap_err();
+
+        assert!(error.contains("Multiple LVM volume groups"));
+    }
+
+    #[test]
+    fn planned_docker_root_lv_size_uses_minimum_and_headroom() {
+        assert_eq!(planned_docker_root_lv_size(0), MIN_DOCKER_ROOT_LV_BYTES);
+        assert_eq!(
+            planned_docker_root_lv_size(50 * 1024 * 1024 * 1024),
+            60 * 1024 * 1024 * 1024
+        );
+    }
+
+    #[test]
+    fn mount_entry_for_path_requires_exact_mount_point() {
+        let mounts = "/dev/root / ext4 rw 0 0\n/dev/vg/docker /var/lib/docker ext4 rw 0 0\n";
+
+        assert_eq!(
+            mount_entry_for_path(mounts, "/var/lib/docker"),
+            Some("/dev/vg/docker /var/lib/docker ext4 rw 0 0".to_string())
+        );
+        assert_eq!(mount_entry_for_path(mounts, "/var/lib"), None);
+    }
+
+    #[test]
+    fn fstab_has_mountpoint_handles_escaped_spaces() {
+        let fstab = "# comment\nUUID=abc /var/lib/docker ext4 defaults 0 2\nUUID=def /mnt/docker\\040data ext4 defaults 0 2\n";
+
+        assert!(fstab_has_mountpoint(fstab, "/var/lib/docker"));
+        assert!(fstab_has_mountpoint(fstab, "/mnt/docker data"));
+        assert!(!fstab_has_mountpoint(fstab, "/var/lib/containerd"));
+    }
+
+    #[test]
     fn update_compose_content_removes_namespace_setting_without_reformatting() {
         let input = r#"services:
   caddy:
@@ -4021,6 +5336,58 @@ volumes:
 "#;
 
         let updated = update_compose_content(input, "worker", "5.5", None)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(updated, expected);
+    }
+
+    #[test]
+    fn update_compose_content_sets_non_root_user() {
+        let input = r#"services:
+  web:
+    image: nginx
+    user: root
+    ports:
+      - "8080:80"
+"#;
+        let expected = r#"services:
+  web:
+    image: nginx
+    user: "1000:1000"
+    ports:
+      - "8080:80"
+"#;
+
+        let updated = update_compose_content(input, "web", "4.1", None)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(updated, expected);
+    }
+
+    #[test]
+    fn update_compose_content_adds_healthcheck_block() {
+        let input = r#"services:
+  api:
+    image: node:20-alpine
+    environment:
+      NODE_ENV: production
+"#;
+        let expected = r#"services:
+  api:
+    image: node:20-alpine
+    environment:
+      NODE_ENV: production
+    healthcheck:
+      test: ["CMD-SHELL", "test -e /proc/1/stat || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+"#;
+
+        let updated = update_compose_content(input, "api", "4.6", None)
             .unwrap()
             .unwrap();
 

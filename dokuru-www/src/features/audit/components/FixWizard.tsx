@@ -12,7 +12,7 @@ import { AffectedItems } from "@/features/audit/components/AffectedItems";
 import type { AuditResult, FixOutcome, FixPreview, FixProgress } from "@/lib/api/agent-direct";
 import type { Container as DockerContainer } from "@/services/docker-api";
 import {
-    getFixSteps, isNamespaceRecreateRule, isCgroupRule,
+    getFixSteps, isContainerRecreateRule, isCgroupRule,
     type TargetConfig, type WizardStep,
 } from "@/features/audit/hooks/useFix";
 
@@ -124,8 +124,9 @@ function ConfirmStep({
 }) {
     const { rule, affected } = result;
     const steps = preview?.steps ?? getFixSteps(rule.id);
-    const isRecreate = isNamespaceRecreateRule(rule.id);
+    const isRecreate = isContainerRecreateRule(rule.id);
     const isCgroup = isCgroupRule(rule.id);
+    const isHostPartition = rule.id === "1.1.1";
     const targets = preview?.targets ?? [];
 
     return (
@@ -145,6 +146,20 @@ function ConfirmStep({
                 </div>
             )}
 
+            {isHostPartition && (
+                <div className="flex items-start gap-3 rounded-lg border border-red-500/40 bg-red-500/8 px-4 py-3">
+                    <AlertTriangle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                        <p className="text-xs font-semibold text-red-400">
+                            High-risk host storage migration
+                        </p>
+                        <p className="text-xs text-red-400/70 leading-relaxed">
+                            Dokuru only proceeds when one LVM volume group is clearly eligible. It creates a new logical volume, copies DockerRootDir, stops Docker for the final sync, updates /etc/fstab, and keeps the original Docker root as a backup.
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {/* Restart warning */}
             {isRecreate && (
                 <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/8 px-4 py-3">
@@ -154,7 +169,7 @@ function ConfirmStep({
                             Container restart required
                         </p>
                         <p className="text-xs text-amber-400/70 leading-relaxed">
-                            Namespace and privileged flags cannot be changed on a running container. Standalone containers are recreated, while Compose-managed services update the compose file and run docker compose up.
+                            This setting cannot be changed on a running container. Standalone containers are recreated, while Compose-managed services update the compose file and run docker compose up.
                         </p>
                     </div>
                 </div>
@@ -289,7 +304,13 @@ function ConfirmStep({
                 </div>
             ) : null}
 
-            {preview && targets.length === 0 && (
+            {preview && targets.length === 0 && isHostPartition && (
+                <div className="rounded-lg border border-[#2496ED]/20 bg-[#2496ED]/8 px-4 py-3 text-xs text-[#2496ED]/80">
+                    This is a host-level storage fix, so there are no per-container targets to list.
+                </div>
+            )}
+
+            {preview && targets.length === 0 && !isHostPartition && (
                 <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/8 px-4 py-3 text-xs text-emerald-400/80">
                     Agent preview says no containers currently need this fix.
                 </div>

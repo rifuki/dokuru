@@ -1282,7 +1282,7 @@ function AuditDetailPage() {
                     {autoFixable.length} rule{autoFixable.length > 1 ? "s" : ""} can be auto-fixed
                   </p>
                   <p className="text-xs text-[#2496ED]/60 mt-0.5">
-                    Namespace isolation, cgroup limits, and privileged containers — one click.
+                    Image config, namespace isolation, cgroup limits, and privileged containers — one click.
                   </p>
                 </div>
                 <button

@@ -122,14 +122,20 @@ impl Section1 {
             category: RuleCategory::Runtime,
             severity: Severity::Low,
             scored: true,
-            audit_command: Some("cat /proc/mounts | grep /var/lib/docker".into()),
-            check_fn: |_docker, _containers| {
+            audit_command: Some("mountpoint -- \"$(docker info -f '{{ .DockerRootDir }}')\"".into()),
+            check_fn: |docker, _containers| {
+                let docker = docker.clone();
                 Box::pin(async move {
+                    let docker_root = docker
+                        .info()
+                        .await
+                        .ok()
+                        .and_then(|info| info.docker_root_dir)
+                        .filter(|path| !path.trim().is_empty())
+                        .unwrap_or_else(|| "/var/lib/docker".to_string());
                     let mounts = std::fs::read_to_string("/proc/mounts").unwrap_or_default();
-                    let matching: Vec<String> = mounts
-                        .lines()
-                        .filter(|l| l.split_whitespace().nth(1).is_some_and(|mp| mp == "/var/lib/docker"))
-                        .map(String::from)
+                    let matching: Vec<String> = fix_helpers::mount_entry_for_path(&mounts, &docker_root)
+                        .into_iter()
                         .collect();
                     let found = !matching.is_empty();
                     Ok(CheckResult {
@@ -139,18 +145,18 @@ impl Section1 {
                             category: RuleCategory::Runtime,
                             severity: Severity::Low,
                             section: "Host Configuration".into(),
-                            description: "Separate partition for /var/lib/docker".into(),
-                            remediation: "Mount a dedicated partition at /var/lib/docker".into(),
+                            description: "Separate partition for DockerRootDir".into(),
+                            remediation: "Mount a dedicated partition or LVM logical volume at DockerRootDir".into(),
                         },
                         status: if found { CheckStatus::Pass } else { CheckStatus::Fail },
                         message: if found {
-                            "/var/lib/docker is on a separate partition".into()
+                            format!("{docker_root} is on a separate partition")
                         } else {
-                            "/var/lib/docker is NOT on a separate partition".into()
+                            format!("{docker_root} is NOT on a separate partition")
                         },
-                        affected: if found { vec![] } else { vec!["/var/lib/docker".into()] },
-                        remediation_kind: RemediationKind::Manual,
-                        audit_command: Some("cat /proc/mounts | grep /var/lib/docker".into()),
+                        affected: if found { vec![] } else { vec![docker_root] },
+                        remediation_kind: RemediationKind::Auto,
+                        audit_command: Some("mountpoint -- \"$(docker info -f '{{ .DockerRootDir }}')\"".into()),
                         raw_output: Some(if matching.is_empty() { "(no mount entry)".into() } else { matching.join("\n") }),
                         references: None,
                         rationale: None,
@@ -160,10 +166,15 @@ impl Section1 {
                     })
                 })
             },
-            remediation_kind: RemediationKind::Manual,
-            fix_fn: None,
-            remediation_guide: "Create a dedicated partition and mount it at /var/lib/docker:\n  1. Create partition with fdisk\n  2. mkfs.ext4 /dev/sdX1\n  3. Add to /etc/fstab\n  4. Restart Docker".into(),
-            requires_restart: false,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|docker| {
+                let docker = docker.clone();
+                Box::pin(async move {
+                    fix_helpers::apply_docker_root_partition_fix_with_progress(&docker, None).await
+                })
+            }),
+            remediation_guide: "Dokuru can auto-remediate this when the host has exactly one LVM volume group with enough free space:\n  1. Create a dedicated LVM logical volume for DockerRootDir\n  2. Format it as ext4\n  3. Copy DockerRootDir data with rsync\n  4. Stop Docker for a final sync\n  5. Mount the volume at DockerRootDir and persist it in /etc/fstab\n  6. Restart Docker\n\nIf LVM is unavailable or multiple VGs are eligible, create/select the target partition manually before rerunning the fix.".into(),
+            requires_restart: true,
             requires_elevation: true,
             references: vec!["CIS Docker Benchmark v1.8.0, Section 1.1.1".into()],
             rationale: "Without a separate partition, Docker data can fill the root filesystem.".into(),

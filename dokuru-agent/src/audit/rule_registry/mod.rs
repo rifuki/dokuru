@@ -276,6 +276,16 @@ impl RuleRegistry {
             .await;
         }
 
+        if super::fix_helpers::supports_image_config_fix(&request.rule_id) {
+            return Box::pin(super::fix_helpers::apply_image_config_fix_with_progress(
+                docker,
+                &request.rule_id,
+                &request.targets,
+                progress,
+            ))
+            .await;
+        }
+
         if super::fix_helpers::supports_namespace_fix(&request.rule_id) {
             return Box::pin(super::fix_helpers::apply_namespace_fix_with_progress(
                 docker,
@@ -291,6 +301,13 @@ impl RuleRegistry {
                 &request.rule_id,
                 progress,
             ))
+            .await;
+        }
+
+        if super::fix_helpers::supports_docker_root_partition_fix(&request.rule_id) {
+            return super::fix_helpers::apply_docker_root_partition_fix_with_progress(
+                docker, progress,
+            )
             .await;
         }
 

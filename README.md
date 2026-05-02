@@ -106,14 +106,14 @@ Sister project (separate working tree): **[`dokuru-lab`](../dokuru-lab)** — a 
 
 ## CIS Coverage
 
-36 rules implemented across all 5 sections. Auto-fix where the Docker/Compose API can safely apply the change; guided remediation where human judgement is required.
+36 rules implemented across all 5 sections. Auto-fix where the host, Docker, or Compose layer can safely apply the change; guided remediation where human judgement is required.
 
 | Section | Scope | Rules | Auto | Guided |
 |---|---|---:|---:|---:|
-| 1 | Host Configuration (auditd) | 14 | 12 | 2 |
+| 1 | Host Configuration (partition + auditd) | 14 | 13 | 1 |
 | 2 | Docker Daemon | 2 | 1 (`2.10` userns-remap) | 1 |
 | 3 | Daemon File Permissions | 8 | 8 | 0 |
-| 4 | Container Images | 2 | 0 | 2 |
+| 4 | Container Images | 2 | 2 (`4.1` user override, `4.6` healthcheck override) | 0 |
 | 5 | Container Runtime | 10 | 8 | 2 |
 
 Runtime rules are the backbone of the demo lab:
@@ -137,7 +137,8 @@ flowchart LR
     B -->|5.11/5.12/5.29| C[cgroup_resource_fix]
     B -->|5.10/5.16/5.17/5.21/5.31| D[namespace_fix]
     B -->|5.5| E[privileged_fix]
-    B -->|1.1.x| F[audit_rule_fix]
+    B -->|1.1.1| O[docker_root_partition_fix]
+    B -->|1.1.3-1.1.18| F[audit_rule_fix]
     B -->|2.10| G[userns_remap_fix]
     C --> H{Compose-managed?}
     H -->|Yes| I[Edit YAML + backup + compose up]
@@ -146,11 +147,13 @@ flowchart LR
     E --> K
     F --> L[Write /etc/audit/rules.d + reload]
     G --> M[9-step: dockremap + subuid/subgid<br/>+ daemon.json + restart + migrate volumes]
+    O --> P[Guarded LVM migration<br/>+ rsync + fstab + Docker restart]
     I --> N[Record FixHistoryEntry<br/>with RollbackPlan]
     J --> N
     K --> N
     L --> N
     M --> N
+    P --> N
 ```
 
 ## Quick Start

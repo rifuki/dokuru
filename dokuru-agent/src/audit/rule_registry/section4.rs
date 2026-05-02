@@ -1,8 +1,9 @@
 // Section 4: Container Images and Build File Configuration
 // CIS Docker Benchmark v1.8.0
 use super::RuleDefinition;
-use crate::audit::types::{
-    CheckResult, CheckStatus, CisRule, RemediationKind, RuleCategory, Severity,
+use crate::audit::{
+    fix_helpers,
+    types::{CheckResult, CheckStatus, CisRule, RemediationKind, RuleCategory, Severity},
 };
 
 const HEALTHCHECK_AUDIT_COMMAND: &str = r#"docker ps --format "{{.ID}} {{.Names}}" | while read -r id name; do healthcheck=$(docker inspect --format "{{ if .Config.Healthcheck }}true{{ else }}false{{ end }}" "$id"); printf "%s: Healthcheck=%s\n" "$name" "$healthcheck"; done"#;
@@ -111,7 +112,7 @@ impl Section4 {
                             severity: Severity::High,
                             section: "Container Images".into(),
                             description: "Non-root user in container".into(),
-                            remediation: "Add USER directive to Dockerfile or use --user flag".into(),
+                            remediation: "Add USER directive to Dockerfile or use user override".into(),
                         },
                         status: if failing.is_empty() { CheckStatus::Pass } else { CheckStatus::Fail },
                         message: if failing.is_empty() {
@@ -120,7 +121,7 @@ impl Section4 {
                             format!("{} container(s) running as root", failing.len())
                         },
                         affected: failing,
-                        remediation_kind: RemediationKind::Manual,
+                        remediation_kind: RemediationKind::Auto,
                         audit_command: Some(Self::inspect_command(".Config.User", "User")),
                         raw_output: Some(raw_lines.join("\n")),
                         references: None,
@@ -131,15 +132,22 @@ impl Section4 {
                     })
                 })
             },
-            remediation_kind: RemediationKind::Manual,
-            fix_fn: None,
-            remediation_guide: r"Add a non-root user in your Dockerfile:
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|docker| {
+                let docker = docker.clone();
+                Box::pin(async move {
+                    Box::pin(fix_helpers::apply_image_config_fix(&docker, "4.1")).await
+                })
+            }),
+            remediation_guide: r#"Preferred image-level fix: add a non-root user in your Dockerfile, then rebuild the image:
 
   RUN groupadd -r appuser && useradd -r -g appuser appuser
   USER appuser
 
-Or use the --user flag at runtime:
-  docker run --user 1000:1000 nginx".into(),
+Dokuru auto-fix uses the runtime/Compose equivalent so the CIS audit passes without rebuilding:
+  user: "1000:1000"
+
+This recreates affected containers. If the app needs root-owned files, adjust file ownership or choose an app-specific UID/GID."#.into(),
             requires_restart: true,
             requires_elevation: false,
             references: vec![
@@ -205,7 +213,7 @@ Or use the --user flag at runtime:
                             severity: Severity::Low,
                             section: "Container Images".into(),
                             description: "HEALTHCHECK instruction in container image".into(),
-                            remediation: "Add HEALTHCHECK to Dockerfile".into(),
+                            remediation: "Add HEALTHCHECK to Dockerfile or Compose service".into(),
                         },
                         status: if failing.is_empty() { CheckStatus::Pass } else { CheckStatus::Fail },
                         message: if failing.is_empty() {
@@ -214,7 +222,7 @@ Or use the --user flag at runtime:
                             format!("{} container(s) have no HEALTHCHECK", failing.len())
                         },
                         affected: failing,
-                        remediation_kind: RemediationKind::Manual,
+                        remediation_kind: RemediationKind::Auto,
                         audit_command: Some(HEALTHCHECK_AUDIT_COMMAND.into()),
                         raw_output: Some(raw_lines.join("\n")),
                         references: None,
@@ -225,15 +233,28 @@ Or use the --user flag at runtime:
                     })
                 })
             },
-            remediation_kind: RemediationKind::Manual,
-            fix_fn: None,
-            remediation_guide: r"Add HEALTHCHECK to your Dockerfile:
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|docker| {
+                let docker = docker.clone();
+                Box::pin(async move {
+                    Box::pin(fix_helpers::apply_image_config_fix(&docker, "4.6")).await
+                })
+            }),
+            remediation_guide: r#"Preferred image-level fix: add an app-specific HEALTHCHECK to your Dockerfile, then rebuild the image:
 
   HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
     CMD curl -f http://localhost/health || exit 1
 
 Or for non-HTTP services:
-  HEALTHCHECK CMD pg_isready -U postgres || exit 1".into(),
+  HEALTHCHECK CMD pg_isready -U postgres || exit 1
+
+Dokuru auto-fix uses a conservative Compose/runtime healthcheck so the CIS audit passes without rebuilding:
+  healthcheck:
+    test: ["CMD-SHELL", "test -e /proc/1/stat || exit 1"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
+    start_period: 10s"#.into(),
             requires_restart: true,
             requires_elevation: false,
             references: vec![

@@ -8,6 +8,33 @@ import { useAuditStore } from "@/stores/use-audit-store";
 export type WizardStep = "confirm" | "applying" | "result";
 
 export function getFixSteps(ruleId: string): string[] {
+    if (ruleId === "1.1.1") return [
+        "Preflighting Docker root and host storage…",
+        "Selecting an unambiguous LVM volume group…",
+        "Creating a dedicated Docker logical volume…",
+        "Formatting and mounting the new volume temporarily…",
+        "Copying Docker root data into the new volume…",
+        "Stopping Docker services for final sync…",
+        "Switching DockerRootDir to the dedicated mount…",
+        "Persisting the mount in /etc/fstab…",
+        "Restarting Docker and verifying the mount point…",
+    ];
+    if (ruleId === "4.1") return [
+        "Finding containers running as root…",
+        "Saving container or Compose configuration…",
+        "Stopping affected container(s)…",
+        "Recreating with user 1000:1000…",
+        "Starting container(s)…",
+        "Verifying non-root user config…",
+    ];
+    if (ruleId === "4.6") return [
+        "Finding containers without healthchecks…",
+        "Saving container or Compose configuration…",
+        "Stopping affected container(s)…",
+        "Recreating with default healthcheck…",
+        "Starting container(s)…",
+        "Verifying healthcheck config…",
+    ];
     if (ruleId === "5.5") return [
         "Inspecting containers running with --privileged…",
         "Saving container configuration…",
@@ -99,6 +126,14 @@ export function getFixSteps(ruleId: string): string[] {
 
 export function isNamespaceRecreateRule(ruleId: string): boolean {
     return ["5.5", "5.10", "5.16", "5.17", "5.21", "5.31"].includes(ruleId);
+}
+
+export function isImageConfigRecreateRule(ruleId: string): boolean {
+    return ["4.1", "4.6"].includes(ruleId);
+}
+
+export function isContainerRecreateRule(ruleId: string): boolean {
+    return isNamespaceRecreateRule(ruleId) || isImageConfigRecreateRule(ruleId);
 }
 
 export function isCgroupRule(ruleId: string): boolean {

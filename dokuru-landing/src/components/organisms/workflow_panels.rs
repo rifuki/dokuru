@@ -95,9 +95,9 @@ pub(crate) fn audit_preview_panel() -> impl IntoView {
                 </div>
                 <div class="space-y-3">
                     <div class="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">"security pillars"</div>
-                    {audit_stats::preview_pillar(IconKind::Box, "Namespace Isolation", "text-[#2496ED] border-[#2496ED]/25", "1/5", "bg-[#2496ED]", "20%")}
-                    {audit_stats::preview_pillar(IconKind::Gauge, "Cgroup Controls", "text-[#2496ED] border-[#2496ED]/25", "2/5", "bg-[#2496ED]", "40%")}
-                    {audit_stats::preview_pillar(IconKind::Shield, "Runtime Hardening", "text-[#2496ED] border-[#2496ED]/25", "3/6", "bg-[#2496ED]", "50%")}
+                    {audit_stats::preview_pillar(IconKind::Box, "Namespace Isolation", "text-zinc-300 border-white/10", "1/5", "bg-zinc-500", "20%")}
+                    {audit_stats::preview_pillar(IconKind::Gauge, "Cgroup Controls", "text-zinc-300 border-white/10", "2/5", "bg-zinc-500", "40%")}
+                    {audit_stats::preview_pillar(IconKind::Shield, "Runtime Hardening", "text-zinc-300 border-white/10", "3/6", "bg-zinc-500", "50%")}
                 </div>
                 <div class="flex items-center justify-between border-t border-white/5 pt-4">
                     <div class="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-600">"run · 2s ago"</div>

@@ -6,7 +6,7 @@ import {
     RefreshCw, Check, ShieldAlert, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { isNamespaceRecreateRule } from "@/features/audit/hooks/useFix";
+import { isContainerRecreateRule } from "@/features/audit/hooks/useFix";
 import type { FixAllStep, RuleFixStatus } from "@/features/audit/hooks/useFixAll";
 
 // ── Step indicator ────────────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ function RuleRow({
     selectable?: boolean;
     onToggle?: (ruleId: string) => void;
 }) {
-    const isRecreate = isNamespaceRecreateRule(rs.ruleId);
+    const isRecreate = isContainerRecreateRule(rs.ruleId);
     const applied = rs.outcome?.status === "Applied";
     const skipped = rs.state === "skipped";
 
@@ -164,7 +164,7 @@ function ConfirmStep({
     onToggleRule: (ruleId: string) => void;
     onSetAllSelected: (selected: boolean) => void;
 }) {
-    const recreateCount = ruleStatuses.filter(r => r.selected && isNamespaceRecreateRule(r.ruleId)).length;
+    const recreateCount = ruleStatuses.filter(r => r.selected && isContainerRecreateRule(r.ruleId)).length;
     const highRiskCount = ruleStatuses.filter(r => r.highRisk && !r.selected).length;
 
     return (
@@ -177,7 +177,7 @@ function ConfirmStep({
                             Risky auto-fixes are not selected by default
                         </p>
                         <p className="text-sm text-white/62 leading-relaxed">
-                            Recreate/user namespace fixes like 5.31 can restart containers. Select them manually only when you are ready.
+                            Host storage, user namespace, and recreate fixes like 1.1.1, 2.10, 4.1, and 5.31 can restart Docker or break workloads if prerequisites are wrong. Select them manually only when you are ready.
                         </p>
                     </div>
                 </div>
@@ -191,7 +191,7 @@ function ConfirmStep({
                             {recreateCount} rule{recreateCount > 1 ? "s" : ""} require container restart
                         </p>
                         <p className="text-sm text-white/62 leading-relaxed">
-                            Namespace and privileged flags require stop → recreate → start. Expect ~5 seconds of downtime per affected container.
+                            Selected fixes require stop → recreate → start for affected standalone containers, or docker compose up for Compose services. Expect short downtime per affected container.
                         </p>
                     </div>
                 </div>

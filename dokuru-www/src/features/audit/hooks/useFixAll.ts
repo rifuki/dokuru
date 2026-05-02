@@ -15,7 +15,7 @@ export type RuleFixStatus = {
     highRisk: boolean;
 };
 
-const HIGH_RISK_AUTO_FIX_RULES = new Set(["2.10", "5.5", "5.10", "5.16", "5.17", "5.21", "5.31"]);
+const HIGH_RISK_AUTO_FIX_RULES = new Set(["1.1.1", "2.10", "4.1", "5.5", "5.10", "5.16", "5.17", "5.21", "5.31"]);
 
 interface UseFixAllArgs {
     agentId: string;

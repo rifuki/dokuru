@@ -12,7 +12,7 @@ const fn severity_label(kind: SeverityKind) -> &'static str {
 
 const fn remediation_label(kind: RemediationKind) -> &'static str {
     match kind {
-        RemediationKind::Auto => "AUTO",
+        RemediationKind::Auto => "Auto Fix",
         RemediationKind::Guided => "GUIDED",
         RemediationKind::Manual => "MANUAL",
         RemediationKind::Ok => "OK",
@@ -29,7 +29,7 @@ const fn severity_class(kind: SeverityKind) -> &'static str {
 
 const fn remediation_class(kind: RemediationKind) -> &'static str {
     match kind {
-        RemediationKind::Auto => "text-[#2496ED] bg-[#2496ED]/10 border-[#2496ED]/30",
+        RemediationKind::Auto => "text-white bg-[#2496ED] border-[#2496ED]",
         RemediationKind::Guided => "text-cyan-300 bg-cyan-500/10 border-cyan-500/30",
         RemediationKind::Manual => "text-zinc-300 bg-white/5 border-white/15",
         RemediationKind::Ok => "text-emerald-400 bg-emerald-500/10 border-emerald-500/30",
@@ -56,8 +56,13 @@ pub(crate) fn severity_chip(kind: SeverityKind) -> impl IntoView {
 
 #[must_use]
 pub(crate) fn remediation_pill(kind: RemediationKind) -> impl IntoView {
+    let text_case = match kind {
+        RemediationKind::Auto => "tracking-wide",
+        _ => "uppercase tracking-[0.14em]",
+    };
+
     view! {
-        <span class=format!("inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.14em] px-2 py-0.5 rounded-full border {}", remediation_class(kind)) data-testid=format!("remediation-{}", remediation_label(kind).to_lowercase())>
+        <span class=format!("inline-flex items-center gap-1 font-mono text-[10px] {} px-2 py-0.5 rounded-full border {}", text_case, remediation_class(kind)) data-testid=format!("remediation-{}", remediation_label(kind).to_lowercase().replace(" ", "-"))>
             {icon(remediation_icon(kind), 10, "", "2.5")}
             {remediation_label(kind)}
         </span>
