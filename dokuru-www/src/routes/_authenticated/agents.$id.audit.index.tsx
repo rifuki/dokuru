@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAgentStore } from "@/stores/use-agent-store";
-import { useAuditStore, type AuditProgressLine } from "@/stores/use-audit-store";
+import { useAuditStore, type AuditProgressLine, type AuditStreamStatus } from "@/stores/use-audit-store";
 import { useEffect, useRef, useState } from "react";
 import { agentApi } from "@/lib/api/agent";
 import { agentDirectApi, type AuditResponse, type AuditResult, type FixOutcome } from "@/lib/api/agent-direct";
@@ -694,13 +694,21 @@ function AuditRunTerminal({
     current,
     lines,
     error,
+    status,
+    savedAuditId,
+    onOpenResult,
 }: {
     total: number;
     current: number;
     lines: AuditProgressLine[];
     error: string | null;
+    status: AuditStreamStatus;
+    savedAuditId?: string;
+    onOpenResult: () => void;
 }) {
-    const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+    const isComplete = status === "complete";
+    const isSaving = status === "saving";
+    const pct = total > 0 ? Math.round(((isComplete ? total : current) / total) * 100) : 0;
     const latest = lines.at(-1);
     const [autoScroll, setAutoScroll] = useState(true);
     const logRef = useRef<HTMLDivElement>(null);
@@ -731,6 +739,11 @@ function AuditRunTerminal({
                     </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
+                    {isComplete && savedAuditId && (
+                        <Button size="sm" variant="outline" className="h-8" onClick={onOpenResult}>
+                            Open Result
+                        </Button>
+                    )}
                     <div className="flex items-center gap-2">
                         <span className="text-xs font-medium text-muted-foreground">Auto Scroll</span>
                         <button
@@ -755,7 +768,7 @@ function AuditRunTerminal({
                         </button>
                     </div>
                     <span className="font-mono text-[11px] text-muted-foreground">
-                        {current}/{total || "?"} · {pct}%
+                        {isComplete ? total : current}/{total || "?"} · {pct}%
                     </span>
                 </div>
             </div>
@@ -766,12 +779,18 @@ function AuditRunTerminal({
                         <p className="font-mono text-xs text-muted-foreground truncate">
                             {error
                                 ? "audit stream failed"
+                                : isSaving
+                                ? "saving audit result..."
+                                : isComplete
+                                ? "audit complete"
                                 : latest
                                 ? `checking ${latest.ruleId} · ${latest.title}`
                                 : "opening audit stream..."}
                         </p>
                         {error ? (
                             <XCircle className="h-4 w-4 text-rose-400 shrink-0" />
+                        ) : isComplete ? (
+                            <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
                         ) : (
                             <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
                         )}
@@ -823,7 +842,8 @@ function AuditPage() {
     const [token, setToken] = useState<string | undefined>();
     const [containers, setContainers] = useState<DockerContainer[]>([]);
     const [auditData] = useState<AuditResponse | null>(null);
-    const isRunning = auditStream?.status === "running" || auditStream?.status === "saving";
+    const auditStreamStatus = auditStream?.status ?? "idle";
+    const isRunning = auditStreamStatus === "running" || auditStreamStatus === "saving";
     const auditHistory = auditHistories[id] ?? [];
     const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
     const [sectionFilter, setSectionFilter] = useState<string>("all");
@@ -831,8 +851,11 @@ function AuditPage() {
     const auditCurrent = auditStream?.current ?? 0;
     const auditProgressLines = auditStream?.lines ?? [];
     const auditStreamError = auditStream?.error ?? null;
+    const savedAuditId = auditStream?.savedAudit?.id;
+    const showAuditTerminal = auditStreamStatus !== "idle" && (
+        isRunning || auditStreamStatus === "complete" || auditStreamStatus === "error" || auditProgressLines.length > 0
+    );
     const mountedRef = useRef(false);
-    const watchedRunningAuditRef = useRef(false);
 
     useEffect(() => {
         agentApi.getById(id).then(a => {
@@ -858,27 +881,6 @@ function AuditPage() {
         };
     }, []);
 
-    useEffect(() => {
-        if (isRunning) {
-            watchedRunningAuditRef.current = true;
-            return;
-        }
-
-        if (auditStream?.status === "complete" && auditStream.savedAudit?.id && watchedRunningAuditRef.current) {
-            watchedRunningAuditRef.current = false;
-            void navigate({
-                to: "/agents/$id/audits/$auditId",
-                params: { id, auditId: auditStream.savedAudit.id },
-                replace: true,
-            });
-            return;
-        }
-
-        if (auditStream?.status === "error") {
-            watchedRunningAuditRef.current = false;
-        }
-    }, [auditStream?.savedAudit?.id, auditStream?.status, id, isRunning, navigate]);
-
     const handleRunAudit = async () => {
         if (!agent) return;
         if (agent.access_mode !== "relay" && !token) {
@@ -890,21 +892,23 @@ function AuditPage() {
             try {
                 toast.success(`Audit complete — ${savedAudit.summary.score}/100`);
                 await queryClient.invalidateQueries({ queryKey: ["audits", id] });
-                if (savedAudit.id) {
-                    await navigate({
-                        to: "/agents/$id/audits/$auditId",
-                        params: { id: agent.id, auditId: savedAudit.id },
-                        replace: true,
-                    });
-                }
             } catch {
-                toast.error("Failed to open audit result");
+                toast.error("Failed to refresh audit history");
             }
         } catch (error) {
             if (!mountedRef.current) return;
             const message = error instanceof Error ? error.message : "Audit failed";
             toast.error(message);
         }
+    };
+
+    const openSavedAudit = () => {
+        if (!savedAuditId) return;
+        void navigate({
+            to: "/agents/$id/audits/$auditId",
+            params: { id, auditId: savedAuditId },
+            replace: true,
+        });
     };
 
     // Group sections
@@ -1151,17 +1155,20 @@ function AuditPage() {
                     {/* ── Run New Audit Card ────────────────────────────── */}
                     <div className={cn(
                         "relative overflow-hidden rounded-3xl border transition-all duration-500 ease-out",
-                        isRunning
+                        showAuditTerminal
                             ? "h-[500px] border-border bg-card sm:h-[520px] md:h-[540px]"
                             : "h-[340px] border-border/70 bg-card/90 px-4 py-4 sm:h-[350px] md:h-[360px]",
                     )}>
-                        <div className={cn("pointer-events-none absolute inset-0 transition-opacity duration-500", isRunning ? "opacity-0" : "bg-white/[0.018] opacity-100")} />
-                        {isRunning ? (
+                        <div className={cn("pointer-events-none absolute inset-0 transition-opacity duration-500", showAuditTerminal ? "opacity-0" : "bg-white/[0.018] opacity-100")} />
+                        {showAuditTerminal ? (
                             <AuditRunTerminal
                                 total={auditTotal}
                                 current={auditCurrent}
                                 lines={auditProgressLines}
                                 error={auditStreamError}
+                                status={auditStreamStatus}
+                                savedAuditId={savedAuditId}
+                                onOpenResult={openSavedAudit}
                             />
                         ) : (
                             <div className="relative z-10 flex h-full flex-col items-center justify-center gap-4 text-center">
