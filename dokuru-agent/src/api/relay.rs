@@ -114,7 +114,7 @@ pub async fn start_relay_mode(config: Config) -> Result<()> {
 }
 
 fn relay_token(config: Config) -> Result<String> {
-    config.auth.relay_token.ok_or_else(|| {
+    config.auth.token.ok_or_else(|| {
         eyre::eyre!(
             "No relay token configured. Please set relay_token in config or run onboarding."
         )

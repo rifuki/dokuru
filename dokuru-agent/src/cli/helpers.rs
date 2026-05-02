@@ -817,7 +817,7 @@ pub fn write_config_file(
         .map(|c| c.access.clone())
         .unwrap_or_default();
     let resolved_relay_token =
-        relay_token.or_else(|| existing.as_ref().and_then(|c| c.auth.relay_token.clone()));
+        relay_token.or_else(|| existing.as_ref().and_then(|c| c.auth.token.clone()));
 
     let runtime_config = RuntimeConfig {
         server: ServerConfig {
@@ -830,8 +830,7 @@ pub fn write_config_file(
         },
         auth: AuthConfig {
             token_hash: resolved_token,
-            plain_token: resolved_relay_token.clone(),
-            relay_token: resolved_relay_token,
+            token: resolved_relay_token,
         },
         access: existing_access,
     };

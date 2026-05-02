@@ -14,13 +14,7 @@ pub struct BootstrapInfo {
 pub async fn get_bootstrap(State(state): State<AppState>) -> ApiResult<BootstrapInfo> {
     let config = &state.config;
 
-    // Try plain_token first, fallback to relay_token
-    let token = config
-        .auth
-        .plain_token
-        .clone()
-        .or_else(|| config.auth.relay_token.clone())
-        .unwrap_or_default();
+    let token = config.auth.token.clone().unwrap_or_default();
 
     let url = if config.access.url.is_empty() {
         format!("http://localhost:{}", config.server.port)
