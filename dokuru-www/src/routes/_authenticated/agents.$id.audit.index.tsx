@@ -310,7 +310,10 @@ function RuleCard({ result, agentId, agentUrl, agentAccessMode, token, container
             setFixOutcome(agentId, rule.id, outcome);
             if (outcome.status === "Applied") {
                 toast.success(`Fix applied for rule ${rule.id}`);
-                await queryClient.invalidateQueries({ queryKey: ["agent-audit"] });
+                await Promise.all([
+                    queryClient.invalidateQueries({ queryKey: ["agent-audit"] }),
+                    queryClient.invalidateQueries({ queryKey: ["agent-containers", agentId] }),
+                ]);
                 if (refreshedAudit?.id) {
                     navigate({
                         to: "/agents/$id/audits/$auditId",
