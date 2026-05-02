@@ -122,3 +122,18 @@ jobs:
             dokuru-deploy \
             install.sh \
             version.json
+
+  notify:
+    name: Notify Status
+    needs: [build, release]
+    if: always()
+    uses: ./.github/workflows/notify.yaml
+    with:
+      workflow_name: "Release Deploy CLI"
+      status: ${{ needs.release.result }}
+      details: |
+        🏗️ *Build:* ${{ needs.build.result }}
+        📦 *Release:* ${{ needs.release.result }}
+    secrets:
+      telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}

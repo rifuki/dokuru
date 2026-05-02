@@ -182,3 +182,18 @@ jobs:
           docker compose up -d --force-recreate --no-deps dokuru-server dokuru-www
           docker compose ps dokuru-db dokuru-redis dokuru-server dokuru-www
           REMOTE
+
+  notify:
+    name: Notify Status
+    needs: deploy
+    if: always() && needs.deploy.result != 'skipped'
+    uses: ./.github/workflows/notify.yaml
+    with:
+      workflow_name: "Deploy Compose Stack"
+      status: ${{ needs.deploy.result }}
+      details: |
+        🚀 *Environment:* Production
+        📦 *Services:* dokuru-server, dokuru-www
+    secrets:
+      telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
