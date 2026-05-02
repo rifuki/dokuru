@@ -1,13 +1,14 @@
 use axum::{
-    extract::{Request, State},
+    extract::{ConnectInfo, Request, State},
     http::StatusCode,
     middleware::Next,
     response::Response,
 };
 use sha2::{Digest, Sha256};
+use std::net::SocketAddr;
 use subtle::ConstantTimeEq;
 
-use crate::api::state::AppState;
+use crate::api::{AuthConfig, infrastructure::web::local_request, state::AppState};
 
 /// Agent token authentication middleware.
 /// Validates Bearer token against stored hash using constant-time comparison.
@@ -15,9 +16,14 @@ use crate::api::state::AppState;
 /// cannot set the `Authorization` header during WebSocket upgrades).
 pub async fn agent_auth_middleware(
     State(state): State<AppState>,
+    ConnectInfo(client_addr): ConnectInfo<SocketAddr>,
     request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
+    if allows_tokenless_trusted_loopback(&state.config.auth, request.headers(), client_addr) {
+        return Ok(next.run(request).await);
+    }
+
     // Primary: Authorization: Bearer <token> header
     let token_from_header = request
         .headers()
@@ -58,5 +64,70 @@ pub async fn agent_auth_middleware(
         Ok(next.run(request).await)
     } else {
         Err(StatusCode::UNAUTHORIZED)
+    }
+}
+
+fn allows_tokenless_trusted_loopback(
+    auth: &AuthConfig,
+    headers: &axum::http::HeaderMap,
+    client_addr: SocketAddr,
+) -> bool {
+    let raw_token_missing = auth.token.as_deref().map(str::is_empty).unwrap_or(true);
+
+    !auth.token_hash.is_empty()
+        && raw_token_missing
+        && local_request::is_trusted_loopback_request(headers, client_addr)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::{HeaderMap, HeaderValue, header};
+
+    fn auth(token_hash: &str, token: Option<&str>) -> AuthConfig {
+        AuthConfig {
+            token_hash: token_hash.to_string(),
+            token: token.map(str::to_string),
+        }
+    }
+
+    fn addr(ip: &str) -> SocketAddr {
+        format!("{ip}:51122").parse().expect("valid socket addr")
+    }
+
+    fn headers(host: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::HOST,
+            HeaderValue::from_str(host).expect("valid host"),
+        );
+        headers
+    }
+
+    #[test]
+    fn allows_trusted_loopback_when_raw_token_is_missing() {
+        assert!(allows_tokenless_trusted_loopback(
+            &auth("abc123", None),
+            &headers("localhost:3939"),
+            addr("127.0.0.1"),
+        ));
+    }
+
+    #[test]
+    fn still_requires_auth_when_raw_token_exists() {
+        assert!(!allows_tokenless_trusted_loopback(
+            &auth("abc123", Some("dok_token")),
+            &headers("localhost:3939"),
+            addr("127.0.0.1"),
+        ));
+    }
+
+    #[test]
+    fn rejects_public_tunnel_hosts() {
+        assert!(!allows_tokenless_trusted_loopback(
+            &auth("abc123", None),
+            &headers("reviews-richards-charming-veteran.trycloudflare.com"),
+            addr("127.0.0.1"),
+        ));
     }
 }

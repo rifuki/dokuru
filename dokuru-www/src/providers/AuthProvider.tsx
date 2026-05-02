@@ -24,9 +24,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
         // Auto-bootstrap token from agent
         try {
           const bootstrap = await fetchBootstrapInfo();
-          if (bootstrap?.token) {
+          if (bootstrap) {
             setLocalAgentBootstrap(bootstrap);
-            debug("[AuthProvider] Auto-bootstrapped token from agent");
+            debug(
+              bootstrap.token
+                ? "[AuthProvider] Auto-bootstrapped token from agent"
+                : "[AuthProvider] Bootstrapped local agent without token",
+            );
           }
         } catch (error) {
           console.error("[AuthProvider] Failed to bootstrap token:", error);

@@ -34,7 +34,9 @@ function getRequiredEnv(name: string): string {
 // ============================================
 
 export const API_URL = IS_LOCAL_AGENT_MODE
-  ? import.meta.env.VITE_API_BASE_URL || globalThis.location?.origin || "http://localhost:3939"
+  ? isDev && import.meta.env.VITE_API_BASE_URL
+    ? import.meta.env.VITE_API_BASE_URL
+    : globalThis.location?.origin || "http://localhost:3939"
   : getRequiredEnv("VITE_API_BASE_URL");
 
 // ============================================

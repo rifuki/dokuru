@@ -1,8 +1,8 @@
 import axios from "axios";
 import { apiClient } from "@/lib/api";
 import { wsApiUrl } from "@/lib/api/api-config";
-import { API_URL, IS_LOCAL_AGENT_MODE } from "@/lib/env";
-import { getLocalAgentToken, localAgent, LOCAL_AGENT_ID, setLocalAgentBootstrap, setLocalAgentToken } from "@/lib/local-agent";
+import { IS_LOCAL_AGENT_MODE } from "@/lib/env";
+import { getLocalAgentToken, localAgent, localAgentUrl, LOCAL_AGENT_ID, setLocalAgentBootstrap, setLocalAgentToken } from "@/lib/local-agent";
 import { useAuthStore } from "@/stores/use-auth-store";
 import type { Agent, CreateAgentDto, UpdateAgentDto } from "@/types/agent";
 import { agentDirectApi, type AuditReportResponse, type AuditResponse, type AuditResult, type FixHistoryEntry, type FixOutcome, type FixPreview, type FixTarget } from "./agent-direct";
@@ -18,7 +18,9 @@ function localAgentHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : undefined;
 }
 
-const localAgentRootUrl = API_URL.replace(/\/+$/, "");
+function localAgentRootUrl() {
+  return localAgentUrl().replace(/\/+$/, "");
+}
 
 export const agentApi = {
   list: async (): Promise<Agent[]> => {
@@ -29,7 +31,7 @@ export const agentApi = {
 
   create: async (dto: CreateAgentDto): Promise<Agent> => {
     if (IS_LOCAL_AGENT_MODE) {
-      setLocalAgentBootstrap({ token: dto.token, name: dto.name, url: localAgentRootUrl });
+      setLocalAgentBootstrap({ token: dto.token, name: dto.name, url: localAgentRootUrl() });
       return localAgent();
     }
     const response = await apiClient.post("/agents", dto);
@@ -58,7 +60,7 @@ export const agentApi = {
 
   saveAudit: async (id: string, auditData: AuditResponse): Promise<AuditResponse> => {
     if (IS_LOCAL_AGENT_MODE && id === LOCAL_AGENT_ID) {
-      const response = await axios.post(`${localAgentRootUrl}/audit/history`, auditData, { headers: localAgentHeaders() });
+      const response = await axios.post(`${localAgentRootUrl()}/audit/history`, auditData, { headers: localAgentHeaders() });
       return response.data.data;
     }
     const response = await apiClient.post(`/agents/${id}/audit`, auditData);
@@ -103,7 +105,7 @@ export const agentApi = {
 
   listFixHistory: async (id: string): Promise<FixHistoryEntry[]> => {
     if (IS_LOCAL_AGENT_MODE && id === LOCAL_AGENT_ID) {
-      return agentDirectApi.listFixHistory(localAgentRootUrl, getLocalAgentToken());
+      return agentDirectApi.listFixHistory(localAgentRootUrl(), getLocalAgentToken());
     }
     const response = await apiClient.get(`/agents/${id}/fix/history`);
     return response.data.data;
@@ -111,7 +113,7 @@ export const agentApi = {
 
   rollbackFix: async (id: string, historyId: string): Promise<FixOutcome> => {
     if (IS_LOCAL_AGENT_MODE && id === LOCAL_AGENT_ID) {
-      return agentDirectApi.rollbackFix(localAgentRootUrl, historyId, getLocalAgentToken());
+      return agentDirectApi.rollbackFix(localAgentRootUrl(), historyId, getLocalAgentToken());
     }
     const response = await apiClient.post(`/agents/${id}/fix/rollback`, { history_id: historyId });
     return response.data.data;
@@ -127,7 +129,7 @@ export const agentApi = {
 
   getAuditById: async (id: string, auditId: string): Promise<AuditResponse> => {
     if (IS_LOCAL_AGENT_MODE && id === LOCAL_AGENT_ID) {
-      const response = await axios.get(`${localAgentRootUrl}/audit/history/${auditId}`, { headers: localAgentHeaders() });
+      const response = await axios.get(`${localAgentRootUrl()}/audit/history/${auditId}`, { headers: localAgentHeaders() });
       return response.data.data;
     }
     const response = await apiClient.get(`/agents/${id}/audit/${auditId}`);
@@ -136,7 +138,7 @@ export const agentApi = {
 
   getAuditReport: async (id: string, auditId: string): Promise<AuditReportResponse> => {
     if (IS_LOCAL_AGENT_MODE && id === LOCAL_AGENT_ID) {
-      const response = await axios.get(`${localAgentRootUrl}/audit/history/${auditId}/report`, { headers: localAgentHeaders() });
+      const response = await axios.get(`${localAgentRootUrl()}/audit/history/${auditId}/report`, { headers: localAgentHeaders() });
       return response.data.data;
     }
     const response = await apiClient.get(`/agents/${id}/audit/${auditId}/report`);
@@ -145,7 +147,7 @@ export const agentApi = {
 
   listAudits: async (id: string): Promise<AuditResponse[]> => {
     if (IS_LOCAL_AGENT_MODE && id === LOCAL_AGENT_ID) {
-      const response = await axios.get(`${localAgentRootUrl}/audit/history`, { headers: localAgentHeaders() });
+      const response = await axios.get(`${localAgentRootUrl()}/audit/history`, { headers: localAgentHeaders() });
       return response.data.data;
     }
     const response = await apiClient.get(`/agents/${id}/audits`);
