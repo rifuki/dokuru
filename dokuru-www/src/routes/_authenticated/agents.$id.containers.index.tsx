@@ -15,6 +15,7 @@ import { canUseDockerAgent, dockerApi, dockerCredential, type Container } from "
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
   TooltipContent,
@@ -39,6 +40,34 @@ function stateColor(state: string) {
     case "restarting": return "bg-blue-500/10 text-blue-500 border-blue-500/20";
     default:           return "bg-muted text-muted-foreground border-muted";
   }
+}
+
+function ContainerRowsSkeleton() {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className="rounded-lg border bg-card p-5">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-9 w-9 shrink-0 rounded-md" />
+            <div className="grid min-w-0 flex-1 grid-cols-1 items-center gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_6rem_minmax(0,2fr)]">
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-36" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+              <Skeleton className="h-4 w-64 max-w-full" />
+              <Skeleton className="h-6 w-20 rounded-full" />
+              <Skeleton className="hidden h-4 w-32 md:block" />
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <Skeleton className="h-8 w-8 rounded-md" />
+              <Skeleton className="h-8 w-8 rounded-md" />
+              <Skeleton className="h-8 w-8 rounded-md" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function ContainerRow({
@@ -318,9 +347,7 @@ function ContainersPage() {
       <div className="space-y-6">
 
       {isLoading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => <div key={i} className="rounded-lg border bg-card animate-pulse h-20" />)}
-        </div>
+        <ContainerRowsSkeleton />
       ) : filtered.length === 0 ? (
         <div className="rounded-xl border-2 border-dashed bg-muted/20 p-20 text-center">
           <div className="flex justify-center mb-4">

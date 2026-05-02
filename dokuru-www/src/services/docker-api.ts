@@ -1,5 +1,6 @@
 import axios, { type AxiosPromise } from "axios";
 import { apiClient } from "@/lib/api";
+import { LOCAL_AGENT_ID } from "@/lib/local-agent";
 import { getAgentToken } from "@/stores/use-agent-store";
 
 export interface Container {
@@ -86,7 +87,7 @@ export function dockerCredential(agent: DockerAgentLike | null | undefined) {
 }
 
 export function canUseDockerAgent(agent: DockerAgentLike | null | undefined) {
-  return !!dockerCredential(agent);
+  return agent?.id === LOCAL_AGENT_ID || !!dockerCredential(agent);
 }
 
 function dockerRequest<T>(

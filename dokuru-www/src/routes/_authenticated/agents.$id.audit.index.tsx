@@ -9,6 +9,7 @@ import type { Agent } from "@/types/agent";
 import { dockerApi, dockerCredential, type Container as DockerContainer } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -22,6 +23,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { AffectedItems } from "@/features/audit/components/AffectedItems";
+import { LOCAL_AGENT_ID } from "@/lib/local-agent";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/audit/")({
     component: AuditPage,
@@ -689,6 +691,52 @@ function SectionHeader({ section, total, passed }: { section: string; total: num
 
 type StatusFilter = "all" | "Pass" | "Fail";
 
+const AUDIT_HISTORY_CACHE_PREFIX = "agent_audit_history_";
+
+function auditHistoryCacheKey(agentId: string) {
+    return `${AUDIT_HISTORY_CACHE_PREFIX}${agentId}`;
+}
+
+function sortAuditHistory(history: AuditResponse[]) {
+    return [...history].sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
+}
+
+function readCachedAuditHistory(agentId: string): AuditResponse[] {
+    try {
+        const raw = localStorage.getItem(auditHistoryCacheKey(agentId));
+        if (!raw) return [];
+        const parsed = JSON.parse(raw) as unknown;
+        return Array.isArray(parsed) ? sortAuditHistory(parsed as AuditResponse[]) : [];
+    } catch {
+        return [];
+    }
+}
+
+function writeCachedAuditHistory(agentId: string, history: AuditResponse[]) {
+    try {
+        localStorage.setItem(auditHistoryCacheKey(agentId), JSON.stringify(sortAuditHistory(history).slice(0, 20)));
+    } catch {
+        // Audit history cache is best-effort; the agent remains the source of truth.
+    }
+}
+
+function LatestAuditSkeleton() {
+    return (
+        <div className="flex items-center gap-4 rounded-xl border bg-card p-4">
+            <Skeleton className="h-16 w-16 shrink-0 rounded-full" />
+            <div className="min-w-0 flex-1 space-y-3">
+                <Skeleton className="h-4 w-56 max-w-full" />
+                <Skeleton className="h-3 w-80 max-w-full" />
+                <div className="flex gap-2">
+                    <Skeleton className="h-6 w-20 rounded-full" />
+                    <Skeleton className="h-6 w-20 rounded-full" />
+                    <Skeleton className="h-6 w-20 rounded-full" />
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function AuditRunTerminal({
     total,
     current,
@@ -740,8 +788,8 @@ function AuditRunTerminal({
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                     {isComplete && savedAuditId && (
-                        <Button size="sm" variant="outline" className="h-8" onClick={onOpenResult}>
-                            Open Result
+                        <Button size="sm" variant="outline" className="audit-result-cta h-8 px-3" onClick={onOpenResult}>
+                            <span className="relative z-10">Open Result</span>
                         </Button>
                     )}
                     <div className="flex items-center gap-2">
@@ -852,25 +900,61 @@ function AuditPage() {
     const auditProgressLines = auditStream?.lines ?? [];
     const auditStreamError = auditStream?.error ?? null;
     const savedAuditId = auditStream?.savedAudit?.id;
+    const latestAudit = auditHistory[0] ?? auditStream?.savedAudit ?? null;
+    const hasAnyAudit = !!latestAudit || !!savedAuditId;
     const showAuditTerminal = auditStreamStatus !== "idle" && (
         isRunning || auditStreamStatus === "complete" || auditStreamStatus === "error" || auditProgressLines.length > 0
     );
+    const [historyLoading, setHistoryLoading] = useState(true);
+    const [historyError, setHistoryError] = useState<string | null>(null);
     const mountedRef = useRef(false);
 
     useEffect(() => {
+        let cancelled = false;
+        const cachedHistory = readCachedAuditHistory(id);
+        if (cachedHistory.length > 0) setAuditHistory(id, cachedHistory);
+
+        queueMicrotask(() => {
+            if (cancelled) return;
+            setHistoryLoading(true);
+            setHistoryError(null);
+        });
+
         agentApi.getById(id).then(a => {
+            if (cancelled) return;
             setAgent(a);
             setToken(dockerCredential(a) || undefined);
-            agentApi.listAudits(a.id).then(h => setAuditHistory(id, h)).catch(() => {});
+            agentApi.listAudits(a.id)
+                .then(h => {
+                    if (cancelled) return;
+                    const sorted = sortAuditHistory(h);
+                    setAuditHistory(id, sorted);
+                    writeCachedAuditHistory(id, sorted);
+                })
+                .catch((error) => {
+                    if (cancelled) return;
+                    const message = error instanceof Error ? error.message : "Failed to load audit history";
+                    setHistoryError(message);
+                })
+                .finally(() => {
+                    if (!cancelled) setHistoryLoading(false);
+                });
             const credential = dockerCredential(a);
-            if (!credential) {
+            if (!credential && a.id !== LOCAL_AGENT_ID) {
                 setContainers([]);
                 return;
             }
             dockerApi.listContainers(a.url, credential, true)
                 .then(response => setContainers(response.data))
                 .catch(() => setContainers([]));
-        }).catch(() => toast.error("Failed to load agent"));
+        }).catch(() => {
+            if (cancelled) return;
+            setHistoryLoading(false);
+            toast.error("Failed to load agent");
+        });
+        return () => {
+            cancelled = true;
+        };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]);
 
@@ -883,12 +967,18 @@ function AuditPage() {
 
     const handleRunAudit = async () => {
         if (!agent) return;
-        if (agent.access_mode !== "relay" && !token) {
+        if (agent.access_mode !== "relay" && !token && agent.id !== LOCAL_AGENT_ID) {
             return toast.error("Agent token not found. Edit this agent and paste the token once to sync it across devices.");
         }
         try {
             const savedAudit = await startAudit(agent, token);
             if (!mountedRef.current) return;
+            const nextHistory = sortAuditHistory([
+                savedAudit,
+                ...auditHistory.filter((item) => item.id !== savedAudit.id),
+            ]);
+            setAuditHistory(id, nextHistory);
+            writeCachedAuditHistory(id, nextHistory);
             try {
                 toast.success(`Audit complete — ${savedAudit.summary.score}/100`);
                 await queryClient.invalidateQueries({ queryKey: ["audits", id] });
@@ -957,7 +1047,7 @@ function AuditPage() {
                 </div>
                 {!isRunning && (
                     <Button onClick={handleRunAudit} disabled={!agent || !isOnline} className="shrink-0" title={!isOnline ? "Agent offline" : undefined}>
-                        {auditData
+                        {hasAnyAudit
                             ? <><RefreshCw className="h-4 w-4 mr-2" /> Re-run Audit</>
                             : <><Play className="h-4 w-4 mr-2" /> Run Audit</>
                         }
@@ -1175,14 +1265,17 @@ function AuditPage() {
                                     <Shield className="h-10 w-10 text-primary" />
                                 </div>
                                 <div>
-                                    <h3 className="text-lg font-semibold">Run New Security Audit</h3>
+                                    <h3 className="text-lg font-semibold">{hasAnyAudit ? "Re-run Security Audit" : "Run New Security Audit"}</h3>
                                     <p className="text-muted-foreground text-sm mt-1 max-w-sm">
                                         Run the CIS Docker Benchmark v1.8.0 audit to check namespace isolation,
                                         cgroup configuration, file permissions, and more.
                                     </p>
                                 </div>
                                 <Button onClick={handleRunAudit} disabled={!agent || !isOnline}>
-                                    <Play className="h-4 w-4 mr-2" /> Run Security Audit
+                                    {hasAnyAudit
+                                        ? <><RefreshCw className="h-4 w-4 mr-2" /> Re-run Security Audit</>
+                                        : <><Play className="h-4 w-4 mr-2" /> Run Security Audit</>
+                                    }
                                 </Button>
                                 <div className="flex flex-wrap justify-center gap-2 mt-2">
                                     {["Host Config", "Daemon", "File Perms", "Images", "Namespaces", "Cgroups"].map(t => (
@@ -1193,73 +1286,97 @@ function AuditPage() {
                         )}
                     </div>
 
-                    {/* ── Show Latest Audit if exists ──────────────────── */}
-                    {auditHistory.length > 0 && (
-                        <>
-                            <div className="flex items-center justify-between">
-                                <div>
+                    {/* ── Latest audit status ───────────────────────────── */}
+                    <>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <div className="flex items-center gap-2">
                                     <h3 className="text-lg font-semibold">Latest Audit</h3>
-                                    <p className="text-sm text-muted-foreground">Most recent security audit result</p>
+                                    {latestAudit && historyLoading && (
+                                        <Badge variant="outline" className="border-primary/25 bg-primary/10 text-[10px] text-primary">Refreshing</Badge>
+                                    )}
+                                    {latestAudit && historyError && !historyLoading && (
+                                        <Badge variant="outline" className="border-amber-400/30 bg-amber-400/10 text-[10px] text-amber-300">Cached</Badge>
+                                    )}
                                 </div>
-                                <Link to="/agents/$id/audits" params={{ id: agent?.id ?? "" }}>
-                                    <Button variant="outline" size="sm">
-                                        <Clock className="h-4 w-4" /> History
-                                    </Button>
-                                </Link>
+                                <p className="text-sm text-muted-foreground">
+                                    {latestAudit && historyError && !historyLoading
+                                        ? "Showing last saved audit while history refresh is unavailable"
+                                        : "Most recent security audit result"}
+                                </p>
                             </div>
-                            
-                            {auditHistory[0].id && (
-                                <Link 
-                                    to="/agents/$id/audits/$auditId"
-                                    params={{ id, auditId: auditHistory[0].id }}
-                                    className="flex items-center gap-4 p-4 rounded-xl border bg-card hover:bg-muted/50 transition-colors text-left w-full group"
-                                >
+                            <Link to="/agents/$id/audits" params={{ id: agent?.id ?? id }}>
+                                <Button variant="outline" size="sm">
+                                    <Clock className="h-4 w-4" /> History
+                                </Button>
+                            </Link>
+                        </div>
+
+                        {latestAudit?.id ? (
+                            <Link
+                                to="/agents/$id/audits/$auditId"
+                                params={{ id, auditId: latestAudit.id }}
+                                className="flex items-center gap-4 p-4 rounded-xl border bg-card hover:bg-muted/50 transition-colors text-left w-full group"
+                            >
                                 <div className="flex-shrink-0">
                                     <div className="relative w-16 h-16">
                                         <svg width="64" height="64" viewBox="0 0 64 64">
                                             <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="4"
                                                 className="text-muted-foreground/10" />
                                             <circle cx="32" cy="32" r="28" fill="none" 
-                                                stroke={auditHistory[0].summary.score >= 80 ? "#22c55e" : auditHistory[0].summary.score >= 60 ? "#f59e0b" : "#ef4444"}
+                                                stroke={latestAudit.summary.score >= 80 ? "#22c55e" : latestAudit.summary.score >= 60 ? "#f59e0b" : "#ef4444"}
                                                 strokeWidth="4"
                                                 strokeDasharray={`${2 * Math.PI * 28}`}
-                                                strokeDashoffset={`${2 * Math.PI * 28 - (auditHistory[0].summary.score / 100) * 2 * Math.PI * 28}`}
+                                                strokeDashoffset={`${2 * Math.PI * 28 - (latestAudit.summary.score / 100) * 2 * Math.PI * 28}`}
                                                 strokeLinecap="round" transform="rotate(-90 32 32)"
                                             />
                                         </svg>
                                         <div className="absolute inset-0 flex items-center justify-center">
                                             <span className={`text-xl font-bold ${
-                                                auditHistory[0].summary.score >= 80 ? "text-green-500" : 
-                                                auditHistory[0].summary.score >= 60 ? "text-yellow-500" : "text-red-500"
-                                            }`}>{auditHistory[0].summary.score}</span>
+                                                latestAudit.summary.score >= 80 ? "text-green-500" :
+                                                latestAudit.summary.score >= 60 ? "text-yellow-500" : "text-red-500"
+                                            }`}>{latestAudit.summary.score}</span>
                                         </div>
                                     </div>
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-1">
                                         <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                                        <span className="text-sm font-medium">{fmtDate(auditHistory[0].timestamp)}</span>
+                                        <span className="text-sm font-medium">{fmtDate(latestAudit.timestamp)}</span>
                                     </div>
                                     <p className="text-xs text-muted-foreground truncate mb-2">
-                                        {auditHistory[0].hostname} • Docker {auditHistory[0].docker_version} • {auditHistory[0].total_containers} containers
+                                        {latestAudit.hostname} • Docker {latestAudit.docker_version} • {latestAudit.total_containers} containers
                                     </p>
                                     <div className="flex items-center gap-2">
                                         <Badge variant="outline" className="text-[10px]">
-                                            {auditHistory[0].summary.passed} passed
+                                            {latestAudit.summary.passed} passed
                                         </Badge>
                                         <Badge variant="outline" className="text-[10px]">
-                                            {auditHistory[0].summary.failed} failed
+                                            {latestAudit.summary.failed} failed
                                         </Badge>
                                         <Badge variant="outline" className="text-[10px]">
-                                            {auditHistory[0].summary.total} total
+                                            {latestAudit.summary.total} total
                                         </Badge>
                                     </div>
                                 </div>
                                 <ChevronDown className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors -rotate-90" />
                             </Link>
-                            )}
-                        </>
-                    )}
+                        ) : historyLoading ? (
+                            <LatestAuditSkeleton />
+                        ) : historyError ? (
+                            <div className="flex items-start gap-3 rounded-xl border border-amber-400/25 bg-amber-400/10 p-4 text-sm text-amber-200">
+                                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                                <div>
+                                    <p className="font-semibold">Audit history could not be refreshed</p>
+                                    <p className="mt-1 text-xs text-muted-foreground">Existing audits may still be on the agent. Open History or retry when the connection is stable.</p>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="rounded-xl border border-dashed bg-card/50 p-6 text-sm text-muted-foreground">
+                                No saved audits yet. Run an audit once and Dokuru will keep the latest result here.
+                            </div>
+                        )}
+                    </>
                 </>
             )}
         </div>

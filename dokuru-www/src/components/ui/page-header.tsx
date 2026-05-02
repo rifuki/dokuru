@@ -1,5 +1,6 @@
 import { type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export interface StatItem {
   value: string | number;
@@ -43,10 +44,11 @@ export function PageHeader({
       {(loading || (stats && stats.length > 0)) && (
         <div className="border-t border-border/40 bg-muted/20 px-6 py-2.5 flex items-center gap-4">
           {loading ? (
-            <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-pulse" />
-              Loading…
-            </span>
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-3 w-20" />
+              <span className="text-border/60 text-xs">|</span>
+              <Skeleton className="h-3 w-16" />
+            </div>
           ) : (
             stats?.map((s, i) => (
               <div key={i} className="flex items-center gap-2">

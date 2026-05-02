@@ -4,6 +4,7 @@ import { canUseDockerAgent, dockerApi, dockerCredential, type Container } from "
 import { agentApi } from "@/lib/api/agent";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,6 +45,39 @@ function stateColor(state: string) {
     case "restarting": return "bg-blue-500/10 text-blue-500 border-blue-500/20";
     default:           return "bg-muted text-muted-foreground border-muted";
   }
+}
+
+function ContainerDetailSkeleton() {
+  return (
+    <div className="mx-auto w-full max-w-7xl space-y-6">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-10 w-10 rounded-lg" />
+          <div className="space-y-2">
+            <Skeleton className="h-7 w-48" />
+            <Skeleton className="h-3 w-72 max-w-[60vw]" />
+          </div>
+        </div>
+        <div className="hidden gap-2 md:flex">
+          <Skeleton className="h-9 w-20 rounded-md" />
+          <Skeleton className="h-9 w-24 rounded-md" />
+          <Skeleton className="h-9 w-24 rounded-md" />
+        </div>
+      </div>
+      <div className="overflow-hidden rounded-lg border bg-card">
+        <div className="flex gap-3 border-b bg-muted/30 px-5 pt-3">
+          <Skeleton className="h-11 w-28 rounded-t-lg" />
+          <Skeleton className="h-11 w-24 rounded-t-lg" />
+          <Skeleton className="h-11 w-24 rounded-t-lg" />
+        </div>
+        <div className="grid gap-6 p-6 md:grid-cols-2">
+          <Skeleton className="h-48 rounded-[19px]" />
+          <Skeleton className="h-48 rounded-[19px]" />
+          <Skeleton className="h-36 rounded-[19px] md:col-span-2" />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ContainerDetailPage() {
@@ -135,12 +169,7 @@ function ContainerDetailPage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="max-w-7xl mx-auto w-full space-y-4">
-        <div className="animate-pulse h-12 bg-card rounded-lg" />
-        <div className="animate-pulse h-32 bg-card rounded-lg" />
-      </div>
-    );
+    return <ContainerDetailSkeleton />;
   }
 
   if (!container) {

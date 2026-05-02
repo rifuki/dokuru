@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { agentApi } from "@/lib/api/agent";
 import { agentDirectApi, type AuditResponse, type AuditResult, type AuditStreamMessage, type FixOutcome, type FixProgress, type FixTarget } from "@/lib/api/agent-direct";
+import { LOCAL_AGENT_ID } from "@/lib/local-agent";
 import type { Agent } from "@/types/agent";
 
 export type AuditStreamStatus = "idle" | "running" | "saving" | "complete" | "error";
@@ -71,6 +72,10 @@ const createIdleStream = (): AuditStreamState => ({
     lines: [],
     error: null,
 });
+
+function allowsTokenlessLocalAgent(agentId: string) {
+    return agentId === LOCAL_AGENT_ID;
+}
 
 interface AuditState {
     // Audit sedang berjalan per agentId
@@ -150,7 +155,7 @@ export const useAuditStore = create<AuditState>((set) => ({
         const existingRun = auditRuns.get(agent.id);
         if (existingRun) return existingRun;
 
-        if (agent.access_mode !== "relay" && !token) {
+        if (agent.access_mode !== "relay" && !token && !allowsTokenlessLocalAgent(agent.id)) {
             return Promise.reject(new Error("Agent token not found. Edit this agent and paste the token once to sync it across devices."));
         }
 
@@ -391,7 +396,7 @@ export const useAuditStore = create<AuditState>((set) => ({
         const existingRun = fixRuns.get(key);
         if (existingRun) return existingRun;
 
-        if (request.agentAccessMode !== "relay" && !request.token) {
+        if (request.agentAccessMode !== "relay" && !request.token && !allowsTokenlessLocalAgent(request.agentId)) {
             return Promise.reject(new Error("Agent token not found. Edit this agent and paste the token once to sync it across devices."));
         }
 

@@ -20,6 +20,7 @@ import {
 import { dockerApi, type Container } from "@/services/docker-api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import useWebSocket, { ReadyState } from "react-use-websocket";
@@ -29,6 +30,84 @@ import { useAuthStore } from "@/stores/use-auth-store";
 const TERMINAL_BG = "#090909";
 const TERMINAL_FG = "#d4d4d4";
 const TERMINAL_CURSOR = "#38bdf8";
+
+function ContainerOverviewSkeleton() {
+  return (
+    <div className="p-5 sm:p-6 space-y-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        {[0, 1].map((item) => (
+          <section key={item} className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-1.5 w-1.5 rounded-full" />
+              <Skeleton className="h-4 w-28" />
+            </div>
+            <div className="space-y-3 rounded-[19px] border border-border bg-muted/45 p-4">
+              <Skeleton className="h-5 w-full" />
+              <Skeleton className="h-5 w-4/5" />
+              <Skeleton className="h-5 w-2/3" />
+            </div>
+          </section>
+        ))}
+      </div>
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-1.5 w-1.5 rounded-full" />
+          <Skeleton className="h-4 w-36" />
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <Skeleton className="h-28 rounded-[19px]" />
+          <Skeleton className="h-28 rounded-[19px]" />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ContainerLogsSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-lg border">
+      <div className="flex items-center justify-between border-b border-white/10 bg-[#0d1117] px-4 py-2">
+        <Skeleton className="h-3 w-28 bg-white/10" />
+        <Skeleton className="h-5 w-20 rounded-full bg-white/10" />
+      </div>
+      <div className="h-96 space-y-2 bg-[#0d1117] p-4">
+        {Array.from({ length: 10 }).map((_, index) => (
+          <Skeleton key={index} className="h-3 bg-white/10" style={{ width: `${92 - (index % 4) * 12}%` }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ContainerStatsSkeleton() {
+  return (
+    <div className="space-y-4 p-6">
+      <Skeleton className="h-14 rounded-lg" />
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <Skeleton className="h-36 rounded-[19px]" />
+        <Skeleton className="h-36 rounded-[19px]" />
+      </div>
+    </div>
+  );
+}
+
+function ContainerInspectSkeleton() {
+  return (
+    <div className="p-5">
+      <div className="overflow-hidden rounded-lg border">
+        <div className="flex items-center justify-between border-b border-white/10 bg-[#0d1117] px-4 py-2">
+          <Skeleton className="h-3 w-36 bg-white/10" />
+          <Skeleton className="h-7 w-16 bg-white/10" />
+        </div>
+        <div className="max-h-[600px] space-y-2 bg-[#0d1117] p-4">
+          {Array.from({ length: 14 }).map((_, index) => (
+            <Skeleton key={index} className="h-3 bg-white/10" style={{ width: `${96 - (index % 5) * 9}%` }} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function mountTypeBadgeClass(type: string) {
   switch (type.toLowerCase()) {
@@ -63,7 +142,7 @@ export function ContainerOverview({
     staleTime: 10_000,
   });
 
-  if (isLoading) return <p className="text-sm text-muted-foreground p-6">Loading…</p>;
+  if (isLoading) return <ContainerOverviewSkeleton />;
   if (!data) return null;
 
   const cfg = data.Config as Record<string, unknown> | undefined;
@@ -288,7 +367,7 @@ export function ContainerLogs({
     viewport.scrollTop = viewport.scrollHeight;
   }, [autoScroll, normalizedLogs.length]);
 
-  if (isLoading) return <p className="text-sm text-muted-foreground p-6">Loading…</p>;
+  if (isLoading) return <ContainerLogsSkeleton />;
 
   return (
     <div className="rounded-lg border overflow-hidden">
@@ -339,7 +418,7 @@ export function ContainerStats({
     refetchInterval: interval,
   });
 
-  if (isLoading) return <p className="text-sm text-muted-foreground p-6">Loading…</p>;
+  if (isLoading) return <ContainerStatsSkeleton />;
   if (!data) return <p className="text-sm text-muted-foreground p-6">No stats available.</p>;
 
   const cpuDelta =
@@ -849,7 +928,7 @@ export function ContainerInspect({
     staleTime: 10_000,
   });
 
-  if (isLoading) return <p className="text-sm text-muted-foreground p-6">Loading…</p>;
+  if (isLoading) return <ContainerInspectSkeleton />;
 
   return (
     <div className="p-5 overflow-x-hidden">

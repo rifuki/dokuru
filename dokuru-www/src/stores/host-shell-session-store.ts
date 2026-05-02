@@ -134,8 +134,8 @@ class HostShellSession {
       return `${wsApiUrl}/agents/${options.agentId}/host/shell/stream?${params.toString()}`;
     }
 
-    if (!options.agentUrl || !options.token) return null;
-    params.set("token", options.token);
+    if (!options.agentUrl) return null;
+    if (options.token) params.set("token", options.token);
     return `${options.agentUrl.replace(/^http/, "ws")}/host/shell/stream?${params.toString()}`;
   }
 
