@@ -134,6 +134,8 @@ export const useAuditStore = create<AuditState>((set) => ({
             const socket = new WebSocket(url);
             auditSockets.set(agent.id, socket);
             let settled = false;
+            let latestIndex = 0;
+            let latestTotal = 0;
 
             const setStream = (update: Partial<AuditStreamState>) => {
                 set((s) => ({
@@ -220,6 +222,62 @@ export const useAuditStore = create<AuditState>((set) => ({
                 }
             };
 
+            const recoverCompletedStream = async () => {
+                if (settled) return;
+                settled = true;
+                setStream({ status: "saving" });
+
+                try {
+                    const savedAudit = agent.access_mode === "relay"
+                        ? await agentApi.runAudit(agent.id)
+                        : await agentApi.saveAudit(agent.id, await agentDirectApi.runAudit(agent.url, token));
+                    auditRuns.delete(agent.id);
+                    if (auditSockets.get(agent.id) === socket) auditSockets.delete(agent.id);
+                    set((s) => ({
+                        runningAudits: { ...s.runningAudits, [agent.id]: false },
+                        auditHistories: {
+                            ...s.auditHistories,
+                            [agent.id]: [
+                                savedAudit,
+                                ...(s.auditHistories[agent.id] ?? []).filter((item) => item.id !== savedAudit.id),
+                            ],
+                        },
+                        auditStreams: {
+                            ...s.auditStreams,
+                            [agent.id]: {
+                                ...(s.auditStreams[agent.id] ?? createIdleStream()),
+                                status: "complete",
+                                current: latestTotal || latestIndex,
+                                total: latestTotal,
+                                error: null,
+                                savedAudit,
+                                completedAt: new Date().toISOString(),
+                            },
+                        },
+                    }));
+                    resolve(savedAudit);
+                } catch (error) {
+                    auditRuns.delete(agent.id);
+                    if (auditSockets.get(agent.id) === socket) auditSockets.delete(agent.id);
+                    const message = error instanceof Error
+                        ? `Audit stream reached ${latestIndex}/${latestTotal}, but final report recovery failed: ${error.message}`
+                        : "Audit stream reached completion, but final report recovery failed";
+                    set((s) => ({
+                        runningAudits: { ...s.runningAudits, [agent.id]: false },
+                        auditStreams: {
+                            ...s.auditStreams,
+                            [agent.id]: {
+                                ...(s.auditStreams[agent.id] ?? createIdleStream()),
+                                status: "error",
+                                error: message,
+                                completedAt: new Date().toISOString(),
+                            },
+                        },
+                    }));
+                    reject(new Error(message));
+                }
+            };
+
             socket.onmessage = (event) => {
                 try {
                     const message = JSON.parse(String(event.data)) as AuditStreamMessage;
@@ -229,6 +287,8 @@ export const useAuditStore = create<AuditState>((set) => ({
                     }
 
                     if (message.type === "progress") {
+                        latestIndex = message.index;
+                        latestTotal = message.total;
                         set((s) => {
                             const current = s.auditStreams[agent.id] ?? createIdleStream();
                             return {
@@ -272,7 +332,13 @@ export const useAuditStore = create<AuditState>((set) => ({
             socket.onerror = () => finishWithError("Audit progress stream failed");
             socket.onclose = () => {
                 if (auditSockets.get(agent.id) === socket) auditSockets.delete(agent.id);
-                if (!settled) finishWithError("Audit progress stream closed before completion");
+                if (!settled) {
+                    if (latestTotal > 0 && latestIndex >= latestTotal) {
+                        void recoverCompletedStream();
+                    } else {
+                        finishWithError("Audit progress stream closed before completion");
+                    }
+                }
             };
         });
 
