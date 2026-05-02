@@ -4,27 +4,27 @@ export const LOCAL_AGENT_ID = "local";
 export const LOCAL_AGENT_TOKEN_KEY = `agent_token_${LOCAL_AGENT_ID}`;
 export const LOCAL_AGENT_NAME_KEY = "local_agent_name";
 
+type BootstrapInfo = { token: string; url: string; name: string };
+
+let bootstrapInfo: BootstrapInfo | null = null;
+
 export function localAgentUrl() {
   return globalThis.location?.origin ?? "";
 }
 
 export function getLocalAgentToken() {
-  try {
-    return localStorage.getItem(LOCAL_AGENT_TOKEN_KEY) || localStorage.getItem("dokuru_agent_token") || "";
-  } catch {
-    return "";
-  }
+  return bootstrapInfo?.token ?? "";
 }
 
 export function setLocalAgentToken(token: string) {
-  try {
-    localStorage.setItem(LOCAL_AGENT_TOKEN_KEY, token);
-  } catch {
-    // ignore storage failures
-  }
+  bootstrapInfo = { ...(bootstrapInfo ?? { url: localAgentUrl(), name: "Local Agent" }), token };
 }
 
-export async function fetchBootstrapInfo(): Promise<{ token: string; url: string; name: string } | null> {
+export function setLocalAgentBootstrap(info: BootstrapInfo) {
+  bootstrapInfo = info;
+}
+
+export async function fetchBootstrapInfo(): Promise<BootstrapInfo | null> {
   try {
     const response = await fetch(`${localAgentUrl()}/api/v1/bootstrap`);
     if (!response.ok) return null;
@@ -36,12 +36,7 @@ export async function fetchBootstrapInfo(): Promise<{ token: string; url: string
 }
 
 export function localAgent(): Agent {
-  let name = "Local Agent";
-  try {
-    name = localStorage.getItem(LOCAL_AGENT_NAME_KEY) || name;
-  } catch {
-    // ignore storage failures
-  }
+  const name = bootstrapInfo?.name || "Local Agent";
 
   const now = new Date().toISOString();
   return {

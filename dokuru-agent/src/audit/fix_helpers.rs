@@ -33,6 +33,74 @@ pub struct RollbackPlan {
 static FIX_HISTORY: LazyLock<RwLock<Vec<FixHistoryEntry>>> =
     LazyLock::new(|| RwLock::new(Vec::new()));
 
+fn fix_history_path() -> PathBuf {
+    std::env::var("DOKURU_DATA_DIR").map_or_else(
+        |_| {
+            if cfg!(debug_assertions) {
+                std::env::current_dir()
+                    .unwrap_or_else(|_| PathBuf::from("."))
+                    .join(".dokuru")
+                    .join("fix-history.json")
+            } else {
+                PathBuf::from("/var/lib/dokuru/fix-history.json")
+            }
+        },
+        |value| PathBuf::from(value).join("fix-history.json"),
+    )
+}
+
+async fn read_persisted_fix_history() -> Vec<FixHistoryEntry> {
+    let path = fix_history_path();
+    match tokio::fs::read(&path).await {
+        Ok(json) => match serde_json::from_slice::<Vec<FixHistoryEntry>>(&json) {
+            Ok(history) => history,
+            Err(error) => {
+                tracing::warn!(path = %path.display(), %error, "Failed to parse fix history");
+                Vec::new()
+            }
+        },
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(error) => {
+            tracing::warn!(path = %path.display(), %error, "Failed to read fix history");
+            Vec::new()
+        }
+    }
+}
+
+async fn write_persisted_fix_history(history: &[FixHistoryEntry]) {
+    let path = fix_history_path();
+    let Some(dir) = path.parent() else {
+        return;
+    };
+    if let Err(error) = tokio::fs::create_dir_all(dir).await {
+        tracing::warn!(path = %dir.display(), %error, "Failed to create fix history directory");
+        return;
+    }
+    let json = match serde_json::to_vec_pretty(history) {
+        Ok(json) => json,
+        Err(error) => {
+            tracing::warn!(%error, "Failed to serialize fix history");
+            return;
+        }
+    };
+    if let Err(error) = tokio::fs::write(&path, json).await {
+        tracing::warn!(path = %path.display(), %error, "Failed to write fix history");
+    }
+}
+
+async fn fix_history_snapshot() -> Vec<FixHistoryEntry> {
+    let history = FIX_HISTORY.read().await.clone();
+    if !history.is_empty() {
+        return history;
+    }
+
+    let persisted = read_persisted_fix_history().await;
+    if !persisted.is_empty() {
+        *FIX_HISTORY.write().await = persisted.clone();
+    }
+    persisted
+}
+
 const DEFAULT_MEMORY_BYTES: i64 = 256 * 1024 * 1024;
 const DEFAULT_CPU_SHARES: i64 = 512;
 const DEFAULT_PIDS_LIMIT: i64 = 100;
@@ -5037,19 +5105,33 @@ pub async fn record_fix_history(
         rollback_note,
     };
 
-    let mut history = FIX_HISTORY.write().await;
-    history.insert(0, entry.clone());
-    history.truncate(50);
+    if FIX_HISTORY.read().await.is_empty() {
+        let persisted = read_persisted_fix_history().await;
+        if !persisted.is_empty() {
+            let mut history = FIX_HISTORY.write().await;
+            if history.is_empty() {
+                *history = persisted;
+            }
+        }
+    }
+
+    let history = {
+        let mut history = FIX_HISTORY.write().await;
+        history.insert(0, entry.clone());
+        history.truncate(50);
+        history.clone()
+    };
+    write_persisted_fix_history(&history).await;
     entry
 }
 
 pub async fn list_fix_history() -> Vec<FixHistoryEntry> {
-    FIX_HISTORY.read().await.clone()
+    fix_history_snapshot().await
 }
 
 pub async fn rollback_fix(docker: &Docker, request: &RollbackRequest) -> eyre::Result<FixOutcome> {
     let entry = {
-        let history = FIX_HISTORY.read().await;
+        let history = fix_history_snapshot().await;
         history
             .iter()
             .find(|entry| entry.id == request.history_id)

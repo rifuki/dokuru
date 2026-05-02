@@ -2,10 +2,10 @@ import axios from "axios";
 import { apiClient } from "@/lib/api";
 import { wsApiUrl } from "@/lib/api/api-config";
 import { API_URL, IS_LOCAL_AGENT_MODE } from "@/lib/env";
-import { getLocalAgentToken, localAgent, LOCAL_AGENT_ID, LOCAL_AGENT_NAME_KEY, setLocalAgentToken } from "@/lib/local-agent";
+import { getLocalAgentToken, localAgent, LOCAL_AGENT_ID, setLocalAgentBootstrap, setLocalAgentToken } from "@/lib/local-agent";
 import { useAuthStore } from "@/stores/use-auth-store";
 import type { Agent, CreateAgentDto, UpdateAgentDto } from "@/types/agent";
-import type { AuditReportResponse, AuditResponse, AuditResult, FixHistoryEntry, FixOutcome, FixPreview, FixTarget } from "./agent-direct";
+import { agentDirectApi, type AuditReportResponse, type AuditResponse, type AuditResult, type FixHistoryEntry, type FixOutcome, type FixPreview, type FixTarget } from "./agent-direct";
 import type { HostShellInfo } from "./agent-direct";
 
 export interface RelayFixResponse {
@@ -29,8 +29,7 @@ export const agentApi = {
 
   create: async (dto: CreateAgentDto): Promise<Agent> => {
     if (IS_LOCAL_AGENT_MODE) {
-      setLocalAgentToken(dto.token);
-      localStorage.setItem(LOCAL_AGENT_NAME_KEY, dto.name);
+      setLocalAgentBootstrap({ token: dto.token, name: dto.name, url: localAgentRootUrl });
       return localAgent();
     }
     const response = await apiClient.post("/agents", dto);
@@ -45,7 +44,6 @@ export const agentApi = {
 
   update: async (id: string, dto: UpdateAgentDto): Promise<Agent> => {
     if (IS_LOCAL_AGENT_MODE && id === LOCAL_AGENT_ID) {
-      localStorage.setItem(LOCAL_AGENT_NAME_KEY, dto.name);
       if (dto.token) setLocalAgentToken(dto.token);
       return localAgent();
     }
@@ -104,12 +102,17 @@ export const agentApi = {
   },
 
   listFixHistory: async (id: string): Promise<FixHistoryEntry[]> => {
-    if (IS_LOCAL_AGENT_MODE && id === LOCAL_AGENT_ID) return [];
+    if (IS_LOCAL_AGENT_MODE && id === LOCAL_AGENT_ID) {
+      return agentDirectApi.listFixHistory(localAgentRootUrl, getLocalAgentToken());
+    }
     const response = await apiClient.get(`/agents/${id}/fix/history`);
     return response.data.data;
   },
 
   rollbackFix: async (id: string, historyId: string): Promise<FixOutcome> => {
+    if (IS_LOCAL_AGENT_MODE && id === LOCAL_AGENT_ID) {
+      return agentDirectApi.rollbackFix(localAgentRootUrl, historyId, getLocalAgentToken());
+    }
     const response = await apiClient.post(`/agents/${id}/fix/rollback`, { history_id: historyId });
     return response.data.data;
   },
