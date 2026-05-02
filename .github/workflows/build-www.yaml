@@ -77,3 +77,15 @@ jobs:
             VITE_DOKURU_MODE=${{ env.VITE_DOKURU_MODE }}
             VITE_API_BASE_URL=${{ env.VITE_API_BASE_URL }}
             VITE_ENABLE_HOST_SHELL=${{ env.VITE_ENABLE_HOST_SHELL }}
+
+  notify:
+    name: Notify Status
+    needs: docker
+    if: always() && github.event_name != 'pull_request'
+    uses: ./.github/workflows/notify.yaml
+    with:
+      workflow_name: "Build WWW"
+      status: ${{ needs.docker.result }}
+    secrets:
+      telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}

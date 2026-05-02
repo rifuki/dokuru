@@ -66,3 +66,15 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  notify:
+    name: Notify Status
+    needs: docker
+    if: always() && github.event_name != 'pull_request'
+    uses: ./.github/workflows/notify.yaml
+    with:
+      workflow_name: "Build Landing"
+      status: ${{ needs.docker.result }}
+    secrets:
+      telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}

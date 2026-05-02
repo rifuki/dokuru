@@ -133,3 +133,15 @@ jobs:
       - name: Test (deploy)
         working-directory: dokuru-deploy
         run: cargo test
+
+  notify:
+    name: Notify Status
+    needs: [web-build, rust-check]
+    if: always()
+    uses: ./.github/workflows/notify.yaml
+    with:
+      workflow_name: "CI"
+      status: ${{ (needs.web-build.result == 'success' && needs.rust-check.result == 'success') && 'success' || 'failure' }}
+    secrets:
+      telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}

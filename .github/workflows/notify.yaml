@@ -1,0 +1,77 @@
+name: Telegram Notification
+
+on:
+  workflow_call:
+    inputs:
+      workflow_name:
+        description: 'Name of the workflow (e.g., CI, Release Agent)'
+        required: true
+        type: string
+      status:
+        description: 'Job status (success, failure, cancelled)'
+        required: true
+        type: string
+      details:
+        description: 'Additional details to include in notification'
+        required: false
+        type: string
+        default: ''
+    secrets:
+      telegram_bot_token:
+        required: true
+      telegram_chat_id:
+        required: true
+
+jobs:
+  send-notification:
+    name: Send Telegram Notification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set notification variables
+        id: vars
+        run: |
+          STATUS="${{ inputs.status }}"
+          
+          if [[ "$STATUS" == "success" ]]; then
+            echo "icon=✅" >> $GITHUB_OUTPUT
+            echo "status_text=Success" >> $GITHUB_OUTPUT
+          elif [[ "$STATUS" == "failure" ]]; then
+            echo "icon=❌" >> $GITHUB_OUTPUT
+            echo "status_text=Failed" >> $GITHUB_OUTPUT
+          elif [[ "$STATUS" == "cancelled" ]]; then
+            echo "icon=⚠️" >> $GITHUB_OUTPUT
+            echo "status_text=Cancelled" >> $GITHUB_OUTPUT
+          else
+            echo "icon=❓" >> $GITHUB_OUTPUT
+            echo "status_text=Unknown" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send Telegram notification
+        run: |
+          MESSAGE_TEXT="${{ steps.vars.outputs.icon }} *${{ inputs.workflow_name }} - ${{ steps.vars.outputs.status_text }}*
+
+          📦 *Repository:* [${{ github.repository }}](https://github.com/${{ github.repository }})
+          🌿 *Branch:* \`${{ github.ref_name }}\`
+          👤 *Triggered by:* \`${{ github.actor }}\`
+          🕐 *Time:* \`$(date -u +'%Y-%m-%d %H:%M:%S UTC')\`"
+
+          if [ -n "${{ inputs.details }}" ]; then
+            MESSAGE_TEXT="$MESSAGE_TEXT
+
+          📝 *Details:*
+          ${{ inputs.details }}"
+          fi
+
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.telegram_bot_token }}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"chat_id\": \"${{ secrets.telegram_chat_id }}\",
+              \"text\": \"$MESSAGE_TEXT\",
+              \"parse_mode\": \"Markdown\",
+              \"reply_markup\": {
+                \"inline_keyboard\": [
+                  [{\"text\": \"View Workflow\", \"url\": \"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}],
+                  [{\"text\": \"View Commit\", \"url\": \"https://github.com/${{ github.repository }}/commit/${{ github.sha }}\"}]
+                ]
+              }
+            }"

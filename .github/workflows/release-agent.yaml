@@ -286,3 +286,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release edit latest --draft=false --prerelease
+
+  notify:
+    name: Notify Status
+    needs: [build, publish]
+    if: always()
+    uses: ./.github/workflows/notify.yaml
+    with:
+      workflow_name: "Release Agent"
+      status: ${{ needs.publish.result }}
+      details: |
+        🏗️ *Build:* ${{ needs.build.result }}
+        📦 *Publish:* ${{ needs.publish.result }}
+    secrets:
+      telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
