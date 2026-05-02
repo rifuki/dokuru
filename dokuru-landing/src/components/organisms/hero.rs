@@ -56,10 +56,7 @@ pub(crate) fn hero() -> impl IntoView {
                         <div class="relative rounded-xl border border-white/10 bg-[#050505] shadow-[0_0_40px_rgba(0,0,0,0.8)] overflow-hidden">
                             {audit_panel()}
                         </div>
-                        <div class="mt-4 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-600">
-                            <span>"// fig.01 — audit summary"</span>
-                            <span>"dokuru/dashboard"</span>
-                        </div>
+
                     </div>
                 </div>
             </div>
