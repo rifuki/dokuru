@@ -1,5 +1,5 @@
 use super::feature::{
-    audit, containers, environments, fix, health, host_shell, info, proxy, rules, trivy,
+    audit, bootstrap, containers, environments, fix, health, host_shell, info, proxy, rules, trivy,
     web_assets, ws,
 };
 use super::infrastructure::web::middleware::agent_auth_middleware;
@@ -8,8 +8,10 @@ use crate::docker;
 use axum::{Router, middleware};
 
 pub fn build_router(state: AppState) -> Router {
-    // Public routes (no auth) - only health check
-    let public_routes = Router::new().merge(health::routes());
+    // Public routes (no auth) - health check and bootstrap
+    let public_routes = Router::new()
+        .merge(health::routes())
+        .merge(bootstrap::routes::routes());
 
     // Protected routes (require auth token)
     let protected_routes = Router::new()

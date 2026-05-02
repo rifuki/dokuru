@@ -24,6 +24,17 @@ export function setLocalAgentToken(token: string) {
   }
 }
 
+export async function fetchBootstrapInfo(): Promise<{ token: string; url: string; name: string } | null> {
+  try {
+    const response = await fetch(`${localAgentUrl()}/api/v1/bootstrap`);
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.data;
+  } catch {
+    return null;
+  }
+}
+
 export function localAgent(): Agent {
   let name = "Local Agent";
   try {

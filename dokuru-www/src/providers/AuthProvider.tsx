@@ -3,6 +3,7 @@ import { useAuthActions } from "@/stores/use-auth-store";
 import { authService } from "@/lib/api";
 import { Loader2 } from "lucide-react";
 import { IS_LOCAL_AGENT_MODE } from "@/lib/env";
+import { fetchBootstrapInfo, setLocalAgentToken } from "@/lib/local-agent";
 
 interface AuthProviderProps {
   children: React.ReactNode;
@@ -20,6 +21,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     const restoreSession = async () => {
       if (IS_LOCAL_AGENT_MODE) {
+        // Auto-bootstrap token from agent
+        try {
+          const bootstrap = await fetchBootstrapInfo();
+          if (bootstrap?.token) {
+            setLocalAgentToken(bootstrap.token);
+            debug("[AuthProvider] Auto-bootstrapped token from agent");
+          }
+        } catch (error) {
+          console.error("[AuthProvider] Failed to bootstrap token:", error);
+        }
+
         login("local-agent", {
           id: "local-agent",
           email: "local@dokuru.agent",

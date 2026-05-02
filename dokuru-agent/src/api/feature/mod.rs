@@ -1,4 +1,5 @@
 pub mod audit;
+pub mod bootstrap;
 pub mod containers;
 pub mod environments;
 pub mod fix;

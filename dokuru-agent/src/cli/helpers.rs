@@ -830,7 +830,7 @@ pub fn write_config_file(
         },
         auth: AuthConfig {
             token_hash: resolved_token,
-            relay_token: resolved_relay_token,
+            relay_token: resolved_relay_token.clone(),
         },
         access: existing_access,
     };
@@ -850,6 +850,20 @@ pub fn write_config_file(
 
     if use_dokuru_group {
         chgrp_dokuru(&config_path)?;
+    }
+
+    // Write plain token to .token file for bootstrap endpoint
+    if let Some(token) = &resolved_relay_token {
+        let token_path = config.config_dir.join(".token");
+        fs::write(&token_path, token)
+            .wrap_err_with(|| format!("Failed to write {}", token_path.display()))?;
+
+        let mut token_permissions = fs::metadata(&token_path)
+            .wrap_err_with(|| format!("Failed to stat {}", token_path.display()))?
+            .permissions();
+        token_permissions.set_mode(0o600); // Only root can read
+        fs::set_permissions(&token_path, token_permissions)
+            .wrap_err_with(|| format!("Failed to chmod {}", token_path.display()))?;
     }
 
     Ok(())
