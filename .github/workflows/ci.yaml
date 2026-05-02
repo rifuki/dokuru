@@ -76,6 +76,20 @@ jobs:
             dokuru-deploy
           cache-on-failure: true
 
+      # Build dokuru-www for agent embedding
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Build dokuru-www (agent mode)
+        working-directory: dokuru-www
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+        env:
+          VITE_DOKURU_MODE: agent
+
       # Agent tests
       - name: Format check (agent)
         working-directory: dokuru-agent
