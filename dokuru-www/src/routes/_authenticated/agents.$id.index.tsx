@@ -248,7 +248,8 @@ function AgentDashboard() {
         if (!agent) return;
         setEditName(agent.name);
         setEditUrl(agent.url);
-        setEditToken("");
+        // Auto-fill token in agent mode for visibility
+        setEditToken(agent.token || "");
         setEditAccessMode(normalizeAgentAccessMode(agent.access_mode));
         setShowToken(false);
         setEditDialogOpen(true);
