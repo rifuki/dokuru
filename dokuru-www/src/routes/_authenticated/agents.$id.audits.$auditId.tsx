@@ -104,25 +104,43 @@ function severityRank(severity: string) {
   return 1;
 }
 
+const KNOWN_AUTO_FIX_RULE_IDS = new Set([
+  "1.1.1", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.1.10", "1.1.11", "1.1.12", "1.1.14", "1.1.18",
+  "2.10",
+  "3.1", "3.2", "3.3", "3.4", "3.5", "3.6", "3.17", "3.18",
+  "4.1", "4.6",
+  "5.5", "5.10", "5.11", "5.12", "5.16", "5.17", "5.21", "5.25", "5.29", "5.31",
+]);
+
+function remediationKindForResult(result: AuditResult): AuditResult["remediation_kind"] {
+  return result.remediation_kind ?? (KNOWN_AUTO_FIX_RULE_IDS.has(result.rule.id) ? "auto" : "manual");
+}
+
+function isAutoFixableResult(result: AuditResult) {
+  return result.status === "Fail" && remediationKindForResult(result) === "auto";
+}
+
 function effortForResult(result: AuditResult): AuditRemediationEffort {
-  if (result.remediation_kind === "auto") return "quick";
-  if (result.remediation_kind === "guided") return "moderate";
+  const remediationKind = remediationKindForResult(result);
+  if (remediationKind === "auto") return "quick";
+  if (remediationKind === "guided") return "moderate";
   return "involved";
 }
 
 function buildRemediationPlan(results: AuditResult[]): AuditRemediationPlan {
   const failed = results.filter(result => result.status === "Fail");
-  const autoFixable = failed.filter(result => result.remediation_kind === "auto").length;
-  const guided = failed.filter(result => result.remediation_kind === "guided").length;
+  const autoFixable = failed.filter(result => remediationKindForResult(result) === "auto").length;
+  const guided = failed.filter(result => remediationKindForResult(result) === "guided").length;
   const highImpact = failed.filter(result => result.rule.severity === "High").length;
   const mediumImpact = failed.filter(result => result.rule.severity === "Medium").length;
 
   const actions: AuditRemediationAction[] = failed
     .map((result) => {
       const pillar = getRulePillar(result.rule.id);
+      const remediationKind = remediationKindForResult(result);
       const effort = effortForResult(result);
       const riskScore = severityRank(result.rule.severity) * 100
-        + (result.remediation_kind === "auto" ? 30 : result.remediation_kind === "guided" ? 15 : 0)
+        + (remediationKind === "auto" ? 30 : remediationKind === "guided" ? 15 : 0)
         + Math.min(result.affected.length, 10);
 
       return {
@@ -134,7 +152,7 @@ function buildRemediationPlan(results: AuditResult[]): AuditRemediationPlan {
         section_label: result.rule.section,
         pillar_key: pillar,
         pillar_label: PILLAR_META[pillar].name,
-        remediation_kind: result.remediation_kind,
+        remediation_kind: remediationKind,
         effort,
         risk_score: riskScore,
         affected_count: result.affected.length,
@@ -249,7 +267,7 @@ function AuditCommandBlock({ label, command }: { label: string; command: string 
           Copy
         </Button>
       </div>
-      <code className="block rounded border border-border/50 bg-zinc-950 p-3 font-mono text-xs text-emerald-400 overflow-x-auto whitespace-pre-wrap">
+      <code className="block rounded border border-border/50 bg-muted/50 p-3 font-mono text-xs text-primary overflow-x-auto whitespace-pre-wrap dark:bg-zinc-950 dark:text-emerald-400">
         $ {command}
       </code>
     </div>
@@ -260,7 +278,7 @@ function CommandOutputBlock({ label, output }: { label: string; output?: string 
   return (
     <div>
       <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">{label}</p>
-      <pre className="rounded border border-border/50 bg-zinc-950 p-3 font-mono text-xs text-zinc-300 whitespace-pre-wrap overflow-x-auto">
+      <pre className="rounded border border-border/50 bg-muted/50 p-3 font-mono text-xs text-muted-foreground whitespace-pre-wrap overflow-x-auto dark:bg-zinc-950 dark:text-zinc-300">
         {output || "(no output)"}
       </pre>
     </div>
@@ -383,7 +401,8 @@ function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, 
   focusedRuleId?: string;
   onOpenWizard: (result: AuditResult) => void;
 }) {
-  const { rule, status, message, affected, audit_command, raw_output, command_stderr, command_exit_code, references, rationale, impact, remediation_kind, remediation_guide } = result;
+  const { rule, status, message, affected, audit_command, raw_output, command_stderr, command_exit_code, references, rationale, impact, remediation_guide } = result;
+  const remediation_kind = remediationKindForResult(result);
   const fixJob = useAuditStore((state) => state.fixJobs[fixJobKey(agentId, rule.id)]);
   const storedOutcome = useAuditStore((state) => state.fixOutcomes[agentId]?.[rule.id] ?? null);
   const isFocused = focusedRuleId === rule.id;
@@ -406,7 +425,7 @@ function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, 
   const pillarMeta = PILLAR_META[pillar];
   const PillarIcon = pillarMeta.icon;
 
-  const hasFix = status === "Fail" && !!(rule.remediation || remediation_guide || affected.length > 0);
+  const hasFix = status === "Fail" && !!(rule.remediation || remediation_guide || affected.length > 0 || remediation_kind === "auto");
   const hasDebug = !!(audit_command || raw_output !== undefined || command_stderr || typeof command_exit_code === "number" || (references && references.length > 0));
   const isFixing = fixJob?.status === "running";
   const isFixed = fixJob?.status === "applied" || storedOutcome?.status === "Applied";
@@ -474,7 +493,7 @@ function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, 
               )}
             >
               {isFixing ? <Loader2 className="h-3 w-3 animate-spin" /> : isFixed ? <ShieldCheck className="h-3 w-3" /> : <Wrench className="h-3 w-3" />}
-              {isFixing ? "View Progress" : isFixed ? "View Result" : "Auto Fix"}
+              {isFixing ? "View Progress" : isFixed ? "View Result" : "Apply Fix"}
             </button>
           )}
           <button onClick={() => setOpen(v => !v)} className="p-1 hover:bg-muted/40 rounded transition-colors">
@@ -563,7 +582,7 @@ function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, 
                 {remediation_guide && (
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-2">Fix Guide</p>
-                    <pre className="text-xs bg-zinc-950 text-zinc-300 rounded-lg p-3 font-mono leading-relaxed whitespace-pre-wrap overflow-x-auto border border-border/50">
+                    <pre className="text-xs bg-muted/50 text-muted-foreground rounded-lg p-3 font-mono leading-relaxed whitespace-pre-wrap overflow-x-auto border border-border/50 dark:bg-zinc-950 dark:text-zinc-300">
                       {remediation_guide}
                     </pre>
                   </div>
@@ -1382,7 +1401,7 @@ function AuditDetailPage() {
 
           {/* ── Fix All banner ───────────────────────────────── */}
           {(() => {
-            const autoFixable = baseResults.filter(r => r.status === "Fail" && r.remediation_kind === "auto");
+            const autoFixable = baseResults.filter(isAutoFixableResult);
             if (autoFixable.length === 0) return null;
             return (
               <div className="flex items-center justify-between gap-4 rounded-xl border border-[#2496ED]/25 bg-[#2496ED]/5 px-5 py-4">
@@ -1447,7 +1466,7 @@ function AuditDetailPage() {
                   const pillar = action.pillar_key as SecurityPillar;
                   const meta = PILLAR_META[pillar];
                   const effortLabel = action.effort === "quick" ? "Quick" : action.effort === "moderate" ? "Moderate" : "Involved";
-                  const kindLabel = action.remediation_kind === "auto" ? "Auto fix" : action.remediation_kind === "guided" ? "Guided" : "Manual";
+                  const kindLabel = action.remediation_kind === "auto" ? "Apply fix" : action.remediation_kind === "guided" ? "Guided" : "Manual";
                   const kindClass = action.remediation_kind === "auto"
                     ? "border-[#2496ED]/25 bg-[#2496ED]/10 text-[#2496ED]"
                     : "border-border bg-muted/30 text-muted-foreground";

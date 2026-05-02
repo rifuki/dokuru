@@ -178,7 +178,15 @@ pub fn blocked(rule_id: &str, msg: &str) -> FixOutcome {
 }
 
 pub fn supports_cgroup_resource_fix(rule_id: &str) -> bool {
-    matches!(rule_id, "5.11" | "5.12" | "5.29" | "cgroup_all")
+    matches!(rule_id, "5.11" | "5.12" | "5.25" | "5.29" | "cgroup_all")
+}
+
+fn cgroup_effective_rule_id(rule_id: &str) -> &str {
+    if rule_id == "5.25" {
+        "cgroup_all"
+    } else {
+        rule_id
+    }
 }
 
 pub fn supports_image_config_fix(rule_id: &str) -> bool {
@@ -2743,6 +2751,7 @@ async fn default_target_for_rule(
     rule_id: &str,
     container: &ContainerSummary,
 ) -> Option<FixTarget> {
+    let effective_rule_id = cgroup_effective_rule_id(rule_id);
     let id = container.id.as_deref()?;
     let inspect = docker.inspect_container(id, None).await.ok()?;
     let host_config = inspect.host_config.as_ref()?;
@@ -2751,7 +2760,7 @@ async fn default_target_for_rule(
     let cpu_shares = host_config.cpu_shares.unwrap_or(0);
     let pids_limit = host_config.pids_limit.unwrap_or(0);
 
-    let needs_update = match rule_id {
+    let needs_update = match effective_rule_id {
         "5.11" => memory == 0,
         "5.12" => cpu_shares == 0,
         "5.29" => pids_limit <= 0,
@@ -2770,11 +2779,11 @@ async fn default_target_for_rule(
 
     Some(FixTarget {
         container_id: id.to_string(),
-        memory: (matches!(rule_id, "5.11" | "cgroup_all") && memory == 0)
+        memory: (matches!(effective_rule_id, "5.11" | "cgroup_all") && memory == 0)
             .then_some(DEFAULT_MEMORY_BYTES),
-        cpu_shares: (matches!(rule_id, "5.12" | "cgroup_all") && cpu_shares == 0)
+        cpu_shares: (matches!(effective_rule_id, "5.12" | "cgroup_all") && cpu_shares == 0)
             .then_some(DEFAULT_CPU_SHARES),
-        pids_limit: (matches!(rule_id, "5.29" | "cgroup_all") && pids_limit <= 0)
+        pids_limit: (matches!(effective_rule_id, "5.29" | "cgroup_all") && pids_limit <= 0)
             .then_some(DEFAULT_PIDS_LIMIT),
         strategy: Some(strategy.to_string()),
     })
@@ -3082,7 +3091,7 @@ pub async fn apply_cgroup_resource_fix_with_progress(
     if !supports_cgroup_resource_fix(rule_id) {
         return Ok(blocked(
             rule_id,
-            "Parameterized fix currently supports only cgroup rules 5.11, 5.12, 5.29, or cgroup_all",
+            "Parameterized fix currently supports only cgroup rules 5.11, 5.12, 5.25, 5.29, or cgroup_all",
         ));
     }
 
@@ -3483,7 +3492,7 @@ fn cgroup_update_detail(rule_id: &str, target: &FixTarget) -> String {
             "pids_limit={}",
             target.pids_limit.unwrap_or(DEFAULT_PIDS_LIMIT)
         ),
-        "cgroup_all" => format!(
+        "5.25" | "cgroup_all" => format!(
             "memory={} bytes, cpu_shares={}, pids_limit={}",
             target.memory.unwrap_or(DEFAULT_MEMORY_BYTES),
             target.cpu_shares.unwrap_or(DEFAULT_CPU_SHARES),
@@ -3507,7 +3516,7 @@ fn docker_update_command(rule_id: &str, target: &FixTarget, container: &str) -> 
             "docker update --pids-limit={} {container}",
             target.pids_limit.unwrap_or(DEFAULT_PIDS_LIMIT)
         ),
-        "cgroup_all" => format!(
+        "5.25" | "cgroup_all" => format!(
             "docker update --memory={} --memory-swap=-1 --cpu-shares={} --pids-limit={} {container}",
             compose_memory_value(target.memory.unwrap_or(DEFAULT_MEMORY_BYTES)),
             target.cpu_shares.unwrap_or(DEFAULT_CPU_SHARES),
@@ -3536,7 +3545,7 @@ fn update_options(
 
     let mut options = UpdateContainerOptions::<String>::default();
 
-    if matches!(rule_id, "5.11" | "cgroup_all") {
+    if matches!(rule_id, "5.11" | "5.25" | "cgroup_all") {
         let memory = target.memory.unwrap_or(DEFAULT_MEMORY_BYTES);
         if memory <= 0 {
             return Err(eyre::eyre!("memory must be greater than zero"));
@@ -3547,7 +3556,7 @@ fn update_options(
         options.memory_swap = Some(-1);
     }
 
-    if matches!(rule_id, "5.12" | "cgroup_all") {
+    if matches!(rule_id, "5.12" | "5.25" | "cgroup_all") {
         let cpu_shares = target.cpu_shares.unwrap_or(DEFAULT_CPU_SHARES);
         if cpu_shares <= 0 {
             return Err(eyre::eyre!("cpu_shares must be greater than zero"));
@@ -3557,7 +3566,7 @@ fn update_options(
         options.cpu_shares = Some(cpu_shares);
     }
 
-    if matches!(rule_id, "5.29" | "cgroup_all") {
+    if matches!(rule_id, "5.29" | "5.25" | "cgroup_all") {
         let pids_limit = target.pids_limit.unwrap_or(DEFAULT_PIDS_LIMIT);
         if pids_limit <= 0 {
             return Err(eyre::eyre!("pids_limit must be greater than zero"));
@@ -3593,21 +3602,21 @@ fn verify_cgroup_host_config(
     target: &FixTarget,
     host_config: &bollard::models::HostConfig,
 ) -> eyre::Result<()> {
-    if matches!(rule_id, "5.11" | "cgroup_all") {
+    if matches!(rule_id, "5.11" | "5.25" | "cgroup_all") {
         let expected = target.memory.unwrap_or(DEFAULT_MEMORY_BYTES);
         if host_config.memory.unwrap_or(0) != expected {
             return Err(eyre::eyre!("memory limit did not update to {expected}"));
         }
     }
 
-    if matches!(rule_id, "5.12" | "cgroup_all") {
+    if matches!(rule_id, "5.12" | "5.25" | "cgroup_all") {
         let expected = target.cpu_shares.unwrap_or(DEFAULT_CPU_SHARES);
         if host_config.cpu_shares.unwrap_or(0) != expected {
             return Err(eyre::eyre!("CPU shares did not update to {expected}"));
         }
     }
 
-    if matches!(rule_id, "5.29" | "cgroup_all") {
+    if matches!(rule_id, "5.29" | "5.25" | "cgroup_all") {
         let expected = target.pids_limit.unwrap_or(DEFAULT_PIDS_LIMIT);
         if host_config.pids_limit.unwrap_or(0) != expected {
             return Err(eyre::eyre!("PIDs limit did not update to {expected}"));
@@ -4496,9 +4505,9 @@ fn update_compose_service_lines(
                 .unwrap_or(DEFAULT_PIDS_LIMIT)
                 .to_string(),
         ),
-        "cgroup_all" => {
-            let target = target
-                .ok_or_else(|| eyre::eyre!("cgroup_all compose update needs target values"))?;
+        "5.25" | "cgroup_all" => {
+            let target =
+                target.ok_or_else(|| eyre::eyre!("cgroup compose update needs target values"))?;
             set_cgroup_all_service_values(lines, block, target)
         }
         _ => false,

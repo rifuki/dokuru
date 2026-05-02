@@ -17,7 +17,7 @@ import {
 import {
     Play, Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
     Terminal, Wrench, ExternalLink, AlertTriangle, Info, Server,
-    Clock, Cpu, Container, RefreshCw, Zap, BookOpen, CheckCircle2,
+    Clock, Cpu, Container, RefreshCw, BookOpen, CheckCircle2,
     RotateCcw, ShieldAlert, XCircle, ListChecks,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -99,6 +99,18 @@ function StatusIcon({ status, severity }: { status: "Pass" | "Fail" | "Error"; s
     return <Shield className="h-5 w-5 text-orange-500 shrink-0" />;
 }
 
+const KNOWN_AUTO_FIX_RULE_IDS = new Set([
+    "1.1.1", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.1.10", "1.1.11", "1.1.12", "1.1.14", "1.1.18",
+    "2.10",
+    "3.1", "3.2", "3.3", "3.4", "3.5", "3.6", "3.17", "3.18",
+    "4.1", "4.6",
+    "5.5", "5.10", "5.11", "5.12", "5.16", "5.17", "5.21", "5.25", "5.29", "5.31",
+]);
+
+function remediationKindForResult(result: AuditResult) {
+    return result.remediation_kind ?? (KNOWN_AUTO_FIX_RULE_IDS.has(result.rule.id) ? "auto" : "manual");
+}
+
 async function copyCommand(command: string) {
     try {
         await navigator.clipboard.writeText(command);
@@ -153,7 +165,7 @@ function FixPanel({ outcome, onDismiss }: { outcome: FixOutcome; onDismiss: () =
                         </span>
                     )}
                     {outcome.restart_command && (
-                        <code className="block w-full text-xs bg-zinc-900 dark:bg-zinc-950 text-green-400 px-3 py-2 rounded-lg font-mono mt-1">
+                        <code className="block w-full text-xs bg-muted/50 dark:bg-zinc-950 text-primary dark:text-green-400 px-3 py-2 rounded-lg font-mono mt-1">
                             $ {outcome.restart_command}
                         </code>
                     )}
@@ -259,7 +271,8 @@ function RuleCard({ result, agentId, agentUrl, agentAccessMode, token, container
     const [fixStepIndex, setFixStepIndex] = useState(0);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    const { rule, status, message, affected, audit_command, raw_output, command_stderr, command_exit_code, references, rationale, impact, remediation_kind } = result;
+    const { rule, status, message, affected, audit_command, raw_output, command_stderr, command_exit_code, references, rationale, impact } = result;
+    const remediation_kind = remediationKindForResult(result);
     const meta = sectionMeta(rule.section);
     const steps = getFixSteps(rule.id);
     const needsRestart = requiresDockerRestart(rule.id);
@@ -340,8 +353,8 @@ function RuleCard({ result, agentId, agentUrl, agentAccessMode, token, container
             <AlertDialogContent>
                 <AlertDialogHeader>
                     <AlertDialogTitle className="flex items-center gap-2">
-                        <Zap className="h-4 w-4 text-blue-500" />
-                        Apply Auto Fix — Rule {rule.id}
+                        <Wrench className="h-4 w-4 text-blue-500" />
+                        Apply Fix — Rule {rule.id}
                     </AlertDialogTitle>
                     <AlertDialogDescription>
                         The following system-level changes will be applied automatically:
@@ -408,7 +421,7 @@ function RuleCard({ result, agentId, agentUrl, agentAccessMode, token, container
                                     Copy
                                 </Button>
                             </div>
-                            <code className="block text-xs bg-zinc-900 dark:bg-zinc-950 text-green-400 p-3 rounded-lg overflow-x-auto font-mono">
+                            <code className="block text-xs bg-muted/50 dark:bg-zinc-950 text-primary dark:text-green-400 p-3 rounded-lg overflow-x-auto font-mono">
                                 $ {audit_command}
                             </code>
                         </div>
@@ -505,9 +518,9 @@ function RuleCard({ result, agentId, agentUrl, agentAccessMode, token, container
                                     {fixing ? (
                                         <Loader2 className="h-3 w-3 animate-spin" />
                                     ) : (
-                                        <Zap className="h-3 w-3" />
+                                        <Wrench className="h-3 w-3" />
                                     )}
-                                    {fixing ? "Fixing…" : "Auto Fix"}
+                                    {fixing ? "Fixing…" : "Apply Fix"}
                                 </button>
                             )}
                             <button
@@ -599,7 +612,7 @@ function RuleCard({ result, agentId, agentUrl, agentAccessMode, token, container
                                     Copy
                                 </Button>
                             </div>
-                            <code className="block text-xs bg-zinc-900 dark:bg-zinc-950 text-green-400 p-3 rounded-lg overflow-x-auto font-mono">
+                            <code className="block text-xs bg-muted/50 dark:bg-zinc-950 text-primary dark:text-green-400 p-3 rounded-lg overflow-x-auto font-mono">
                                 $ {audit_command}
                             </code>
                         </div>
@@ -854,11 +867,11 @@ function AuditRunTerminal({
                     </div>
                 </div>
 
-                <div ref={logRef} className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-zinc-950 dark:bg-zinc-950 bg-zinc-100 p-4 font-mono text-[11px] leading-relaxed">
+                <div ref={logRef} className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-zinc-50 p-4 font-mono text-[11px] leading-relaxed text-zinc-800 shadow-inner dark:bg-zinc-950 dark:text-zinc-200">
                     {lines.length === 0 && !error && (
                         <p className="text-muted-foreground/50">$ connecting to dokuru-agent audit websocket...</p>
                     )}
-                    {lines.slice(-8).map(line => (
+                    {lines.map(line => (
                         <div key={`${line.ruleId}-${line.index}`} className="space-y-0.5 border-b border-border/50 py-1.5 last:border-b-0">
                             <div className="flex items-center gap-2">
                                 <span className="text-muted-foreground/40">[{line.index.toString().padStart(2, "0")}/{line.total}]</span>
@@ -869,8 +882,8 @@ function AuditRunTerminal({
                                 <span className="text-[#2496ED]">{line.ruleId}</span>
                                 <span className="truncate text-zinc-700 dark:text-zinc-300">{line.title}</span>
                             </div>
-                            {line.command && <p className="pl-16 text-zinc-500 dark:text-zinc-600 truncate">$ {line.command}</p>}
-                            <p className="pl-16 text-zinc-600 dark:text-zinc-500 truncate">{line.message}</p>
+                            {line.command && <p className="pl-16 text-zinc-500 dark:text-zinc-500 truncate">$ {line.command}</p>}
+                            <p className="pl-16 text-zinc-600 dark:text-zinc-400 truncate">{line.message}</p>
                         </div>
                     ))}
                     {error && <p className="text-rose-400">! {error}</p>}

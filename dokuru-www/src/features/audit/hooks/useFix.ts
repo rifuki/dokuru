@@ -98,6 +98,11 @@ export function getFixSteps(ruleId: string): string[] {
         "Applying selected Docker/Compose PIDs limit…",
         "Verifying PIDs cgroup limits…",
     ];
+    if (ruleId === "5.25") return [
+        "Finding containers without cgroup limits…",
+        "Applying selected Docker/Compose resource limits…",
+        "Verifying cgroup confinement…",
+    ];
     if (ruleId === "2.10") return [
         "Snapshotting container mounts and Compose context...",
         "Creating dockremap system user…",
@@ -270,6 +275,12 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
             if (ruleId === "5.11") base.memory = Math.max(1, config?.memoryMb ?? 256) * 1024 * 1024;
             if (ruleId === "5.12") base.cpu_shares = Math.max(2, config?.cpuShares ?? 512);
             if (ruleId === "5.29") base.pids_limit = Math.max(1, config?.pidsLimit ?? 100);
+            if (ruleId === "5.25") {
+                const fallback = getSuggestedLimits(target.container_name || target.image);
+                base.memory = (config?.memoryMb ?? fallback.memoryMb) * 1024 * 1024;
+                base.cpu_shares = config?.cpuShares ?? fallback.cpuShares;
+                base.pids_limit = config?.pidsLimit ?? fallback.pidsLimit;
+            }
             return base;
         });
     }, [preview, targetConfig]);

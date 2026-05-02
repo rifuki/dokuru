@@ -258,10 +258,17 @@ function ConfirmStep({
 // ── Configure resources step ──────────────────────────────────────────────────
 
 function ruleValueLabel(ruleId: CgroupRuleId) {
+    if (ruleId === "5.25") return "Resource limits";
     if (ruleId === "5.11") return "Memory";
     if (ruleId === "5.12") return "CPU shares";
     return "PIDs";
 }
+
+const RESOURCE_MINIMUMS = {
+    memoryMb: 64,
+    cpuShares: 128,
+    pidsLimit: 50,
+} as const;
 
 function ConfigureResourcesStep({
     cgroupTargets,
@@ -288,6 +295,12 @@ function ConfigureResourcesStep({
     const showMemory = selectedCgroupRuleIds.includes("5.11");
     const showCpu = selectedCgroupRuleIds.includes("5.12");
     const showPids = selectedCgroupRuleIds.includes("5.29");
+    const showAllResources = selectedCgroupRuleIds.includes("5.25");
+    const hasInvalidValues = cgroupTargets.some((target) => (
+        ((showMemory || showAllResources) && target.ruleIds.some((ruleId) => ruleId === "5.11" || ruleId === "5.25") && (!Number.isFinite(target.memoryMb) || target.memoryMb < RESOURCE_MINIMUMS.memoryMb))
+        || ((showCpu || showAllResources) && target.ruleIds.some((ruleId) => ruleId === "5.12" || ruleId === "5.25") && (!Number.isFinite(target.cpuShares) || target.cpuShares < RESOURCE_MINIMUMS.cpuShares))
+        || ((showPids || showAllResources) && target.ruleIds.some((ruleId) => ruleId === "5.29" || ruleId === "5.25") && (!Number.isFinite(target.pidsLimit) || target.pidsLimit < RESOURCE_MINIMUMS.pidsLimit))
+    ));
 
     return (
         <div className="flex flex-col gap-5">
@@ -368,30 +381,30 @@ function ConfigureResourcesStep({
                                             </div>
 
                                             <div className="grid gap-2 sm:grid-cols-3">
-                                                {showMemory && (
+                                                {(showMemory || showAllResources) && (
                                                     <ResourceInput
                                                         label="Memory MB"
                                                         value={target.memoryMb}
-                                                        enabled={target.ruleIds.includes("5.11")}
-                                                        min={1}
+                                                        enabled={target.ruleIds.some((ruleId) => ruleId === "5.11" || ruleId === "5.25")}
+                                                        min={RESOURCE_MINIMUMS.memoryMb}
                                                         onChange={(value) => onUpdateTarget(target.key, { memoryMb: value })}
                                                     />
                                                 )}
-                                                {showCpu && (
+                                                {(showCpu || showAllResources) && (
                                                     <ResourceInput
                                                         label="CPU shares"
                                                         value={target.cpuShares}
-                                                        enabled={target.ruleIds.includes("5.12")}
-                                                        min={2}
+                                                        enabled={target.ruleIds.some((ruleId) => ruleId === "5.12" || ruleId === "5.25")}
+                                                        min={RESOURCE_MINIMUMS.cpuShares}
                                                         onChange={(value) => onUpdateTarget(target.key, { cpuShares: value })}
                                                     />
                                                 )}
-                                                {showPids && (
+                                                {(showPids || showAllResources) && (
                                                     <ResourceInput
                                                         label="PIDs"
                                                         value={target.pidsLimit}
-                                                        enabled={target.ruleIds.includes("5.29")}
-                                                        min={1}
+                                                        enabled={target.ruleIds.some((ruleId) => ruleId === "5.29" || ruleId === "5.25")}
+                                                        min={RESOURCE_MINIMUMS.pidsLimit}
                                                         onChange={(value) => onUpdateTarget(target.key, { pidsLimit: value })}
                                                     />
                                                 )}
@@ -414,7 +427,7 @@ function ConfigureResourcesStep({
                 </button>
                 <button
                     onClick={onApply}
-                    disabled={cgroupLoading}
+                    disabled={cgroupLoading || hasInvalidValues}
                     className="flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-[#2496ED] hover:bg-[#1e80cc] disabled:bg-white/10 disabled:text-white/25 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] transition-all active:scale-[0.98]"
                 >
                     Apply {selectedCount} Selected
@@ -437,17 +450,34 @@ function ResourceInput({
     min: number;
     onChange: (value: number) => void;
 }) {
+    const invalid = enabled && (!Number.isFinite(value) || value < min);
     return (
-        <label className={cn("block rounded-lg border px-2.5 py-2", enabled ? "border-white/10 bg-black/25" : "border-white/5 bg-white/[0.015] opacity-45")}>
+        <label className={cn(
+            "block rounded-lg border px-2.5 py-2 transition-colors",
+            enabled ? "border-white/10 bg-black/25" : "border-white/5 bg-white/[0.015] opacity-45",
+            invalid && "border-red-500/60 bg-red-500/10",
+        )}>
             <span className="mb-1 block font-mono text-[9px] uppercase tracking-[0.12em] text-white/35">{label}</span>
             <input
                 type="number"
                 min={min}
                 disabled={!enabled}
-                value={value}
-                onChange={(event) => onChange(Number(event.target.value))}
-                className="h-8 w-full rounded border border-white/8 bg-black/35 px-2 text-right font-mono text-xs font-semibold text-white/80 outline-none transition-colors focus:border-[#2496ED]/60 disabled:cursor-not-allowed disabled:text-white/25"
+                value={value > 0 ? value : ""}
+                onChange={(event) => {
+                    const next = event.target.value;
+                    const parsed = Number(next);
+                    onChange(next === "" || !Number.isFinite(parsed) ? 0 : parsed);
+                }}
+                className={cn(
+                    "h-8 w-full rounded border bg-black/35 px-2 text-right font-mono text-xs font-semibold outline-none transition-colors disabled:cursor-not-allowed disabled:text-white/25",
+                    invalid ? "border-red-500/70 text-red-400 focus:border-red-500" : "border-white/8 text-white/80 focus:border-[#2496ED]/60",
+                )}
             />
+            {invalid && (
+                <span className="mt-1 block text-right font-mono text-[9px] text-red-400/85">
+                    Minimum {min}
+                </span>
+            )}
         </label>
     );
 }
@@ -609,7 +639,7 @@ export function FixAllWizard({
             <SheetContent
                 side="right"
                 showCloseButton={false}
-                className="w-full sm:max-w-[520px] bg-[#09090B] border-l border-white/8 p-0 flex flex-col gap-0 overflow-hidden"
+                className="audit-fix-sheet w-full sm:max-w-[520px] bg-background border-l p-0 flex flex-col gap-0 overflow-hidden"
             >
                 <SheetClose
                     disabled={step === "applying"}
@@ -619,7 +649,7 @@ export function FixAllWizard({
                     <span className="sr-only">Close</span>
                 </SheetClose>
                 {/* Header */}
-                <SheetHeader className="px-6 pt-6 pb-5 border-b border-white/8 space-y-5">
+                <SheetHeader className="px-6 pt-6 pb-5 border-b space-y-5">
                     <div className="pr-12">
                         <div className="min-w-0 space-y-1.5">
                             <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/35">

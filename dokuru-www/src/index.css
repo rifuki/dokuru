@@ -248,6 +248,51 @@
     background: var(--card);
   }
 
+  html:not(.dark) .audit-fix-sheet {
+    background: var(--background) !important;
+    border-color: var(--border) !important;
+    color: var(--foreground);
+  }
+
+  html:not(.dark) .audit-fix-sheet [class*="text-white"] {
+    color: color-mix(in srgb, var(--foreground) 68%, transparent) !important;
+  }
+
+  html:not(.dark) .audit-fix-sheet .text-white,
+  html:not(.dark) .audit-fix-sheet [class*="bg-[#2496ED]"] {
+    color: #fff !important;
+  }
+
+  html:not(.dark) .audit-fix-sheet [class*="border-white"] {
+    border-color: color-mix(in srgb, var(--border) 92%, transparent) !important;
+  }
+
+  html:not(.dark) .audit-fix-sheet [class*="bg-white/"] {
+    background-color: color-mix(in srgb, var(--muted) 62%, transparent) !important;
+  }
+
+  html:not(.dark) .audit-fix-sheet [class*="bg-black/"],
+  html:not(.dark) .audit-fix-sheet [class*="bg-[#030507]"],
+  html:not(.dark) .audit-fix-sheet [class*="bg-[#050507]"],
+  html:not(.dark) .audit-fix-sheet [class*="bg-[#09090B]"],
+  html:not(.dark) .audit-fix-sheet [class*="bg-[#06111a]"] {
+    background-color: color-mix(in srgb, var(--muted) 72%, white 28%) !important;
+  }
+
+  html:not(.dark) .audit-fix-sheet [class*="text-red"],
+  html:not(.dark) .audit-fix-sheet [class*="text-rose"] {
+    color: #e11d48 !important;
+  }
+
+  html:not(.dark) .audit-fix-sheet [class*="text-amber"],
+  html:not(.dark) .audit-fix-sheet [class*="text-yellow"] {
+    color: #b45309 !important;
+  }
+
+  html:not(.dark) .audit-fix-sheet [class*="text-emerald"] {
+    color: #047857 !important;
+  }
+
   .dark [data-slot="sidebar-inner"] {
     background: var(--sidebar);
   }

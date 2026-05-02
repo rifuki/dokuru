@@ -18,7 +18,12 @@ export type RuleFixStatus = {
 };
 
 const HIGH_RISK_AUTO_FIX_RULES = new Set(["1.1.1", "2.10", "4.1", "5.5", "5.10", "5.16", "5.17", "5.21", "5.31"]);
-const CGROUP_RULE_IDS = ["5.11", "5.12", "5.29"] as const;
+const CGROUP_RULE_IDS = ["5.11", "5.12", "5.25", "5.29"] as const;
+const MIN_CGROUP_VALUES = {
+    memoryMb: 64,
+    cpuShares: 128,
+    pidsLimit: 50,
+} as const;
 
 export type CgroupRuleId = typeof CGROUP_RULE_IDS[number];
 
@@ -94,11 +99,26 @@ function cgroupTargetsForRule(ruleId: string, targets: CgroupTargetConfig[]): Fi
                 strategy: target.strategy,
             };
 
-            if (ruleId === "5.11") payload.memory = Math.max(1, target.memoryMb) * 1024 * 1024;
-            if (ruleId === "5.12") payload.cpu_shares = Math.max(2, target.cpuShares);
-            if (ruleId === "5.29") payload.pids_limit = Math.max(1, target.pidsLimit);
+            if (ruleId === "5.11" || ruleId === "5.25") payload.memory = Math.max(MIN_CGROUP_VALUES.memoryMb, target.memoryMb) * 1024 * 1024;
+            if (ruleId === "5.12" || ruleId === "5.25") payload.cpu_shares = Math.max(MIN_CGROUP_VALUES.cpuShares, target.cpuShares);
+            if (ruleId === "5.29" || ruleId === "5.25") payload.pids_limit = Math.max(MIN_CGROUP_VALUES.pidsLimit, target.pidsLimit);
             return payload;
         });
+}
+
+function invalidCgroupTarget(ruleIds: CgroupRuleId[], targets: CgroupTargetConfig[]) {
+    for (const target of targets) {
+        if ((ruleIds.includes("5.11") || ruleIds.includes("5.25")) && target.ruleIds.some((ruleId) => ruleId === "5.11" || ruleId === "5.25")) {
+            if (!Number.isFinite(target.memoryMb) || target.memoryMb < MIN_CGROUP_VALUES.memoryMb) return "memory";
+        }
+        if ((ruleIds.includes("5.12") || ruleIds.includes("5.25")) && target.ruleIds.some((ruleId) => ruleId === "5.12" || ruleId === "5.25")) {
+            if (!Number.isFinite(target.cpuShares) || target.cpuShares < MIN_CGROUP_VALUES.cpuShares) return "CPU shares";
+        }
+        if ((ruleIds.includes("5.29") || ruleIds.includes("5.25")) && target.ruleIds.some((ruleId) => ruleId === "5.29" || ruleId === "5.25")) {
+            if (!Number.isFinite(target.pidsLimit) || target.pidsLimit < MIN_CGROUP_VALUES.pidsLimit) return "PIDs";
+        }
+    }
+    return null;
 }
 
 interface UseFixAllArgs {
@@ -211,6 +231,14 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
         if (step === "confirm" && selectedCgroupRuleIds.length > 0) {
             await loadCgroupConfig(selectedCgroupRuleIds);
             return;
+        }
+
+        if (step === "configure") {
+            const invalidField = invalidCgroupTarget(selectedCgroupRuleIds, cgroupTargets);
+            if (invalidField) {
+                toast.error(`Enter a valid minimum value for ${invalidField} before applying fixes`);
+                return;
+            }
         }
 
         setStep("applying");

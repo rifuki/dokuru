@@ -1060,10 +1060,15 @@ impl Section5 {
                 })
             },
 
-            remediation_kind: RemediationKind::Manual,
-            fix_fn: None,
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|docker| {
+                let docker = docker.clone();
+                Box::pin(async move {
+                    fix_helpers::apply_default_cgroup_resource_fix(&docker, "5.25").await
+                })
+            }),
             remediation_guide: RULE_5_25_GUIDE.into(),
-            requires_restart: true,
+            requires_restart: false,
             requires_elevation: false,
 
             references: vec![

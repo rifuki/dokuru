@@ -132,7 +132,7 @@ function ConfirmStep({
     const meta = valueMeta(rule.id);
     const hasInvalidValues = isCgroup && targets.some(target => {
         const config = targetConfig[target.container_id];
-        if (!config) return false;
+        if (!config) return true;
         const value = config[meta.key] ?? 0;
         return value < meta.min;
     });
@@ -290,7 +290,7 @@ function ConfirmStep({
                                             <input
                                                 type="number"
                                                 min={meta.min}
-                                                value={value}
+                                                value={value > 0 ? value : ""}
                                                 onChange={(e) => {
                                                     const input = e.target.value;
                                                     if (input === "") {
@@ -703,7 +703,7 @@ export function FixWizard({
         <Sheet open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
             <SheetContent
                 side="right"
-                className="w-full sm:max-w-[680px] bg-[#09090B] border-l border-white/8 p-0 flex flex-col gap-0 overflow-hidden"
+                className="audit-fix-sheet w-full sm:max-w-[680px] bg-[#09090B] border-l border-white/8 p-0 flex flex-col gap-0 overflow-hidden"
             >
                 {/* ── Header ── */}
                 <SheetHeader className="px-6 pt-6 pb-5 border-b border-white/8 space-y-4">
@@ -715,7 +715,7 @@ export function FixWizard({
                                 Rule {rule.id}
                             </span>
                             <span className="text-[10px] font-mono text-white/30 uppercase tracking-[0.15em]">
-                                auto fix
+                                apply fix
                             </span>
                         </div>
                         <p className="text-base font-semibold text-white leading-snug">
