@@ -72,7 +72,7 @@ fn allows_tokenless_trusted_loopback(
     headers: &axum::http::HeaderMap,
     client_addr: SocketAddr,
 ) -> bool {
-    let raw_token_missing = auth.token.as_deref().map(str::is_empty).unwrap_or(true);
+    let raw_token_missing = auth.token.as_deref().is_none_or(str::is_empty);
 
     !auth.token_hash.is_empty()
         && raw_token_missing
