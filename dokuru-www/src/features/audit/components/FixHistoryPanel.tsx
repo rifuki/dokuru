@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { agentApi } from "@/lib/api/agent";
 import { agentDirectApi, type FixHistoryEntry, type FixOutcome, type FixTarget } from "@/lib/api/agent-direct";
+import { LOCAL_AGENT_ID } from "@/lib/local-agent";
 
 interface FixHistoryPanelProps {
     agentId: string;
@@ -84,7 +85,7 @@ export function FixHistoryPanel({
 
     const historyQuery = useQuery({
         queryKey: ["fix-history", agentAccessMode, agentId, agentUrl, token],
-        enabled: agentAccessMode === "relay" || !!agentUrl,
+        enabled: agentAccessMode === "relay" || (!!agentUrl && (!!token || agentId === LOCAL_AGENT_ID)),
         queryFn: async () => {
             return agentAccessMode === "relay"
                 ? await agentApi.listFixHistory(agentId)

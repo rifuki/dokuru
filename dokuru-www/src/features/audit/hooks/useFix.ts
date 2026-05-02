@@ -203,7 +203,9 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
     const queryClient = useQueryClient();
 
     const openWizard = useCallback((result: AuditResult) => {
-        const existingJob = useAuditStore.getState().fixJobs[fixJobKey(agentId, result.rule.id)];
+        const state = useAuditStore.getState();
+        const existingJob = state.fixJobs[fixJobKey(agentId, result.rule.id)];
+        const existingOutcome = state.fixOutcomes[agentId]?.[result.rule.id];
         setActiveResult(result);
         setPreview(null);
         setTargetConfig({});
@@ -213,6 +215,14 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
             setStep(existingJob.status === "running" ? "applying" : "result");
             setOutcome(existingJob.outcome ?? null);
             setStepIndex(existingJob.stepIndex);
+            setPreviewLoading(false);
+            return;
+        }
+
+        if (existingOutcome) {
+            setStep("result");
+            setOutcome(existingOutcome);
+            setStepIndex(Number.MAX_SAFE_INTEGER);
             setPreviewLoading(false);
             return;
         }
@@ -309,7 +319,10 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
 
             if (fixOutcome.status === "Applied") {
                 toast.success(`Fix applied — rule ${rule.id}`);
-                await queryClient.invalidateQueries({ queryKey: ["agent-audit"] });
+                await Promise.all([
+                    queryClient.invalidateQueries({ queryKey: ["agent-audit"] }),
+                    queryClient.invalidateQueries({ queryKey: ["fix-history"] }),
+                ]);
             } else if (fixOutcome.status === "Blocked") {
                 toast.error(`${rule.id}: ${fixOutcome.message.slice(0, 80)}`);
             }

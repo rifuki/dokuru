@@ -11,11 +11,13 @@ import {
   type AuditReportResponse,
   type AuditResponse,
   type AuditResult,
+  type FixHistoryEntry,
 } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
 import { dockerApi, dockerCredential, type Container as DockerContainer } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog";
 import {
   Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
@@ -28,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { PILLAR_META, getRulePillar, type SecurityPillar } from "@/lib/audit-pillars";
 import { userDocumentApi } from "@/lib/api/document";
 import { getOrFetchPdfBlob } from "@/lib/pdf-cache";
+import { LOCAL_AGENT_ID } from "@/lib/local-agent";
 import { fixJobKey, useAuditStore } from "@/stores/use-audit-store";
 import { FixWizard } from "@/features/audit/components/FixWizard";
 import { FixAllWizard } from "@/features/audit/components/FixAllWizard";
@@ -390,15 +393,17 @@ function AgentVerificationPanel({
   );
 }
 
-function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, containers, focusedRuleId, onOpenWizard }: {
+function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAccessMode, token, containers, focusedRuleId, appliedFixEntry, onOpenWizard }: {
   result: AuditResult;
   agentId: string;
   auditId: string;
+  auditTimestamp?: string;
   agentUrl: string;
   agentAccessMode?: string;
   token?: string;
   containers?: DockerContainer[];
   focusedRuleId?: string;
+  appliedFixEntry?: FixHistoryEntry;
   onOpenWizard: (result: AuditResult) => void;
 }) {
   const { rule, status, message, affected, audit_command, raw_output, command_stderr, command_exit_code, references, rationale, impact, remediation_guide } = result;
@@ -427,9 +432,10 @@ function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, 
 
   const hasFix = status === "Fail" && !!(rule.remediation || remediation_guide || affected.length > 0 || remediation_kind === "auto");
   const hasDebug = !!(audit_command || raw_output !== undefined || command_stderr || typeof command_exit_code === "number" || (references && references.length > 0));
-  const isFixing = fixJob?.status === "running";
-  const isFixed = fixJob?.status === "applied" || storedOutcome?.status === "Applied";
-  const isFixBlocked = fixJob?.status === "blocked" || fixJob?.status === "failed" || storedOutcome?.status === "Blocked";
+  const isCurrentFixJob = isFixJobAfterAudit(fixJob, auditTimestamp ? { timestamp: auditTimestamp } : null);
+  const isFixing = isCurrentFixJob && fixJob?.status === "running";
+  const isFixed = (isCurrentFixJob && fixJob?.status === "applied") || appliedFixEntry?.outcome.status === "Applied";
+  const isFixBlocked = isCurrentFixJob && (fixJob?.status === "blocked" || fixJob?.status === "failed" || storedOutcome?.status === "Blocked");
   const tabs = [
     { id: "overview" as const, label: "Overview", show: true },
     { id: "fix" as const, label: "Fix", show: hasFix },
@@ -486,7 +492,15 @@ function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, 
         <div className="flex items-center gap-2 shrink-0">
           {status === "Fail" && remediation_kind === "auto" && (
             <button
-              onClick={(e) => { e.stopPropagation(); onOpenWizard(result); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (appliedFixEntry) {
+                  useAuditStore.getState().setFixOutcome(agentId, rule.id, appliedFixEntry.outcome);
+                } else if (!isFixed && storedOutcome) {
+                  useAuditStore.getState().setFixOutcome(agentId, rule.id, null);
+                }
+                onOpenWizard(result);
+              }}
               className={cn(
                 "inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-md text-white transition-all shadow-sm",
                 isFixed ? "bg-emerald-600 hover:bg-emerald-700" : "bg-[#2496ED] hover:bg-[#1d7ac7]",
@@ -964,6 +978,127 @@ function CisPdfDialog({ open, onClose }: { open: boolean; onClose: () => void })
   );
 }
 
+function AuditDetailSkeleton() {
+  return (
+    <div className="max-w-5xl mx-auto w-full space-y-6 pb-10">
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-3">
+          <Skeleton className="h-8 w-56" />
+          <Skeleton className="h-4 w-72" />
+        </div>
+        <Skeleton className="h-9 w-24 rounded-md" />
+      </div>
+
+      <div className="overflow-hidden rounded-[16px] border border-border bg-card shadow-sm">
+        <div className="flex items-center justify-between border-b border-border bg-muted/20 px-5 py-4">
+          <div className="flex items-center gap-4">
+            <div className="flex gap-2">
+              <Skeleton className="h-3 w-3 rounded-full" />
+              <Skeleton className="h-3 w-3 rounded-full" />
+              <Skeleton className="h-3 w-3 rounded-full" />
+            </div>
+            <Skeleton className="h-5 w-72 max-w-[56vw]" />
+          </div>
+          <Skeleton className="h-4 w-28" />
+        </div>
+        <div className="grid grid-cols-1 divide-y divide-border md:grid-cols-2 md:divide-x md:divide-y-0">
+          <div className="space-y-6 p-6">
+            <Skeleton className="h-3 w-28" />
+            <div className="flex items-end gap-3">
+              <Skeleton className="h-20 w-32" />
+              <Skeleton className="mb-2 h-7 w-16" />
+            </div>
+            <Skeleton className="h-2 w-full rounded-full" />
+            <div className="grid grid-cols-3 gap-3">
+              <Skeleton className="h-24 rounded-[12px]" />
+              <Skeleton className="h-24 rounded-[12px]" />
+              <Skeleton className="h-24 rounded-[12px]" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Skeleton className="h-14 rounded-[10px]" />
+              <Skeleton className="h-14 rounded-[10px]" />
+              <Skeleton className="h-14 rounded-[10px]" />
+              <Skeleton className="h-14 rounded-[10px]" />
+            </div>
+          </div>
+          <div className="space-y-5 p-6">
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-2">
+                <Skeleton className="h-3 w-36" />
+                <Skeleton className="h-3 w-44" />
+              </div>
+              <Skeleton className="h-10 w-40 rounded-[10px]" />
+            </div>
+            {Array.from({ length: 5 }).map((_, index) => (
+              <div key={index} className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-5 w-9" />
+                  <Skeleton className="h-4 flex-1" />
+                  <Skeleton className="h-4 w-10" />
+                </div>
+                <Skeleton className="h-2 w-full rounded-full" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-9 w-40 rounded-lg" />
+          <Skeleton className="h-9 flex-1 rounded-lg" />
+        </div>
+        {Array.from({ length: 5 }).map((_, index) => (
+          <Skeleton key={index} className="h-28 rounded-xl" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function isTimestampAfter(value?: string, reference?: string) {
+  if (!value || !reference) return false;
+  const valueTime = Date.parse(value);
+  const referenceTime = Date.parse(reference);
+  return Number.isFinite(valueTime) && Number.isFinite(referenceTime) && valueTime > referenceTime;
+}
+
+function isAfterAudit(entry: FixHistoryEntry, audit?: AuditResponse | null) {
+  return isTimestampAfter(entry.timestamp, audit?.timestamp);
+}
+
+function isFixJobAfterAudit(job: { completedAt?: string; startedAt?: string } | undefined, audit?: { timestamp?: string } | null) {
+  return isTimestampAfter(job?.completedAt ?? job?.startedAt, audit?.timestamp);
+}
+
+function latestAppliedFixesAfterAudit(history: FixHistoryEntry[], audit?: AuditResponse | null) {
+  const latest = new Map<string, FixHistoryEntry>();
+  const sorted = [...history].sort((a, b) => (Date.parse(b.timestamp) || 0) - (Date.parse(a.timestamp) || 0));
+  for (const entry of sorted) {
+    const ruleId = entry.request.rule_id;
+    if (latest.has(ruleId) || entry.outcome.status !== "Applied" || !isAfterAudit(entry, audit)) continue;
+    latest.set(ruleId, entry);
+  }
+  return latest;
+}
+
+function projectedScoreFromFixes(audit: AuditResponse, results: AuditResult[], fixedRuleIds: Set<string>) {
+  const fixedFailedResults = results.filter(result => result.status === "Fail" && fixedRuleIds.has(result.rule.id));
+  const total = audit.summary.total || results.length;
+  const projectedPassed = Math.min(total, audit.summary.passed + fixedFailedResults.length);
+  const projectedFailed = Math.max(0, audit.summary.failed - fixedFailedResults.length);
+  const projectedScore = total > 0 ? Math.round((projectedPassed / total) * 100) : audit.summary.score;
+
+  return {
+    fixedCount: fixedFailedResults.length,
+    fixedRuleIds: fixedFailedResults.map(result => result.rule.id),
+    projectedPassed,
+    projectedFailed,
+    projectedScore,
+    scoreDelta: projectedScore - audit.summary.score,
+  };
+}
+
 // ── Main Page ────────────────────────────────────────────────────────────────
 
 type StatusFilter = "all" | "Pass" | "Fail" | "Error";
@@ -974,6 +1109,7 @@ function AuditDetailPage() {
   const { ruleId: focusedRuleId } = Route.useSearch();
   const navigate = useNavigate();
   const markAuditResultViewed = useAuditStore((state) => state.markAuditResultViewed);
+  const setFixOutcome = useAuditStore((state) => state.setFixOutcome);
   const [agent, setAgent] = useState<Agent | null>(null);
   const [token, setToken] = useState<string | undefined>();
   const [containers, setContainers] = useState<DockerContainer[]>([]);
@@ -986,6 +1122,7 @@ function AuditDetailPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("pillar");
   const [loading, setLoading] = useState(true);
+  const fixJobs = useAuditStore((state) => state.fixJobs);
 
   const {
     open: wizardOpen,
@@ -1031,6 +1168,18 @@ function AuditDetailPage() {
     token,
   });
 
+  const fixHistoryQuery = useQuery({
+    queryKey: ["fix-history", agent?.access_mode, id, agent?.url ?? "", token],
+    enabled: !!agent && (agent.access_mode === "relay" || (!!agent.url && (!!token || agent.id === LOCAL_AGENT_ID))),
+    queryFn: async () => {
+      if (!agent) return [];
+      return agent.access_mode === "relay"
+        ? await agentApi.listFixHistory(id)
+        : await agentDirectApi.listFixHistory(agent.url, token);
+    },
+    staleTime: 15_000,
+  });
+
   useEffect(() => {
     markAuditResultViewed(id, auditId);
   }, [auditId, id, markAuditResultViewed]);
@@ -1057,7 +1206,6 @@ function AuditDetailPage() {
         }
 
         const audit = await agentApi.getAuditById(id, auditId);
-        console.log('Fetched audit:', audit);
         setAuditData(audit);
 
         try {
@@ -1095,6 +1243,14 @@ function AuditDetailPage() {
 
   const report = auditReport?.report;
   const baseResults = sortAuditResults(report?.sorted_results?.length ? report.sorted_results : auditData?.results ?? []);
+  const appliedHistoryByRule = latestAppliedFixesAfterAudit(fixHistoryQuery.data ?? [], auditData);
+  const fixedRuleIds = new Set<string>(appliedHistoryByRule.keys());
+  for (const result of baseResults) {
+    const ruleId = result.rule.id;
+    const job = fixJobs[fixJobKey(id, ruleId)];
+    if (job?.status === "applied" && isFixJobAfterAudit(job, auditData)) fixedRuleIds.add(ruleId);
+  }
+  const projectedFixScore = auditData ? projectedScoreFromFixes(auditData, baseResults, fixedRuleIds) : null;
   const sectionSummaries = groupSummariesFromResults(baseResults, result => result.rule.section, key => key);
   const sections = sectionSummaries.map(section => section.key);
   const sectionStats: Record<string, { total: number; passed: number; percent: number }> = Object.fromEntries(sectionSummaries.map(section => [
@@ -1170,12 +1326,16 @@ function AuditDetailPage() {
     navigate({ to: "/agents/$id/audits", params: { id } });
   };
 
+  useEffect(() => {
+    if (!auditData || !fixHistoryQuery.data?.length) return;
+    const appliedFixes = latestAppliedFixesAfterAudit(fixHistoryQuery.data, auditData);
+    for (const [ruleId, entry] of appliedFixes) {
+      setFixOutcome(id, ruleId, entry.outcome);
+    }
+  }, [auditData, fixHistoryQuery.data, id, setFixOutcome]);
+
   if (loading) {
-    return (
-      <div className="flex min-h-[calc(100svh-8rem)] w-full items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <AuditDetailSkeleton />;
   }
 
   return (
@@ -1254,6 +1414,25 @@ function AuditDetailPage() {
                     />
                   </div>
                   <p className="mt-2 text-sm text-muted-foreground">CIS Docker Benchmark v1.8.0 · {auditData.summary.total} rules</p>
+                  {projectedFixScore && projectedFixScore.fixedCount > 0 && (
+                    <div className="mt-4 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-emerald-500 dark:text-emerald-400">
+                          <ShieldCheck className="h-3.5 w-3.5" />
+                          Projected after fixes
+                        </span>
+                        <span className="font-mono text-sm font-black text-emerald-500 dark:text-emerald-400">
+                          ~{projectedFixScore.projectedScore}/100
+                          {projectedFixScore.scoreDelta > 0 && (
+                            <span className="ml-1 text-xs">+{projectedFixScore.scoreDelta}</span>
+                          )}
+                        </span>
+                      </div>
+                      <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                        Preview if {projectedFixScore.fixedCount} fixed failed check{projectedFixScore.fixedCount > 1 ? "s" : ""} pass on the next audit. Re-run audit to confirm the real score.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-3 gap-3 mt-6">
@@ -1401,7 +1580,7 @@ function AuditDetailPage() {
 
           {/* ── Fix All banner ───────────────────────────────── */}
           {(() => {
-            const autoFixable = baseResults.filter(isAutoFixableResult);
+            const autoFixable = baseResults.filter(result => isAutoFixableResult(result) && !fixedRuleIds.has(result.rule.id));
             if (autoFixable.length === 0) return null;
             return (
               <div className="flex items-center justify-between gap-4 rounded-xl border border-[#2496ED]/25 bg-[#2496ED]/5 px-5 py-4">
@@ -1708,11 +1887,13 @@ function AuditDetailPage() {
                                 result={r}
                                 agentId={id}
                                 auditId={auditId}
+                                auditTimestamp={auditData.timestamp}
                                 agentUrl={agent?.url ?? ""}
                                 agentAccessMode={agent?.access_mode}
                                 token={token}
                                 containers={containers}
                                 focusedRuleId={focusedRuleId}
+                                appliedFixEntry={appliedHistoryByRule.get(r.rule.id)}
                                 onOpenWizard={openWizard}
                               />
                             ))
@@ -1741,11 +1922,13 @@ function AuditDetailPage() {
                                 result={r}
                                 agentId={id}
                                 auditId={auditId}
+                                auditTimestamp={auditData.timestamp}
                                 agentUrl={agent?.url ?? ""}
                                 agentAccessMode={agent?.access_mode}
                                 token={token}
                                 containers={containers}
                                 focusedRuleId={focusedRuleId}
+                                appliedFixEntry={appliedHistoryByRule.get(r.rule.id)}
                                 onOpenWizard={openWizard}
                               />
                             ))

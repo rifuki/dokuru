@@ -996,7 +996,30 @@ function AuditPage() {
             setAuditHistory(id, nextHistory);
             writeCachedAuditHistory(id, nextHistory);
             try {
-                toast.success(`Audit complete — ${savedAudit.summary.score}/100`);
+                const savedAuditId = savedAudit.id;
+                const toastId = savedAuditId ? `audit-complete-${id}-${savedAuditId}` : `audit-complete-${id}-${Date.now()}`;
+                const toastOptions: NonNullable<Parameters<typeof toast.success>[1]> = {
+                    id: toastId,
+                    description: "Open the saved audit result, or swipe/close this toast to hide it.",
+                    duration: 12_000,
+                    cancel: {
+                        label: "Hide",
+                        onClick: () => toast.dismiss(toastId),
+                    },
+                };
+                if (savedAuditId) {
+                    toastOptions.action = {
+                        label: "Open result",
+                        onClick: () => {
+                            toast.dismiss(toastId);
+                            void navigate({
+                                to: "/agents/$id/audits/$auditId",
+                                params: { id, auditId: savedAuditId },
+                            });
+                        },
+                    };
+                }
+                toast.success(`Audit complete - ${savedAudit.summary.score}/100`, toastOptions);
                 await queryClient.invalidateQueries({ queryKey: ["audits", id] });
             } catch {
                 toast.error("Failed to refresh audit history");

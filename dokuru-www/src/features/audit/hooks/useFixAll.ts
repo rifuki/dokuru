@@ -293,7 +293,10 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
 
         if (applied > 0) {
             toast.success(`Applied ${applied} fix${applied > 1 ? "es" : ""}${blocked > 0 ? `, ${blocked} blocked` : ""}`);
-            await queryClient.invalidateQueries({ queryKey: ["agent-audit"] });
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ["agent-audit"] }),
+                queryClient.invalidateQueries({ queryKey: ["fix-history"] }),
+            ]);
         } else {
             toast.error("No fixes could be applied");
         }
