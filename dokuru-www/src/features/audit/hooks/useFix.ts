@@ -1,9 +1,9 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { agentApi } from "@/lib/api/agent";
-import { agentDirectApi, type AuditResult, type FixOutcome, type FixPreview, type FixProgress, type FixTarget } from "@/lib/api/agent-direct";
-import { useAuditStore } from "@/stores/use-audit-store";
+import { agentDirectApi, type AuditResult, type FixOutcome, type FixPreview, type FixTarget } from "@/lib/api/agent-direct";
+import { fixJobKey, useAuditStore } from "@/stores/use-audit-store";
 
 export type WizardStep = "confirm" | "applying" | "result";
 
@@ -182,16 +182,6 @@ export type TargetConfig = {
     strategy: "docker_update" | "compose_update";
 };
 
-type FixStreamMessage =
-    | { type: "progress"; data: FixProgress }
-    | { type: "outcome"; data: FixOutcome }
-    | { type: "error"; message: string };
-
-type FixStreamResult = {
-    outcome: FixOutcome;
-    events: FixProgress[];
-};
-
 export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs) {
     const [open, setOpen] = useState(false);
     const [step, setStep] = useState<WizardStep>("confirm");
@@ -201,21 +191,30 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
     const [preview, setPreview] = useState<FixPreview | null>(null);
     const [previewLoading, setPreviewLoading] = useState(false);
     const [targetConfig, setTargetConfig] = useState<Record<string, TargetConfig>>({});
-    const [progressEvents, setProgressEvents] = useState<FixProgress[]>([]);
-    const socketRef = useRef<WebSocket | null>(null);
+    const activeRuleId = activeResult?.rule.id;
+    const activeJob = useAuditStore((state) => activeRuleId ? state.fixJobs[fixJobKey(agentId, activeRuleId)] : undefined);
 
-    const { setFixing, setFixOutcome } = useAuditStore();
+    const startFixJob = useAuditStore((state) => state.startFixJob);
     const queryClient = useQueryClient();
 
     const openWizard = useCallback((result: AuditResult) => {
+        const existingJob = useAuditStore.getState().fixJobs[fixJobKey(agentId, result.rule.id)];
         setActiveResult(result);
-        setStep("confirm");
-        setOutcome(null);
-        setStepIndex(0);
-        setProgressEvents([]);
         setPreview(null);
         setTargetConfig({});
         setOpen(true);
+
+        if (existingJob) {
+            setStep(existingJob.status === "running" ? "applying" : "result");
+            setOutcome(existingJob.outcome ?? null);
+            setStepIndex(existingJob.stepIndex);
+            setPreviewLoading(false);
+            return;
+        }
+
+        setStep("confirm");
+        setOutcome(null);
+        setStepIndex(0);
         setPreviewLoading(true);
 
         const loadPreview = agentAccessMode === "relay"
@@ -250,8 +249,6 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
     }, []);
 
     const closeWizard = useCallback(() => {
-        socketRef.current?.close();
-        socketRef.current = null;
         setOpen(false);
         setTimeout(() => {
             setStep("confirm");
@@ -259,7 +256,6 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
             setStepIndex(0);
             setPreview(null);
             setTargetConfig({});
-            setProgressEvents([]);
         }, 300);
     }, []);
 
@@ -278,68 +274,6 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
         });
     }, [preview, targetConfig]);
 
-    const applyFixViaStream = useCallback((ruleId: string, targets: FixTarget[]) => new Promise<FixStreamResult>((resolve, reject) => {
-        const request = { rule_id: ruleId, targets };
-        const url = agentAccessMode === "relay"
-            ? agentApi.fixStreamUrl(agentId, request)
-            : agentDirectApi.fixStreamUrl(agentUrl, request, token);
-        const socket = new WebSocket(url);
-        let settled = false;
-        const streamEvents: FixProgress[] = [];
-        socketRef.current = socket;
-
-        socket.onmessage = (event) => {
-            try {
-                const message = JSON.parse(String(event.data)) as FixStreamMessage;
-                if (message.type === "progress") {
-                    streamEvents.push(message.data);
-                    setProgressEvents((events) => [...events, message.data]);
-                    setStepIndex(Math.max(0, message.data.step - 1));
-                    return;
-                }
-                if (message.type === "outcome") {
-                    settled = true;
-                    if (message.data.status === "Applied" && streamEvents.length === 0) {
-                        reject(new Error("Agent returned success without live command/evidence output"));
-                        socket.close();
-                        return;
-                    }
-                    resolve({ outcome: message.data, events: streamEvents });
-                    socket.close();
-                    return;
-                }
-                if (message.type === "error") {
-                    settled = true;
-                    reject(new Error(message.message));
-                    socket.close();
-                }
-            } catch (error) {
-                settled = true;
-                reject(error instanceof Error ? error : new Error("Invalid fix stream message"));
-                socket.close();
-            }
-        };
-
-        socket.onerror = () => {
-            if (!settled) {
-                settled = true;
-                reject(new Error("Fix progress stream failed"));
-            }
-        };
-        socket.onclose = () => {
-            if (socketRef.current === socket) socketRef.current = null;
-            if (!settled) {
-                settled = true;
-                const lastEvent = streamEvents.at(-1);
-                reject(new Error(
-                    lastEvent
-                        ? `Fix progress stream closed before final outcome. Last event: ${lastEvent.action} (${lastEvent.status})`
-                        : "Fix progress stream closed before completion",
-                ));
-            }
-        };
-    }), [agentAccessMode, agentId, agentUrl, token]);
-
     const applyFix = useCallback(async () => {
         if (!activeResult) return;
         const { rule } = activeResult;
@@ -348,15 +282,18 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
 
         setStep("applying");
         setStepIndex(0);
-        setProgressEvents([]);
-        setFixing(agentId, rule.id, true);
-        setFixOutcome(agentId, rule.id, null);
 
         try {
-            const { outcome: fixOutcome } = await applyFixViaStream(rule.id, targets);
+            const fixOutcome = await startFixJob({
+                agentId,
+                agentUrl,
+                agentAccessMode,
+                token,
+                ruleId: rule.id,
+                targets,
+            });
             setStepIndex(steps.length);
             setOutcome(fixOutcome);
-            setFixOutcome(agentId, rule.id, fixOutcome);
             setStep("result");
 
             if (fixOutcome.status === "Applied") {
@@ -375,24 +312,28 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
             };
             setStepIndex(steps.length);
             setOutcome(errOutcome);
-            setFixOutcome(agentId, rule.id, errOutcome);
             setStep("result");
             toast.error("Fix failed");
-        } finally {
-            setFixing(agentId, rule.id, false);
         }
-    }, [activeResult, agentId, buildTargets, applyFixViaStream, queryClient, setFixing, setFixOutcome]);
+    }, [activeResult, agentAccessMode, agentId, agentUrl, buildTargets, queryClient, startFixJob, token]);
+
+    const effectiveStep = activeJob
+        ? activeJob.status === "running" ? "applying" : "result"
+        : step;
+    const effectiveOutcome = activeJob?.outcome ?? outcome;
+    const effectiveStepIndex = activeJob?.stepIndex ?? stepIndex;
+    const effectiveProgressEvents = activeJob?.progressEvents ?? [];
 
     return {
         open,
-        step,
-        outcome,
-        stepIndex,
+        step: effectiveStep,
+        outcome: effectiveOutcome,
+        stepIndex: effectiveStepIndex,
         activeResult,
         preview,
         previewLoading,
         targetConfig,
-        progressEvents,
+        progressEvents: effectiveProgressEvents,
         updateTargetConfig,
         openWizard,
         closeWizard,

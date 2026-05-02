@@ -28,7 +28,7 @@ import { cn } from "@/lib/utils";
 import { PILLAR_META, getRulePillar, type SecurityPillar } from "@/lib/audit-pillars";
 import { userDocumentApi } from "@/lib/api/document";
 import { getOrFetchPdfBlob } from "@/lib/pdf-cache";
-import { useAuditStore } from "@/stores/use-audit-store";
+import { fixJobKey, useAuditStore } from "@/stores/use-audit-store";
 import { FixWizard } from "@/features/audit/components/FixWizard";
 import { FixAllWizard } from "@/features/audit/components/FixAllWizard";
 import { FixHistoryPanel } from "@/features/audit/components/FixHistoryPanel";
@@ -384,6 +384,8 @@ function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, 
   onOpenWizard: (result: AuditResult) => void;
 }) {
   const { rule, status, message, affected, audit_command, raw_output, command_stderr, command_exit_code, references, rationale, impact, remediation_kind, remediation_guide } = result;
+  const fixJob = useAuditStore((state) => state.fixJobs[fixJobKey(agentId, rule.id)]);
+  const storedOutcome = useAuditStore((state) => state.fixOutcomes[agentId]?.[rule.id] ?? null);
   const isFocused = focusedRuleId === rule.id;
   const cardRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(isFocused);
@@ -406,6 +408,9 @@ function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, 
 
   const hasFix = status === "Fail" && !!(rule.remediation || remediation_guide || affected.length > 0);
   const hasDebug = !!(audit_command || raw_output !== undefined || command_stderr || typeof command_exit_code === "number" || (references && references.length > 0));
+  const isFixing = fixJob?.status === "running";
+  const isFixed = fixJob?.status === "applied" || storedOutcome?.status === "Applied";
+  const isFixBlocked = fixJob?.status === "blocked" || fixJob?.status === "failed" || storedOutcome?.status === "Blocked";
   const tabs = [
     { id: "overview" as const, label: "Overview", show: true },
     { id: "fix" as const, label: "Fix", show: hasFix },
@@ -429,6 +434,24 @@ function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, 
                 {pillarMeta.name}
               </span>
               <SeverityBadge severity={rule.severity} status={status} />
+              {isFixing && (
+                <span className="inline-flex h-6 items-center gap-1.5 rounded-md border border-[#2496ED]/30 bg-[#2496ED]/10 px-2 text-xs font-semibold text-[#2496ED]">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Fixing now
+                </span>
+              )}
+              {isFixed && (
+                <span className="inline-flex h-6 items-center gap-1.5 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 text-xs font-semibold text-emerald-400">
+                  <ShieldCheck className="h-3 w-3" />
+                  Fix applied
+                </span>
+              )}
+              {!isFixing && !isFixed && isFixBlocked && (
+                <span className="inline-flex h-6 items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/10 px-2 text-xs font-semibold text-amber-400">
+                  <AlertTriangle className="h-3 w-3" />
+                  Fix needs review
+                </span>
+              )}
               {affected.length > 0 && (
                 <span className="inline-flex h-6 items-center gap-1 rounded-md border border-border/70 bg-muted/25 px-2 text-xs font-medium text-muted-foreground">
                   <AlertTriangle className="h-3 w-3 text-muted-foreground/65" />
@@ -445,10 +468,13 @@ function RuleCard({ result, agentId, auditId, agentUrl, agentAccessMode, token, 
           {status === "Fail" && remediation_kind === "auto" && (
             <button
               onClick={(e) => { e.stopPropagation(); onOpenWizard(result); }}
-              className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-md bg-[#2496ED] hover:bg-[#1d7ac7] text-white transition-all shadow-sm"
+              className={cn(
+                "inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-md text-white transition-all shadow-sm",
+                isFixed ? "bg-emerald-600 hover:bg-emerald-700" : "bg-[#2496ED] hover:bg-[#1d7ac7]",
+              )}
             >
-              <Wrench className="h-3 w-3" />
-              Auto Fix
+              {isFixing ? <Loader2 className="h-3 w-3 animate-spin" /> : isFixed ? <ShieldCheck className="h-3 w-3" /> : <Wrench className="h-3 w-3" />}
+              {isFixing ? "View Progress" : isFixed ? "View Result" : "Auto Fix"}
             </button>
           )}
           <button onClick={() => setOpen(v => !v)} className="p-1 hover:bg-muted/40 rounded transition-colors">

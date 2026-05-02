@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { agentApi } from "@/lib/api/agent";
-import { agentDirectApi, type AuditResponse, type AuditResult, type AuditStreamMessage, type FixOutcome } from "@/lib/api/agent-direct";
+import { agentDirectApi, type AuditResponse, type AuditResult, type AuditStreamMessage, type FixOutcome, type FixProgress, type FixTarget } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
 
 export type AuditStreamStatus = "idle" | "running" | "saving" | "complete" | "error";
@@ -27,8 +27,42 @@ export interface AuditStreamState {
     completedAt?: string;
 }
 
+export type FixJobStatus = "running" | "applied" | "blocked" | "failed";
+
+export interface FixJobState {
+    agentId: string;
+    ruleId: string;
+    status: FixJobStatus;
+    progressEvents: FixProgress[];
+    stepIndex: number;
+    outcome?: FixOutcome;
+    error?: string;
+    startedAt: string;
+    completedAt?: string;
+}
+
+export interface StartFixJobRequest {
+    agentId: string;
+    agentUrl: string;
+    agentAccessMode?: string;
+    token?: string;
+    ruleId: string;
+    targets: FixTarget[];
+}
+
+type FixStreamMessage =
+    | { type: "progress"; data: FixProgress }
+    | { type: "outcome"; data: FixOutcome }
+    | { type: "error"; message: string };
+
+export function fixJobKey(agentId: string, ruleId: string) {
+    return `${agentId}:${ruleId}`;
+}
+
 const auditSockets = new Map<string, WebSocket>();
 const auditRuns = new Map<string, Promise<AuditResponse>>();
+const fixSockets = new Map<string, WebSocket>();
+const fixRuns = new Map<string, Promise<FixOutcome>>();
 
 const createIdleStream = (): AuditStreamState => ({
     status: "idle",
@@ -58,6 +92,10 @@ interface AuditState {
     // Last completed audit result the user already opened per agentId.
     viewedAuditResults: Record<string, string>;
 
+    // Background fix jobs keyed by agentId:ruleId. The websocket is module-scoped,
+    // so remediation keeps running when the sheet or route unmounts.
+    fixJobs: Record<string, FixJobState>;
+
     // Actions
     setRunning: (agentId: string, running: boolean) => void;
     setAuditHistory: (agentId: string, history: AuditResponse[]) => void;
@@ -65,6 +103,7 @@ interface AuditState {
     setFixOutcome: (agentId: string, ruleId: string, outcome: FixOutcome | null) => void;
     markAuditResultViewed: (agentId: string, auditId: string) => void;
     startAudit: (agent: Agent, token?: string) => Promise<AuditResponse>;
+    startFixJob: (request: StartFixJobRequest) => Promise<FixOutcome>;
 }
 
 export const useAuditStore = create<AuditState>((set) => ({
@@ -74,6 +113,7 @@ export const useAuditStore = create<AuditState>((set) => ({
     fixOutcomes: {},
     auditStreams: {},
     viewedAuditResults: {},
+    fixJobs: {},
 
     setRunning: (agentId, running) =>
         set((s) => ({
@@ -343,6 +383,190 @@ export const useAuditStore = create<AuditState>((set) => ({
         });
 
         auditRuns.set(agent.id, run);
+        return run;
+    },
+
+    startFixJob: (request) => {
+        const key = fixJobKey(request.agentId, request.ruleId);
+        const existingRun = fixRuns.get(key);
+        if (existingRun) return existingRun;
+
+        if (request.agentAccessMode !== "relay" && !request.token) {
+            return Promise.reject(new Error("Agent token not found. Edit this agent and paste the token once to sync it across devices."));
+        }
+
+        const startedAt = new Date().toISOString();
+        set((s) => ({
+            fixingRules: {
+                ...s.fixingRules,
+                [request.agentId]: { ...s.fixingRules[request.agentId], [request.ruleId]: true },
+            },
+            fixOutcomes: {
+                ...s.fixOutcomes,
+                [request.agentId]: { ...s.fixOutcomes[request.agentId], [request.ruleId]: null },
+            },
+            fixJobs: {
+                ...s.fixJobs,
+                [key]: {
+                    agentId: request.agentId,
+                    ruleId: request.ruleId,
+                    status: "running",
+                    progressEvents: [],
+                    stepIndex: 0,
+                    startedAt,
+                },
+            },
+        }));
+
+        const run = new Promise<FixOutcome>((resolve, reject) => {
+            const payload = { rule_id: request.ruleId, targets: request.targets };
+            const url = request.agentAccessMode === "relay"
+                ? agentApi.fixStreamUrl(request.agentId, payload)
+                : agentDirectApi.fixStreamUrl(request.agentUrl, payload, request.token);
+            const socket = new WebSocket(url);
+            const streamEvents: FixProgress[] = [];
+            let settled = false;
+            fixSockets.set(key, socket);
+
+            const completeJob = (outcome: FixOutcome) => {
+                if (settled) return;
+                settled = true;
+                fixRuns.delete(key);
+                if (fixSockets.get(key) === socket) fixSockets.delete(key);
+                const status: FixJobStatus = outcome.status === "Applied"
+                    ? "applied"
+                    : outcome.status === "Blocked"
+                    ? "blocked"
+                    : "failed";
+                set((s) => ({
+                    fixingRules: {
+                        ...s.fixingRules,
+                        [request.agentId]: { ...s.fixingRules[request.agentId], [request.ruleId]: false },
+                    },
+                    fixOutcomes: {
+                        ...s.fixOutcomes,
+                        [request.agentId]: { ...s.fixOutcomes[request.agentId], [request.ruleId]: outcome },
+                    },
+                    fixJobs: {
+                        ...s.fixJobs,
+                        [key]: {
+                            ...(s.fixJobs[key] ?? {
+                                agentId: request.agentId,
+                                ruleId: request.ruleId,
+                                startedAt,
+                            }),
+                            status,
+                            outcome,
+                            error: status === "applied" ? undefined : outcome.message,
+                            progressEvents: streamEvents,
+                            stepIndex: Number.MAX_SAFE_INTEGER,
+                            completedAt: new Date().toISOString(),
+                        },
+                    },
+                }));
+                resolve(outcome);
+            };
+
+            const failJob = (message: string) => {
+                if (settled) return;
+                const outcome: FixOutcome = {
+                    rule_id: request.ruleId,
+                    status: "Blocked",
+                    message,
+                    requires_restart: false,
+                    requires_elevation: false,
+                };
+                settled = true;
+                fixRuns.delete(key);
+                if (fixSockets.get(key) === socket) fixSockets.delete(key);
+                set((s) => ({
+                    fixingRules: {
+                        ...s.fixingRules,
+                        [request.agentId]: { ...s.fixingRules[request.agentId], [request.ruleId]: false },
+                    },
+                    fixOutcomes: {
+                        ...s.fixOutcomes,
+                        [request.agentId]: { ...s.fixOutcomes[request.agentId], [request.ruleId]: outcome },
+                    },
+                    fixJobs: {
+                        ...s.fixJobs,
+                        [key]: {
+                            ...(s.fixJobs[key] ?? {
+                                agentId: request.agentId,
+                                ruleId: request.ruleId,
+                                startedAt,
+                            }),
+                            status: "failed",
+                            outcome,
+                            error: message,
+                            progressEvents: streamEvents,
+                            completedAt: new Date().toISOString(),
+                        },
+                    },
+                }));
+                reject(new Error(message));
+            };
+
+            socket.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(String(event.data)) as FixStreamMessage;
+                    if (message.type === "progress") {
+                        streamEvents.push(message.data);
+                        set((s) => ({
+                            fixJobs: {
+                                ...s.fixJobs,
+                                [key]: {
+                                    ...(s.fixJobs[key] ?? {
+                                        agentId: request.agentId,
+                                        ruleId: request.ruleId,
+                                        status: "running" as const,
+                                        startedAt,
+                                    }),
+                                    status: "running",
+                                    progressEvents: [...streamEvents],
+                                    stepIndex: Math.max(0, message.data.step - 1),
+                                },
+                            },
+                        }));
+                        return;
+                    }
+
+                    if (message.type === "outcome") {
+                        if (message.data.status === "Applied" && streamEvents.length === 0) {
+                            failJob("Agent returned success without live command/evidence output");
+                            socket.close();
+                            return;
+                        }
+                        completeJob(message.data);
+                        socket.close();
+                        return;
+                    }
+
+                    if (message.type === "error") {
+                        failJob(message.message);
+                        socket.close();
+                    }
+                } catch (error) {
+                    failJob(error instanceof Error ? error.message : "Invalid fix stream message");
+                    socket.close();
+                }
+            };
+
+            socket.onerror = () => failJob("Fix progress stream failed");
+            socket.onclose = () => {
+                if (fixSockets.get(key) === socket) fixSockets.delete(key);
+                if (!settled) {
+                    const lastEvent = streamEvents.at(-1);
+                    failJob(
+                        lastEvent
+                            ? `Fix progress stream closed before final outcome. Last event: ${lastEvent.action} (${lastEvent.status})`
+                            : "Fix progress stream closed before completion",
+                    );
+                }
+            };
+        });
+
+        fixRuns.set(key, run);
         return run;
     },
 }));

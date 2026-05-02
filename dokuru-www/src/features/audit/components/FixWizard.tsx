@@ -477,7 +477,7 @@ function ApplyingStep({ ruleId, stepIndex, progressEvents }: { ruleId: string; s
             </div>
 
             <p className="text-[11px] text-white/30 font-mono text-center">
-                Live progress is streamed from dokuru-agent. Do not close this panel while fix is in progress.
+                Live progress is streamed from dokuru-agent. You can close this panel or navigate away; the fix continues in the background.
             </p>
 
             <ProgressEventsPanel progressEvents={progressEvents} />

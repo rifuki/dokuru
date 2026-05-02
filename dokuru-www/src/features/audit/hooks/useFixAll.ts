@@ -1,8 +1,8 @@
 import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { agentApi } from "@/lib/api/agent";
-import { agentDirectApi, type AuditResult, type FixOutcome } from "@/lib/api/agent-direct";
+import { type AuditResult, type FixOutcome } from "@/lib/api/agent-direct";
+import { useAuditStore } from "@/stores/use-audit-store";
 
 export type FixAllStep = "confirm" | "applying" | "result";
 
@@ -24,11 +24,6 @@ interface UseFixAllArgs {
     token?: string;
 }
 
-type FixStreamMessage =
-    | { type: "progress"; data: unknown }
-    | { type: "outcome"; data: FixOutcome }
-    | { type: "error"; message: string };
-
 export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixAllArgs) {
     const [open, setOpen] = useState(false);
     const [step, setStep] = useState<FixAllStep>("confirm");
@@ -36,49 +31,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
     const [ruleStatuses, setRuleStatuses] = useState<RuleFixStatus[]>([]);
 
     const queryClient = useQueryClient();
-
-    const applyRuleViaStream = useCallback((ruleId: string) => new Promise<FixOutcome>((resolve, reject) => {
-        const request = { rule_id: ruleId, targets: [] };
-        const url = agentAccessMode === "relay"
-            ? agentApi.fixStreamUrl(agentId, request)
-            : agentDirectApi.fixStreamUrl(agentUrl, request, token);
-        const socket = new WebSocket(url);
-        let settled = false;
-
-        socket.onmessage = (event) => {
-            try {
-                const message = JSON.parse(String(event.data)) as FixStreamMessage;
-                if (message.type === "outcome") {
-                    settled = true;
-                    resolve(message.data);
-                    socket.close();
-                    return;
-                }
-                if (message.type === "error") {
-                    settled = true;
-                    reject(new Error(message.message));
-                    socket.close();
-                }
-            } catch (error) {
-                settled = true;
-                reject(error instanceof Error ? error : new Error("Invalid fix stream message"));
-                socket.close();
-            }
-        };
-
-        socket.onerror = () => {
-            if (!settled) {
-                settled = true;
-                reject(new Error("Fix progress stream failed"));
-            }
-        };
-        socket.onclose = () => {
-            if (!settled) {
-                settled = true;
-                reject(new Error("Fix progress stream closed before completion"));
-            }
-        };
-    }), [agentAccessMode, agentId, agentUrl, token]);
+    const startFixJob = useAuditStore((state) => state.startFixJob);
 
     const openFixAll = useCallback((rules: AuditResult[]) => {
         setRuleStatuses(rules.map(r => ({
@@ -139,7 +92,14 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
             setRuleStatuses([...updated]);
 
             try {
-                updated[i].outcome = await applyRuleViaStream(updated[i].ruleId);
+                updated[i].outcome = await startFixJob({
+                    agentId,
+                    agentUrl,
+                    agentAccessMode,
+                    token,
+                    ruleId: updated[i].ruleId,
+                    targets: [],
+                });
                 updated[i].state = "done";
             } catch {
                 updated[i].outcome = {
@@ -169,7 +129,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
         } else {
             toast.error("No fixes could be applied");
         }
-    }, [ruleStatuses, applyRuleViaStream, queryClient]);
+    }, [agentAccessMode, agentId, agentUrl, queryClient, ruleStatuses, startFixJob, token]);
 
     const selectedCount = ruleStatuses.filter(r => r.selected).length;
 
