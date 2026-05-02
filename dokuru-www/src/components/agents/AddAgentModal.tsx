@@ -1,5 +1,6 @@
 import { useState, type CSSProperties, type FormEvent } from "react";
 import { useAgentStore, getAgentTokenByUrl, setAgentTokenByUrl } from "@/stores/use-agent-store";
+import { IS_LOCAL_AGENT_MODE } from "@/lib/env";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,7 +37,7 @@ export function AddAgentModal({ open, onOpenChange, onOpenSetupGuide }: AddAgent
     const [name, setName] = useState("");
     const [url, setUrl] = useState("");
     const [token, setToken] = useState("");
-    const [accessMode, setAccessMode] = useState<AccessMode>("cloudflare");
+    const [accessMode, setAccessMode] = useState<AccessMode>(IS_LOCAL_AGENT_MODE ? "direct" : "cloudflare");
 
     const handleRandomName = () => {
         setName(generateRandomName());
@@ -92,7 +93,7 @@ export function AddAgentModal({ open, onOpenChange, onOpenSetupGuide }: AddAgent
             setName("");
             setUrl("");
             setToken("");
-            setAccessMode("cloudflare");
+            setAccessMode(IS_LOCAL_AGENT_MODE ? "direct" : "cloudflare");
             onOpenChange(false);
         } catch (error) {
             toast.error((error as Error).message || "Failed to add agent");
@@ -121,22 +122,28 @@ export function AddAgentModal({ open, onOpenChange, onOpenSetupGuide }: AddAgent
                         <div className="mb-3">
                             <div className="text-sm font-semibold">Connection mode</div>
                             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                                Cloudflare is the fastest setup. Relay is best when the host cannot expose any URL.
+                                {IS_LOCAL_AGENT_MODE 
+                                    ? "Direct mode connects to agents on your local network or via public URLs."
+                                    : "Cloudflare is the fastest setup. Relay is best when the host cannot expose any URL."}
                             </p>
                         </div>
 
                         <div role="radiogroup" aria-label="Connection mode" className="space-y-2">
-                            <AgentConnectionModeOption
-                                mode="cloudflare"
-                                checked={accessMode === "cloudflare"}
-                                badge="Recommended"
-                                onSelect={(mode) => setAccessMode(mode)}
-                            />
-                            <AgentConnectionModeOption
-                                mode="relay"
-                                checked={accessMode === "relay"}
-                                onSelect={(mode) => setAccessMode(mode)}
-                            />
+                            {!IS_LOCAL_AGENT_MODE && (
+                                <AgentConnectionModeOption
+                                    mode="cloudflare"
+                                    checked={accessMode === "cloudflare"}
+                                    badge="Recommended"
+                                    onSelect={(mode) => setAccessMode(mode)}
+                                />
+                            )}
+                            {!IS_LOCAL_AGENT_MODE && (
+                                <AgentConnectionModeOption
+                                    mode="relay"
+                                    checked={accessMode === "relay"}
+                                    onSelect={(mode) => setAccessMode(mode)}
+                                />
+                            )}
                             <AgentConnectionModeOption
                                 mode="direct"
                                 checked={accessMode === "direct"}
