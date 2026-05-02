@@ -1,76 +1,53 @@
-use super::super::helpers::{
-    collect_preflight, confirm_action, disable_service_if_present, reload_systemd,
-    remove_dir_if_present, remove_file_if_present, resolve_shared_config, run_step,
-    runtime_config_path, service_unit_path, stop_service_if_present,
+use crate::cli::UninstallArgs;
+use crate::cli::helpers::{
+    disable_service_if_present, nix_like_is_root, remove_dir_if_present, remove_file_if_present,
+    run_command, run_step, stop_service_if_present,
 };
-use super::super::types::UninstallArgs;
-use cliclack::{intro, note, outro, outro_cancel};
 use eyre::{Result, bail};
+use std::path::PathBuf;
 
-pub fn run_uninstall(args: &UninstallArgs) -> Result<()> {
-    let config = resolve_shared_config(&args.shared, None)?;
-    let preflight = collect_preflight(&config);
-    let unit_path = service_unit_path(&config);
-    let config_path = runtime_config_path(&config);
-
-    intro("🐳 Dokuru  uninstall")?;
-
-    if !preflight.running_as_root() {
-        outro_cancel("Root privileges required. Re-run with: sudo dokuru uninstall")?;
-        bail!("root privileges required");
+pub fn run_uninstall(_args: &UninstallArgs) -> Result<()> {
+    if !nix_like_is_root() {
+        bail!("Uninstall must be run as root (use sudo)");
     }
 
-    note(
-        "Will remove",
-        format!(
-            "Binary:  {}\nConfig:  {}\nService: {}",
-            config.install_path.display(),
-            config_path.display(),
-            unit_path.display(),
-        ),
-    )?;
+    cliclack::intro("Dokuru Uninstall")?;
 
-    if !confirm_action(
-        args.shared.yes,
-        &format!("Uninstall Dokuru from {}?", config.install_path.display()),
-    )? {
-        outro_cancel("Uninstall cancelled.")?;
-        bail!("cancelled");
+    let confirm = cliclack::confirm("Remove all Dokuru files and configuration?")
+        .initial_value(false)
+        .interact()?;
+
+    if !confirm {
+        cliclack::outro_cancel("Uninstall cancelled")?;
+        return Ok(());
     }
 
-    if preflight.has_systemd() && unit_path.exists() {
-        run_step("Stopping Dokuru service", || {
-            stop_service_if_present(&config.service_name)
-        })?;
-        run_step("Disabling Dokuru service", || {
-            disable_service_if_present(&config.service_name)
-        })?;
-        run_step("Removing systemd unit", || {
-            remove_file_if_present(&unit_path)
-        })?;
-        run_step("Reloading systemd", reload_systemd)?;
-    }
-
-    run_step("Removing Dokuru binary", || {
-        remove_file_if_present(&config.install_path)
-    })?;
-    run_step("Removing Dokuru config", || {
-        remove_dir_if_present(&config.config_dir)
+    run_step("Stopping Dokuru service", || {
+        stop_service_if_present("dokuru")
     })?;
 
-    let mut removed = vec![
-        "Binary:  removed".to_string(),
-        "Config:  removed".to_string(),
-    ];
-    if preflight.has_systemd() {
-        removed.push("Service: removed".to_string());
-    }
-    note("Uninstall complete", removed.join("\n"))?;
+    run_step("Disabling Dokuru service", || {
+        disable_service_if_present("dokuru")
+    })?;
 
-    outro("Dokuru has been removed from this host.")?;
+    run_step("Removing systemd unit", || {
+        remove_file_if_present(&PathBuf::from("/etc/systemd/system/dokuru.service"))?;
+        let _ = run_command("systemctl", &["daemon-reload"]);
+        Ok(())
+    })?;
+
+    run_step("Removing configuration", || {
+        remove_dir_if_present(&PathBuf::from("/etc/dokuru"))
+    })?;
+
+    run_step("Removing binary", || {
+        remove_file_if_present(&PathBuf::from("/usr/local/bin/dokuru"))
+    })?;
+
+    run_step("Removing audit data", || {
+        remove_dir_if_present(&PathBuf::from("/var/lib/dokuru"))
+    })?;
+
+    cliclack::outro("Dokuru has been uninstalled successfully")?;
     Ok(())
 }
-
-// ─── SetupMode ───────────────────────────────────────────────────────────────
-
-// ─── Config Resolution ───────────────────────────────────────────────────────
