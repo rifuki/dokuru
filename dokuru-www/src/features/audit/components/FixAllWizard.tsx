@@ -1,5 +1,5 @@
 import {
-    Sheet, SheetClose, SheetContent, SheetHeader,
+    Sheet, SheetClose, SheetHeader,
 } from "@/components/ui/sheet";
 import {
     AlertTriangle, CheckCircle2, Loader2, XCircle,
@@ -8,6 +8,7 @@ import {
 import { cn } from "@/lib/utils";
 import { isContainerRecreateRule } from "@/features/audit/hooks/useFix";
 import type { CgroupRuleId, CgroupTargetConfig, FixAllStep, RuleFixStatus } from "@/features/audit/hooks/useFixAll";
+import { ResizableSheetContent } from "@/features/audit/components/ResizableSheetContent";
 
 // ── Step indicator ────────────────────────────────────────────────────────────
 
@@ -246,7 +247,7 @@ function ConfirmStep({
                 <button
                     onClick={onConfirm}
                     disabled={selectedCount === 0}
-                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-[#2496ED] hover:bg-[#1e80cc] disabled:bg-white/10 disabled:text-white/25 disabled:shadow-none px-4 py-2.5 text-sm font-semibold text-white shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] transition-all hover:shadow-[0_0_24px_-4px_rgba(36,150,237,0.65)] active:scale-[0.98]"
+                    className="audit-on-primary flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-[#2496ED] hover:bg-[#1e80cc] disabled:bg-white/10 disabled:text-white/25 disabled:shadow-none px-4 py-2.5 text-sm font-semibold text-white shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] transition-all hover:shadow-[0_0_24px_-4px_rgba(36,150,237,0.65)] active:scale-[0.98]"
                 >
                     {hasCgroupSelection ? "Configure Resources" : `Apply ${selectedCount} Selected`}
                 </button>
@@ -428,7 +429,7 @@ function ConfigureResourcesStep({
                 <button
                     onClick={onApply}
                     disabled={cgroupLoading || hasInvalidValues}
-                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-[#2496ED] hover:bg-[#1e80cc] disabled:bg-white/10 disabled:text-white/25 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] transition-all active:scale-[0.98]"
+                    className="audit-on-primary flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-[#2496ED] hover:bg-[#1e80cc] disabled:bg-white/10 disabled:text-white/25 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] transition-all active:scale-[0.98]"
                 >
                     Apply {selectedCount} Selected
                 </button>
@@ -596,7 +597,7 @@ function ResultStep({
                 </button>
                 <button
                     onClick={onRerunAudit}
-                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-[#2496ED] hover:bg-[#1e80cc] px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98]"
+                    className="audit-on-primary flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-[#2496ED] hover:bg-[#1e80cc] px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98]"
                 >
                     <RefreshCw className="h-3.5 w-3.5" />
                     Re-run Audit
@@ -636,10 +637,13 @@ export function FixAllWizard({
 
     return (
         <Sheet open={open} onOpenChange={(v) => { if (!v && step !== "applying") onClose(); }}>
-            <SheetContent
+            <ResizableSheetContent
                 side="right"
                 showCloseButton={false}
-                className="audit-fix-sheet w-full sm:max-w-[520px] bg-background border-l p-0 flex flex-col gap-0 overflow-hidden"
+                storageKey="dokuru_fix_all_sheet_width"
+                defaultWidth={560}
+                minWidth={420}
+                className="bg-background border-l"
             >
                 <SheetClose
                     disabled={step === "applying"}
@@ -701,7 +705,7 @@ export function FixAllWizard({
                         />
                     )}
                 </div>
-            </SheetContent>
+            </ResizableSheetContent>
         </Sheet>
     );
 }

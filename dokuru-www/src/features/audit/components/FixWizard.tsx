@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-    Sheet, SheetContent, SheetHeader,
+    Sheet, SheetHeader,
 } from "@/components/ui/sheet";
 import {
     AlertTriangle, CheckCircle2, Loader2, RotateCcw, Server,
@@ -15,6 +15,7 @@ import {
     getFixSteps, isContainerRecreateRule, isCgroupRule,
     type TargetConfig, type WizardStep,
 } from "@/features/audit/hooks/useFix";
+import { ResizableSheetContent } from "@/features/audit/components/ResizableSheetContent";
 
 // ── Step indicator ────────────────────────────────────────────────────────────
 
@@ -371,7 +372,7 @@ function ConfirmStep({
                     onClick={onConfirm}
                     disabled={previewLoading || hasInvalidValues}
                     className={cn(
-                        "flex-1 inline-flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98]",
+                        "audit-on-primary flex-1 inline-flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98]",
                         previewLoading || hasInvalidValues
                             ? "bg-white/10 cursor-not-allowed opacity-50"
                             : "bg-[#2496ED] hover:bg-[#1e80cc] shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] hover:shadow-[0_0_24px_-4px_rgba(36,150,237,0.65)]"
@@ -660,7 +661,7 @@ function ResultStep({
                 {isApplied && (
                     <button
                         onClick={onRerunAudit}
-                        className="flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-[#2496ED] hover:bg-[#1e80cc] px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98]"
+                        className="audit-on-primary flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-[#2496ED] hover:bg-[#1e80cc] px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98]"
                     >
                         <RefreshCw className="h-3.5 w-3.5" />
                         Re-run Audit
@@ -701,9 +702,12 @@ export function FixWizard({
 
     return (
         <Sheet open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-            <SheetContent
+            <ResizableSheetContent
                 side="right"
-                className="audit-fix-sheet w-full sm:max-w-[680px] bg-[#09090B] border-l border-white/8 p-0 flex flex-col gap-0 overflow-hidden"
+                storageKey="dokuru_fix_sheet_width"
+                defaultWidth={720}
+                minWidth={420}
+                className="bg-[#09090B] border-l border-white/8"
             >
                 {/* ── Header ── */}
                 <SheetHeader className="px-6 pt-6 pb-5 border-b border-white/8 space-y-4">
@@ -757,7 +761,7 @@ export function FixWizard({
                         />
                     )}
                 </div>
-            </SheetContent>
+            </ResizableSheetContent>
         </Sheet>
     );
 }

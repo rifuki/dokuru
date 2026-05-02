@@ -255,12 +255,17 @@
   }
 
   html:not(.dark) .audit-fix-sheet [class*="text-white"] {
-    color: color-mix(in srgb, var(--foreground) 68%, transparent) !important;
+    color: color-mix(in srgb, var(--foreground) 76%, transparent) !important;
   }
 
-  html:not(.dark) .audit-fix-sheet .text-white,
-  html:not(.dark) .audit-fix-sheet [class*="bg-[#2496ED]"] {
+  html:not(.dark) .audit-fix-sheet .audit-on-primary,
+  html:not(.dark) .audit-fix-sheet .audit-on-primary * {
     color: #fff !important;
+  }
+
+  html:not(.dark) .audit-fix-sheet .audit-on-primary:disabled,
+  html:not(.dark) .audit-fix-sheet .audit-on-primary:disabled * {
+    color: color-mix(in srgb, var(--foreground) 42%, transparent) !important;
   }
 
   html:not(.dark) .audit-fix-sheet [class*="border-white"] {
