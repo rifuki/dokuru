@@ -2,7 +2,16 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useReducer, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { agentApi } from "@/lib/api/agent";
-import { agentDirectApi, type AuditReportResponse, type AuditResponse, type AuditResult } from "@/lib/api/agent-direct";
+import {
+  agentDirectApi,
+  type AuditGroupSummary,
+  type AuditRemediationAction,
+  type AuditRemediationEffort,
+  type AuditRemediationPlan,
+  type AuditReportResponse,
+  type AuditResponse,
+  type AuditResult,
+} from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
 import { dockerApi, dockerCredential, type Container as DockerContainer } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
@@ -53,6 +62,100 @@ const SECTION_META: Record<string, { label: string; num: string; color: string; 
 
 function sectionMeta(section: string) {
   return SECTION_META[section] ?? { label: section, num: "", color: "text-gray-500", bg: "bg-gray-500/10", border: "border-gray-500/30" };
+}
+
+function sortAuditResults(results: AuditResult[]) {
+  return [...results].sort((a, b) => {
+    if (a.status !== b.status) return a.status === "Fail" ? -1 : 1;
+    return a.rule.id.localeCompare(b.rule.id, undefined, { numeric: true });
+  });
+}
+
+function groupSummariesFromResults(results: AuditResult[], keyForResult: (result: AuditResult) => string, labelForKey: (key: string) => string): AuditGroupSummary[] {
+  const groups = new Map<string, { passed: number; failed: number; errors: number }>();
+
+  for (const result of results) {
+    const key = keyForResult(result);
+    const group = groups.get(key) ?? { passed: 0, failed: 0, errors: 0 };
+    if (result.status === "Pass") group.passed += 1;
+    else if (result.status === "Fail") group.failed += 1;
+    else group.errors += 1;
+    groups.set(key, group);
+  }
+
+  return [...groups.entries()].map(([key, group]) => {
+    const total = group.passed + group.failed + group.errors;
+    return {
+      key,
+      label: labelForKey(key),
+      number: null,
+      total,
+      passed: group.passed,
+      failed: group.failed,
+      errors: group.errors,
+      percent: total > 0 ? Math.round((group.passed / total) * 100) : 0,
+    };
+  });
+}
+
+function severityRank(severity: string) {
+  if (severity === "High") return 3;
+  if (severity === "Medium") return 2;
+  return 1;
+}
+
+function effortForResult(result: AuditResult): AuditRemediationEffort {
+  if (result.remediation_kind === "auto") return "quick";
+  if (result.remediation_kind === "guided") return "moderate";
+  return "involved";
+}
+
+function buildRemediationPlan(results: AuditResult[]): AuditRemediationPlan {
+  const failed = results.filter(result => result.status === "Fail");
+  const autoFixable = failed.filter(result => result.remediation_kind === "auto").length;
+  const guided = failed.filter(result => result.remediation_kind === "guided").length;
+  const highImpact = failed.filter(result => result.rule.severity === "High").length;
+  const mediumImpact = failed.filter(result => result.rule.severity === "Medium").length;
+
+  const actions: AuditRemediationAction[] = failed
+    .map((result) => {
+      const pillar = getRulePillar(result.rule.id);
+      const effort = effortForResult(result);
+      const riskScore = severityRank(result.rule.severity) * 100
+        + (result.remediation_kind === "auto" ? 30 : result.remediation_kind === "guided" ? 15 : 0)
+        + Math.min(result.affected.length, 10);
+
+      return {
+        rank: 0,
+        rule_id: result.rule.id,
+        title: result.rule.title,
+        severity: result.rule.severity,
+        section_key: result.rule.section,
+        section_label: result.rule.section,
+        pillar_key: pillar,
+        pillar_label: PILLAR_META[pillar].name,
+        remediation_kind: result.remediation_kind,
+        effort,
+        risk_score: riskScore,
+        affected_count: result.affected.length,
+        command_available: Boolean(result.audit_command),
+        summary: result.remediation_guide || result.rule.remediation || result.message,
+      };
+    })
+    .sort((a, b) => b.risk_score - a.risk_score || a.rule_id.localeCompare(b.rule_id, undefined, { numeric: true }))
+    .map((action, index) => ({ ...action, rank: index + 1 }));
+
+  return {
+    total_failed: failed.length,
+    auto_fixable: autoFixable,
+    guided,
+    manual: failed.length - autoFixable - guided,
+    high_impact: highImpact,
+    medium_impact: mediumImpact,
+    low_impact: failed.length - highImpact - mediumImpact,
+    quick_wins: autoFixable,
+    actions,
+  };
 }
 
 
@@ -941,36 +1044,16 @@ function AuditDetailPage() {
   })() : null;
 
   const report = auditReport?.report;
-  const baseResults = report?.sorted_results ?? [...(auditData?.results ?? [])].sort((a, b) => {
-    if (a.status !== b.status) return a.status === "Fail" ? -1 : 1;
-    return a.rule.id.localeCompare(b.rule.id, undefined, { numeric: true });
-  });
-  // Group sections
-  const sections: string[] = report
-    ? report.sections.map(section => section.key)
-    : auditData
-      ? [...new Set(auditData.results.map(r => r.rule.section))]
-      : [];
-
-  const sectionStats: Record<string, { total: number; passed: number; percent: number }> = report
-    ? Object.fromEntries(report.sections.map(section => [
-      section.key,
-      { total: section.total, passed: section.passed, percent: section.percent },
-    ]))
-    : auditData
-      ? Object.fromEntries(sections.map(s => {
-        const sectionRules = auditData.results.filter(r => r.rule.section === s);
-        const passed = sectionRules.filter(r => r.status === "Pass").length;
-        return [s, {
-          total: sectionRules.length,
-          passed,
-          percent: sectionRules.length > 0 ? Math.round((passed / sectionRules.length) * 100) : 0,
-        }];
-      }))
-      : {};
+  const baseResults = sortAuditResults(report?.sorted_results?.length ? report.sorted_results : auditData?.results ?? []);
+  const sectionSummaries = groupSummariesFromResults(baseResults, result => result.rule.section, key => key);
+  const sections = sectionSummaries.map(section => section.key);
+  const sectionStats: Record<string, { total: number; passed: number; percent: number }> = Object.fromEntries(sectionSummaries.map(section => [
+    section.key,
+    { total: section.total, passed: section.passed, percent: section.percent },
+  ]));
 
   // Sort sections: worst pass% first, so problem areas appear at top
-  const sortedSections = report ? sections : [...sections].sort((a, b) => {
+  const sortedSections = [...sections].sort((a, b) => {
     const statA = sectionStats[a] ?? { total: 0, passed: 0 };
     const statB = sectionStats[b] ?? { total: 0, passed: 0 };
     const pctA = statA.total > 0 ? statA.passed / statA.total : 1;
@@ -998,24 +1081,19 @@ function AuditDetailPage() {
 
   const filteredResults = scopedResults.filter(r => statusFilter === "all" || r.status === statusFilter);
 
-  const pillarSummaries = report?.pillars ?? (Object.keys(PILLAR_META) as SecurityPillar[]).map(pillar => {
-    const pillarRules = baseResults.filter(r => getRulePillar(r.rule.id) === pillar);
-    const passed = pillarRules.filter(r => r.status === "Pass").length;
-    const failed = pillarRules.filter(r => r.status === "Fail").length;
-    const errors = pillarRules.filter(r => r.status === "Error").length;
-    const total = passed + failed;
-
-    return {
-      key: pillar,
-      label: PILLAR_META[pillar].name,
-      number: null,
-      total,
-      passed,
-      failed,
-      errors,
-      percent: total > 0 ? Math.round((passed / total) * 100) : 0,
-    };
+  const pillarSummaries = groupSummariesFromResults(
+    baseResults,
+    result => getRulePillar(result.rule.id),
+    key => PILLAR_META[key as SecurityPillar]?.name ?? key,
+  ).sort((a, b) => {
+    const order = Object.keys(PILLAR_META);
+    return order.indexOf(a.key) - order.indexOf(b.key);
   });
+  const severityFailures = {
+    high: baseResults.filter(r => r.rule.severity === "High" && r.status === "Fail").length,
+    medium: baseResults.filter(r => r.rule.severity === "Medium" && r.status === "Fail").length,
+  };
+  const remediationPlan = buildRemediationPlan(baseResults);
 
   // Group filtered results by section OR pillar based on viewMode
   const groupedResults = viewMode === "section"
@@ -1252,11 +1330,11 @@ function AuditDetailPage() {
                 <div className="pt-4 mt-4 border-t border-border grid grid-cols-2 gap-2">
                   <div className="rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2.5">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-[0.14em]">Critical</p>
-                    <p className="text-lg font-black text-rose-400">{report?.severity_failures.high ?? auditData.results.filter(r => r.rule.severity === "High" && r.status === "Fail").length}</p>
+                    <p className="text-lg font-black text-rose-400">{severityFailures.high}</p>
                   </div>
                   <div className="rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2.5">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-[0.14em]">Medium</p>
-                    <p className="text-lg font-black text-amber-400">{report?.severity_failures.medium ?? auditData.results.filter(r => r.rule.severity === "Medium" && r.status === "Fail").length}</p>
+                    <p className="text-lg font-black text-amber-400">{severityFailures.medium}</p>
                   </div>
                 </div>
               </div>
@@ -1305,36 +1383,36 @@ function AuditDetailPage() {
             />
           )}
 
-          {report?.remediation.total_failed ? (
+          {remediationPlan.total_failed ? (
             <div className="rounded-2xl border border-border bg-card dark:bg-gradient-to-br dark:from-[#0A0A0B] dark:to-[#111113] overflow-hidden">
               <div className="flex flex-col gap-4 border-b border-border px-5 py-4 md:flex-row md:items-center md:justify-between">
                 <div className="max-w-2xl">
                   <h3 className="text-base font-bold tracking-tight">Remediation Plan</h3>
                   <p className="text-sm text-muted-foreground">
-                    Top {Math.min(report.remediation.actions.length, 5)} of {report.remediation.total_failed} failed checks from this audit. After a fix and audit rerun, the next failed rule moves into this priority list.
+                    Top {Math.min(remediationPlan.actions.length, 5)} of {remediationPlan.total_failed} failed checks from this audit. After a fix and audit rerun, the next failed rule moves into this priority list.
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
                   <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2">
-                    <p className="text-lg font-black text-rose-400">{report.remediation.high_impact}</p>
+                    <p className="text-lg font-black text-rose-400">{remediationPlan.high_impact}</p>
                     <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">High severity</p>
                   </div>
                   <div className="rounded-lg border border-[#2496ED]/20 bg-[#2496ED]/10 px-3 py-2">
-                    <p className="text-lg font-black text-[#2496ED]">{report.remediation.auto_fixable}</p>
+                    <p className="text-lg font-black text-[#2496ED]">{remediationPlan.auto_fixable}</p>
                     <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Auto-fixable</p>
                   </div>
                   <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
-                    <p className="text-lg font-black text-foreground">{report.remediation.quick_wins}</p>
+                    <p className="text-lg font-black text-foreground">{remediationPlan.quick_wins}</p>
                     <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Quick fixes</p>
                   </div>
                   <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
-                    <p className="text-lg font-black text-foreground">{report.remediation.manual + report.remediation.guided}</p>
+                    <p className="text-lg font-black text-foreground">{remediationPlan.manual + remediationPlan.guided}</p>
                     <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Manual review</p>
                   </div>
                 </div>
               </div>
               <div className="divide-y divide-border">
-                {report.remediation.actions.slice(0, 5).map((action) => {
+                {remediationPlan.actions.slice(0, 5).map((action) => {
                   const pillar = action.pillar_key as SecurityPillar;
                   const meta = PILLAR_META[pillar];
                   const effortLabel = action.effort === "quick" ? "Quick" : action.effort === "moderate" ? "Moderate" : "Involved";
