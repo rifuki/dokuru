@@ -423,9 +423,53 @@ function ProgressEventsPanel({
     );
 }
 
-function ApplyingStep({ ruleId, stepIndex, progressEvents }: { ruleId: string; stepIndex: number; progressEvents: FixProgress[] }) {
+function FixStepChecklist({ ruleId, stepIndex, complete = false }: { ruleId: string; stepIndex: number; complete?: boolean }) {
     const steps = getFixSteps(ruleId);
 
+    return (
+        <div className="rounded-lg border border-white/8 bg-[#050507] overflow-hidden">
+            <div className="flex items-center gap-1.5 px-3 py-2 border-b border-white/5 bg-white/[0.015]">
+                <Terminal className="h-3 w-3 text-white/30" />
+                <span className="text-[10px] font-mono text-white/30 uppercase tracking-[0.15em]">
+                    dokuru-agent
+                </span>
+                <span className="ml-auto text-[10px] font-mono text-[#2496ED]/60 uppercase tracking-[0.15em]">
+                    rule {ruleId}
+                </span>
+            </div>
+            <div className="p-4 space-y-2.5">
+                {steps.map((s, i) => {
+                    const done = complete || i < stepIndex;
+                    const active = !complete && i === stepIndex;
+                    const pending = !complete && i > stepIndex;
+                    return (
+                        <div
+                            key={i}
+                            className={cn(
+                                "flex items-start gap-3 text-xs font-mono transition-all duration-300",
+                                done && "text-emerald-400",
+                                active && "text-white",
+                                pending && "text-white/20"
+                            )}
+                        >
+                            <span className="shrink-0 w-4 text-center mt-px">
+                                {done
+                                    ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                                    : active
+                                    ? <Loader2 className="h-3.5 w-3.5 text-[#2496ED] animate-spin" />
+                                    : <span className="inline-block w-3.5 h-3.5 rounded-full border border-white/10" />
+                                }
+                            </span>
+                            <span className="leading-relaxed">{s}</span>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
+function ApplyingStep({ ruleId, stepIndex, progressEvents }: { ruleId: string; stepIndex: number; progressEvents: FixProgress[] }) {
     return (
         <div className="flex flex-col gap-4">
             <div className="flex items-center gap-2.5">
@@ -435,46 +479,7 @@ function ApplyingStep({ ruleId, stepIndex, progressEvents }: { ruleId: string; s
                 </span>
             </div>
 
-            {/* Terminal-style step list */}
-            <div className="rounded-lg border border-white/8 bg-[#050507] overflow-hidden">
-                <div className="flex items-center gap-1.5 px-3 py-2 border-b border-white/5 bg-white/[0.015]">
-                    <Terminal className="h-3 w-3 text-white/30" />
-                    <span className="text-[10px] font-mono text-white/30 uppercase tracking-[0.15em]">
-                        dokuru-agent
-                    </span>
-                    <span className="ml-auto text-[10px] font-mono text-[#2496ED]/60 uppercase tracking-[0.15em]">
-                        rule {ruleId}
-                    </span>
-                </div>
-                <div className="p-4 space-y-2.5">
-                    {steps.map((s, i) => {
-                        const done = i < stepIndex;
-                        const active = i === stepIndex;
-                        const pending = i > stepIndex;
-                        return (
-                            <div
-                                key={i}
-                                className={cn(
-                                    "flex items-start gap-3 text-xs font-mono transition-all duration-300",
-                                    done && "text-emerald-400",
-                                    active && "text-white",
-                                    pending && "text-white/20"
-                                )}
-                            >
-                                <span className="shrink-0 w-4 text-center mt-px">
-                                    {done
-                                        ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                                        : active
-                                        ? <Loader2 className="h-3.5 w-3.5 text-[#2496ED] animate-spin" />
-                                        : <span className="inline-block w-3.5 h-3.5 rounded-full border border-white/10" />
-                                    }
-                                </span>
-                                <span className="leading-relaxed">{s}</span>
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
+            <FixStepChecklist ruleId={ruleId} stepIndex={stepIndex} />
 
             <p className="text-[11px] text-white/30 font-mono text-center">
                 Live progress is streamed from dokuru-agent. You can close this panel or navigate away; the fix continues in the background.
@@ -491,6 +496,7 @@ function ResultStep({
     outcome,
     result,
     progressEvents,
+    stepIndex,
     agentId,
     containers,
     auditId,
@@ -500,6 +506,7 @@ function ResultStep({
     outcome: FixOutcome;
     result: AuditResult;
     progressEvents: FixProgress[];
+    stepIndex: number;
     agentId: string;
     containers: DockerContainer[];
     auditId?: string;
@@ -549,6 +556,8 @@ function ResultStep({
                     </div>
                 </div>
             </div>
+
+            <FixStepChecklist ruleId={result.rule.id} stepIndex={stepIndex} complete={isApplied} />
 
             {/* Flags */}
             {(outcome.requires_elevation || outcome.requires_restart) && (
@@ -707,6 +716,7 @@ export function FixWizard({
                             outcome={outcome}
                             result={result}
                             progressEvents={progressEvents}
+                            stepIndex={stepIndex}
                             agentId={agentId}
                             containers={containers}
                             auditId={auditId}

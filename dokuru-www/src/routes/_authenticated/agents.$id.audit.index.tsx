@@ -907,7 +907,6 @@ function AuditPage() {
         void navigate({
             to: "/agents/$id/audits/$auditId",
             params: { id, auditId: savedAuditId },
-            replace: true,
         });
     };
 

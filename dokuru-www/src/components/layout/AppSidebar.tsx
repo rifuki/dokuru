@@ -364,9 +364,6 @@ export function AppSidebar() {
                                 const completedAuditId = auditStream?.status === "complete" ? auditStream.savedAudit?.id : undefined;
                                 const completedAuditViewed = !!completedAuditId && viewedAuditResults[agent.id] === completedAuditId;
                                 const auditStatus = isCurrentAuditPage || completedAuditViewed ? null : auditSidebarStatus(auditStream);
-                                const auditResultHref = completedAuditId && !completedAuditViewed
-                                  ? `/agents/${agent.id}/audits/${completedAuditId}`
-                                  : item.href;
                                 const active = isActive(item.href);
                                 const disabled = item.requiresOnline && !isOnline;
                                 return disabled ? (
@@ -381,7 +378,7 @@ export function AppSidebar() {
                                 ) : (
                                   <Link
                                      key={item.href}
-                                     to={auditResultHref}
+                                      to={item.href}
                                      title={auditStatus?.title}
                                       className={`flex items-center gap-3 border-l-4 px-3 py-2 text-sm transition-colors ${
                                         active
