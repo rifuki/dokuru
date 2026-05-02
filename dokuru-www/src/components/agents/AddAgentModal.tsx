@@ -1,5 +1,5 @@
 import { useState, type CSSProperties, type FormEvent } from "react";
-import { useAgentStore } from "@/stores/use-agent-store";
+import { useAgentStore, getAgentTokenByUrl, setAgentTokenByUrl } from "@/stores/use-agent-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,6 +42,17 @@ export function AddAgentModal({ open, onOpenChange, onOpenSetupGuide }: AddAgent
         setName(generateRandomName());
     };
 
+    const handleUrlChange = (newUrl: string) => {
+        setUrl(newUrl);
+        // Auto-fill token from cache if available and token field is empty
+        if (newUrl && accessMode !== "relay" && !token) {
+            const cachedToken = getAgentTokenByUrl(newUrl);
+            if (cachedToken) {
+                setToken(cachedToken);
+            }
+        }
+    };
+
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
 
@@ -70,6 +81,12 @@ export function AddAgentModal({ open, onOpenChange, onOpenSetupGuide }: AddAgent
                 token: token.trim(),
                 access_mode: accessMode,
             });
+            
+            // Cache token by URL for future auto-fill
+            if (accessMode !== "relay") {
+                setAgentTokenByUrl(url.trim(), token.trim());
+            }
+            
             toast.success("Agent added successfully");
             // Reset form
             setName("");
@@ -191,7 +208,7 @@ export function AddAgentModal({ open, onOpenChange, onOpenSetupGuide }: AddAgent
                                                 : "https://agent.yourdomain.com"
                                         }
                                         value={url}
-                                        onChange={(e) => setUrl(e.target.value.trim())}
+                                        onChange={(e) => handleUrlChange(e.target.value.trim())}
                                         disabled={isLoading}
                                         autoComplete="off"
                                         autoCorrect="off"

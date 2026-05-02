@@ -247,3 +247,23 @@ export const getAgentToken = (agentId: string): string | null => {
 export const setAgentToken = (agentId: string, token: string): void => {
   localStorage.setItem(`agent_token_${agentId}`, token);
 };
+
+// Helper to get agent token by URL (for direct mode without agent ID)
+export const getAgentTokenByUrl = (url: string): string | null => {
+  try {
+    const normalized = new URL(url).origin;
+    return localStorage.getItem(`agent_token_url_${normalized}`);
+  } catch {
+    return null;
+  }
+};
+
+// Helper to set agent token by URL (for direct mode)
+export const setAgentTokenByUrl = (url: string, token: string): void => {
+  try {
+    const normalized = new URL(url).origin;
+    localStorage.setItem(`agent_token_url_${normalized}`, token);
+  } catch {
+    // Invalid URL, skip caching
+  }
+};
