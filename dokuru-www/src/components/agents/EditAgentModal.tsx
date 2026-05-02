@@ -14,6 +14,7 @@ import {
     AgentConnectionModeOption,
 } from "@/components/agents/AgentConnectionModeOption";
 import type { AgentAccessMode } from "@/components/agents/AgentConnectionMode";
+import { IS_LOCAL_AGENT_MODE } from "@/lib/env";
 
 const EDIT_ACCESS_MODES: AgentAccessMode[] = ["cloudflare", "relay", "direct"];
 const EDIT_ACCESS_MODES_WITH_DOMAIN: AgentAccessMode[] = ["cloudflare", "relay", "direct", "domain"];
@@ -90,7 +91,7 @@ export function EditAgentModal({
                                     key={mode}
                                     mode={mode}
                                     checked={accessMode === mode}
-                                    badge={mode === "cloudflare" ? "Recommended" : undefined}
+                                    disabled={IS_LOCAL_AGENT_MODE && (mode === "cloudflare" || mode === "relay")}
                                     onSelect={onAccessModeChange}
                                 />
                             ))}

@@ -28,11 +28,13 @@ export function AgentConnectionModeOption<TMode extends AgentAccessMode>({
     mode,
     checked,
     badge,
+    disabled = false,
     onSelect,
 }: {
     mode: TMode;
     checked: boolean;
     badge?: string;
+    disabled?: boolean;
     onSelect: (mode: TMode) => void;
 }) {
     const { label, description, Icon } = MODE_META[mode];
@@ -42,11 +44,14 @@ export function AgentConnectionModeOption<TMode extends AgentAccessMode>({
             type="button"
             role="radio"
             aria-checked={checked}
-            onClick={() => onSelect(mode)}
-            className={`flex w-full cursor-pointer items-center gap-3 rounded-xl border p-3 text-left transition-all ${
-                checked
-                    ? "border-primary bg-primary/10 shadow-sm"
-                    : "border-border bg-background hover:border-primary/40 hover:bg-background/80"
+            disabled={disabled}
+            onClick={() => !disabled && onSelect(mode)}
+            className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all ${
+                disabled
+                    ? "cursor-not-allowed opacity-50"
+                    : checked
+                        ? "cursor-pointer border-primary bg-primary/10 shadow-sm"
+                        : "cursor-pointer border-border bg-background hover:border-primary/40 hover:bg-background/80"
             }`}
         >
             <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${checked ? "bg-primary text-primary-foreground" : "bg-muted text-primary"}`}>

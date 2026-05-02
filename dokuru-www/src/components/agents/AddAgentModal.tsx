@@ -122,28 +122,25 @@ export function AddAgentModal({ open, onOpenChange, onOpenSetupGuide }: AddAgent
                         <div className="mb-3">
                             <div className="text-sm font-semibold">Connection mode</div>
                             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                                {IS_LOCAL_AGENT_MODE 
-                                    ? "Direct mode connects to agents on your local network or via public URLs."
+                                {IS_LOCAL_AGENT_MODE
+                                    ? "Direct mode is the only supported mode for local agent deployments."
                                     : "Cloudflare is the fastest setup. Relay is best when the host cannot expose any URL."}
                             </p>
                         </div>
 
                         <div role="radiogroup" aria-label="Connection mode" className="space-y-2">
-                            {!IS_LOCAL_AGENT_MODE && (
-                                <AgentConnectionModeOption
-                                    mode="cloudflare"
-                                    checked={accessMode === "cloudflare"}
-                                    badge="Recommended"
-                                    onSelect={(mode) => setAccessMode(mode)}
-                                />
-                            )}
-                            {!IS_LOCAL_AGENT_MODE && (
-                                <AgentConnectionModeOption
-                                    mode="relay"
-                                    checked={accessMode === "relay"}
-                                    onSelect={(mode) => setAccessMode(mode)}
-                                />
-                            )}
+                            <AgentConnectionModeOption
+                                mode="cloudflare"
+                                checked={accessMode === "cloudflare"}
+                                disabled={IS_LOCAL_AGENT_MODE}
+                                onSelect={(mode) => setAccessMode(mode)}
+                            />
+                            <AgentConnectionModeOption
+                                mode="relay"
+                                checked={accessMode === "relay"}
+                                disabled={IS_LOCAL_AGENT_MODE}
+                                onSelect={(mode) => setAccessMode(mode)}
+                            />
                             <AgentConnectionModeOption
                                 mode="direct"
                                 checked={accessMode === "direct"}
