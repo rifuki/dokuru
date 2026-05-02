@@ -4,7 +4,7 @@ import {
 } from "@/components/ui/sheet";
 import {
     AlertTriangle, CheckCircle2, Loader2, RotateCcw, Server,
-    ShieldAlert, XCircle, Zap, ChevronRight, Terminal, Copy, Check,
+    ShieldAlert, XCircle, Wrench, ChevronRight, Terminal, Copy, Check,
     RefreshCw, FileCode2, Activity, ArrowRight, Box,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -292,8 +292,13 @@ function ConfirmStep({
                                                 min={meta.min}
                                                 value={value}
                                                 onChange={(e) => {
-                                                    const val = Number(e.target.value);
-                                                    if (val >= meta.min) {
+                                                    const input = e.target.value;
+                                                    if (input === "") {
+                                                        onTargetChange(target.container_id, { [meta.key]: 0 });
+                                                        return;
+                                                    }
+                                                    const val = Number(input);
+                                                    if (!isNaN(val)) {
                                                         onTargetChange(target.container_id, { [meta.key]: val });
                                                     }
                                                 }}
@@ -372,7 +377,7 @@ function ConfirmStep({
                             : "bg-[#2496ED] hover:bg-[#1e80cc] shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] hover:shadow-[0_0_24px_-4px_rgba(36,150,237,0.65)]"
                     )}
                 >
-                    <Zap className="h-3.5 w-3.5" />
+                    <Wrench className="h-3.5 w-3.5" />
                     Apply Fix
                 </button>
             </div>
@@ -706,7 +711,7 @@ export function FixWizard({
                     <div className="space-y-2 pr-8">
                         <div className="flex items-center gap-2.5">
                             <span className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.15em] text-[#2496ED] bg-[#2496ED]/10 border border-[#2496ED]/25 px-2.5 py-1 rounded">
-                                <Zap className="h-3 w-3" />
+                                <Wrench className="h-3 w-3" />
                                 Rule {rule.id}
                             </span>
                             <span className="text-[10px] font-mono text-white/30 uppercase tracking-[0.15em]">

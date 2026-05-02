@@ -373,7 +373,7 @@ function RuleCard({ result, agentId, agentUrl, agentAccessMode, token, container
                         onClick={() => void executeFix()}
                         className="bg-blue-500 hover:bg-blue-600 text-white"
                     >
-                        <Zap className="h-3.5 w-3.5 mr-1.5" /> Apply Fix
+                        <Wrench className="h-3.5 w-3.5 mr-1.5" /> Apply Fix
                     </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
@@ -854,7 +854,7 @@ function AuditRunTerminal({
                     </div>
                 </div>
 
-                <div ref={logRef} className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-zinc-950 p-4 font-mono text-[11px] leading-relaxed">
+                <div ref={logRef} className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-zinc-950 dark:bg-zinc-950 bg-zinc-100 p-4 font-mono text-[11px] leading-relaxed">
                     {lines.length === 0 && !error && (
                         <p className="text-muted-foreground/50">$ connecting to dokuru-agent audit websocket...</p>
                     )}
@@ -864,13 +864,13 @@ function AuditRunTerminal({
                                 <span className="text-muted-foreground/40">[{line.index.toString().padStart(2, "0")}/{line.total}]</span>
                                 <span className={cn(
                                     "font-bold",
-                                    line.status === "Pass" ? "text-emerald-400" : line.status === "Fail" ? "text-rose-400" : "text-amber-400",
+                                    line.status === "Pass" ? "text-emerald-600 dark:text-emerald-400" : line.status === "Fail" ? "text-rose-600 dark:text-rose-400" : "text-amber-600 dark:text-amber-400",
                                 )}>{line.status.toUpperCase()}</span>
                                 <span className="text-[#2496ED]">{line.ruleId}</span>
-                                <span className="truncate text-zinc-300">{line.title}</span>
+                                <span className="truncate text-zinc-700 dark:text-zinc-300">{line.title}</span>
                             </div>
-                            {line.command && <p className="pl-16 text-zinc-600 truncate">$ {line.command}</p>}
-                            <p className="pl-16 text-zinc-500 truncate">{line.message}</p>
+                            {line.command && <p className="pl-16 text-zinc-500 dark:text-zinc-600 truncate">$ {line.command}</p>}
+                            <p className="pl-16 text-zinc-600 dark:text-zinc-500 truncate">{line.message}</p>
                         </div>
                     ))}
                     {error && <p className="text-rose-400">! {error}</p>}
