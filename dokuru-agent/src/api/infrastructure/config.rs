@@ -30,6 +30,8 @@ pub struct DockerConfig {
 #[serde(default)]
 pub struct AuthConfig {
     pub token_hash: String,
+    /// Plain token for bootstrap endpoint (agent mode only)
+    pub plain_token: Option<String>,
     /// Actual token for relay mode (stored securely, only used for WebSocket auth)
     pub relay_token: Option<String>,
 }

@@ -1,6 +1,5 @@
 use axum::extract::State;
 use serde::Serialize;
-use std::path::PathBuf;
 
 use crate::api::infrastructure::web::response::{ApiResult, ApiSuccess};
 use crate::api::state::AppState;
@@ -12,18 +11,14 @@ pub struct BootstrapInfo {
     pub name: String,
 }
 
-fn read_plain_token() -> Option<String> {
-    let token_path = PathBuf::from("/etc/dokuru/.token");
-    std::fs::read_to_string(token_path)
-        .ok()
-        .map(|s| s.trim().to_string())
-}
-
 pub async fn get_bootstrap(State(state): State<AppState>) -> ApiResult<BootstrapInfo> {
     let config = &state.config;
 
-    // Try to read plain token from file, fallback to relay_token from config
-    let token = read_plain_token()
+    // Try plain_token first, fallback to relay_token
+    let token = config
+        .auth
+        .plain_token
+        .clone()
         .or_else(|| config.auth.relay_token.clone())
         .unwrap_or_default();
 
