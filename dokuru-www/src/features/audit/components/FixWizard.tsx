@@ -98,9 +98,9 @@ function currentValueLabel(ruleId: string, target: FixPreview["targets"][number]
 }
 
 function valueMeta(ruleId: string) {
-    if (ruleId === "5.11") return { label: "Memory", unit: "MB", key: "memoryMb" as const, min: 1 };
-    if (ruleId === "5.12") return { label: "CPU shares", unit: "shares", key: "cpuShares" as const, min: 2 };
-    return { label: "PIDs limit", unit: "PIDs", key: "pidsLimit" as const, min: 1 };
+    if (ruleId === "5.11") return { label: "Memory", unit: "MB", key: "memoryMb" as const, min: 64 };
+    if (ruleId === "5.12") return { label: "CPU shares", unit: "shares", key: "cpuShares" as const, min: 128 };
+    return { label: "PIDs limit", unit: "PIDs", key: "pidsLimit" as const, min: 50 };
 }
 
 // ── Step 1: Confirm ───────────────────────────────────────────────────────────
@@ -128,6 +128,14 @@ function ConfirmStep({
     const isCgroup = isCgroupRule(rule.id);
     const isHostPartition = rule.id === "1.1.1";
     const targets = preview?.targets ?? [];
+
+    const meta = valueMeta(rule.id);
+    const hasInvalidValues = isCgroup && targets.some(target => {
+        const config = targetConfig[target.container_id];
+        if (!config) return false;
+        const value = config[meta.key] ?? 0;
+        return value < meta.min;
+    });
 
     return (
         <div className="flex flex-col gap-5">
@@ -283,9 +291,24 @@ function ConfirmStep({
                                                 type="number"
                                                 min={meta.min}
                                                 value={value}
-                                                onChange={(e) => onTargetChange(target.container_id, { [meta.key]: Number(e.target.value) })}
-                                                className="h-9 w-full rounded-lg border border-white/10 bg-black/35 px-3 text-right text-[13px] font-semibold text-white/85 outline-none transition-colors focus:border-[#2496ED]/60 focus:bg-black/50"
+                                                onChange={(e) => {
+                                                    const val = Number(e.target.value);
+                                                    if (val >= meta.min) {
+                                                        onTargetChange(target.container_id, { [meta.key]: val });
+                                                    }
+                                                }}
+                                                className={cn(
+                                                    "h-9 w-full rounded-lg border bg-black/35 px-3 text-right text-[13px] font-semibold outline-none transition-colors focus:bg-black/50",
+                                                    value < meta.min
+                                                        ? "border-red-500/60 text-red-400 focus:border-red-500/80"
+                                                        : "border-white/10 text-white/85 focus:border-[#2496ED]/60"
+                                                )}
                                             />
+                                            {value < meta.min && (
+                                                <span className="mt-1 block text-[9px] text-red-400/80">
+                                                    Minimum: {meta.min} {meta.unit}
+                                                </span>
+                                            )}
                                         </label>
                                     )}
                                 </div>
@@ -341,8 +364,13 @@ function ConfirmStep({
                 </button>
                 <button
                     onClick={onConfirm}
-                    disabled={previewLoading}
-                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-[#2496ED] hover:bg-[#1e80cc] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] transition-all hover:shadow-[0_0_24px_-4px_rgba(36,150,237,0.65)] active:scale-[0.98]"
+                    disabled={previewLoading || hasInvalidValues}
+                    className={cn(
+                        "flex-1 inline-flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98]",
+                        previewLoading || hasInvalidValues
+                            ? "bg-white/10 cursor-not-allowed opacity-50"
+                            : "bg-[#2496ED] hover:bg-[#1e80cc] shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] hover:shadow-[0_0_24px_-4px_rgba(36,150,237,0.65)]"
+                    )}
                 >
                     <Zap className="h-3.5 w-3.5" />
                     Apply Fix
