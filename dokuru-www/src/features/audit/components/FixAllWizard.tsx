@@ -4,6 +4,7 @@ import {
 import {
     AlertTriangle, CheckCircle2, Loader2, XCircle,
     RefreshCw, Check, ShieldAlert, X, FileCode2, Server,
+    Terminal, Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isContainerRecreateRule } from "@/features/audit/hooks/useFix";
@@ -89,7 +90,7 @@ function RuleRow({
                 {selectable
                     ? <span className={cn(
                         "inline-flex h-3.5 w-3.5 items-center justify-center rounded border mt-0.5",
-                        rs.selected ? "border-[#2496ED] bg-[#2496ED] text-white" : "border-white/20 bg-transparent",
+                        rs.selected ? "audit-on-primary border-[#2496ED] bg-[#2496ED] text-white" : "border-white/20 bg-transparent",
                     )}>{rs.selected && <Check size={10} strokeWidth={3} />}</span>
                     : skipped
                     ? <span className="inline-block w-3 h-3 rounded-full border border-white/10 mt-0.5" />
@@ -538,6 +539,92 @@ function ApplyingStep({
     );
 }
 
+function uniqueLabels(values: Array<string | undefined | null>) {
+    return Array.from(new Set(values.map(value => value?.trim()).filter(Boolean))) as string[];
+}
+
+function EvidenceRuleCard({ rs }: { rs: RuleFixStatus }) {
+    const applied = rs.outcome?.status === "Applied";
+    const blocked = rs.outcome?.status === "Blocked";
+    const evidenceEvents = rs.progressEvents.filter(event => event.command || event.detail || event.action);
+    const targets = uniqueLabels(rs.progressEvents.map(event => event.container_name)).slice(0, 4);
+    const previewEvents = evidenceEvents.slice(-4);
+
+    return (
+        <div className={cn(
+            "rounded-xl border p-3.5",
+            applied ? "border-[#2496ED]/22 bg-[#2496ED]/6" : blocked ? "border-rose-500/25 bg-rose-500/[0.06]" : "border-white/8 bg-white/[0.02]"
+        )}>
+            <div className="flex items-start gap-3">
+                <div className={cn(
+                    "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border",
+                    applied ? "border-[#2496ED]/30 bg-[#2496ED]/12 text-[#2496ED]" : "border-rose-500/25 bg-rose-500/10 text-rose-400"
+                )}>
+                    {applied ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+                </div>
+                <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-xs font-bold text-white/65">{rs.ruleId}</span>
+                        <span className={cn(
+                            "rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em]",
+                            applied ? "border-[#2496ED]/25 bg-[#2496ED]/10 text-[#2496ED]" : "border-rose-500/25 bg-rose-500/10 text-rose-400"
+                        )}>
+                            {applied ? "applied" : "blocked"}
+                        </span>
+                        {rs.progressEvents.length > 0 && (
+                            <span className="rounded border border-white/8 bg-white/[0.035] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-white/38">
+                                {rs.progressEvents.length} events
+                            </span>
+                        )}
+                    </div>
+                    <p className="mt-1 text-sm font-semibold leading-snug text-white/82">{rs.title}</p>
+                    {rs.outcome?.message && (
+                        <p className="mt-1 text-xs leading-relaxed text-white/50">{rs.outcome.message}</p>
+                    )}
+                </div>
+            </div>
+
+            {targets.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5 pl-10">
+                    {targets.map(target => (
+                        <span key={target} className="rounded-lg border border-[#2496ED]/18 bg-[#2496ED]/8 px-2 py-1 font-mono text-[10px] text-[#2496ED]/85">
+                            {target}
+                        </span>
+                    ))}
+                </div>
+            )}
+
+            {previewEvents.length > 0 ? (
+                <div className="mt-3 overflow-hidden rounded-lg border border-white/8 bg-black/25 font-mono">
+                    {previewEvents.map((event, index) => (
+                        <div key={`${event.rule_id}-${event.action}-${event.step}-${index}`} className="border-b border-white/6 px-3 py-2 last:border-b-0">
+                            <div className="flex min-w-0 items-center gap-2 text-[10px]">
+                                <span className={cn(
+                                    "w-14 shrink-0 uppercase tracking-[0.12em]",
+                                    event.status === "done" ? "text-[#2496ED]" : event.status === "error" ? "text-rose-400" : "text-amber-400"
+                                )}>
+                                    {event.status}
+                                </span>
+                                <span className="truncate font-semibold text-white/68">{event.action.replaceAll("_", " ")}</span>
+                                {event.detail && <span className="truncate text-white/32">{event.detail}</span>}
+                            </div>
+                            {event.command && (
+                                <pre className="mt-1 overflow-x-auto rounded border border-[#2496ED]/12 bg-[#06111a] px-2 py-1.5 text-[10px] text-[#58b8ff]">
+                                    <span className="select-none text-white/28">$ </span>{event.command}
+                                </pre>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                <p className="mt-3 rounded-lg border border-white/8 bg-white/[0.02] px-3 py-2 text-xs text-white/35">
+                    No streamed evidence was captured for this rule. The final agent outcome is still shown above.
+                </p>
+            )}
+        </div>
+    );
+}
+
 // ── Result step ───────────────────────────────────────────────────────────────
 
 function ResultStep({
@@ -552,6 +639,8 @@ function ResultStep({
     const blocked = selected.filter(r => r.outcome?.status === "Blocked").length;
     const skipped = ruleStatuses.filter(r => r.state === "skipped").length;
     const allApplied = blocked === 0;
+    const evidenceCount = selected.reduce((sum, rs) => sum + rs.progressEvents.length, 0);
+    const targets = uniqueLabels(selected.flatMap(rs => rs.progressEvents.map(event => event.container_name)));
 
     return (
         <div className="flex flex-col gap-5">
@@ -580,7 +669,53 @@ function ResultStep({
                 </div>
             </div>
 
-            {/* Per-rule results */}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2.5">
+                    <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/30">applied</p>
+                    <p className="mt-1 text-xl font-bold text-[#2496ED]">{applied}</p>
+                </div>
+                <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2.5">
+                    <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/30">blocked</p>
+                    <p className="mt-1 text-xl font-bold text-rose-400">{blocked}</p>
+                </div>
+                <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2.5">
+                    <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/30">evidence</p>
+                    <p className="mt-1 text-xl font-bold text-white/82">{evidenceCount}</p>
+                </div>
+                <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2.5">
+                    <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/30">targets</p>
+                    <p className="mt-1 text-xl font-bold text-white/82">{targets.length}</p>
+                </div>
+            </div>
+
+            <div className="rounded-xl border border-white/8 bg-white/[0.02] p-3.5">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                        <Activity className="h-3.5 w-3.5 text-[#2496ED]" />
+                        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/38">Bulk evidence ledger</p>
+                    </div>
+                    <span className="rounded border border-white/8 bg-white/[0.03] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-white/35">
+                        {selected.length} selected
+                    </span>
+                </div>
+                <div className="space-y-3">
+                    {selected.map(rs => (
+                        <EvidenceRuleCard key={rs.ruleId} rs={rs} />
+                    ))}
+                </div>
+            </div>
+
+            {skipped > 0 && (
+                <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3.5 py-3 text-xs text-white/42">
+                    <div className="flex items-start gap-2">
+                        <Terminal className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/35" />
+                        <p className="leading-relaxed">
+                            {skipped} rule(s) were intentionally skipped by selection. High-risk rules stay available in the rule list, but they are not mixed into the evidence ledger unless you selected them.
+                        </p>
+                    </div>
+                </div>
+            )}
+
             <div className="rounded-lg border border-white/8 bg-white/[0.02] overflow-hidden divide-y divide-white/5">
                 {ruleStatuses.map(rs => (
                     <RuleRow key={rs.ruleId} rs={rs} showOutcome={true} />

@@ -165,6 +165,11 @@
 @layer base {
   html {
     font-family: "Inter", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
   }
 
   * {
@@ -179,6 +184,32 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    html.theme-ready body,
+    html.theme-ready main,
+    html.theme-ready aside,
+    html.theme-ready header,
+    html.theme-ready nav,
+    html.theme-ready section,
+    html.theme-ready article,
+    html.theme-ready [data-slot="sidebar-inner"],
+    html.theme-ready [data-slot="sidebar-inset"],
+    html.theme-ready [data-slot="card"],
+    html.theme-ready [data-slot="dialog-content"],
+    html.theme-ready [data-slot="sheet-content"],
+    html.theme-ready [data-slot="button"],
+    html.theme-ready [data-slot="input"],
+    html.theme-ready [data-slot="select-trigger"],
+    html.theme-ready [data-slot="dropdown-menu-content"],
+    html.theme-ready pre,
+    html.theme-ready code,
+    html.theme-ready textarea {
+      transition-property: background-color, border-color, color, fill, stroke, box-shadow, opacity;
+      transition-duration: 180ms;
+      transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    }
   }
 
   code,
@@ -248,6 +279,25 @@
     background: var(--card);
   }
 
+  .compose-code-dialog {
+    background: var(--card);
+    color: var(--foreground);
+  }
+
+  .compose-code-panel {
+    background:
+      radial-gradient(circle at top left, rgba(14, 165, 233, 0.10), transparent 38%),
+      #05080d;
+    color: #dbeafe;
+  }
+
+  .compose-code-panel .yaml-comment { color: #7f8ea3; }
+  .compose-code-panel .yaml-root-key { color: #22d3ee; }
+  .compose-code-panel .yaml-key { color: #7dd3fc; }
+  .compose-code-panel .yaml-punctuation { color: #738096; }
+  .compose-code-panel .yaml-value { color: #fde68a; }
+  .compose-code-panel .yaml-plain { color: #dbeafe; }
+
   html:not(.dark) .audit-fix-sheet {
     background: var(--background) !important;
     border-color: var(--border) !important;
@@ -282,6 +332,22 @@
   html:not(.dark) .audit-fix-sheet [class*="bg-[#09090B]"],
   html:not(.dark) .audit-fix-sheet [class*="bg-[#06111a]"] {
     background-color: color-mix(in srgb, var(--muted) 72%, white 28%) !important;
+  }
+
+  html:not(.dark) .audit-fix-sheet .audit-on-primary:not(:disabled) {
+    background-color: var(--primary) !important;
+    border-color: color-mix(in srgb, var(--primary) 72%, transparent) !important;
+    color: #fff !important;
+  }
+
+  html:not(.dark) .audit-fix-sheet .audit-on-primary:not(:disabled) * {
+    color: #fff !important;
+  }
+
+  html:not(.dark) .audit-fix-sheet .audit-on-primary:disabled {
+    background-color: color-mix(in srgb, var(--muted) 82%, white 18%) !important;
+    border-color: color-mix(in srgb, var(--border) 92%, transparent) !important;
+    box-shadow: none !important;
   }
 
   html:not(.dark) .audit-fix-sheet [class*="text-red"],

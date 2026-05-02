@@ -2,9 +2,9 @@ import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { agentApi } from "@/lib/api/agent";
-import { agentDirectApi, type AuditResult, type FixOutcome, type FixPreviewTarget, type FixTarget } from "@/lib/api/agent-direct";
+import { agentDirectApi, type AuditResult, type FixOutcome, type FixPreviewTarget, type FixProgress, type FixTarget } from "@/lib/api/agent-direct";
 import { getSuggestedLimits } from "@/features/audit/hooks/useFix";
-import { useAuditStore } from "@/stores/use-audit-store";
+import { fixJobKey, useAuditStore } from "@/stores/use-audit-store";
 
 export type FixAllStep = "confirm" | "configure" | "applying" | "result";
 
@@ -12,6 +12,7 @@ export type RuleFixStatus = {
     ruleId: string;
     title: string;
     outcome: FixOutcome | null;
+    progressEvents: FixProgress[];
     state: "pending" | "applying" | "done" | "skipped";
     selected: boolean;
     highRisk: boolean;
@@ -144,6 +145,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
             ruleId: r.rule.id,
             title: r.rule.title,
             outcome: null,
+            progressEvents: [],
             state: "pending",
             selected: !HIGH_RISK_AUTO_FIX_RULES.has(r.rule.id),
             highRisk: HIGH_RISK_AUTO_FIX_RULES.has(r.rule.id),
@@ -264,6 +266,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
                     ruleId: updated[i].ruleId,
                     targets: cgroupTargetsForRule(updated[i].ruleId, cgroupTargets),
                 });
+                updated[i].progressEvents = useAuditStore.getState().fixJobs[fixJobKey(agentId, updated[i].ruleId)]?.progressEvents ?? [];
                 updated[i].state = "done";
             } catch {
                 updated[i].outcome = {
@@ -274,6 +277,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
                     restart_command: undefined,
                     requires_elevation: false,
                 };
+                updated[i].progressEvents = useAuditStore.getState().fixJobs[fixJobKey(agentId, updated[i].ruleId)]?.progressEvents ?? [];
                 updated[i].state = "done";
             }
             setRuleStatuses([...updated]);

@@ -154,7 +154,7 @@ function ComposeDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-3xl w-full max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden">
+      <DialogContent className="compose-code-dialog max-w-3xl w-full max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden">
         {/* Header */}
         <DialogHeader className="flex-row items-start justify-between gap-3 px-5 py-4 pr-12 border-b border-border/60 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
@@ -247,7 +247,7 @@ function ComposeDialog({
         </DialogHeader>
 
         {/* Body */}
-        <div className="flex-1 overflow-auto bg-zinc-950/60 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-zinc-700/50 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-2 [&::-webkit-scrollbar-thumb]:border-transparent hover:[&::-webkit-scrollbar-thumb]:bg-zinc-600/50">
+        <div className="compose-code-panel flex-1 overflow-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-700/70 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-2 [&::-webkit-scrollbar-thumb]:border-transparent hover:[&::-webkit-scrollbar-thumb]:bg-slate-600/80">
           {isLoading ? (
             <div className="flex items-center justify-center h-48 text-sm text-muted-foreground gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-pulse" />
@@ -260,21 +260,21 @@ function ComposeDialog({
                 <span className="text-sm font-medium">{errorDetail.error}</span>
               </div>
               {errorDetail.detail && (
-                <pre className="text-xs text-zinc-400 font-mono whitespace-pre-wrap break-all bg-zinc-900/60 rounded-lg px-4 py-3 w-full">
+                <pre className="text-xs text-slate-300 font-mono whitespace-pre-wrap break-all bg-slate-950/80 rounded-lg px-4 py-3 w-full">
                   {errorDetail.detail}
                 </pre>
               )}
             </div>
           ) : isEditing ? (
             <textarea
-              className="block min-h-[55vh] w-full resize-none bg-transparent p-5 text-xs leading-relaxed font-mono text-zinc-100 outline-none selection:bg-cyan-500/30"
+              className="block min-h-[55vh] w-full resize-none bg-transparent p-5 text-xs leading-relaxed font-mono text-slate-100 outline-none selection:bg-cyan-500/30"
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               spellCheck={false}
               wrap={wordWrap ? "soft" : "off"}
             />
           ) : (
-            <pre className={`p-5 text-xs leading-relaxed font-mono text-zinc-200 ${wordWrap ? 'whitespace-pre-wrap break-all' : 'whitespace-pre overflow-x-auto'}`}>
+            <pre className={`p-5 text-xs leading-relaxed font-mono text-slate-100 ${wordWrap ? 'whitespace-pre-wrap break-all' : 'whitespace-pre overflow-x-auto'}`}>
               <YamlHighlight content={data?.content ?? ""} />
             </pre>
           )}
@@ -302,16 +302,16 @@ function YamlHighlight({ content }: { content: string }) {
 function YamlLine({ line }: { line: string }) {
   // Comment
   if (/^\s*#/.test(line)) {
-    return <span className="text-zinc-500 italic">{line}</span>;
+    return <span className="yaml-comment italic">{line}</span>;
   }
   // Top-level key (no leading spaces, ends with colon)
   if (/^[a-zA-Z_][a-zA-Z0-9_-]*\s*:/.test(line)) {
     const colon = line.indexOf(":");
     return (
       <>
-        <span className="text-cyan-400 font-semibold">{line.slice(0, colon)}</span>
-        <span className="text-zinc-400">:</span>
-        <span className="text-zinc-200">{line.slice(colon + 1)}</span>
+        <span className="yaml-root-key font-semibold">{line.slice(0, colon)}</span>
+        <span className="yaml-punctuation">:</span>
+        <span className="yaml-plain">{line.slice(colon + 1)}</span>
       </>
     );
   }
@@ -322,9 +322,9 @@ function YamlLine({ line }: { line: string }) {
     return (
       <>
         <span>{m[1]}</span>
-        <span className="text-sky-300">{m[2]}</span>
-        <span className="text-zinc-400">{m[3]}</span>
-        <span className="text-amber-200">{m[4]}</span>
+        <span className="yaml-key">{m[2]}</span>
+        <span className="yaml-punctuation">{m[3]}</span>
+        <span className="yaml-value">{m[4]}</span>
       </>
     );
   }
@@ -334,12 +334,12 @@ function YamlLine({ line }: { line: string }) {
     return (
       <>
         <span>{line.slice(0, dash)}</span>
-        <span className="text-zinc-400">-</span>
-        <span className="text-amber-200">{line.slice(dash + 1)}</span>
+        <span className="yaml-punctuation">-</span>
+        <span className="yaml-value">{line.slice(dash + 1)}</span>
       </>
     );
   }
-  return <span className="text-zinc-300">{line}</span>;
+  return <span className="yaml-plain">{line}</span>;
 }
 
 // ---------- Container row ----------
