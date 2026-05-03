@@ -104,7 +104,7 @@ export function SecuritySettings() {
                                 setCurrentPassword(e.target.value.trim());
                                 setCurrentPasswordError(null);
                             }}
-                            className={`h-11 bg-card border-border pr-10 shadow-xs hover:border-border/80 focus-visible:border-primary/60 focus-visible:ring-primary/20 ${currentPasswordError ? "border-destructive focus-visible:ring-destructive/50" : ""}`}
+                            className={`h-11 border-border/80 bg-transparent pr-10 shadow-none hover:border-border focus-visible:border-primary/50 focus-visible:ring-primary/15 dark:border-transparent dark:bg-muted/40 dark:hover:bg-muted/60 dark:focus-visible:ring-primary/50 ${currentPasswordError ? "border-destructive focus-visible:ring-destructive/50" : ""}`}
                         />
                         <button
                             type="button"
@@ -136,7 +136,7 @@ export function SecuritySettings() {
                                 type={showNewPassword ? "text" : "password"}
                                 value={newPassword}
                                 onChange={(e) => handleNewPasswordChange(e.target.value.trim())}
-                                className="h-11 bg-card border-border pr-10 shadow-xs hover:border-border/80 focus-visible:border-primary/60 focus-visible:ring-primary/20"
+                                className="h-11 border-border/80 bg-transparent pr-10 shadow-none hover:border-border focus-visible:border-primary/50 focus-visible:ring-primary/15 dark:border-transparent dark:bg-muted/40 dark:hover:bg-muted/60 dark:focus-visible:ring-primary/50"
                             />
                             <button
                                 type="button"
@@ -164,7 +164,7 @@ export function SecuritySettings() {
                             type="password"
                             value={confirmPassword}
                             onChange={(e) => handleConfirmPasswordChange(e.target.value.trim())}
-                            className={`h-11 bg-card border-border shadow-xs hover:border-border/80 focus-visible:border-primary/60 focus-visible:ring-primary/20 ${confirmPasswordError ? "border-destructive focus-visible:ring-destructive/50" : ""}`}
+                            className={`h-11 border-border/80 bg-transparent shadow-none hover:border-border focus-visible:border-primary/50 focus-visible:ring-primary/15 dark:border-transparent dark:bg-muted/40 dark:hover:bg-muted/60 dark:focus-visible:ring-primary/50 ${confirmPasswordError ? "border-destructive focus-visible:ring-destructive/50" : ""}`}
                         />
                         {confirmPasswordError && (
                             <p className="text-[13px] text-destructive">{confirmPasswordError}</p>

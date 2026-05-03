@@ -303,7 +303,7 @@ export function ProfileSettings() {
 
             <form onSubmit={handleProfileSubmit} noValidate className="space-y-8 max-w-2xl">
                 {/* Avatar Section */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 rounded-xl border border-border bg-card p-6 shadow-xs">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 rounded-xl border border-border/70 bg-transparent p-6 dark:border-border/30 dark:bg-muted/20">
                     <button
                         type="button"
                         className={cn(
@@ -366,7 +366,7 @@ export function ProfileSettings() {
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             placeholder="Your display name"
-                            className="h-11 bg-card border-border shadow-xs hover:border-border/80 focus-visible:border-primary/60 focus-visible:ring-primary/20"
+                            className="h-11 border-border/80 bg-transparent shadow-none hover:border-border focus-visible:border-primary/50 focus-visible:ring-primary/15 dark:border-transparent dark:bg-muted/40 dark:hover:bg-muted/60 dark:focus-visible:ring-primary/50"
                         />
                     </div>
                     <div className="space-y-2">
@@ -378,7 +378,7 @@ export function ProfileSettings() {
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             placeholder="username"
-                            className="h-11 bg-card border-border shadow-xs hover:border-border/80 focus-visible:border-primary/60 focus-visible:ring-primary/20"
+                            className="h-11 border-border/80 bg-transparent shadow-none hover:border-border focus-visible:border-primary/50 focus-visible:ring-primary/15 dark:border-transparent dark:bg-muted/40 dark:hover:bg-muted/60 dark:focus-visible:ring-primary/50"
                         />
                         <p className="text-[13px] text-muted-foreground mt-1">
                             You can only change this once every 30 days.
@@ -404,7 +404,7 @@ export function ProfileSettings() {
                                 onChange={(e) => setEmail(e.target.value)}
                                 placeholder="your@email.com"
                                 disabled={isSendingVerification}
-                                className="h-11 bg-card border-border pr-24 shadow-xs hover:border-border/80 focus-visible:border-primary/60 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-70"
+                                className="h-11 border-border/80 bg-transparent pr-24 shadow-none hover:border-border focus-visible:border-primary/50 focus-visible:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-70 dark:border-transparent dark:bg-muted/40 dark:hover:bg-muted/60 dark:focus-visible:ring-primary/50"
                             />
                             {(isEmailChanged || !user.email_verified) && (
                                 <button
@@ -412,10 +412,10 @@ export function ProfileSettings() {
                                     onClick={handleSendVerification}
                                     disabled={!canSendVerification}
                                     className={cn(
-                                        "absolute right-2 top-1/2 flex h-7 -translate-y-1/2 items-center gap-1.5 rounded-md border px-3 text-[12px] font-medium shadow-xs transition-colors disabled:cursor-not-allowed",
+                                        "absolute right-2 top-1/2 flex h-7 -translate-y-1/2 items-center gap-1.5 rounded-md border px-3 text-[12px] font-medium shadow-none transition-colors disabled:cursor-not-allowed",
                                         canSendVerification
-                                            ? "border-border bg-background text-foreground hover:border-primary/50 hover:bg-primary hover:text-primary-foreground"
-                                            : "border-border/60 bg-muted/40 text-muted-foreground opacity-70"
+                                            ? "border-border/80 bg-transparent text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground dark:border-border dark:bg-muted dark:text-foreground dark:hover:bg-muted/80"
+                                            : "border-border/60 bg-muted/20 text-muted-foreground opacity-70 dark:bg-muted"
                                     )}
                                 >
                                     {isSendingVerification ? (
