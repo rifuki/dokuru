@@ -334,6 +334,7 @@ mod tests {
             backup_path: Some(
                 "/home/rifuki/dokuru-lab/docker-compose.yaml.dokuru.rollback.test.bak".to_string(),
             ),
+            delete_on_rollback: false,
             working_dir: Some("/home/rifuki/dokuru-lab".to_string()),
             config_files: Some("docker-compose.yaml".to_string()),
         };

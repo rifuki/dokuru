@@ -35,7 +35,7 @@ export type CgroupTargetConfig = {
     image: string;
     composeProject?: string;
     composeService?: string;
-    strategy: "docker_update" | "compose_update";
+    strategy: "docker_update" | "compose_update" | "dokuru_override";
     ruleIds: CgroupRuleId[];
     memoryMb: number;
     cpuShares: number;
@@ -59,7 +59,7 @@ function cgroupTargetKey(target: FixPreviewTarget) {
 }
 
 function cgroupStrategy(target: FixPreviewTarget): CgroupTargetConfig["strategy"] {
-    return target.strategy === "compose_update" ? "compose_update" : "docker_update";
+    return target.strategy === "dokuru_override" || target.strategy === "compose_update" ? target.strategy : "docker_update";
 }
 
 function mergeCgroupTarget(

@@ -211,7 +211,7 @@ function ConfirmStep({
                             <div className="flex items-start gap-2.5">
                                 <FileCode2 className="mt-0.5 h-4 w-4 shrink-0" />
                                 <p className="leading-relaxed">
-                                    Compose-managed containers default to <span className="font-semibold text-[#2496ED]">Persist in Compose</span> so the score does not regress after <code className="font-mono">docker compose restart</code>. Switch to Live only if you need a temporary Docker update.
+                                    Compose-managed containers default to <span className="font-semibold text-[#2496ED]">Dokuru override</span>, so source YAML stays clean while the fix survives <code className="font-mono">docker compose up</code>. Use Patch source only when you want Dokuru to edit the base compose file.
                                 </p>
                             </div>
                         </div>
@@ -219,7 +219,7 @@ function ConfirmStep({
 
                     <div className="overflow-hidden rounded-xl border border-white/8 bg-white/[0.025]">
                         {isCgroup && (
-                            <div className="hidden border-b border-white/6 bg-white/[0.025] px-4 py-2.5 text-[9px] font-mono uppercase tracking-[0.16em] text-white/30 sm:grid sm:grid-cols-[minmax(0,1.25fr)_minmax(116px,.7fr)_148px_150px] sm:gap-4">
+                            <div className="hidden border-b border-white/6 bg-white/[0.025] px-4 py-2.5 text-[9px] font-mono uppercase tracking-[0.16em] text-white/30 sm:grid sm:grid-cols-[minmax(0,1.25fr)_minmax(116px,.7fr)_210px_150px] sm:gap-4">
                                 <span>Container</span>
                                 <span>Source</span>
                                 <span>Apply via</span>
@@ -229,7 +229,7 @@ function ConfirmStep({
                         {targets.map((target, i) => {
                             const config = targetConfig[target.container_id];
                             const canCompose = Boolean(target.compose_project && target.compose_service);
-                            const strategy = config?.strategy ?? (target.strategy === "compose_update" ? "compose_update" : "docker_update");
+                            const strategy = config?.strategy ?? (target.strategy === "dokuru_override" || target.strategy === "compose_update" ? target.strategy : "docker_update");
                             const meta = valueMeta(rule.id);
                             const value = config?.[meta.key] ?? 0;
 
@@ -238,7 +238,7 @@ function ConfirmStep({
                                     key={target.container_id}
                                     className={cn(
                                         "grid gap-3 px-4 py-3 text-xs font-mono sm:items-center",
-                                        isCgroup ? "sm:grid-cols-[minmax(0,1.25fr)_minmax(116px,.7fr)_148px_150px] sm:gap-4" : "sm:grid-cols-[minmax(0,1fr)_auto]",
+                                        isCgroup ? "sm:grid-cols-[minmax(0,1.25fr)_minmax(116px,.7fr)_210px_150px] sm:gap-4" : "sm:grid-cols-[minmax(0,1fr)_auto]",
                                         i < targets.length - 1 && "border-b border-white/6"
                                     )}
                                 >
@@ -261,18 +261,30 @@ function ConfirmStep({
                                     )}
 
                                     {isCgroup && config && (
-                                        <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-white/10 bg-black/25 p-0.5">
+                                        <div className="grid grid-cols-3 overflow-hidden rounded-lg border border-white/10 bg-black/25 p-0.5">
+                                            <button
+                                                type="button"
+                                                disabled={!canCompose}
+                                                onClick={() => onTargetChange(target.container_id, { strategy: "dokuru_override" })}
+                                                className={cn(
+                                                    "rounded-md px-2 py-1.5 text-[10px] font-semibold transition-colors",
+                                                    strategy === "dokuru_override" && canCompose ? "bg-[#2496ED] text-white" : "text-white/38 hover:text-white/70",
+                                                    !canCompose && "cursor-not-allowed opacity-35 hover:text-white/38"
+                                                )}
+                                            >
+                                                Override
+                                            </button>
                                             <button
                                                 type="button"
                                                 disabled={!canCompose}
                                                 onClick={() => onTargetChange(target.container_id, { strategy: "compose_update" })}
                                                 className={cn(
                                                     "rounded-md px-2 py-1.5 text-[10px] font-semibold transition-colors",
-                                                    strategy === "compose_update" && canCompose ? "bg-[#2496ED] text-white" : "text-white/38 hover:text-white/70",
+                                                    strategy === "compose_update" && canCompose ? "bg-white/14 text-white" : "text-white/38 hover:text-white/70",
                                                     !canCompose && "cursor-not-allowed opacity-35 hover:text-white/38"
                                                 )}
                                             >
-                                                Compose
+                                                Patch
                                             </button>
                                             <button
                                                 type="button"
@@ -325,7 +337,7 @@ function ConfirmStep({
                     </div>
                     {isCgroup && (
                         <p className="px-1 text-[10px] text-white/25 font-mono">
-                            Rows are aligned by container, source, apply method, and value. Compose mode edits the compose YAML then runs <code>docker compose up -d</code>; Live only uses Docker update for the current container instance.
+                            Override writes <code>docker-compose.dokuru.override.yml</code>; Patch edits the source compose file; Live only updates the current container instance.
                         </p>
                     )}
                 </div>

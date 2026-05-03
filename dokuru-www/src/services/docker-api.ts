@@ -68,6 +68,9 @@ export interface Stack {
   name: string;
   working_dir: string | null;
   config_file: string | null;
+  dokuru_override_file: string | null;
+  dokuru_override_exists: boolean;
+  dokuru_override_active: boolean;
   containers: StackContainer[];
   running: number;
   total: number;

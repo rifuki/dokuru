@@ -30,6 +30,7 @@ const COMPOSE_FILENAMES: &[&str] = &[
     "docker-compose.yml",
     "compose.yml",
 ];
+const DOKURU_COMPOSE_OVERRIDE_FILENAME: &str = "docker-compose.dokuru.override.yml";
 
 #[derive(Debug, Deserialize)]
 pub struct DockerCommandPayload {
@@ -114,6 +115,9 @@ struct StackResponse {
     name: String,
     working_dir: Option<String>,
     config_file: Option<String>,
+    dokuru_override_file: Option<String>,
+    dokuru_override_exists: bool,
+    dokuru_override_active: bool,
     containers: Vec<StackContainer>,
     running: usize,
     total: usize,
@@ -777,6 +781,9 @@ async fn collect_stacks(docker: &Docker) -> Result<Vec<StackResponse>> {
                 config_file: labels
                     .get("com.docker.compose.project.config_files")
                     .cloned(),
+                dokuru_override_file: None,
+                dokuru_override_exists: false,
+                dokuru_override_active: false,
                 containers: Vec::new(),
                 running: 0,
                 total: 0,
@@ -790,8 +797,79 @@ async fn collect_stacks(docker: &Docker) -> Result<Vec<StackResponse>> {
     }
 
     let mut result: Vec<StackResponse> = stacks.into_values().collect();
+    for stack in &mut result {
+        annotate_dokuru_override(stack).await;
+    }
     result.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(result)
+}
+
+async fn annotate_dokuru_override(stack: &mut StackResponse) {
+    let Some(path) =
+        stack_dokuru_override_path(stack.working_dir.as_deref(), stack.config_file.as_deref())
+    else {
+        return;
+    };
+
+    stack.dokuru_override_active = config_files_include_path(
+        stack.config_file.as_deref(),
+        stack.working_dir.as_deref(),
+        &path,
+    );
+    stack.dokuru_override_exists = tokio::fs::metadata(&path)
+        .await
+        .is_ok_and(|metadata| metadata.is_file());
+    stack.dokuru_override_file = Some(path.to_string_lossy().to_string());
+}
+
+fn stack_dokuru_override_path(
+    working_dir: Option<&str>,
+    config_files: Option<&str>,
+) -> Option<PathBuf> {
+    if let Some(working_dir) = working_dir.filter(|value| !value.trim().is_empty()) {
+        return Some(PathBuf::from(working_dir).join(DOKURU_COMPOSE_OVERRIDE_FILENAME));
+    }
+
+    config_file_paths(config_files, None)
+        .into_iter()
+        .find_map(|path| {
+            path.parent()
+                .map(|parent| parent.join(DOKURU_COMPOSE_OVERRIDE_FILENAME))
+        })
+}
+
+fn config_files_include_path(
+    config_files: Option<&str>,
+    working_dir: Option<&str>,
+    needle: &FsPath,
+) -> bool {
+    config_file_paths(config_files, working_dir)
+        .iter()
+        .any(|path| path == needle || path.file_name() == needle.file_name())
+}
+
+fn config_file_paths(config_files: Option<&str>, working_dir: Option<&str>) -> Vec<PathBuf> {
+    let working_dir = working_dir
+        .filter(|value| !value.trim().is_empty())
+        .map(PathBuf::from);
+    config_files
+        .unwrap_or_default()
+        .split(',')
+        .filter_map(|raw| {
+            let raw = raw.trim();
+            if raw.is_empty() {
+                return None;
+            }
+            let path = PathBuf::from(raw);
+            Some(if path.is_absolute() {
+                path
+            } else if let Some(working_dir) = &working_dir {
+                working_dir.join(path)
+            } else {
+                path
+            })
+        })
+        .collect()
 }
 
 async fn resolve_compose_file(

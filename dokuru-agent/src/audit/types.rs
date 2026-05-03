@@ -209,6 +209,8 @@ pub struct ComposeRollbackTarget {
     pub compose_path: String,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub backup_path: Option<String>,
+    #[serde(default)]
+    pub delete_on_rollback: bool,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub working_dir: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]

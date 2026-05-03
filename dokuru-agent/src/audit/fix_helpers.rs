@@ -118,6 +118,10 @@ const DOCKER_ROOT_LV_HEADROOM_BYTES: u64 = 1024 * 1024 * 1024;
 const USERNS_SNAPSHOT_PATH: &str = "/tmp/dokuru-userns-remap-snapshot.json";
 const USERNS_REMAP_RULE_ID: &str = "2.10";
 const USERNS_REMAP_TOTAL_STEPS: u8 = 9;
+const STRATEGY_DOKURU_OVERRIDE: &str = "dokuru_override";
+const STRATEGY_COMPOSE_UPDATE: &str = "compose_update";
+const STRATEGY_DOCKER_UPDATE: &str = "docker_update";
+const DOKURU_COMPOSE_OVERRIDE_FILENAME: &str = "docker-compose.dokuru.override.yml";
 const COMPOSE_FILENAMES: &[&str] = &[
     "compose.yaml",
     "docker-compose.yaml",
@@ -191,6 +195,22 @@ fn cgroup_effective_rule_id(rule_id: &str) -> &str {
 
 pub fn supports_image_config_fix(rule_id: &str) -> bool {
     matches!(rule_id, "4.1" | "4.6")
+}
+
+fn is_dokuru_override_strategy(strategy: Option<&str>) -> bool {
+    strategy == Some(STRATEGY_DOKURU_OVERRIDE)
+}
+
+fn is_compose_source_strategy(strategy: Option<&str>) -> bool {
+    strategy == Some(STRATEGY_COMPOSE_UPDATE)
+}
+
+fn compose_strategy_label(strategy: Option<&str>) -> &'static str {
+    if is_dokuru_override_strategy(strategy) {
+        "dokuru override"
+    } else {
+        "compose"
+    }
 }
 
 pub fn suggest_resource_limits(name: &str, image: &str) -> ResourceSuggestion {
@@ -2660,11 +2680,11 @@ fn preview_target_from_inspect(
     let host_config = inspect.host_config.as_ref();
     let compose = compose_context_from_inspect(inspect);
     let strategy = if supports_cgroup_resource_fix(rule_id) && compose.is_some() {
-        "compose_update"
+        STRATEGY_DOKURU_OVERRIDE
     } else if supports_cgroup_resource_fix(rule_id) {
-        "docker_update"
+        STRATEGY_DOCKER_UPDATE
     } else if compose.is_some() {
-        "compose_update"
+        STRATEGY_DOKURU_OVERRIDE
     } else {
         "recreate"
     };
@@ -2772,9 +2792,9 @@ async fn default_target_for_rule(
         return None;
     }
     let strategy = if compose_context_from_inspect(&inspect).is_some() {
-        "compose_update"
+        STRATEGY_DOKURU_OVERRIDE
     } else {
-        "docker_update"
+        STRATEGY_DOCKER_UPDATE
     };
 
     Some(FixTarget {
@@ -2913,7 +2933,7 @@ async fn default_image_config_targets(
             continue;
         }
         let strategy = if compose_context_from_inspect(&inspect).is_some() {
-            "compose_update"
+            STRATEGY_DOKURU_OVERRIDE
         } else {
             "recreate"
         };
@@ -2956,18 +2976,32 @@ async fn apply_image_config_target(
         Some(image_config_violation_detail(rule_id).to_string()),
     );
 
-    if target.strategy.as_deref() == Some("compose_update") {
+    if is_dokuru_override_strategy(target.strategy.as_deref())
+        || is_compose_source_strategy(target.strategy.as_deref())
+    {
         let Some(ctx) = compose_context_from_inspect(&inspect) else {
             return Err(format!(
-                "{container_label}: compose_update requested but container has no Compose metadata"
+                "{container_label}: compose strategy requested but container has no Compose metadata"
             ));
         };
         if !compose_services.insert(ctx.key()) {
             return Ok(None);
         }
-        return apply_compose_service_fix(docker, rule_id, &ctx, progress)
-            .await
-            .map(|()| Some(format!("{}:{} (compose)", ctx.project, ctx.service)))
+        let result = if is_dokuru_override_strategy(target.strategy.as_deref()) {
+            apply_compose_service_override_fix(docker, rule_id, &ctx, None, progress).await
+        } else {
+            apply_compose_service_fix(docker, rule_id, &ctx, progress).await
+        };
+
+        return result
+            .map(|()| {
+                Some(format!(
+                    "{}:{} ({})",
+                    ctx.project,
+                    ctx.service,
+                    compose_strategy_label(target.strategy.as_deref())
+                ))
+            })
             .map_err(|error| format!("{container_label}: compose fix failed: {error}"));
     }
 
@@ -3146,22 +3180,29 @@ async fn apply_cgroup_target(
     compose_services: &mut HashSet<String>,
 ) -> Result<Option<String>, String> {
     let container_label = container_label(docker, &target.container_id).await;
-    if target.strategy.as_deref() == Some("compose_update") {
+    if is_dokuru_override_strategy(target.strategy.as_deref())
+        || is_compose_source_strategy(target.strategy.as_deref())
+    {
         let inspect = match docker.inspect_container(&target.container_id, None).await {
             Ok(inspect) => inspect,
             Err(error) => return Err(format!("{container_label}: inspect failed: {error}")),
         };
         let Some(ctx) = compose_context_from_inspect(&inspect) else {
             return Err(format!(
-                "{container_label}: compose_update requested but container has no Compose metadata"
+                "{container_label}: compose strategy requested but container has no Compose metadata"
             ));
         };
         if !compose_services.insert(ctx.key()) {
             return Ok(None);
         }
 
-        return apply_compose_cgroup_resource_fix(docker, rule_id, target, &ctx, progress)
-            .await
+        let result = if is_dokuru_override_strategy(target.strategy.as_deref()) {
+            apply_compose_cgroup_override_fix(docker, rule_id, target, &ctx, progress).await
+        } else {
+            apply_compose_cgroup_resource_fix(docker, rule_id, target, &ctx, progress).await
+        };
+
+        return result
             .map(Some)
             .map_err(|error| format!("{container_label}: compose update failed: {error}"));
     }
@@ -3442,6 +3483,110 @@ async fn run_compose_cgroup_update(
             Err(eyre::eyre!(
                 "{error}; compose file was restored from {}",
                 backup_path.display()
+            ))
+        }
+    }
+}
+
+async fn apply_compose_cgroup_override_fix(
+    docker: &Docker,
+    rule_id: &str,
+    target: &FixTarget,
+    ctx: &ComposeContext,
+    progress: Option<&ProgressSender>,
+) -> eyre::Result<String> {
+    let label = format!("{}:{}", ctx.project, ctx.service);
+    emit_progress(
+        progress,
+        rule_id,
+        &label,
+        ProgressStep::new(1, 3),
+        "inspect_current_cgroup",
+        "done",
+        Some("Detected Compose-managed container resource limits".to_string()),
+    );
+
+    let update = prepare_dokuru_compose_override(ctx, rule_id, Some(target)).await?;
+    let restore = write_dokuru_compose_override(
+        rule_id,
+        &label,
+        &update,
+        ProgressStep::new(2, 3),
+        progress,
+        Some(cgroup_update_detail(rule_id, target)),
+    )
+    .await?;
+    run_compose_cgroup_override_update(ctx, &label, &update, restore, rule_id, progress).await?;
+
+    verify_compose_cgroup_service(docker, rule_id, target, ctx).await?;
+    emit_progress(
+        progress,
+        rule_id,
+        &label,
+        ProgressStep::new(3, 3),
+        "verify_cgroup",
+        "done",
+        Some("Compose service cgroup limits updated with Dokuru override and verified".to_string()),
+    );
+
+    Ok(format!("{}:{} (dokuru override)", ctx.project, ctx.service))
+}
+
+async fn run_compose_cgroup_override_update(
+    ctx: &ComposeContext,
+    label: &str,
+    update: &DokuruComposeOverride,
+    restore: DokuruOverrideRestore,
+    rule_id: &str,
+    progress: Option<&ProgressSender>,
+) -> eyre::Result<()> {
+    let command = compose_up_command_text(ctx, &update.compose_paths);
+    emit_compose_up_progress(
+        rule_id,
+        label,
+        progress,
+        ComposeUpProgress {
+            status: "in_progress",
+            detail: Some("Recreating Compose service with Dokuru override".to_string()),
+            command: Some(command.clone()),
+            stdout: None,
+            stderr: None,
+        },
+    );
+
+    match run_compose_up_capture(ctx, &update.compose_paths).await {
+        Ok((stdout, stderr)) => {
+            emit_compose_up_progress(
+                rule_id,
+                label,
+                progress,
+                ComposeUpProgress {
+                    status: "done",
+                    detail: Some("Compose service recreated with Dokuru override".to_string()),
+                    command: Some(command),
+                    stdout: Some(stdout),
+                    stderr: Some(stderr),
+                },
+            );
+            Ok(())
+        }
+        Err(error) => {
+            restore_dokuru_compose_override(&update.override_path, &restore).await;
+            emit_compose_up_progress(
+                rule_id,
+                label,
+                progress,
+                ComposeUpProgress {
+                    status: "error",
+                    detail: Some(error.to_string()),
+                    command: Some(command),
+                    stdout: None,
+                    stderr: Some(format!("{error}")),
+                },
+            );
+            Err(eyre::eyre!(
+                "{error}; Dokuru override was restored at {}",
+                update.override_path.display()
             ))
         }
     }
@@ -3730,8 +3875,12 @@ pub async fn apply_privileged_fix_with_progress(
         if let Some(ctx) = compose_context_from_inspect(&inspect) {
             let key = ctx.key();
             if compose_services.insert(key) {
-                match apply_compose_service_fix(docker, rule_id, &ctx, progress).await {
-                    Ok(()) => updated.push(format!("{}:{} (compose)", ctx.project, ctx.service)),
+                match apply_compose_service_override_fix(docker, rule_id, &ctx, None, progress)
+                    .await
+                {
+                    Ok(()) => {
+                        updated.push(format!("{}:{} (dokuru override)", ctx.project, ctx.service))
+                    }
                     Err(e) => failed.push(format!("{label}: compose fix failed: {e}")),
                 }
             }
@@ -4047,8 +4196,12 @@ pub async fn apply_namespace_fix_with_progress(
         if let Some(ctx) = compose_context_from_inspect(&inspect) {
             let key = ctx.key();
             if compose_services.insert(key) {
-                match apply_compose_service_fix(docker, rule_id, &ctx, progress).await {
-                    Ok(()) => updated.push(format!("{}:{} (compose)", ctx.project, ctx.service)),
+                match apply_compose_service_override_fix(docker, rule_id, &ctx, None, progress)
+                    .await
+                {
+                    Ok(()) => {
+                        updated.push(format!("{}:{} (dokuru override)", ctx.project, ctx.service))
+                    }
                     Err(e) => failed.push(format!("{label}: compose fix failed: {e}")),
                 }
             }
@@ -4176,6 +4329,49 @@ async fn apply_compose_service_fix(
     let edit = prepare_compose_service_edit(rule_id, ctx, &label, progress).await?;
     let backup_path = write_compose_service_edit(rule_id, &label, &edit, progress).await?;
     run_compose_service_edit(docker, rule_id, ctx, &label, &edit, &backup_path, progress).await
+}
+
+async fn apply_compose_service_override_fix(
+    docker: &Docker,
+    rule_id: &str,
+    ctx: &ComposeContext,
+    target: Option<&FixTarget>,
+    progress: Option<&ProgressSender>,
+) -> eyre::Result<()> {
+    let label = format!("{}:{}", ctx.project, ctx.service);
+    emit_progress(
+        progress,
+        rule_id,
+        &label,
+        ProgressStep::new(2, 6),
+        "resolve_compose_file",
+        "in_progress",
+        Some("Resolving Docker Compose config files".to_string()),
+    );
+    let update = prepare_dokuru_compose_override(ctx, rule_id, target).await?;
+    emit_progress(
+        progress,
+        rule_id,
+        &label,
+        ProgressStep::new(2, 6),
+        "resolve_compose_file",
+        "done",
+        Some(format!(
+            "{} compose file(s) found",
+            update.compose_paths.len() - 1
+        )),
+    );
+    let restore = write_dokuru_compose_override(
+        rule_id,
+        &label,
+        &update,
+        ProgressStep::new(3, 6),
+        progress,
+        Some("service override".to_string()),
+    )
+    .await?;
+
+    run_compose_service_override(docker, rule_id, ctx, &label, &update, restore, progress).await
 }
 
 struct ComposeServiceEdit {
@@ -4349,6 +4545,75 @@ async fn run_compose_service_edit(
     Ok(())
 }
 
+async fn run_compose_service_override(
+    docker: &Docker,
+    rule_id: &str,
+    ctx: &ComposeContext,
+    label: &str,
+    update: &DokuruComposeOverride,
+    restore: DokuruOverrideRestore,
+    progress: Option<&ProgressSender>,
+) -> eyre::Result<()> {
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        ProgressStep::new(4, 6),
+        "docker_compose_up",
+        "in_progress",
+        Some(format!(
+            "Recreating service {} with Dokuru override",
+            ctx.service
+        )),
+    );
+    if let Err(error) = run_compose_up(ctx, &update.compose_paths).await {
+        restore_dokuru_compose_override(&update.override_path, &restore).await;
+        emit_progress(
+            progress,
+            rule_id,
+            label,
+            ProgressStep::new(4, 6),
+            "docker_compose_up",
+            "error",
+            Some(error.to_string()),
+        );
+        return Err(eyre::eyre!(
+            "{error}; Dokuru override was restored at {}",
+            update.override_path.display()
+        ));
+    }
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        ProgressStep::new(5, 6),
+        "docker_compose_up",
+        "done",
+        None,
+    );
+
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        ProgressStep::new(6, 6),
+        "verify_compose_service",
+        "in_progress",
+        None,
+    );
+    verify_compose_service(docker, rule_id, ctx).await?;
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        ProgressStep::new(6, 6),
+        "verify_compose_service",
+        "done",
+        Some("Compose service recreated with Dokuru override and verified".to_string()),
+    );
+    Ok(())
+}
+
 async fn resolve_compose_files(ctx: &ComposeContext) -> eyre::Result<Vec<PathBuf>> {
     let mut candidates = Vec::new();
 
@@ -4415,6 +4680,274 @@ fn compose_backup_path(path: &Path) -> PathBuf {
         |name| name.to_string_lossy().into_owned(),
     );
     path.with_file_name(format!("{filename}.dokuru.bak.{timestamp}"))
+}
+
+struct DokuruComposeOverride {
+    compose_paths: Vec<PathBuf>,
+    override_path: PathBuf,
+    content: String,
+}
+
+struct DokuruOverrideRestore {
+    backup_path: Option<PathBuf>,
+    delete_on_restore: bool,
+}
+
+async fn prepare_dokuru_compose_override(
+    ctx: &ComposeContext,
+    rule_id: &str,
+    target: Option<&FixTarget>,
+) -> eyre::Result<DokuruComposeOverride> {
+    let mut compose_paths = resolve_compose_files(ctx).await?;
+    let override_path = dokuru_compose_override_path(ctx, &compose_paths)?;
+    let existing = match tokio::fs::read_to_string(&override_path).await {
+        Ok(content) => Some(content),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error.into()),
+    };
+    let content =
+        upsert_dokuru_override_content(existing.as_deref(), &ctx.service, rule_id, target)?;
+    push_unique_path(&mut compose_paths, override_path.clone());
+
+    Ok(DokuruComposeOverride {
+        compose_paths,
+        override_path,
+        content,
+    })
+}
+
+fn dokuru_compose_override_path(
+    ctx: &ComposeContext,
+    compose_paths: &[PathBuf],
+) -> eyre::Result<PathBuf> {
+    if let Some(working_dir) = &ctx.working_dir {
+        return Ok(working_dir.join(DOKURU_COMPOSE_OVERRIDE_FILENAME));
+    }
+
+    if let Some(parent) = compose_paths.first().and_then(|path| path.parent()) {
+        return Ok(parent.join(DOKURU_COMPOSE_OVERRIDE_FILENAME));
+    }
+
+    Err(eyre::eyre!(
+        "could not determine Dokuru override path for {}:{}",
+        ctx.project,
+        ctx.service
+    ))
+}
+
+async fn write_dokuru_compose_override(
+    rule_id: &str,
+    label: &str,
+    update: &DokuruComposeOverride,
+    step: ProgressStep,
+    progress: Option<&ProgressSender>,
+    detail: Option<String>,
+) -> eyre::Result<DokuruOverrideRestore> {
+    let existing = match tokio::fs::read_to_string(&update.override_path).await {
+        Ok(content) => Some(content),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error.into()),
+    };
+
+    let restore = if existing.as_deref() == Some(update.content.as_str()) {
+        DokuruOverrideRestore {
+            backup_path: None,
+            delete_on_restore: false,
+        }
+    } else if existing.is_some() {
+        let backup_path = compose_backup_path(&update.override_path);
+        tokio::fs::copy(&update.override_path, &backup_path).await?;
+        DokuruOverrideRestore {
+            backup_path: Some(backup_path),
+            delete_on_restore: false,
+        }
+    } else {
+        DokuruOverrideRestore {
+            backup_path: None,
+            delete_on_restore: true,
+        }
+    };
+
+    if existing.as_deref() != Some(update.content.as_str()) {
+        if let Some(parent) = update.override_path.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        tokio::fs::write(&update.override_path, &update.content).await?;
+    }
+
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        step,
+        "write_dokuru_override",
+        "done",
+        Some(format!(
+            "Wrote Dokuru Compose override {}{}",
+            update.override_path.display(),
+            detail.map_or_else(String::new, |detail| format!(" ({detail})"))
+        )),
+    );
+
+    Ok(restore)
+}
+
+async fn restore_dokuru_compose_override(path: &Path, restore: &DokuruOverrideRestore) {
+    if let Some(backup_path) = &restore.backup_path {
+        let _ = tokio::fs::copy(backup_path, path).await;
+    } else if restore.delete_on_restore {
+        let _ = tokio::fs::remove_file(path).await;
+    }
+}
+
+fn upsert_dokuru_override_content(
+    existing: Option<&str>,
+    service: &str,
+    rule_id: &str,
+    target: Option<&FixTarget>,
+) -> eyre::Result<String> {
+    let mut lines = existing
+        .filter(|content| !content.trim().is_empty())
+        .map(split_yaml_lines)
+        .unwrap_or_else(|| {
+            vec!["# Managed by Dokuru. Keep this file after the base compose files.".to_string()]
+        });
+
+    let services_section_line = match find_mapping_key(&lines, 0..lines.len(), 0, "services") {
+        Some(line) => line,
+        None => {
+            if !lines.last().is_none_or(|line| line.trim().is_empty()) {
+                lines.push(String::new());
+            }
+            lines.push("services:".to_string());
+            lines.len() - 1
+        }
+    };
+
+    let services_section_indent = leading_spaces(&lines[services_section_line]);
+    let mut services_end = block_end(&lines, services_section_line + 1, services_section_indent);
+    let service_name_indent = first_child_indent(
+        &lines,
+        services_section_line + 1,
+        services_end,
+        services_section_indent,
+    )
+    .unwrap_or(services_section_indent + 2);
+
+    let mut block = if let Some(service_line) = find_mapping_key(
+        &lines,
+        services_section_line + 1..services_end,
+        service_name_indent,
+        service,
+    ) {
+        ComposeServiceBlock {
+            service_line,
+            end: block_end(&lines, service_line + 1, service_name_indent),
+            body_indent: first_child_indent(
+                &lines,
+                service_line + 1,
+                block_end(&lines, service_line + 1, service_name_indent),
+                service_name_indent,
+            )
+            .unwrap_or(service_name_indent + 2),
+        }
+    } else {
+        lines.insert(
+            services_end,
+            format!(
+                "{}{}:",
+                " ".repeat(service_name_indent),
+                yaml_key_text(service)
+            ),
+        );
+        services_end += 1;
+        ComposeServiceBlock {
+            service_line: services_end - 1,
+            end: services_end,
+            body_indent: service_name_indent + 2,
+        }
+    };
+
+    apply_dokuru_override_service_lines(&mut lines, &mut block, rule_id, target)?;
+    Ok(render_yaml_lines(&lines, true))
+}
+
+fn apply_dokuru_override_service_lines(
+    lines: &mut Vec<String>,
+    block: &mut ComposeServiceBlock,
+    rule_id: &str,
+    target: Option<&FixTarget>,
+) -> eyre::Result<bool> {
+    let changed = match rule_id {
+        "4.1" => set_service_value_text(
+            lines,
+            block,
+            "user",
+            &yaml_quoted_scalar(DEFAULT_NON_ROOT_USER),
+        ),
+        "4.6" => set_healthcheck_text(lines, block),
+        "5.5" => set_service_value_text(lines, block, "privileged", "false"),
+        "5.10" => set_service_value_text(lines, block, "network_mode", "bridge"),
+        "5.16" => set_service_value_text(lines, block, "pid", "!reset null"),
+        "5.17" => set_service_value_text(lines, block, "ipc", "private"),
+        "5.21" => set_service_value_text(lines, block, "uts", "private"),
+        "5.31" => {
+            set_service_value_text(lines, block, "userns_mode", "!reset null")
+                | set_service_value_text(lines, block, "userns", "!reset null")
+        }
+        "5.11" => set_service_value_text(
+            lines,
+            block,
+            "mem_limit",
+            &compose_memory_value(
+                target
+                    .and_then(|target| target.memory)
+                    .unwrap_or(DEFAULT_MEMORY_BYTES),
+            ),
+        ),
+        "5.12" => set_service_value_text(
+            lines,
+            block,
+            "cpu_shares",
+            &target
+                .and_then(|target| target.cpu_shares)
+                .unwrap_or(DEFAULT_CPU_SHARES)
+                .to_string(),
+        ),
+        "5.29" => set_service_value_text(
+            lines,
+            block,
+            "pids_limit",
+            &target
+                .and_then(|target| target.pids_limit)
+                .unwrap_or(DEFAULT_PIDS_LIMIT)
+                .to_string(),
+        ),
+        "5.25" | "cgroup_all" => {
+            let target =
+                target.ok_or_else(|| eyre::eyre!("cgroup override needs target values"))?;
+            set_cgroup_all_service_values(lines, block, target)
+        }
+        _ => return Err(eyre::eyre!("unsupported Dokuru override rule {rule_id}")),
+    };
+
+    Ok(changed)
+}
+
+fn yaml_key_text(value: &str) -> String {
+    if !value.is_empty()
+        && value
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
+    {
+        value.to_string()
+    } else {
+        yaml_quoted_scalar(value)
+    }
+}
+
+fn yaml_quoted_scalar(value: &str) -> String {
+    format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
 #[derive(Clone, Copy)]
@@ -4970,12 +5503,15 @@ async fn cgroup_rollback_plan(docker: &Docker, request: &FixRequest) -> eyre::Re
         };
 
         if let Some(ctx) = compose_context_from_inspect(&inspect) {
-            if compose_services.insert(ctx.key())
-                && let Ok(compose_path) =
+            if compose_services.insert(ctx.key()) {
+                if is_dokuru_override_strategy(target.strategy.as_deref()) {
+                    compose_targets.push(compose_rollback_target_for_override(&ctx).await?);
+                } else if let Ok(compose_path) =
                     find_compose_update_path(&ctx, &request.rule_id, Some(&target)).await
-            {
-                compose_targets
-                    .push(compose_rollback_target_with_backup(&ctx, compose_path).await?);
+                {
+                    compose_targets
+                        .push(compose_rollback_target_with_backup(&ctx, compose_path).await?);
+                }
             }
             continue;
         }
@@ -5017,9 +5553,7 @@ async fn compose_rollback_targets_for_rule(
         if !compose_services.insert(ctx.key()) {
             continue;
         }
-        if let Ok(compose_path) = find_compose_update_path(&ctx, rule_id, None).await {
-            targets.push(compose_rollback_target_with_backup(&ctx, compose_path).await?);
-        }
+        targets.push(compose_rollback_target_for_override(&ctx).await?);
     }
 
     Ok(targets)
@@ -5065,6 +5599,42 @@ async fn compose_rollback_target_with_backup(
         service: ctx.service.clone(),
         compose_path: compose_path.to_string_lossy().to_string(),
         backup_path: Some(backup_path.to_string_lossy().to_string()),
+        delete_on_rollback: false,
+        working_dir: ctx
+            .working_dir
+            .as_ref()
+            .map(|path| path.to_string_lossy().to_string()),
+        config_files: ctx.config_files.clone(),
+    })
+}
+
+async fn compose_rollback_target_for_override(
+    ctx: &ComposeContext,
+) -> eyre::Result<ComposeRollbackTarget> {
+    let compose_paths = resolve_compose_files(ctx).await?;
+    let override_path = dokuru_compose_override_path(ctx, &compose_paths)?;
+    let backup_path = match tokio::fs::metadata(&override_path).await {
+        Ok(metadata) if metadata.is_file() => {
+            let backup_path = compose_rollback_backup_path(&override_path);
+            tokio::fs::copy(&override_path, &backup_path).await?;
+            Some(backup_path.to_string_lossy().to_string())
+        }
+        Ok(_) => {
+            return Err(eyre::eyre!(
+                "Dokuru override path exists but is not a file: {}",
+                override_path.display()
+            ));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error.into()),
+    };
+
+    Ok(ComposeRollbackTarget {
+        project: ctx.project.clone(),
+        service: ctx.service.clone(),
+        compose_path: override_path.to_string_lossy().to_string(),
+        delete_on_rollback: backup_path.is_none(),
+        backup_path,
         working_dir: ctx
             .working_dir
             .as_ref()
@@ -5094,12 +5664,12 @@ pub async fn record_fix_history(
     let compose_rollback_targets = compose_targets;
     let has_compose_rollback = compose_rollback_targets
         .iter()
-        .any(|target| target.backup_path.is_some());
+        .any(|target| target.backup_path.is_some() || target.delete_on_rollback);
     let rollback_supported = outcome.status == FixStatus::Applied
         && (!rollback_targets.is_empty() || has_compose_rollback);
     let rollback_note = rollback_supported.then(|| {
         if has_compose_rollback {
-            "Rollback restores backed up Compose YAML and recreates services".to_string()
+            "Rollback restores backed up Compose YAML or removes Dokuru override files, then recreates services".to_string()
         } else {
             "Rollback restores previous cgroup resource limits".to_string()
         }
@@ -5222,27 +5792,36 @@ async fn rollback_compose_targets(
         }
 
         let label = format!("{}:{} (compose)", target.project, target.service);
-        let Some(backup_path) = target.backup_path.as_ref() else {
-            failed.push(format!("{label}: compose backup path was not captured"));
-            continue;
-        };
-
-        let backup_path = PathBuf::from(backup_path);
         let compose_path = PathBuf::from(&target.compose_path);
-        if tokio::fs::metadata(&backup_path).await.is_err() {
-            failed.push(format!(
-                "{label}: backup file missing: {}",
-                backup_path.display()
-            ));
-            continue;
-        }
+        if let Some(backup_path) = target.backup_path.as_ref().map(PathBuf::from) {
+            if tokio::fs::metadata(&backup_path).await.is_err() {
+                failed.push(format!(
+                    "{label}: backup file missing: {}",
+                    backup_path.display()
+                ));
+                continue;
+            }
 
-        if let Err(error) = tokio::fs::copy(&backup_path, &compose_path).await {
-            failed.push(format!(
-                "{label}: failed to restore {} from {}: {error}",
-                compose_path.display(),
-                backup_path.display()
-            ));
+            if let Err(error) = tokio::fs::copy(&backup_path, &compose_path).await {
+                failed.push(format!(
+                    "{label}: failed to restore {} from {}: {error}",
+                    compose_path.display(),
+                    backup_path.display()
+                ));
+                continue;
+            }
+        } else if target.delete_on_rollback {
+            if let Err(error) = tokio::fs::remove_file(&compose_path).await
+                && error.kind() != std::io::ErrorKind::NotFound
+            {
+                failed.push(format!(
+                    "{label}: failed to remove {}: {error}",
+                    compose_path.display()
+                ));
+                continue;
+            }
+        } else {
+            failed.push(format!("{label}: compose rollback action was not captured"));
             continue;
         }
 
@@ -5658,6 +6237,116 @@ volumes:
             .unwrap();
 
         assert_eq!(updated, expected);
+    }
+
+    #[test]
+    fn dokuru_override_mode_renders_separate_override_yaml() {
+        let target = FixTarget {
+            container_id: "abc".to_string(),
+            memory: Some(512 * 1024 * 1024),
+            cpu_shares: Some(1024),
+            pids_limit: Some(200),
+            strategy: Some(STRATEGY_DOKURU_OVERRIDE.to_string()),
+        };
+        let expected = r#"# Managed by Dokuru. Keep this file after the base compose files.
+
+services:
+  web:
+    mem_limit: 512m
+    cpu_shares: 1024
+    pids_limit: 200
+"#;
+
+        let rendered =
+            upsert_dokuru_override_content(None, "web", "cgroup_all", Some(&target)).unwrap();
+
+        assert_eq!(rendered, expected);
+    }
+
+    #[test]
+    fn dokuru_override_mode_can_reset_namespace_values() {
+        let expected = r#"# Managed by Dokuru. Keep this file after the base compose files.
+
+services:
+  web:
+    pid: !reset null
+"#;
+
+        let rendered = upsert_dokuru_override_content(None, "web", "5.16", None).unwrap();
+
+        assert_eq!(rendered, expected);
+    }
+
+    #[test]
+    fn patch_source_mode_edits_compose_yaml() {
+        let input = "services:\n  web:\n    image: nginx\n";
+        let expected = "services:\n  web:\n    image: nginx\n    mem_limit: 512m\n";
+        let target = FixTarget {
+            container_id: "abc".to_string(),
+            memory: Some(512 * 1024 * 1024),
+            cpu_shares: None,
+            pids_limit: None,
+            strategy: Some(STRATEGY_COMPOSE_UPDATE.to_string()),
+        };
+
+        let updated = update_compose_content(input, "web", "5.11", Some(&target))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(updated, expected);
+    }
+
+    #[test]
+    fn live_only_mode_builds_docker_update_command() {
+        let target = FixTarget {
+            container_id: "abc".to_string(),
+            memory: Some(512 * 1024 * 1024),
+            cpu_shares: Some(1024),
+            pids_limit: Some(200),
+            strategy: Some(STRATEGY_DOCKER_UPDATE.to_string()),
+        };
+
+        let command = docker_update_command("5.25", &target, "web-1");
+
+        assert_eq!(
+            command,
+            "docker update --memory=512m --memory-swap=-1 --cpu-shares=1024 --pids-limit=200 web-1"
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_compose_files_supports_standard_docker_compose_names() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system time should be after unix epoch")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "dokuru-compose-names-{}-{nanos}",
+            std::process::id()
+        ));
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        let yaml_path = dir.join("docker-compose.yaml");
+        let yml_path = dir.join("docker-compose.yml");
+        tokio::fs::write(&yaml_path, "services:\n  web:\n    image: nginx\n")
+            .await
+            .unwrap();
+        tokio::fs::write(&yml_path, "services:\n  worker:\n    image: busybox\n")
+            .await
+            .unwrap();
+
+        let ctx = ComposeContext {
+            project: "dokuru-lab".to_string(),
+            service: "web".to_string(),
+            working_dir: Some(dir.clone()),
+            config_files: None,
+        };
+
+        let files = resolve_compose_files(&ctx).await.unwrap();
+
+        assert!(files.contains(&yaml_path));
+        assert!(files.contains(&yml_path));
+
+        let _ = tokio::fs::remove_dir_all(&dir).await;
     }
 
     #[test]

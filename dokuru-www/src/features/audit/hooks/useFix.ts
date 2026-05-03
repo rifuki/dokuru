@@ -184,7 +184,7 @@ export type TargetConfig = {
     memoryMb: number;
     cpuShares: number;
     pidsLimit: number;
-    strategy: "docker_update" | "compose_update";
+    strategy: "docker_update" | "compose_update" | "dokuru_override";
 };
 
 export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs) {
@@ -247,7 +247,7 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
                             memoryMb: target.suggestion ? Math.round(target.suggestion.memory / 1024 / 1024) : fallback.memoryMb,
                             cpuShares: target.suggestion?.cpu_shares ?? fallback.cpuShares,
                             pidsLimit: target.suggestion?.pids_limit ?? fallback.pidsLimit,
-                            strategy: target.strategy === "compose_update" ? "compose_update" : "docker_update",
+                            strategy: target.strategy === "dokuru_override" || target.strategy === "compose_update" ? target.strategy : "docker_update",
                         };
                     })(),
                 ])));

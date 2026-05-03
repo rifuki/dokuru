@@ -616,6 +616,16 @@ function StackCard({
     : noneRunning
     ? "bg-gray-500/10 text-gray-400 border-gray-500/30"
     : "bg-yellow-500/10 text-yellow-400 border-yellow-500/30";
+  const overrideLabel = stack.dokuru_override_active
+    ? "Dokuru override active"
+    : stack.dokuru_override_exists
+    ? "Override file exists"
+    : "No Dokuru override";
+  const overrideClass = stack.dokuru_override_active
+    ? "border-cyan-500/25 bg-cyan-500/10 text-cyan-400"
+    : stack.dokuru_override_exists
+    ? "border-amber-500/25 bg-amber-500/10 text-amber-400"
+    : "border-border bg-muted/30 text-muted-foreground";
   const barClass = allRunning
     ? "bg-green-500"
     : noneRunning
@@ -674,6 +684,18 @@ function StackCard({
                     {stack.config_file.split("/").pop()}
                   </span>
                 </button>
+              )}
+              {stack.dokuru_override_file && (
+                <span
+                  title={stack.dokuru_override_file}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                    overrideClass,
+                  )}
+                >
+                  <FileCode2 className="h-3 w-3 shrink-0" />
+                  {overrideLabel}
+                </span>
               )}
             </div>
           </div>

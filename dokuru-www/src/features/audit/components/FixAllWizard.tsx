@@ -310,7 +310,7 @@ function ConfigureResourcesStep({
                 <div className="flex items-start gap-2.5">
                     <FileCode2 className="mt-0.5 h-4 w-4 shrink-0" />
                     <p className="leading-relaxed">
-                        Configure cgroup values before bulk apply. Compose-managed containers default to persistent service updates; standalone containers use Docker live updates.
+                        Configure cgroup values before bulk apply. Compose-managed containers default to Dokuru override files; standalone containers use Docker live updates.
                     </p>
                 </div>
             </div>
@@ -356,18 +356,30 @@ function ConfigureResourcesStep({
                                                         </p>
                                                     </div>
                                                 </div>
-                                                <div className="grid shrink-0 grid-cols-2 overflow-hidden rounded-lg border border-white/10 bg-black/25 p-0.5">
+                                                <div className="grid shrink-0 grid-cols-3 overflow-hidden rounded-lg border border-white/10 bg-black/25 p-0.5">
+                                                    <button
+                                                        type="button"
+                                                        disabled={!canCompose}
+                                                        onClick={() => onUpdateTarget(target.key, { strategy: "dokuru_override" })}
+                                                        className={cn(
+                                                            "rounded-md px-2 py-1.5 text-[10px] font-semibold transition-colors",
+                                                            target.strategy === "dokuru_override" && canCompose ? "bg-[#2496ED] text-white" : "text-white/38 hover:text-white/70",
+                                                            !canCompose && "cursor-not-allowed opacity-35 hover:text-white/38"
+                                                        )}
+                                                    >
+                                                        Override
+                                                    </button>
                                                     <button
                                                         type="button"
                                                         disabled={!canCompose}
                                                         onClick={() => onUpdateTarget(target.key, { strategy: "compose_update" })}
                                                         className={cn(
                                                             "rounded-md px-2 py-1.5 text-[10px] font-semibold transition-colors",
-                                                            target.strategy === "compose_update" && canCompose ? "bg-[#2496ED] text-white" : "text-white/38 hover:text-white/70",
+                                                            target.strategy === "compose_update" && canCompose ? "bg-white/14 text-white" : "text-white/38 hover:text-white/70",
                                                             !canCompose && "cursor-not-allowed opacity-35 hover:text-white/38"
                                                         )}
                                                     >
-                                                        Compose
+                                                        Patch
                                                     </button>
                                                     <button
                                                         type="button"
