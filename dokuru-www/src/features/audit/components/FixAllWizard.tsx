@@ -22,40 +22,43 @@ const STEPS: { key: FixAllStep; label: string }[] = [
 
 function StepIndicator({ current, showConfigure }: { current: FixAllStep; showConfigure: boolean }) {
     const steps = showConfigure ? STEPS : STEPS.filter((step) => step.key !== "configure");
-    const idx = steps.findIndex(s => s.key === current);
-    const progress = idx <= 0 ? 0 : (idx / (steps.length - 1)) * 100;
+    const idx = Math.max(steps.findIndex(s => s.key === current), 0);
 
     return (
-        <div className="space-y-3" aria-label="Fix progress">
-            <div className="h-1 overflow-hidden rounded-full bg-white/10">
-                <div
-                    className="h-full rounded-full bg-[#2496ED] transition-all duration-500"
-                    style={{ width: `${progress}%` }}
-                />
-            </div>
-            <div className="flex justify-between text-xs">
-                {steps.map((s, i) => (
-                    <div
-                        key={s.key}
-                        className={cn(
-                            "flex items-center gap-2",
-                            i > 0 && i < steps.length - 1 && "justify-center",
-                            i === steps.length - 1 && "justify-end"
+        <div className="flex w-full items-start" aria-label="Fix progress">
+            {steps.map((s, i) => {
+                const done = i < idx;
+                const active = i === idx;
+
+                return (
+                    <div key={s.key} className={cn("flex items-start", i < steps.length - 1 ? "flex-1" : "flex-none")}>
+                        <div className="flex w-20 flex-col items-center gap-1.5">
+                            <div className={cn(
+                                "flex h-6 w-6 items-center justify-center rounded-full border text-[10px] font-mono font-bold transition-all",
+                                done
+                                    ? "border-[#2496ED] bg-[#2496ED] text-white"
+                                    : active
+                                    ? "border-[#2496ED] bg-[#2496ED]/10 text-[#2496ED]"
+                                    : "border-border bg-muted/20 text-muted-foreground"
+                            )}>
+                                {done ? <Check size={10} strokeWidth={3} /> : i + 1}
+                            </div>
+                            <span className={cn(
+                                "whitespace-nowrap font-mono text-[9px] uppercase tracking-[0.18em]",
+                                active ? "text-[#2496ED]" : done ? "text-muted-foreground" : "text-muted-foreground/70"
+                            )}>
+                                {s.label}
+                            </span>
+                        </div>
+                        {i < steps.length - 1 && (
+                            <div className={cn(
+                                "mt-3 h-px min-w-8 flex-1 transition-all",
+                                i < idx ? "bg-[#2496ED]/70" : "bg-border"
+                            )} />
                         )}
-                    >
-                        <span className={cn(
-                            "h-2 w-2 rounded-full transition-colors",
-                            i <= idx ? "bg-[#2496ED]" : "bg-white/18"
-                        )} />
-                        <span className={cn(
-                            "font-medium",
-                            i === idx ? "text-white" : i < idx ? "text-white/55" : "text-white/35"
-                        )}>
-                            {s.label}
-                        </span>
                     </div>
-                ))}
-            </div>
+                );
+            })}
         </div>
     );
 }
@@ -175,43 +178,47 @@ function ConfirmStep({
     return (
         <div className="flex flex-col gap-5">
             {highRiskCount > 0 && (
-                <div className="flex items-start gap-3 rounded-xl border border-rose-500/25 bg-rose-500/[0.06] px-4 py-3.5">
-                    <ShieldAlert className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
-                    <div className="space-y-0.5">
-                        <p className="text-sm font-semibold text-white/90">
-                            Risky auto-fixes are not selected by default
-                        </p>
-                        <p className="text-sm text-white/62 leading-relaxed">
-                            Host storage, user namespace, and recreate fixes like 1.1.1, 2.10, 4.1, and 5.31 can restart Docker or break workloads if prerequisites are wrong. Select them manually only when you are ready.
-                        </p>
+                <div className="rounded-lg border border-rose-500/25 bg-rose-500/[0.06] px-3.5 py-3">
+                    <div className="flex items-start gap-3">
+                        <ShieldAlert className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
+                        <div className="min-w-0 space-y-0.5">
+                            <p className="text-xs font-semibold text-rose-300">
+                                Risky fixes stay unselected
+                            </p>
+                            <p className="text-xs text-rose-200/65 leading-relaxed">
+                                Host storage, user namespace, and recreate fixes can restart Docker or break workloads if prerequisites are wrong.
+                            </p>
+                        </div>
                     </div>
                 </div>
             )}
 
             {recreateCount > 0 && (
-                <div className="flex items-start gap-3 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-4 py-3.5">
-                    <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
-                    <div className="space-y-0.5">
-                        <p className="text-sm font-semibold text-white/90">
-                            {recreateCount} rule{recreateCount > 1 ? "s" : ""} require container restart
-                        </p>
-                        <p className="text-sm text-white/62 leading-relaxed">
-                            Selected fixes require stop → recreate → start for affected standalone containers, or docker compose up for Compose services. Expect short downtime per affected container.
-                        </p>
+                <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3.5 py-3">
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                        <div className="min-w-0 space-y-0.5">
+                            <p className="text-xs font-semibold text-amber-300">
+                                {recreateCount} rule{recreateCount > 1 ? "s" : ""} require container restart
+                            </p>
+                            <p className="text-xs text-amber-200/65 leading-relaxed">
+                                Selected fixes may stop, recreate, and restart affected containers. Expect short downtime.
+                            </p>
+                        </div>
                     </div>
                 </div>
             )}
 
             <div>
                 <div className="mb-2 flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium text-white/45">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/38">
                         {selectedCount} of {ruleStatuses.length} rules selected
                     </p>
                     <div className="flex items-center gap-2">
                         <button
                             type="button"
                             onClick={() => onSetAllSelected(true)}
-                            className="text-sm font-medium text-[#2496ED]/75 hover:text-[#2496ED]"
+                            className="text-xs font-medium text-[#2496ED]/75 hover:text-[#2496ED]"
                         >
                             Select all
                         </button>
@@ -219,7 +226,7 @@ function ConfirmStep({
                         <button
                             type="button"
                             onClick={() => onSetAllSelected(false)}
-                            className="text-sm font-medium text-white/35 hover:text-white/70"
+                            className="text-xs font-medium text-white/35 hover:text-white/70"
                         >
                             Clear
                         </button>
@@ -241,14 +248,14 @@ function ConfirmStep({
             <div className="flex items-center gap-3 pt-1">
                 <button
                     onClick={onCancel}
-                    className="flex-1 rounded-md border border-white/12 bg-white/[0.03] hover:bg-white/[0.07] px-4 py-2.5 text-sm font-medium text-white/60 hover:text-white/90 transition-all"
+                    className="h-9 flex-1 rounded-md border border-white/12 bg-white/[0.03] px-4 text-sm font-medium text-white/60 transition-all hover:bg-white/[0.07] hover:text-white/90"
                 >
                     Cancel
                 </button>
                 <button
                     onClick={onConfirm}
                     disabled={selectedCount === 0}
-                    className="audit-on-primary flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-[#2496ED] hover:bg-[#1e80cc] disabled:bg-white/10 disabled:text-white/25 disabled:shadow-none px-4 py-2.5 text-sm font-semibold text-white shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] transition-all hover:shadow-[0_0_24px_-4px_rgba(36,150,237,0.65)] active:scale-[0.98]"
+                    className="audit-on-primary inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-md bg-[#2496ED] px-4 text-sm font-semibold text-white transition-all hover:bg-[#1e80cc] active:scale-[0.98] disabled:bg-white/10 disabled:text-white/25 disabled:shadow-none"
                 >
                     {hasCgroupSelection ? "Configure Resources" : `Apply ${selectedCount} Selected`}
                 </button>
@@ -356,13 +363,13 @@ function ConfigureResourcesStep({
                                                         </p>
                                                     </div>
                                                 </div>
-                                                <div className="grid shrink-0 grid-cols-3 overflow-hidden rounded-lg border border-white/10 bg-black/25 p-0.5">
+                                                <div className="grid h-9 shrink-0 grid-cols-3 rounded-md border border-white/10 bg-black/25 p-0.5">
                                                     <button
                                                         type="button"
                                                         disabled={!canCompose}
                                                         onClick={() => onUpdateTarget(target.key, { strategy: "dokuru_override" })}
                                                         className={cn(
-                                                            "rounded-md px-2 py-1.5 text-[10px] font-semibold transition-colors",
+                                                            "h-full rounded-[6px] px-2 text-[10px] font-semibold transition-colors",
                                                             target.strategy === "dokuru_override" && canCompose ? "bg-[#2496ED] text-white" : "text-white/38 hover:text-white/70",
                                                             !canCompose && "cursor-not-allowed opacity-35 hover:text-white/38"
                                                         )}
@@ -374,7 +381,7 @@ function ConfigureResourcesStep({
                                                         disabled={!canCompose}
                                                         onClick={() => onUpdateTarget(target.key, { strategy: "compose_update" })}
                                                         className={cn(
-                                                            "rounded-md px-2 py-1.5 text-[10px] font-semibold transition-colors",
+                                                            "h-full rounded-[6px] px-2 text-[10px] font-semibold transition-colors",
                                                             target.strategy === "compose_update" && canCompose ? "bg-white/14 text-white" : "text-white/38 hover:text-white/70",
                                                             !canCompose && "cursor-not-allowed opacity-35 hover:text-white/38"
                                                         )}
@@ -385,11 +392,11 @@ function ConfigureResourcesStep({
                                                         type="button"
                                                         onClick={() => onUpdateTarget(target.key, { strategy: "docker_update" })}
                                                         className={cn(
-                                                            "rounded-md px-2 py-1.5 text-[10px] font-semibold transition-colors",
+                                                            "h-full rounded-[6px] px-2 text-[10px] font-semibold transition-colors",
                                                             target.strategy === "docker_update" ? "bg-white/12 text-white" : "text-white/38 hover:text-white/70"
                                                         )}
                                                     >
-                                                        Live only
+                                                        Live
                                                     </button>
                                                 </div>
                                             </div>
@@ -475,6 +482,7 @@ function ResourceInput({
             <input
                 type="number"
                 min={min}
+                inputMode="numeric"
                 disabled={!enabled}
                 value={value > 0 ? value : ""}
                 onChange={(event) => {
@@ -483,7 +491,7 @@ function ResourceInput({
                     onChange(next === "" || !Number.isFinite(parsed) ? 0 : parsed);
                 }}
                 className={cn(
-                    "h-8 w-full rounded border bg-black/35 px-2 text-right font-mono text-xs font-semibold outline-none transition-colors disabled:cursor-not-allowed disabled:text-white/25",
+                    "audit-fix-number-input h-8 w-full rounded border bg-black/35 px-2 text-right font-mono text-xs font-semibold outline-none transition-colors disabled:cursor-not-allowed disabled:text-white/25",
                     invalid ? "border-red-500/70 text-red-400 focus:border-red-500" : "border-white/8 text-white/80 focus:border-[#2496ED]/60",
                 )}
             />
