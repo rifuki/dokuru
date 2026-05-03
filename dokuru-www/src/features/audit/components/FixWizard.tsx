@@ -171,15 +171,17 @@ function ConfirmStep({
 
             {/* Restart warning */}
             {isRecreate && (
-                <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/8 px-4 py-3">
-                    <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
-                    <div className="space-y-0.5">
-                        <p className="text-xs font-semibold text-amber-400">
-                            Container restart required
-                        </p>
-                        <p className="text-xs text-amber-400/70 leading-relaxed">
-                            This setting cannot be changed on a running container. Standalone containers are recreated, while Compose-managed services update the compose file and run docker compose up.
-                        </p>
+                <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3.5 py-3">
+                    <div className="flex items-center gap-3">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-amber-400/25 bg-amber-400/10 text-amber-300">
+                            <RotateCcw className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0">
+                            <p className="text-xs font-semibold text-amber-300">Restart/recreate required</p>
+                            <p className="mt-0.5 text-[11px] leading-snug text-amber-200/55">
+                                Dokuru handles it during apply; Compose targets persist the change in YAML.
+                            </p>
+                        </div>
                     </div>
                 </div>
             )}

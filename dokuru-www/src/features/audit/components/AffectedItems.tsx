@@ -72,8 +72,8 @@ export function AffectedItems({
         }
 
         const search = returnTo
-          ? { from: returnTo.source, auditId: returnTo.auditId, ruleId: returnTo.ruleId }
-          : { from: "containers" as const };
+          ? { from: returnTo.source, auditId: returnTo.auditId, ruleId: returnTo.ruleId, containerName: item }
+          : { from: "containers" as const, containerName: item };
 
         return (
           <RouterLink

@@ -26,6 +26,7 @@ type ContainerDetailSearch = {
   from?: "audit" | "containers";
   auditId?: string;
   ruleId?: string;
+  containerName?: string;
 };
 
 export const Route = createFileRoute("/_authenticated/agents/$id/containers/$containerId")({
@@ -33,9 +34,29 @@ export const Route = createFileRoute("/_authenticated/agents/$id/containers/$con
     from: search.from === "audit" || search.from === "containers" ? search.from : undefined,
     auditId: typeof search.auditId === "string" ? search.auditId : undefined,
     ruleId: typeof search.ruleId === "string" ? search.ruleId : undefined,
+    containerName: typeof search.containerName === "string" ? search.containerName : undefined,
   }),
   component: ContainerDetailPage,
 });
+
+function normalizeContainerLookup(value: string) {
+  return value.trim().replace(/^\/+/, "").toLowerCase();
+}
+
+function findRoutedContainer(containers: Container[] | undefined, containerId: string, containerName?: string) {
+  const normalizedId = normalizeContainerLookup(containerId);
+  const normalizedName = containerName ? normalizeContainerLookup(containerName) : "";
+  if (!containers || !normalizedId) return undefined;
+
+  return containers.find((container) => {
+    const id = container.id.toLowerCase();
+    if (id === normalizedId || (normalizedId.length >= 12 && id.startsWith(normalizedId))) return true;
+    return container.names.some((name) => {
+      const normalized = normalizeContainerLookup(name);
+      return normalized === normalizedId || (!!normalizedName && normalized === normalizedName);
+    });
+  });
+}
 
 function stateColor(state: string) {
   switch (state.toLowerCase()) {
@@ -82,7 +103,7 @@ function ContainerDetailSkeleton() {
 
 function ContainerDetailPage() {
   const { id, containerId } = Route.useParams();
-  const { from, auditId, ruleId } = Route.useSearch();
+  const { from, auditId, ruleId, containerName } = Route.useSearch();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const hasAuditBack = from === "audit" && !!auditId;
@@ -106,7 +127,8 @@ function ContainerDetailPage() {
     refetchInterval: 5000,
   });
 
-  const container: Container | undefined = containers?.find((c) => c.id === containerId);
+  const container = findRoutedContainer(containers, containerId, containerName);
+  const resolvedContainerId = container?.id ?? containerId;
   const isRunning = container?.state.toLowerCase() === "running";
   const name = container?.names[0]?.replace("/", "") || containerId.slice(0, 12);
 
@@ -116,7 +138,7 @@ function ContainerDetailPage() {
     mutationFn: () => {
       const credential = dockerCredential(agent);
       if (!agent || !credential) throw new Error();
-      return dockerApi.startContainer(agent.url, credential, containerId);
+      return dockerApi.startContainer(agent.url, credential, resolvedContainerId);
     },
     onSuccess: () => { invalidate(); toast.success("Container started"); },
     onError: () => toast.error("Failed to start container"),
@@ -125,7 +147,7 @@ function ContainerDetailPage() {
     mutationFn: () => {
       const credential = dockerCredential(agent);
       if (!agent || !credential) throw new Error();
-      return dockerApi.stopContainer(agent.url, credential, containerId);
+      return dockerApi.stopContainer(agent.url, credential, resolvedContainerId);
     },
     onSuccess: () => { invalidate(); toast.success("Container stopped"); },
     onError: () => toast.error("Failed to stop container"),
@@ -134,7 +156,7 @@ function ContainerDetailPage() {
     mutationFn: () => {
       const credential = dockerCredential(agent);
       if (!agent || !credential) throw new Error();
-      return dockerApi.restartContainer(agent.url, credential, containerId);
+      return dockerApi.restartContainer(agent.url, credential, resolvedContainerId);
     },
     onSuccess: () => { invalidate(); toast.success("Container restarted"); },
     onError: () => toast.error("Failed to restart container"),
@@ -143,7 +165,7 @@ function ContainerDetailPage() {
     mutationFn: () => {
       const credential = dockerCredential(agent);
       if (!agent || !credential) throw new Error();
-      return dockerApi.removeContainer(agent.url, credential, containerId);
+      return dockerApi.removeContainer(agent.url, credential, resolvedContainerId);
     },
     onSuccess: () => {
       invalidate();
