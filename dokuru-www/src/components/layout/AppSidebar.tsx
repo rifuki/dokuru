@@ -46,7 +46,6 @@ import {
 import { useAuthUser } from "@/stores/use-auth-store";
 import { useAuditStore, type AuditStreamState } from "@/stores/use-audit-store";
 import { useAgentStore } from "@/stores/use-agent-store";
-import { Loader2 } from "lucide-react";
 import { useRealtimeAgents } from "@/hooks/useRealtimeAgents";
 import { useAgentConnections } from "@/hooks/useAgentConnections";
 import { HOST_SHELL_ENABLED } from "@/lib/host-shell";
@@ -288,11 +287,11 @@ export function AppSidebar() {
               {agents.map((agent) => {
                 const isAgentActive = location.pathname.startsWith(`/agents/${agent.id}`);
                 const isConnecting = !!agentConnectingStatus[agent.id];
-                const isOnline = !isConnecting && agentOnlineStatus[agent.id] === true;
+                const isOnline = agentOnlineStatus[agent.id] === true;
                 const isOffline = !isConnecting && agentOnlineStatus[agent.id] === false;
-                const AgentIcon = isOnline ? Bot : BotOff;
+                const AgentIcon = isOnline || isConnecting ? Bot : BotOff;
                 const iconColor = isConnecting
-                  ? "text-blue-400"
+                  ? "animate-pulse text-muted-foreground/45"
                   : isOnline
                   ? "text-primary"
                   : isOffline
@@ -311,9 +310,7 @@ export function AppSidebar() {
                           isIconMode
                             ? ""
                             : `rounded-[12px] border overflow-hidden transition-colors ${
-                                isConnecting
-                                  ? "border-blue-500/45 shadow-[0_0_0_1px_rgba(14,165,233,0.12)]"
-                                  : isAgentActive
+                                isAgentActive
                                   ? "border-miku-primary/40"
                                   : "border-sidebar-border"
                               }`
@@ -322,26 +319,18 @@ export function AppSidebar() {
                         <CollapsibleTrigger asChild>
                           {isIconMode ? (
                             <SidebarMenuButton tooltip={agent.name} isActive={isAgentActive}>
-                              {isConnecting
-                                ? <span className="flex size-5 items-center justify-center animate-pulse"><Loader2 className="size-5 text-blue-400 animate-spin" /></span>
-                                : <AgentIcon className={`size-5 ${iconColor}`} />
-                              }
+                              <AgentIcon className={`size-5 ${iconColor}`} />
                             </SidebarMenuButton>
                           ) : (
                             <button
                               type="button"
                               className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-none transition-colors ${
-                                isConnecting
-                                  ? "text-blue-400 hover:bg-blue-500/10"
-                                  : isAgentActive
+                                isAgentActive
                                   ? "text-miku-primary"
                                   : "text-sidebar-foreground hover:bg-sidebar-accent/40"
                               }`}
                             >
-                              {isConnecting
-                                ? <span className="flex size-5 shrink-0 items-center justify-center animate-pulse"><Loader2 className="size-5 text-blue-400 animate-spin" /></span>
-                                : <AgentIcon className={`size-5 shrink-0 ${iconColor}`} />
-                              }
+                              <AgentIcon className={`size-5 shrink-0 ${iconColor}`} />
                               <span className="flex-1 truncate text-left">{agent.name}</span>
                               <ChevronDown
                                 className={`size-5 shrink-0 text-sidebar-foreground/50 transition-transform duration-200 ${
