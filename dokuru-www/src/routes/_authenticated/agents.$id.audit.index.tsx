@@ -928,7 +928,13 @@ function AuditPage() {
     useEffect(() => {
         let cancelled = false;
         const cachedHistory = readCachedAuditHistory(id);
-        if (cachedHistory.length > 0) setAuditHistory(id, cachedHistory);
+        if (cachedHistory.length > 0) {
+            setAuditHistory(id, cachedHistory);
+            queryClient.setQueryData(["audits", id], cachedHistory);
+            for (const audit of cachedHistory) {
+                if (audit.id) queryClient.setQueryData(["audit", id, audit.id], audit);
+            }
+        }
 
         queueMicrotask(() => {
             if (cancelled) return;
@@ -946,6 +952,10 @@ function AuditPage() {
                     const sorted = sortAuditHistory(h);
                     setAuditHistory(id, sorted);
                     writeCachedAuditHistory(id, sorted);
+                    queryClient.setQueryData(["audits", id], sorted);
+                    for (const audit of sorted) {
+                        if (audit.id) queryClient.setQueryData(["audit", id, audit.id], audit);
+                    }
                 })
                 .catch((error) => {
                     if (cancelled) return;
@@ -995,6 +1005,8 @@ function AuditPage() {
             ]);
             setAuditHistory(id, nextHistory);
             writeCachedAuditHistory(id, nextHistory);
+            queryClient.setQueryData(["audits", id], nextHistory);
+            if (savedAudit.id) queryClient.setQueryData(["audit", id, savedAudit.id], savedAudit);
             try {
                 const savedAuditId = savedAudit.id;
                 const toastId = savedAuditId ? `audit-complete-${id}-${savedAuditId}` : `audit-complete-${id}-${Date.now()}`;

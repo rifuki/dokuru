@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useReducer, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { agentApi } from "@/lib/api/agent";
 import {
   agentDirectApi,
@@ -8,13 +8,12 @@ import {
   type AuditRemediationAction,
   type AuditRemediationEffort,
   type AuditRemediationPlan,
-  type AuditReportResponse,
   type AuditResponse,
   type AuditResult,
   type FixHistoryEntry,
 } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
-import { dockerApi, dockerCredential, type Container as DockerContainer } from "@/services/docker-api";
+import { canUseDockerAgent, dockerApi, dockerCredential, type Container as DockerContainer } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -50,6 +49,29 @@ import { useFixAll } from "@/features/audit/hooks/useFixAll";
 type AuditDetailSearch = {
   ruleId?: string;
 };
+
+const AUDIT_DETAIL_SCROLL_PREFIX = "dokuru_audit_detail_scroll_";
+
+function auditDetailScrollKey(agentId: string, auditId: string) {
+  return `${AUDIT_DETAIL_SCROLL_PREFIX}${agentId}:${auditId}`;
+}
+
+function readSavedWindowScrollY(key: string) {
+  try {
+    const value = Number(window.sessionStorage.getItem(key));
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeSavedWindowScrollY(key: string, scrollY: number) {
+  try {
+    window.sessionStorage.setItem(key, String(Math.max(0, Math.round(scrollY))));
+  } catch {
+    // Scroll memory is a convenience; ignore storage failures.
+  }
+}
 
 export const Route = createFileRoute("/_authenticated/agents/$id/audits/$auditId")({
   validateSearch: (search: Record<string, unknown>): AuditDetailSearch => ({
@@ -1530,22 +1552,74 @@ function AuditDetailPage() {
   const { id, auditId } = Route.useParams();
   const { ruleId: focusedRuleId } = Route.useSearch();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const markAuditResultViewed = useAuditStore((state) => state.markAuditResultViewed);
   const hydrateFixJobFromHistory = useAuditStore((state) => state.hydrateFixJobFromHistory);
-  const [agent, setAgent] = useState<Agent | null>(null);
-  const [token, setToken] = useState<string | undefined>();
-  const [containers, setContainers] = useState<DockerContainer[]>([]);
-  const [auditData, setAuditData] = useState<AuditResponse | null>(null);
-  const [auditReport, setAuditReport] = useState<AuditReportResponse | null>(null);
-  const [auditHistory, setAuditHistory] = useState<AuditResponse[]>([]);
+  const storedAuditHistory = useAuditStore((state) => state.auditHistories[id]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sectionFilter, setSectionFilter] = useState<string>("all");
   const [pillarFilter, setPillarFilter] = useState<SecurityPillar | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("pillar");
-  const [loading, setLoading] = useState(true);
   const [documentExporting, setDocumentExporting] = useState<"html" | "pdf" | null>(null);
   const fixJobs = useAuditStore((state) => state.fixJobs);
+
+  const agentQuery = useQuery({
+    queryKey: ["agent", id],
+    queryFn: () => agentApi.getById(id),
+    staleTime: 30_000,
+  });
+  const agent = agentQuery.data ?? null;
+  const token = agent ? dockerCredential(agent) || undefined : undefined;
+
+  const auditQuery = useQuery({
+    queryKey: ["audit", id, auditId],
+    queryFn: () => agentApi.getAuditById(id, auditId),
+    initialData: () => {
+      const cachedAudit = queryClient.getQueryData<AuditResponse>(["audit", id, auditId]);
+      if (cachedAudit) return cachedAudit;
+      const cachedHistory = queryClient.getQueryData<AuditResponse[]>(["audits", id]) ?? storedAuditHistory ?? [];
+      return cachedHistory.find((audit) => audit.id === auditId);
+    },
+    staleTime: Infinity,
+    gcTime: 30 * 60 * 1000,
+  });
+  const auditData = auditQuery.data ?? null;
+
+  const auditReportQuery = useQuery({
+    queryKey: ["audit-report", id, auditId],
+    queryFn: () => agentApi.getAuditReport(id, auditId),
+    enabled: !!auditData,
+    retry: false,
+    staleTime: Infinity,
+    gcTime: 30 * 60 * 1000,
+  });
+  const auditReport = auditReportQuery.data ?? null;
+
+  const auditHistoryQuery = useQuery({
+    queryKey: ["audits", id],
+    queryFn: () => agentApi.listAudits(id),
+    initialData: () => {
+      const cachedHistory = queryClient.getQueryData<AuditResponse[]>(["audits", id]);
+      if (cachedHistory?.length) return cachedHistory;
+      return storedAuditHistory?.length ? storedAuditHistory : undefined;
+    },
+    staleTime: 60_000,
+  });
+  const auditHistory = auditHistoryQuery.data ?? storedAuditHistory ?? [];
+
+  const containersQuery = useQuery({
+    queryKey: ["containers", id, true],
+    queryFn: async () => {
+      if (!agent) return [];
+      const response = await dockerApi.listContainers(agent.url, dockerCredential(agent), true);
+      return response.data;
+    },
+    enabled: canUseDockerAgent(agent),
+    staleTime: 10_000,
+  });
+  const containers = containersQuery.data ?? [];
+  const auditScrollStorageKey = auditDetailScrollKey(id, auditId);
 
   const {
     open: wizardOpen,
@@ -1608,52 +1682,64 @@ function AuditDetailPage() {
   }, [auditId, id, markAuditResultViewed]);
 
   useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      try {
-        const a = await agentApi.getById(id);
-        setAgent(a);
-        setToken(dockerCredential(a) || undefined);
-        const credential = dockerCredential(a);
+    if (!auditQuery.isError) return;
+    console.error("Failed to load audit:", auditQuery.error);
+    toast.error("Failed to load audit");
+  }, [auditQuery.error, auditQuery.isError]);
 
-        if (credential) {
-          try {
-            const response = await dockerApi.listContainers(a.url, credential, true);
-            setContainers(response.data);
-          } catch (containersError) {
-            console.warn("Failed to load containers for affected links:", containersError);
-            setContainers([]);
-          }
-        } else {
-          setContainers([]);
-        }
+  useEffect(() => {
+    if (!auditReportQuery.isError) return;
+    console.warn("Failed to load Rust audit report, using client fallback:", auditReportQuery.error);
+  }, [auditReportQuery.error, auditReportQuery.isError]);
 
-        const audit = await agentApi.getAuditById(id, auditId);
-        setAuditData(audit);
+  useEffect(() => {
+    if (!auditHistoryQuery.isError) return;
+    console.warn("Failed to load audit history for comparison:", auditHistoryQuery.error);
+  }, [auditHistoryQuery.error, auditHistoryQuery.isError]);
 
-        try {
-          const report = await agentApi.getAuditReport(id, auditId);
-          setAuditReport(report);
-        } catch (reportError) {
-          console.warn("Failed to load Rust audit report, using client fallback:", reportError);
-        }
+  useEffect(() => {
+    if (!containersQuery.isError) return;
+    console.warn("Failed to load containers for affected links:", containersQuery.error);
+  }, [containersQuery.error, containersQuery.isError]);
 
-        try {
-          const history = await agentApi.listAudits(id);
-          setAuditHistory(history);
-        } catch (historyError) {
-          console.warn("Failed to load audit history for comparison:", historyError);
-          setAuditHistory([]);
-        }
-      } catch (error) {
-        console.error('Failed to load audit:', error);
-        toast.error("Failed to load audit");
-      } finally {
-        setLoading(false);
-      }
+  useEffect(() => {
+    if (!auditData || focusedRuleId) return;
+    const savedScrollY = readSavedWindowScrollY(auditScrollStorageKey);
+    if (savedScrollY <= 0) return;
+
+    let secondFrameId: number | null = null;
+    const firstFrameId = window.requestAnimationFrame(() => {
+      window.scrollTo({ top: savedScrollY });
+      secondFrameId = window.requestAnimationFrame(() => window.scrollTo({ top: savedScrollY }));
+    });
+
+    return () => {
+      window.cancelAnimationFrame(firstFrameId);
+      if (secondFrameId !== null) window.cancelAnimationFrame(secondFrameId);
     };
-    void loadData();
-  }, [id, auditId]);
+  }, [auditData, auditScrollStorageKey, focusedRuleId]);
+
+  useEffect(() => {
+    let frameId: number | null = null;
+    const saveScroll = () => writeSavedWindowScrollY(auditScrollStorageKey, window.scrollY);
+    const handleScroll = () => {
+      if (frameId !== null) return;
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        saveScroll();
+      });
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("pagehide", saveScroll);
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("pagehide", saveScroll);
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
+      saveScroll();
+    };
+  }, [auditScrollStorageKey]);
 
   const previousAudit = auditData ? (() => {
     const sortedHistory = [...auditHistory].sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
@@ -1798,7 +1884,7 @@ function AuditDetailPage() {
     }
   }, [auditData, fixHistoryQuery.data, hydrateFixJobFromHistory, id]);
 
-  if (loading) {
+  if (auditQuery.isLoading && !auditData) {
     return <AuditDetailSkeleton />;
   }
 
