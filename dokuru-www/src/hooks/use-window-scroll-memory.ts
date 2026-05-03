@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { getSidebarNavigationIntentForPath } from "@/lib/sidebar-navigation";
 
-const RESTORE_DELAYS = [0, 32, 100, 250, 500, 900];
+const RESTORE_DELAYS = [0, 32, 100, 250, 500, 900, 1400];
 
 type ScrollRestoreIntent = {
   token: string;
@@ -50,8 +50,10 @@ function windowScrollRestoreIntent(key: string): ScrollRestoreIntent {
 export function useWindowScrollMemory(key: string, canRestore = true) {
   const restoreIntent = windowScrollRestoreIntent(key);
   const shouldPersistRef = useRef(restoreIntent.fromSidebar);
+  const allowPersistRef = useRef(restoreIntent.fromSidebar && restoreIntent.savedScrollY <= 0);
   const lastObservedScrollYRef = useRef(0);
   const restoreGuardUntilRef = useRef(0);
+  const completedRestoreTokenRef = useRef<string | null>(null);
   const [completedRestoreToken, setCompletedRestoreToken] = useState<string | null>(null);
   const isRestoring = restoreIntent.fromSidebar && canRestore && restoreIntent.savedScrollY > 0 && completedRestoreToken !== restoreIntent.token;
 
@@ -60,11 +62,29 @@ export function useWindowScrollMemory(key: string, canRestore = true) {
   }, [key]);
 
   useEffect(() => {
+    if (!restoreIntent.fromSidebar) return;
+
+    const allowManualPersist = () => {
+      if (completedRestoreTokenRef.current === restoreIntent.token) allowPersistRef.current = true;
+    };
+
+    window.addEventListener("wheel", allowManualPersist, { passive: true });
+    window.addEventListener("touchmove", allowManualPersist, { passive: true });
+    window.addEventListener("keydown", allowManualPersist);
+
+    return () => {
+      window.removeEventListener("wheel", allowManualPersist);
+      window.removeEventListener("touchmove", allowManualPersist);
+      window.removeEventListener("keydown", allowManualPersist);
+    };
+  }, [restoreIntent.fromSidebar, restoreIntent.token]);
+
+  useEffect(() => {
     let frameId: number | null = null;
     const shouldPersist = shouldPersistRef.current;
 
     const persistScroll = (scrollY: number) => {
-      if (!shouldPersist) return;
+      if (!shouldPersist || !allowPersistRef.current) return;
       writeSavedWindowScrollY(key, scrollY);
     };
     const saveLatestScroll = () => {
@@ -100,17 +120,26 @@ export function useWindowScrollMemory(key: string, canRestore = true) {
   useLayoutEffect(() => {
     const intent = windowScrollRestoreIntent(key);
     shouldPersistRef.current = intent.fromSidebar;
+    allowPersistRef.current = intent.fromSidebar && intent.savedScrollY <= 0;
 
     if (!intent.fromSidebar) {
       if (window.scrollY !== 0) scrollWindowTo(0);
       return;
     }
 
-    if (!canRestore) return;
+    if (!canRestore) {
+      allowPersistRef.current = false;
+      return;
+    }
     if (intent.savedScrollY <= 0) {
-      const frameId = window.requestAnimationFrame(() => setCompletedRestoreToken(intent.token));
+      const frameId = window.requestAnimationFrame(() => {
+        completedRestoreTokenRef.current = intent.token;
+        setCompletedRestoreToken(intent.token);
+      });
       return () => window.cancelAnimationFrame(frameId);
     }
+
+    allowPersistRef.current = false;
 
     restoreGuardUntilRef.current = Date.now() + 1_200;
 
@@ -119,9 +148,12 @@ export function useWindowScrollMemory(key: string, canRestore = true) {
     const timeoutIds: ReturnType<typeof window.setTimeout>[] = [];
     let completed = false;
 
-    const finishRestore = () => {
+    const finishRestore = (targetReached: boolean) => {
       if (cancelled || completed) return;
       completed = true;
+      allowPersistRef.current = targetReached;
+      completedRestoreTokenRef.current = intent.token;
+      lastObservedScrollYRef.current = window.scrollY;
       setCompletedRestoreToken(intent.token);
     };
 
@@ -129,8 +161,9 @@ export function useWindowScrollMemory(key: string, canRestore = true) {
       if (cancelled || completed) return;
       const maxScrollY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
       const nextScrollY = Math.min(intent.savedScrollY, maxScrollY);
+      const targetReached = maxScrollY >= intent.savedScrollY;
       if (nextScrollY !== window.scrollY) scrollWindowTo(nextScrollY);
-      if (maxScrollY >= intent.savedScrollY || finalAttempt) finishRestore();
+      if (targetReached || finalAttempt) finishRestore(targetReached);
     };
 
     for (const [index, delay] of RESTORE_DELAYS.entries()) {
@@ -148,6 +181,7 @@ export function useWindowScrollMemory(key: string, canRestore = true) {
 
     return () => {
       cancelled = true;
+      if (!completed) allowPersistRef.current = false;
       for (const timeoutId of timeoutIds) window.clearTimeout(timeoutId);
       for (const frameId of frameIds) window.cancelAnimationFrame(frameId);
     };

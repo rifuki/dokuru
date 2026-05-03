@@ -925,7 +925,7 @@ function AuditPage() {
     const [historyLoading, setHistoryLoading] = useState(true);
     const [historyError, setHistoryError] = useState<string | null>(null);
     const mountedRef = useRef(false);
-    useWindowScrollMemory(`agent:${id}:audit`, !historyLoading || hasAnyAudit || showAuditTerminal);
+    const scrollMemory = useWindowScrollMemory(`agent:${id}:audit`, !historyLoading || hasAnyAudit || showAuditTerminal);
 
     useEffect(() => {
         let cancelled = false;
@@ -1087,7 +1087,7 @@ function AuditPage() {
     };
 
     return (
-        <div className="max-w-5xl mx-auto w-full space-y-6 pb-10">
+        <div className={cn("max-w-5xl mx-auto w-full space-y-6 pb-10", scrollMemory.isRestoring && "invisible")}>
             {/* ── Top bar ─────────────────────────────────────────── */}
             <div className="flex items-start justify-between gap-4">
                 <div>

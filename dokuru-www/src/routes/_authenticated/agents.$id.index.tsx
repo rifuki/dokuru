@@ -244,7 +244,7 @@ function AgentDashboard() {
     const isOnline = !!dockerInfo;
     const isInitialLoading = agentQuery.isLoading || (dockerInfoQuery.isLoading && !dockerInfoQuery.isError);
     const isRefreshing = agentQuery.isFetching || dockerInfoQuery.isFetching || auditsQuery.isFetching || containersQuery.isFetching || stacksQuery.isFetching;
-    useWindowScrollMemory(`agent:${id}:dashboard`, !agentQuery.isLoading);
+    const scrollMemory = useWindowScrollMemory(`agent:${id}:dashboard`, !agentQuery.isLoading);
 
     const openEdit = () => {
         if (!agent) return;
@@ -342,7 +342,7 @@ function AgentDashboard() {
     }
 
     return (
-        <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-5 pb-10">
+        <div className={cn("mx-auto flex w-full max-w-[1680px] flex-col gap-5 pb-10", scrollMemory.isRestoring && "invisible")}>
             <AgentDialogs
                 agent={agent}
                 deleteDialogOpen={deleteDialogOpen}
