@@ -393,10 +393,15 @@
     text-align: right;
   }
 
+  .audit-fix-target-value-label {
+    white-space: nowrap;
+  }
+
   @container (min-width: 560px) {
     .audit-fix-target-row {
       grid-template-columns: minmax(0, 1fr) minmax(188px, 220px) minmax(112px, 128px);
       gap: 0.75rem;
+      padding-top: 1.35rem;
       align-items: center;
     }
 
@@ -407,6 +412,15 @@
 
     .audit-fix-target-value {
       grid-column: auto;
+      align-self: center;
+      position: relative;
+    }
+
+    .audit-fix-target-value-label {
+      position: absolute;
+      right: 0;
+      bottom: calc(100% + 0.25rem);
+      margin-bottom: 0;
     }
   }
 

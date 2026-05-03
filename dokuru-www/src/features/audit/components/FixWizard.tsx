@@ -258,7 +258,7 @@ function ConfirmStep({
                             <div className="flex items-start gap-2.5">
                                 <FileCode2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#2496ED]/70" />
                                 <p className="leading-relaxed">
-                                    Compose targets use <span className="font-semibold text-[#7dd3fc]">Dokuru override</span> by default. Patch edits source YAML; Live is temporary.
+                                    Compose fixes write a <span className="font-semibold text-[#7dd3fc]">separate override file</span> by default. Patch edits source YAML; Live only changes the running container.
                                 </p>
                             </div>
                         </div>
@@ -314,10 +314,11 @@ function ConfirmStep({
 
                                     {isCgroup && config && (
                                         <label className="audit-fix-target-value block text-[10px] text-white/35">
-                                            <span className="mb-1 block uppercase tracking-[0.12em]">{meta.label} <span className="text-white/20">{meta.unit}</span></span>
+                                            <span className="audit-fix-target-value-label mb-1 block uppercase tracking-[0.12em]">{meta.label} <span className="text-white/20">{meta.unit}</span></span>
                                             <input
                                                 type="number"
                                                 min={meta.min}
+                                                aria-label={`${meta.label} ${meta.unit}`}
                                                 value={value > 0 ? value : ""}
                                                 onChange={(e) => {
                                                     const input = e.target.value;
