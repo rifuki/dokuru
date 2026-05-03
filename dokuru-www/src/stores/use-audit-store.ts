@@ -65,6 +65,21 @@ const auditRuns = new Map<string, Promise<AuditResponse>>();
 const fixSockets = new Map<string, WebSocket>();
 const fixRuns = new Map<string, Promise<FixOutcome>>();
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function isFixHistoryEntryForRun(entry: FixHistoryEntry, request: StartFixJobRequest, startedAt: string) {
+    if (entry.request.rule_id !== request.ruleId) return false;
+    if (entry.request.targets.length > 0 || request.targets.length > 0) {
+        const entryTargets = entry.request.targets.map((target) => target.container_id).sort().join("\0");
+        const requestTargets = request.targets.map((target) => target.container_id).sort().join("\0");
+        if (entryTargets !== requestTargets) return false;
+    }
+    const entryTime = Date.parse(entry.timestamp);
+    const startedTime = Date.parse(startedAt);
+    if (!Number.isFinite(entryTime) || !Number.isFinite(startedTime)) return true;
+    return entryTime >= startedTime - 30_000;
+}
+
 const createIdleStream = (): AuditStreamState => ({
     status: "idle",
     total: 0,
@@ -152,7 +167,13 @@ export const useAuditStore = create<AuditState>((set) => ({
             const ruleId = entry.request.rule_id;
             const key = fixJobKey(agentId, ruleId);
             const currentJob = s.fixJobs[key];
-            if (currentJob?.status === "running") return s;
+            if (currentJob?.status === "running") {
+                const entryTime = Date.parse(entry.timestamp);
+                const startedTime = Date.parse(currentJob.startedAt);
+                if (Number.isFinite(entryTime) && Number.isFinite(startedTime) && entryTime < startedTime - 30_000) {
+                    return s;
+                }
+            }
 
             const status: FixJobStatus = entry.outcome.status === "Applied"
                 ? "applied"
@@ -469,7 +490,11 @@ export const useAuditStore = create<AuditState>((set) => ({
             let settled = false;
             fixSockets.set(key, socket);
 
-            const completeJob = (outcome: FixOutcome) => {
+            const loadFixHistory = () => request.agentAccessMode === "relay"
+                ? agentApi.listFixHistory(request.agentId)
+                : agentDirectApi.listFixHistory(request.agentUrl, request.token);
+
+            const completeJob = (outcome: FixOutcome, events: FixProgress[] = streamEvents) => {
                 if (settled) return;
                 settled = true;
                 fixRuns.delete(key);
@@ -499,13 +524,38 @@ export const useAuditStore = create<AuditState>((set) => ({
                             status,
                             outcome,
                             error: status === "applied" ? undefined : outcome.message,
-                            progressEvents: streamEvents,
+                            progressEvents: events,
                             stepIndex: Number.MAX_SAFE_INTEGER,
                             completedAt: new Date().toISOString(),
                         },
                     },
                 }));
                 resolve(outcome);
+            };
+
+            const recoverJobFromHistory = async () => {
+                const attempts = streamEvents.length > 0 ? 60 : 10;
+                for (let attempt = 0; attempt < attempts; attempt += 1) {
+                    if (settled) return;
+                    try {
+                        const history = await loadFixHistory();
+                        const entry = history.find((item) => isFixHistoryEntryForRun(item, request, startedAt));
+                        if (entry) {
+                            completeJob(entry.outcome, entry.progress_events ?? streamEvents);
+                            return;
+                        }
+                    } catch {
+                        // Keep polling briefly; this path runs only after the live stream disappears.
+                    }
+                    await sleep(streamEvents.length > 0 ? 1_000 : 500);
+                }
+
+                const lastEvent = streamEvents.at(-1);
+                failJob(
+                    lastEvent
+                        ? `Fix progress stream closed before final outcome. Last event: ${lastEvent.action} (${lastEvent.status})`
+                        : "Fix progress stream closed before completion",
+                );
             };
 
             const failJob = (message: string) => {
@@ -573,11 +623,6 @@ export const useAuditStore = create<AuditState>((set) => ({
                     }
 
                     if (message.type === "outcome") {
-                        if (message.data.status === "Applied" && streamEvents.length === 0) {
-                            failJob("Agent returned success without live command/evidence output");
-                            socket.close();
-                            return;
-                        }
                         completeJob(message.data);
                         socket.close();
                         return;
@@ -593,16 +638,13 @@ export const useAuditStore = create<AuditState>((set) => ({
                 }
             };
 
-            socket.onerror = () => failJob("Fix progress stream failed");
+            socket.onerror = () => {
+                // Let onclose recover from persisted history before declaring the job failed.
+            };
             socket.onclose = () => {
                 if (fixSockets.get(key) === socket) fixSockets.delete(key);
                 if (!settled) {
-                    const lastEvent = streamEvents.at(-1);
-                    failJob(
-                        lastEvent
-                            ? `Fix progress stream closed before final outcome. Last event: ${lastEvent.action} (${lastEvent.status})`
-                            : "Fix progress stream closed before completion",
-                    );
+                    void recoverJobFromHistory();
                 }
             };
         });

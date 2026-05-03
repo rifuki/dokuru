@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-    Sheet, SheetHeader,
+    Sheet, SheetDescription, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
 import {
     AlertTriangle, CheckCircle2, Loader2, RotateCcw, Server,
@@ -28,7 +28,7 @@ const WIZARD_STEPS: { key: WizardStep; label: string }[] = [
 type ApplyStrategy = TargetConfig["strategy"];
 
 const APPLY_MODE_OPTIONS: { value: ApplyStrategy; label: string; title: string }[] = [
-    { value: "dokuru_override", label: "Override", title: "Write Dokuru override file" },
+    { value: "dokuru_override", label: "Override", title: "Write Compose override file" },
     { value: "compose_update", label: "Patch", title: "Patch source Compose YAML" },
     { value: "docker_update", label: "Live", title: "Update current container only" },
 ];
@@ -258,7 +258,7 @@ function ConfirmStep({
                             <div className="flex items-start gap-2.5">
                                 <FileCode2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#2496ED]/70" />
                                 <p className="leading-relaxed">
-                                    Compose fixes write a <span className="font-semibold text-[#7dd3fc]">separate override file</span> by default. Patch edits source YAML; Live only changes the running container.
+                                    Compose fixes write a <span className="font-semibold text-[#7dd3fc]">standard override file</span> by default. Patch edits source YAML; Live only changes the running container.
                                 </p>
                             </div>
                         </div>
@@ -470,6 +470,12 @@ function ProgressEventsPanel({
     );
 }
 
+function progressModeLabel(progressEvents: FixProgress[]) {
+    if (progressEvents.some(event => event.action.includes("dokuru_override") || event.action.includes("dokuru"))) return "Override";
+    if (progressEvents.some(event => event.action.includes("compose"))) return "Compose";
+    return "Live";
+}
+
 function FixStepChecklist({ ruleId, stepIndex, complete = false }: { ruleId: string; stepIndex: number; complete?: boolean }) {
     const steps = getFixSteps(ruleId);
 
@@ -599,7 +605,7 @@ function ResultStep({
                     </div>
                     <div className="rounded-lg border border-white/8 bg-black/20 px-3 py-2">
                         <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/28">mode</p>
-                        <p className="mt-1 truncate text-sm font-semibold text-[#2496ED]">{progressEvents.some(event => event.action.includes("compose")) ? "Compose" : "Live"}</p>
+                        <p className="mt-1 truncate text-sm font-semibold text-[#2496ED]">{progressModeLabel(progressEvents)}</p>
                     </div>
                 </div>
             </div>
@@ -735,9 +741,12 @@ export function FixWizard({
                                 apply fix
                             </span>
                         </div>
-                        <p className="text-base font-semibold text-white leading-snug">
+                        <SheetTitle className="text-base font-semibold text-white leading-snug">
                             {rule.title}
-                        </p>
+                        </SheetTitle>
+                        <SheetDescription className="sr-only">
+                            Review affected targets, apply the remediation, and inspect the result for rule {rule.id}.
+                        </SheetDescription>
                     </div>
 
                     {/* Step indicator */}

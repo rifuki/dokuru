@@ -33,20 +33,23 @@ pub struct RollbackPlan {
 static FIX_HISTORY: LazyLock<RwLock<Vec<FixHistoryEntry>>> =
     LazyLock::new(|| RwLock::new(Vec::new()));
 
-fn fix_history_path() -> PathBuf {
+fn dokuru_data_dir() -> PathBuf {
     std::env::var("DOKURU_DATA_DIR").map_or_else(
         |_| {
             if cfg!(debug_assertions) {
                 std::env::current_dir()
                     .unwrap_or_else(|_| PathBuf::from("."))
                     .join(".dokuru")
-                    .join("fix-history.json")
             } else {
-                PathBuf::from("/var/lib/dokuru/fix-history.json")
+                PathBuf::from("/var/lib/dokuru")
             }
         },
-        |value| PathBuf::from(value).join("fix-history.json"),
+        PathBuf::from,
     )
+}
+
+fn fix_history_path() -> PathBuf {
+    dokuru_data_dir().join("fix-history.json")
 }
 
 async fn read_persisted_fix_history() -> Vec<FixHistoryEntry> {
@@ -121,7 +124,8 @@ const USERNS_REMAP_TOTAL_STEPS: u8 = 9;
 const STRATEGY_DOKURU_OVERRIDE: &str = "dokuru_override";
 const STRATEGY_COMPOSE_UPDATE: &str = "compose_update";
 const STRATEGY_DOCKER_UPDATE: &str = "docker_update";
-const DOKURU_COMPOSE_OVERRIDE_FILENAME: &str = "docker-compose.dokuru.override.yml";
+const DEFAULT_COMPOSE_OVERRIDE_FILENAME: &str = "docker-compose.override.yml";
+const COMPOSE_BACKUP_DIR: &str = "compose-backups";
 const COMPOSE_FILENAMES: &[&str] = &[
     "compose.yaml",
     "docker-compose.yaml",
@@ -3404,7 +3408,7 @@ async fn write_compose_cgroup_update(
     progress: Option<&ProgressSender>,
 ) -> eyre::Result<PathBuf> {
     let backup_path = compose_backup_path(&update.compose_path);
-    tokio::fs::copy(&update.compose_path, &backup_path).await?;
+    copy_compose_backup(&update.compose_path, &backup_path).await?;
     tokio::fs::write(&update.compose_path, &update.content).await?;
     send_progress(
         progress,
@@ -4465,7 +4469,7 @@ async fn write_compose_service_edit(
         "in_progress",
         Some(format!("Creating backup {}", backup_path.display())),
     );
-    tokio::fs::copy(&edit.compose_path, &backup_path).await?;
+    copy_compose_backup(&edit.compose_path, &backup_path).await?;
     tokio::fs::write(&edit.compose_path, &edit.content).await?;
     emit_progress(
         progress,
@@ -4673,13 +4677,43 @@ fn push_unique_path(paths: &mut Vec<PathBuf>, path: PathBuf) {
     }
 }
 
-fn compose_backup_path(path: &Path) -> PathBuf {
-    let timestamp = chrono::Utc::now().format("%Y%m%d%H%M%S");
+fn safe_compose_artifact_name(path: &Path) -> String {
     let filename = path.file_name().map_or_else(
         || "compose.yaml".to_string(),
         |name| name.to_string_lossy().into_owned(),
     );
-    path.with_file_name(format!("{filename}.dokuru.bak.{timestamp}"))
+
+    filename
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_') {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+fn compose_artifact_path(path: &Path, kind: &str) -> PathBuf {
+    let timestamp = chrono::Utc::now().format("%Y%m%d%H%M%S");
+    let filename = safe_compose_artifact_name(path);
+    dokuru_data_dir().join(COMPOSE_BACKUP_DIR).join(format!(
+        "{filename}.{kind}.{timestamp}.{}.bak",
+        Uuid::new_v4()
+    ))
+}
+
+fn compose_backup_path(path: &Path) -> PathBuf {
+    compose_artifact_path(path, "edit")
+}
+
+async fn copy_compose_backup(source: &Path, backup_path: &Path) -> eyre::Result<()> {
+    if let Some(parent) = backup_path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    tokio::fs::copy(source, backup_path).await?;
+    Ok(())
 }
 
 struct DokuruComposeOverride {
@@ -4720,12 +4754,13 @@ fn dokuru_compose_override_path(
     ctx: &ComposeContext,
     compose_paths: &[PathBuf],
 ) -> eyre::Result<PathBuf> {
+    let filename = compose_override_filename(compose_paths.first().map(PathBuf::as_path));
     if let Some(working_dir) = &ctx.working_dir {
-        return Ok(working_dir.join(DOKURU_COMPOSE_OVERRIDE_FILENAME));
+        return Ok(working_dir.join(filename));
     }
 
     if let Some(parent) = compose_paths.first().and_then(|path| path.parent()) {
-        return Ok(parent.join(DOKURU_COMPOSE_OVERRIDE_FILENAME));
+        return Ok(parent.join(filename));
     }
 
     Err(eyre::eyre!(
@@ -4733,6 +4768,29 @@ fn dokuru_compose_override_path(
         ctx.project,
         ctx.service
     ))
+}
+
+fn compose_override_filename(compose_path: Option<&Path>) -> String {
+    let Some(compose_path) = compose_path else {
+        return DEFAULT_COMPOSE_OVERRIDE_FILENAME.to_string();
+    };
+
+    let extension = compose_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .filter(|extension| *extension == "yaml")
+        .unwrap_or("yml");
+    let filename = compose_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    let prefix = if filename.starts_with("compose.") {
+        "compose"
+    } else {
+        "docker-compose"
+    };
+
+    format!("{prefix}.override.{extension}")
 }
 
 async fn write_dokuru_compose_override(
@@ -4756,7 +4814,7 @@ async fn write_dokuru_compose_override(
         }
     } else if existing.is_some() {
         let backup_path = compose_backup_path(&update.override_path);
-        tokio::fs::copy(&update.override_path, &backup_path).await?;
+        copy_compose_backup(&update.override_path, &backup_path).await?;
         DokuruOverrideRestore {
             backup_path: Some(backup_path),
             delete_on_restore: false,
@@ -5594,7 +5652,7 @@ async fn compose_rollback_target_with_backup(
     compose_path: PathBuf,
 ) -> eyre::Result<ComposeRollbackTarget> {
     let backup_path = compose_rollback_backup_path(&compose_path);
-    tokio::fs::copy(&compose_path, &backup_path).await?;
+    copy_compose_backup(&compose_path, &backup_path).await?;
 
     Ok(ComposeRollbackTarget {
         project: ctx.project.clone(),
@@ -5618,7 +5676,7 @@ async fn compose_rollback_target_for_override(
     let backup_path = match tokio::fs::metadata(&override_path).await {
         Ok(metadata) if metadata.is_file() => {
             let backup_path = compose_rollback_backup_path(&override_path);
-            tokio::fs::copy(&override_path, &backup_path).await?;
+            copy_compose_backup(&override_path, &backup_path).await?;
             Some(backup_path.to_string_lossy().to_string())
         }
         Ok(_) => {
@@ -5646,11 +5704,7 @@ async fn compose_rollback_target_for_override(
 }
 
 fn compose_rollback_backup_path(path: &Path) -> PathBuf {
-    let filename = path.file_name().map_or_else(
-        || "compose.yaml".to_string(),
-        |name| name.to_string_lossy().into_owned(),
-    );
-    path.with_file_name(format!("{filename}.dokuru.rollback.{}.bak", Uuid::new_v4()))
+    compose_artifact_path(path, "rollback")
 }
 
 pub async fn record_fix_history(
@@ -6277,6 +6331,18 @@ services:
         let rendered = upsert_dokuru_override_content(None, "web", "5.16", None).unwrap();
 
         assert_eq!(rendered, expected);
+    }
+
+    #[test]
+    fn compose_override_filename_matches_base_compose_name() {
+        assert_eq!(
+            compose_override_filename(Some(Path::new("/srv/app/docker-compose.yaml"))),
+            "docker-compose.override.yaml"
+        );
+        assert_eq!(
+            compose_override_filename(Some(Path::new("/srv/app/compose.yml"))),
+            "compose.override.yml"
+        );
     }
 
     #[test]

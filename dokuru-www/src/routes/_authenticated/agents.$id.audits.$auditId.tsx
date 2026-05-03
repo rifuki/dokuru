@@ -18,7 +18,7 @@ import { dockerApi, dockerCredential, type Container as DockerContainer } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import {
   Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
   Terminal, Wrench, AlertTriangle, Server,
@@ -974,6 +974,10 @@ function CisPdfDialog({ open, onClose }: { open: boolean; onClose: () => void })
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-5xl w-full h-[85vh] p-0 flex flex-col gap-0" showCloseButton={false}>
+        <DialogTitle className="sr-only">CIS Docker Benchmark PDF</DialogTitle>
+        <DialogDescription className="sr-only">
+          Preview the CIS Docker Benchmark document attached to this audit.
+        </DialogDescription>
         <div className="h-9 border-b bg-muted/30 px-3 flex items-center gap-2 shrink-0 rounded-t-lg">
           <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
           <span className="text-xs text-muted-foreground truncate flex-1 min-w-0">

@@ -21,7 +21,7 @@ const COMPOSE_FILENAMES: &[&str] = &[
     "docker-compose.yml",
     "compose.yml",
 ];
-const DOKURU_COMPOSE_OVERRIDE_FILENAME: &str = "docker-compose.dokuru.override.yml";
+const DEFAULT_COMPOSE_OVERRIDE_FILENAME: &str = "docker-compose.override.yml";
 
 #[derive(Serialize)]
 pub struct StackContainer {
@@ -230,16 +230,39 @@ fn stack_dokuru_override_path(
     working_dir: Option<&str>,
     config_files: Option<&str>,
 ) -> Option<PathBuf> {
+    let config_paths = config_file_paths(config_files, working_dir);
+    let filename = compose_override_filename(config_paths.first().map(PathBuf::as_path));
+
     if let Some(working_dir) = working_dir.filter(|value| !value.trim().is_empty()) {
-        return Some(PathBuf::from(working_dir).join(DOKURU_COMPOSE_OVERRIDE_FILENAME));
+        return Some(PathBuf::from(working_dir).join(filename));
     }
 
-    config_file_paths(config_files, None)
+    config_paths
         .into_iter()
-        .find_map(|path| {
-            path.parent()
-                .map(|parent| parent.join(DOKURU_COMPOSE_OVERRIDE_FILENAME))
-        })
+        .find_map(|path| path.parent().map(|parent| parent.join(filename.clone())))
+}
+
+fn compose_override_filename(compose_path: Option<&FsPath>) -> String {
+    let Some(compose_path) = compose_path else {
+        return DEFAULT_COMPOSE_OVERRIDE_FILENAME.to_string();
+    };
+
+    let extension = compose_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .filter(|extension| *extension == "yaml")
+        .unwrap_or("yml");
+    let filename = compose_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    let prefix = if filename.starts_with("compose.") {
+        "compose"
+    } else {
+        "docker-compose"
+    };
+
+    format!("{prefix}.override.{extension}")
 }
 
 fn config_files_include_path(
@@ -487,7 +510,7 @@ async fn write_compose_content(
 #[cfg(test)]
 mod tests {
     use super::{
-        DOKURU_COMPOSE_OVERRIDE_FILENAME, config_files_include_path, stack_dokuru_override_path,
+        DEFAULT_COMPOSE_OVERRIDE_FILENAME, config_files_include_path, stack_dokuru_override_path,
         write_compose_content,
     };
     use std::path::PathBuf;
@@ -543,17 +566,17 @@ mod tests {
 
         assert_eq!(
             path,
-            PathBuf::from("/srv/app").join(DOKURU_COMPOSE_OVERRIDE_FILENAME)
+            PathBuf::from("/srv/app").join(DEFAULT_COMPOSE_OVERRIDE_FILENAME)
         );
     }
 
     #[test]
     fn config_files_include_path_handles_relative_docker_compose_names() {
-        let override_path = PathBuf::from("/srv/app").join(DOKURU_COMPOSE_OVERRIDE_FILENAME);
-        let config_files = format!("docker-compose.yaml,{DOKURU_COMPOSE_OVERRIDE_FILENAME}");
+        let override_path = PathBuf::from("/srv/app").join("docker-compose.override.yaml");
+        let config_files = "docker-compose.yaml,docker-compose.override.yaml";
 
         assert!(config_files_include_path(
-            Some(&config_files),
+            Some(config_files),
             Some("/srv/app"),
             &override_path,
         ));

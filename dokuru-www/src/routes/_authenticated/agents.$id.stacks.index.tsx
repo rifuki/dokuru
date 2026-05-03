@@ -28,6 +28,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -317,9 +318,9 @@ function ComposeDialog({
                   </span>
                 )}
               </div>
-              <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
+              <DialogDescription className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
                 {data?.path ?? "Docker Compose file"}
-              </p>
+              </DialogDescription>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">

@@ -1,5 +1,5 @@
 import {
-    Sheet, SheetClose, SheetHeader,
+    Sheet, SheetClose, SheetDescription, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
 import {
     AlertTriangle, CheckCircle2, Loader2, XCircle,
@@ -317,7 +317,7 @@ function ConfigureResourcesStep({
                 <div className="flex items-start gap-2.5">
                     <FileCode2 className="mt-0.5 h-4 w-4 shrink-0" />
                     <p className="leading-relaxed">
-                        Configure cgroup values before bulk apply. Compose-managed containers default to Dokuru override files; standalone containers use Docker live updates.
+                        Configure cgroup values before bulk apply. Compose-managed containers default to standard override files; standalone containers use Docker live updates.
                     </p>
                 </div>
             </div>
@@ -814,9 +814,12 @@ export function FixAllWizard({
                             <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/35">
                                 Bulk remediation
                             </p>
-                            <p className="text-lg font-semibold text-white leading-snug">
+                            <SheetTitle className="text-lg font-semibold text-white leading-snug">
                                 Apply selected fixes
-                            </p>
+                            </SheetTitle>
+                            <SheetDescription className="sr-only">
+                                Review selected rules, configure editable values, apply fixes, and inspect the result.
+                            </SheetDescription>
                             <p className="text-xs text-white/45">
                                 {selectedCount} of {ruleStatuses.length} rules selected
                             </p>
