@@ -26,6 +26,10 @@ function writeSavedWindowScrollY(key: string, scrollY: number) {
   }
 }
 
+function scrollWindowTo(scrollY: number) {
+  window.scrollTo({ top: scrollY, left: 0, behavior: "instant" });
+}
+
 function windowScrollRestoreIntent(key: string): ScrollRestoreIntent {
   const sidebarIntent = getSidebarNavigationIntentForPath();
   if (!sidebarIntent) {
@@ -98,7 +102,7 @@ export function useWindowScrollMemory(key: string, canRestore = true) {
     shouldPersistRef.current = intent.fromSidebar;
 
     if (!intent.fromSidebar) {
-      if (window.scrollY !== 0) window.scrollTo({ top: 0, left: 0 });
+      if (window.scrollY !== 0) scrollWindowTo(0);
       return;
     }
 
@@ -122,11 +126,11 @@ export function useWindowScrollMemory(key: string, canRestore = true) {
     };
 
     const restore = (finalAttempt = false) => {
-      if (cancelled) return;
+      if (cancelled || completed) return;
       const maxScrollY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
       const nextScrollY = Math.min(intent.savedScrollY, maxScrollY);
-      if (nextScrollY !== window.scrollY) window.scrollTo({ top: nextScrollY, left: 0 });
-      if (maxScrollY > 0 || finalAttempt) finishRestore();
+      if (nextScrollY !== window.scrollY) scrollWindowTo(nextScrollY);
+      if (maxScrollY >= intent.savedScrollY || finalAttempt) finishRestore();
     };
 
     for (const [index, delay] of RESTORE_DELAYS.entries()) {

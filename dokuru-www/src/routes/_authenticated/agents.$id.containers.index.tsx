@@ -28,6 +28,7 @@ import { ContainerTabPanel } from "@/components/containers/ContainerTabs";
 import { PageHeader } from "@/components/ui/page-header";
 import { containerUiKey, useContainerUiStore, type ContainerTab } from "@/stores/use-container-ui-store";
 import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
+import { useState } from "react";
 
 const EMPTY_EXPANDED_CONTAINERS: Record<string, boolean> = {};
 
@@ -90,6 +91,7 @@ function ContainerRow({
   stopPendingId,
   restartPendingId,
   removePendingId,
+  suppressExpandAnimation,
 }: {
   container: Container;
   agentUrl: string;
@@ -107,6 +109,7 @@ function ContainerRow({
   stopPendingId: string | undefined;
   restartPendingId: string | undefined;
   removePendingId: string | undefined;
+  suppressExpandAnimation: boolean;
 }) {
   const isRunning = container.state.toLowerCase() === "running";
   const name = container.names[0]?.replace("/", "") || container.id.slice(0, 12);
@@ -235,7 +238,7 @@ function ContainerRow({
 
         {/* Inline detail panel */}
         {expanded && (
-          <div className="animate-in slide-in-from-top-2 duration-200">
+          <div className={suppressExpandAnimation ? undefined : "animate-in slide-in-from-top-2 duration-200"}>
             <ContainerTabPanel
               container={container}
               agentUrl={agentUrl}
@@ -279,9 +282,24 @@ function ContainersPage() {
     enabled: canUseDockerAgent(agent),
     refetchInterval: 5000,
   });
-  useWindowScrollMemory(`agent:${id}:containers`, !isLoading && !!containers);
+  const scrollMemory = useWindowScrollMemory(`agent:${id}:containers`, !isLoading && !!containers);
+  const [localExpandedContainers, setLocalExpandedContainers] = useState<Record<string, boolean>>({});
+  const [localActiveTabs, setLocalActiveTabs] = useState<Record<string, ContainerTab>>({});
+  const shouldRestoreContainerUi = scrollMemory.restoreFromSidebar;
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["containers", id] });
+
+  const handleContainerExpandedChange = (containerId: string, expanded: boolean) => {
+    const key = containerUiKey(id, containerId);
+    setContainerExpanded(id, containerId, expanded);
+    setLocalExpandedContainers((prev) => ({ ...prev, [key]: expanded }));
+  };
+
+  const handleContainerTabChange = (containerId: string, tab: ContainerTab) => {
+    const key = containerUiKey(id, containerId);
+    setContainerTab(id, containerId, tab);
+    setLocalActiveTabs((prev) => ({ ...prev, [key]: tab }));
+  };
 
   const startMutation = useMutation({
     mutationFn: (cid: string) => {
@@ -339,7 +357,7 @@ function ContainersPage() {
   const running = filtered.filter((c) => c.state.toLowerCase() === "running").length;
 
   return (
-    <div className="max-w-7xl mx-auto w-full">
+    <div className={`max-w-7xl mx-auto w-full ${scrollMemory.isRestoring ? "invisible" : ""}`}>
       <PageHeader
         icon={ContainerIcon}
         title="Containers"
@@ -395,10 +413,10 @@ function ContainersPage() {
               agentUrl={agent?.url ?? ""}
               token={dockerCredential(agent)}
               agentId={id}
-              expanded={!!expandedContainers[container.id]}
-              onExpandedChange={(expanded) => setContainerExpanded(id, container.id, expanded)}
-              activeTab={activeTabs[containerUiKey(id, container.id)] ?? "overview"}
-              onTabChange={(tab) => setContainerTab(id, container.id, tab)}
+              expanded={shouldRestoreContainerUi ? !!expandedContainers[container.id] : !!localExpandedContainers[containerUiKey(id, container.id)]}
+              onExpandedChange={(expanded) => handleContainerExpandedChange(container.id, expanded)}
+              activeTab={(shouldRestoreContainerUi ? activeTabs : localActiveTabs)[containerUiKey(id, container.id)] ?? "overview"}
+              onTabChange={(tab) => handleContainerTabChange(container.id, tab)}
               onStart={(cid) => startMutation.mutate(cid)}
               onStop={(cid) => stopMutation.mutate(cid)}
               onRestart={(cid) => restartMutation.mutate(cid)}
@@ -407,6 +425,7 @@ function ContainersPage() {
               stopPendingId={stopPendingId}
               restartPendingId={restartPendingId}
               removePendingId={removePendingId}
+              suppressExpandAnimation={scrollMemory.restoreFromSidebar}
             />
           ))}
         </div>

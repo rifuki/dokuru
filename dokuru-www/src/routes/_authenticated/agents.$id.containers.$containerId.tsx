@@ -21,7 +21,7 @@ import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
 import { ContainerTabPanel } from "@/components/containers/ContainerTabs";
 import { useState } from "react";
-import { containerUiKey, useContainerUiStore } from "@/stores/use-container-ui-store";
+import { containerUiKey, useContainerUiStore, type ContainerTab } from "@/stores/use-container-ui-store";
 import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 
 type ContainerDetailSearch = {
@@ -131,11 +131,13 @@ function ContainerDetailPage() {
 
   const container = findRoutedContainer(containers, containerId, containerName);
   const resolvedContainerId = container?.id ?? containerId;
-  const activeTab = useContainerUiStore((state) => state.activeTabs[containerUiKey(id, resolvedContainerId)] ?? "overview");
+  const persistedActiveTab = useContainerUiStore((state) => state.activeTabs[containerUiKey(id, resolvedContainerId)] ?? "overview");
   const setContainerTab = useContainerUiStore((state) => state.setContainerTab);
+  const [localActiveTab, setLocalActiveTab] = useState<ContainerTab>("overview");
   const isRunning = container?.state.toLowerCase() === "running";
   const name = container?.names[0]?.replace("/", "") || containerId.slice(0, 12);
-  useWindowScrollMemory(`agent:${id}:container-detail:${containerId}`, !!container);
+  const scrollMemory = useWindowScrollMemory(`agent:${id}:container-detail:${containerId}`, !!container);
+  const activeTab = scrollMemory.restoreFromSidebar ? persistedActiveTab : localActiveTab;
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["containers", id] });
 
@@ -243,7 +245,7 @@ function ContainerDetailPage() {
       </AlertDialogContent>
     </AlertDialog>
 
-    <div className="max-w-7xl mx-auto w-full space-y-6">
+    <div className={`max-w-7xl mx-auto w-full space-y-6 ${scrollMemory.isRestoring ? "invisible" : ""}`}>
       {/* Header */}
       <div className="flex items-start justify-between gap-4 min-w-0">
         <div className="flex items-center gap-4 min-w-0">
@@ -306,7 +308,10 @@ function ContainerDetailPage() {
           token={dockerCredential(agent)}
           agentId={id}
           activeTab={activeTab}
-          onTabChange={(tab) => setContainerTab(id, container.id, tab)}
+          onTabChange={(tab) => {
+            setContainerTab(id, container.id, tab);
+            setLocalActiveTab(tab);
+          }}
         />
       </div>
     </div>
