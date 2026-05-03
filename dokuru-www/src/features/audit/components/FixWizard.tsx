@@ -398,7 +398,7 @@ function ProgressEventsPanel({
     if (progressEvents.length === 0) return null;
 
     return (
-        <div className="overflow-hidden rounded-xl border border-white/10 bg-[#030507] shadow-[0_0_40px_-24px_rgba(36,150,237,0.7)]">
+        <div className="overflow-hidden rounded-xl border border-white/10 bg-[#030507]">
             <div className="flex items-center gap-2 border-b border-white/8 bg-white/[0.025] px-3 py-2.5">
                 <div className="flex items-center gap-1.5">
                     <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f56]" />
