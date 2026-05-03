@@ -101,8 +101,8 @@ function formatBytesAsMb(bytes?: number | null) {
 
 function currentValueLabel(ruleId: string, target: FixPreview["targets"][number]) {
     if (ruleId === "5.11") return formatBytesAsMb(target.current_memory);
-    if (ruleId === "5.12") return target.current_cpu_shares ? `${target.current_cpu_shares} shares` : "unset";
-    if (ruleId === "5.29") return target.current_pids_limit && target.current_pids_limit > 0 ? `${target.current_pids_limit} PIDs` : "unset";
+    if (ruleId === "5.12") return target.current_cpu_shares ? `${target.current_cpu_shares} shares` : "no CPU shares";
+    if (ruleId === "5.29") return target.current_pids_limit && target.current_pids_limit > 0 ? `${target.current_pids_limit} PIDs` : "no PID limit";
     return "current";
 }
 
@@ -124,7 +124,7 @@ function ApplyModePicker({
     const effectiveValue = canCompose ? value : "docker_update";
 
     return (
-        <div className="audit-fix-mode-control grid grid-cols-3 rounded-md border border-white/10 bg-black/20 p-0.5" role="radiogroup" aria-label="Apply mode">
+        <div className="audit-fix-mode-control grid h-9 grid-cols-3 overflow-hidden rounded-md border border-white/10 bg-black/20" role="radiogroup" aria-label="Apply mode">
             {APPLY_MODE_OPTIONS.map((option) => {
                 const disabled = !canCompose && option.value !== "docker_update";
                 const active = effectiveValue === option.value;
@@ -138,7 +138,7 @@ function ApplyModePicker({
                         disabled={disabled}
                         onClick={() => onChange(option.value)}
                         className={cn(
-                            "h-8 rounded-[6px] px-2 text-[10px] font-semibold transition-colors whitespace-nowrap outline-none focus-visible:bg-white/10",
+                            "h-full min-w-0 px-2 text-[10px] font-semibold transition-colors whitespace-nowrap outline-none focus-visible:bg-white/10",
                             active && option.value === "dokuru_override" && canCompose && "bg-[#2496ED] text-white",
                             active && option.value !== "dokuru_override" && "bg-white/12 text-white",
                             !active && "text-white/38 hover:text-white/70",
@@ -283,67 +283,65 @@ function ConfirmStep({
                                 >
                                     <div className="audit-fix-target-identity flex min-w-0 items-center gap-2.5">
                                         <Server className="h-3.5 w-3.5 shrink-0 text-white/32" />
-                                        <div className="min-w-0">
-                                            <div className="flex min-w-0 items-center gap-2">
-                                                <span className="truncate text-[13px] font-semibold text-white/75">{target.container_name}</span>
-                                                {isCgroup && (
-                                                    <span
-                                                        title={canCompose ? `${target.compose_project}/${target.compose_service}` : "Runtime-only target"}
-                                                        className={cn(
-                                                            "shrink-0 rounded border px-1.5 py-0.5 text-[8px] uppercase tracking-[0.12em]",
-                                                            canCompose
-                                                                ? "border-[#2496ED]/25 bg-[#2496ED]/8 text-[#2496ED]/75"
-                                                                : "border-white/8 bg-white/[0.025] text-white/30",
-                                                        )}
-                                                    >
-                                                        {canCompose ? "compose" : "runtime"}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <span className="block truncate text-[10px] text-white/28">current: {currentValueLabel(rule.id, target)}</span>
+                                        <div className="flex min-w-0 flex-col items-start gap-1">
+                                            <span className="block max-w-full truncate text-[13px] font-semibold leading-tight text-white/75">{target.container_name}</span>
+                                            {isCgroup && (
+                                                <span
+                                                    title={canCompose ? `${target.compose_project}/${target.compose_service}` : "Runtime-only target"}
+                                                    className={cn(
+                                                        "shrink-0 rounded border px-1.5 py-0.5 text-[8px] uppercase leading-none tracking-[0.12em]",
+                                                        canCompose
+                                                            ? "border-[#2496ED]/25 bg-[#2496ED]/8 text-[#2496ED]/75"
+                                                            : "border-white/8 bg-white/[0.025] text-white/30",
+                                                    )}
+                                                >
+                                                    {canCompose ? "compose" : "runtime"}
+                                                </span>
+                                            )}
+                                            <span className="block max-w-full truncate text-[10px] leading-tight text-white/28">Before fix: {currentValueLabel(rule.id, target)}</span>
                                         </div>
                                     </div>
 
                                     {isCgroup && config && (
-                                        <ApplyModePicker
-                                            value={strategy}
-                                            canCompose={canCompose}
-                                            onChange={(nextStrategy) => onTargetChange(target.container_id, { strategy: nextStrategy })}
-                                        />
-                                    )}
-
-                                    {isCgroup && config && (
-                                        <label className="audit-fix-target-value block text-[10px] text-white/35">
-                                            <span className="audit-fix-target-value-label mb-1 block uppercase tracking-[0.12em]">{meta.label} <span className="text-white/20">{meta.unit}</span></span>
-                                            <input
-                                                type="number"
-                                                min={meta.min}
-                                                aria-label={`${meta.label} ${meta.unit}`}
-                                                value={value > 0 ? value : ""}
-                                                onChange={(e) => {
-                                                    const input = e.target.value;
-                                                    if (input === "") {
-                                                        onTargetChange(target.container_id, { [meta.key]: 0 });
-                                                        return;
-                                                    }
-                                                    const val = Number(input);
-                                                    if (!isNaN(val)) {
-                                                        onTargetChange(target.container_id, { [meta.key]: val });
-                                                    }
-                                                }}
-                                                className={cn(
-                                                    "h-9 w-full rounded-md border bg-black/30 px-3 text-right text-[13px] font-semibold outline-none transition-colors focus:bg-black/45",
-                                                    value < meta.min
-                                                        ? "border-red-500/60 text-red-400 focus:border-red-500/80"
-                                                        : "border-white/10 text-white/85 focus:border-[#2496ED]/60"
-                                                )}
+                                        <div className="audit-fix-target-controls">
+                                            <ApplyModePicker
+                                                value={strategy}
+                                                canCompose={canCompose}
+                                                onChange={(nextStrategy) => onTargetChange(target.container_id, { strategy: nextStrategy })}
                                             />
-                                            {value < meta.min && (
-                                                <span className="mt-1 block text-[9px] text-red-400/80">
-                                                    Minimum: {meta.min} {meta.unit}
-                                                </span>
-                                            )}
-                                        </label>
+                                            <label className="audit-fix-target-value text-[10px] text-white/35">
+                                                <span className="audit-fix-target-value-label uppercase tracking-[0.12em]">{meta.label} <span className="text-white/20">{meta.unit}</span></span>
+                                                <input
+                                                    type="number"
+                                                    min={meta.min}
+                                                    inputMode="numeric"
+                                                    aria-label={`${meta.label} ${meta.unit}`}
+                                                    value={value > 0 ? value : ""}
+                                                    onChange={(e) => {
+                                                        const input = e.target.value;
+                                                        if (input === "") {
+                                                            onTargetChange(target.container_id, { [meta.key]: 0 });
+                                                            return;
+                                                        }
+                                                        const val = Number(input);
+                                                        if (!isNaN(val)) {
+                                                            onTargetChange(target.container_id, { [meta.key]: val });
+                                                        }
+                                                    }}
+                                                    className={cn(
+                                                        "audit-fix-number-input h-9 w-full rounded-md border bg-black/30 px-3 text-right text-[13px] font-semibold outline-none transition-colors focus:bg-black/45",
+                                                        value < meta.min
+                                                            ? "border-red-500/60 text-red-400 focus:border-red-500/80"
+                                                            : "border-white/10 text-white/85 focus:border-[#2496ED]/60"
+                                                    )}
+                                                />
+                                                {value < meta.min && (
+                                                    <span className="audit-fix-target-value-error text-[9px] text-red-400/80">
+                                                        Min {meta.min} {meta.unit}
+                                                    </span>
+                                                )}
+                                            </label>
+                                        </div>
                                     )}
                                 </div>
                             );

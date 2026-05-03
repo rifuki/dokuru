@@ -368,66 +368,87 @@
 
   .audit-fix-target-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(112px, 132px);
-    gap: 0.625rem;
-    padding: 0.75rem 0.875rem;
-    align-items: end;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+    padding: 0.875rem;
+    align-items: center;
   }
 
   .audit-fix-target-identity,
+  .audit-fix-target-controls,
   .audit-fix-mode-control,
   .audit-fix-target-value {
     min-width: 0;
   }
 
-  .audit-fix-target-identity {
-    grid-column: 1 / -1;
+  .audit-fix-target-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    align-items: center;
+    gap: 0.625rem;
+    width: 100%;
   }
 
-  .audit-fix-mode-control {
-    grid-column: 1;
+  .audit-fix-mode-control > button {
+    border-radius: 0;
   }
 
   .audit-fix-target-value {
-    grid-column: 2;
+    display: grid;
+    grid-template-columns: auto minmax(84px, 112px);
+    align-items: center;
+    justify-content: end;
+    gap: 0.25rem 0.5rem;
     text-align: right;
   }
 
   .audit-fix-target-value-label {
     white-space: nowrap;
+    margin-bottom: 0;
+    line-height: 1;
+  }
+
+  .audit-fix-target-value-error {
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
+
+  .audit-fix-number-input {
+    appearance: textfield;
+    -moz-appearance: textfield;
+  }
+
+  .audit-fix-number-input::-webkit-outer-spin-button,
+  .audit-fix-number-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
   }
 
   @container (min-width: 560px) {
     .audit-fix-target-row {
-      grid-template-columns: minmax(0, 1fr) minmax(188px, 220px) minmax(112px, 128px);
+      grid-template-columns: minmax(0, 1fr) minmax(340px, 440px);
       gap: 0.75rem;
-      padding-top: 1.35rem;
       align-items: center;
     }
 
     .audit-fix-target-identity,
-    .audit-fix-mode-control {
+    .audit-fix-target-controls {
       grid-column: auto;
-    }
-
-    .audit-fix-target-value {
-      grid-column: auto;
-      align-self: center;
-      position: relative;
-    }
-
-    .audit-fix-target-value-label {
-      position: absolute;
-      right: 0;
-      bottom: calc(100% + 0.25rem);
-      margin-bottom: 0;
     }
   }
 
   @container (min-width: 900px) {
     .audit-fix-target-row {
-      grid-template-columns: minmax(0, 1fr) 220px 132px;
+      grid-template-columns: minmax(0, 1fr) 520px;
       gap: 1rem;
+    }
+
+    .audit-fix-target-controls {
+      grid-template-columns: minmax(220px, 1fr) max-content;
+    }
+
+    .audit-fix-target-value {
+      grid-template-columns: auto minmax(112px, 132px);
     }
   }
 
