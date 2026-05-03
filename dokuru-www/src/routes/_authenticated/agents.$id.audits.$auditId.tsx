@@ -1214,10 +1214,18 @@ function severityClass(severity: string) {
   return "low";
 }
 
-function buildAuditDocumentFilename(audit: AuditResponse) {
+function buildAuditDocumentStem(audit: AuditResponse) {
   const date = new Date(audit.timestamp);
   const stamp = Number.isNaN(date.getTime()) ? "audit" : date.toISOString().slice(0, 10);
-  return `dokuru-audit-${slugifyFilePart(audit.hostname)}-${stamp}.html`;
+  return `dokuru-audit-${slugifyFilePart(audit.hostname)}-${stamp}`;
+}
+
+function buildAuditDocumentFilename(audit: AuditResponse) {
+  return `${buildAuditDocumentStem(audit)}.html`;
+}
+
+function buildAuditDocumentPrintPath(audit: AuditResponse) {
+  return `/audit-reports/${buildAuditDocumentStem(audit)}`;
 }
 
 function downloadHtmlDocument(filename: string, html: string) {
@@ -1232,14 +1240,46 @@ function downloadHtmlDocument(filename: string, html: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function openPrintableDocument(html: string, targetWindow?: Window | null) {
-  const reportWindow = targetWindow ?? window.open("", "_blank");
-  if (!reportWindow) throw new Error("Popup blocked");
-  reportWindow.document.open();
-  reportWindow.document.write(html);
-  reportWindow.document.close();
+function withPrintBootstrap(html: string, displayPath: string) {
+  const script = `
+    <script>
+      (() => {
+        const displayPath = ${JSON.stringify(displayPath)};
+        let printed = false;
+
+        try {
+          const origin = window.location.origin && window.location.origin !== "null" ? window.location.origin : "";
+          if (origin && displayPath.startsWith("/")) {
+            window.history.replaceState(null, document.title, origin + displayPath);
+          }
+        } catch (_) {}
+
+        const printWhenVisible = () => {
+          if (printed || document.visibilityState !== "visible") return;
+          printed = true;
+          document.removeEventListener("visibilitychange", printWhenVisible);
+          window.setTimeout(() => window.print(), 250);
+        };
+
+        if (document.readyState === "complete") printWhenVisible();
+        else window.addEventListener("load", printWhenVisible, { once: true });
+        document.addEventListener("visibilitychange", printWhenVisible);
+      })();
+    </script>`;
+
+  return html.replace("</body>", `${script}\n</body>`);
+}
+
+function openPrintableDocument(html: string, displayPath: string) {
+  const blobUrl = URL.createObjectURL(new Blob([withPrintBootstrap(html, displayPath)], { type: "text/html;charset=utf-8" }));
+  const reportWindow = window.open(blobUrl, "_blank");
+  if (!reportWindow) {
+    URL.revokeObjectURL(blobUrl);
+    throw new Error("Popup blocked");
+  }
+
   reportWindow.focus();
-  reportWindow.setTimeout(() => reportWindow.print(), 350);
+  window.setTimeout(() => URL.revokeObjectURL(blobUrl), 120_000);
 }
 
 function buildAuditDocumentHtml({
@@ -1342,34 +1382,34 @@ function buildAuditDocumentHtml({
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dokuru Audit Report - ${escapeHtml(audit.hostname)}</title>
   <style>
-    :root { --ink:#111827; --muted:#6b7280; --line:#d9dee7; --soft:#f5f7fb; --brand:#2496ed; --brand-fail:#e11d48; --pass:#059669; --fail:#e11d48; --warn:#d97706; }
-    * { box-sizing: border-box; }
+    :root { --ink:#111827; --muted:#6b7280; --line:#d9dee7; --soft:#f5f7fb; --brand:#2496ed; --brand-fail:#e11d48; --pass:#059669; --fail:#e11d48; --warn:#d97706; color-scheme: light; }
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     body { margin: 0; background: #e9edf3; color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    .page { max-width: 980px; margin: 32px auto; background: #fff; border: 1px solid var(--line); box-shadow: 0 24px 70px rgba(15,23,42,.12); }
-    .hero { padding: 42px 48px 34px; color: white; background: radial-gradient(circle at 12% 0%, rgba(36,150,237,.45), transparent 32%), linear-gradient(135deg, #0b1220 0%, #111827 55%, #172033 100%); }
+    .page { max-width: 980px; margin: 24px auto; background: #fff; border: 1px solid var(--line); box-shadow: 0 24px 70px rgba(15,23,42,.12); }
+    .hero { padding: 32px 42px 28px; color: white; background: radial-gradient(circle at 12% 0%, rgba(36,150,237,.45), transparent 32%), linear-gradient(135deg, #0b1220 0%, #111827 55%, #172033 100%); }
     .brand { display:flex; align-items:center; justify-content:space-between; gap:24px; color:#cbd5e1; font-size:12px; font-weight:800; letter-spacing:.16em; text-transform:uppercase; }
-    .hero h1 { margin: 34px 0 10px; font-size: 44px; line-height: 1; letter-spacing: -.04em; }
+    .hero h1 { margin: 24px 0 8px; font-size: 40px; line-height: 1; letter-spacing: -.04em; }
     .hero p { margin: 0; color: #b9c4d4; font-size: 15px; }
-    .hero-grid { display:grid; grid-template-columns: 210px 1fr; gap:28px; margin-top:34px; align-items:end; }
-    .score { font-size: 82px; line-height: .85; font-weight: 950; letter-spacing:-.08em; color:${scoreColor}; }
+    .hero-grid { display:grid; grid-template-columns: 190px 1fr; gap:24px; margin-top:26px; align-items:end; }
+    .score { font-size: 72px; line-height: .85; font-weight: 950; letter-spacing:-.08em; color:${scoreColor}; }
     .score small { color: rgba(255,255,255,.35); font-size: 28px; letter-spacing:-.04em; }
-    .score-band { display:inline-flex; margin-top:14px; border:1px solid rgba(255,255,255,.18); border-radius:999px; padding:7px 11px; color:#dbeafe; font-size:12px; font-weight:800; }
+    .score-band { display:inline-flex; margin-top:10px; border:1px solid rgba(255,255,255,.18); border-radius:999px; padding:6px 10px; color:#dbeafe; font-size:12px; font-weight:800; }
     .score-track { height: 12px; border-radius:999px; background:rgba(255,255,255,.1); overflow:hidden; }
     .score-fill { height:100%; width:${projectedWidth}%; border-radius:999px; background:${scoreBridge}; }
     .projected { display:flex; align-items:center; justify-content:space-between; gap:18px; margin-top:13px; color:#bfdbfe; font-size:13px; }
     .projected strong { color:#7dd3fc; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .content { padding: 34px 48px 48px; }
-    .metrics { display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap:14px; margin-bottom:30px; }
-    .metric { border:1px solid var(--line); border-radius:18px; padding:16px; background:var(--soft); }
+    .content { padding: 28px 42px 38px; }
+    .metrics { display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap:12px; margin-bottom:24px; }
+    .metric { border:1px solid var(--line); border-radius:16px; padding:14px; background:var(--soft); }
     .metric span { display:block; color:var(--muted); font-size:11px; font-weight:900; letter-spacing:.16em; text-transform:uppercase; }
-    .metric strong { display:block; margin-top:9px; font-size:30px; line-height:1; }
+    .metric strong { display:block; margin-top:8px; font-size:28px; line-height:1; }
     .metric.pass strong { color:var(--pass); } .metric.fail strong { color:var(--fail); } .metric.warn strong { color:var(--warn); }
-    .section { margin-top:34px; break-inside: avoid; }
+    .section { margin-top:26px; break-inside: avoid; }
     .section h2 { margin:0 0 6px; font-size:20px; letter-spacing:-.03em; }
-    .section .lead { margin:0 0 16px; color:var(--muted); font-size:13px; }
+    .section .lead { margin:0 0 12px; color:var(--muted); font-size:13px; }
     table { width:100%; border-collapse:collapse; font-size:12px; }
-    th { text-align:left; color:var(--muted); font-size:10px; letter-spacing:.14em; text-transform:uppercase; border-bottom:1px solid var(--line); padding:10px 8px; }
-    td { border-bottom:1px solid #edf0f5; padding:12px 8px; vertical-align:top; }
+    th { text-align:left; color:var(--muted); font-size:10px; letter-spacing:.14em; text-transform:uppercase; border-bottom:1px solid var(--line); padding:8px 7px; }
+    td { border-bottom:1px solid #edf0f5; padding:9px 7px; vertical-align:top; }
     td p { margin:5px 0 0; color:var(--muted); line-height:1.45; }
     .rank { width:44px; color:var(--muted); font-weight:900; }
     .num { text-align:right; color:var(--muted); font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
@@ -1381,8 +1421,23 @@ function buildAuditDocumentHtml({
     .pill.high { color:#be123c; background:#fff1f2; border-color:#fecdd3; } .pill.medium { color:#b45309; background:#fffbeb; border-color:#fde68a; } .pill.low { color:#475569; background:#f1f5f9; border-color:#cbd5e1; }
     .rule-row.fail td:first-child { color:var(--fail); } .rule-row.pass td:first-child { color:var(--pass); }
     .empty { color:var(--muted); font-style:italic; text-align:center; padding:22px 8px; }
-    .footer { margin-top:36px; padding-top:18px; border-top:1px solid var(--line); color:var(--muted); font-size:11px; display:flex; justify-content:space-between; gap:20px; }
-    @media print { body { background:#fff; } .page { margin:0; max-width:none; border:0; box-shadow:none; } .section { break-inside:avoid; } }
+    .footer { margin-top:28px; padding-top:14px; border-top:1px solid var(--line); color:var(--muted); font-size:11px; display:flex; justify-content:space-between; gap:20px; }
+    @media print {
+      @page { size: A4; margin: 0; }
+      html, body { background:#fff; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .page { width:210mm; margin:0; max-width:none; border:0; box-shadow:none; }
+      .hero { padding:13mm 15mm 11mm; }
+      .hero h1 { margin-top:9mm; font-size:34px; }
+      .hero-grid { grid-template-columns: 44mm 1fr; gap:10mm; margin-top:9mm; }
+      .score { font-size:62px; }
+      .content { padding:10mm 15mm 12mm; }
+      .metrics { margin-bottom:8mm; }
+      .metric { padding:4mm; }
+      .section { margin-top:8mm; break-inside:avoid; }
+      th { padding:2.5mm 2mm; }
+      td { padding:2.8mm 2mm; }
+    }
   </style>
 </head>
 <body>
@@ -1708,29 +1763,22 @@ function AuditDetailPage() {
     });
   };
 
-  const handleExportDocument = async (format: "html" | "pdf") => {
+  const handleExportDocument = (format: "html" | "pdf") => {
     if (!auditData || documentExporting) return;
-    const printWindow = format === "pdf" ? window.open("", "_blank") : null;
-    if (format === "pdf" && !printWindow) {
-      toast.error("Popup blocked. Allow popups, then try Print / Save PDF again.");
-      return;
-    }
     setDocumentExporting(format);
     try {
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       const html = buildCurrentAuditDocumentHtml();
       if (!html) return;
       if (format === "html") {
         downloadHtmlDocument(buildAuditDocumentFilename(auditData), html);
         toast.success("Audit HTML report downloaded");
       } else {
-        openPrintableDocument(html, printWindow);
-        toast.success("Print view opened", {
-          description: "Choose Save as PDF in the browser print dialog.",
+        openPrintableDocument(html, buildAuditDocumentPrintPath(auditData));
+        toast.success("Report tab opened", {
+          description: "Print opens when the report tab is active. Choose Save as PDF there.",
         });
       }
     } catch (error) {
-      printWindow?.close();
       toast.error(error instanceof Error ? error.message : "Failed to build audit document");
     } finally {
       setDocumentExporting(null);
@@ -1780,14 +1828,14 @@ function AuditDetailPage() {
                 )}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Document Format</DropdownMenuLabel>
+            <DropdownMenuContent align="end" className="w-fit min-w-0">
+              <DropdownMenuLabel className="whitespace-nowrap pr-4">Document Format</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => void handleExportDocument("pdf")}>
+              <DropdownMenuItem className="whitespace-nowrap pr-4" onClick={() => handleExportDocument("pdf")}>
                 <Printer className="h-4 w-4" />
                 Print / Save PDF
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void handleExportDocument("html")}>
+              <DropdownMenuItem className="whitespace-nowrap pr-4" onClick={() => handleExportDocument("html")}>
                 <Download className="h-4 w-4" />
                 Download HTML
               </DropdownMenuItem>
