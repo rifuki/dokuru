@@ -108,7 +108,7 @@ function currentValueLabel(ruleId: string, target: FixPreview["targets"][number]
 
 function valueMeta(ruleId: string) {
     if (ruleId === "5.11") return { label: "Memory", unit: "MB", key: "memoryMb" as const, min: 64 };
-    if (ruleId === "5.12") return { label: "CPU shares", unit: "shares", key: "cpuShares" as const, min: 128 };
+    if (ruleId === "5.12") return { label: "CPU", unit: "shares", key: "cpuShares" as const, min: 128 };
     return { label: "Limit", unit: "PIDs", key: "pidsLimit" as const, min: 50 };
 }
 
@@ -283,9 +283,12 @@ function ConfirmStep({
                                 >
                                     <div className="audit-fix-target-identity flex min-w-0 items-center gap-2.5">
                                         <Server className="h-3.5 w-3.5 shrink-0 text-white/32" />
-                                        <div className="flex min-w-0 flex-col items-start gap-1">
-                                            <span className="block max-w-full truncate text-[13px] font-semibold leading-tight text-white/75">{target.container_name}</span>
-                                            {isCgroup && (
+                                        <div className="audit-fix-target-meta min-w-0">
+                                            <div className="min-w-0">
+                                                <span className="block max-w-full truncate text-[13px] font-semibold leading-tight text-white/75">{target.container_name}</span>
+                                                <span className="block max-w-full truncate text-[10px] leading-tight text-white/28">Before fix: {currentValueLabel(rule.id, target)}</span>
+                                            </div>
+                                            {isCgroup && <div className="audit-fix-target-badge-slot">
                                                 <span
                                                     title={canCompose ? `${target.compose_project}/${target.compose_service}` : "Runtime-only target"}
                                                     className={cn(
@@ -297,8 +300,7 @@ function ConfirmStep({
                                                 >
                                                     {canCompose ? "compose" : "runtime"}
                                                 </span>
-                                            )}
-                                            <span className="block max-w-full truncate text-[10px] leading-tight text-white/28">Before fix: {currentValueLabel(rule.id, target)}</span>
+                                            </div>}
                                         </div>
                                     </div>
 
