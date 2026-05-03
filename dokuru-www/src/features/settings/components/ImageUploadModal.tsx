@@ -49,6 +49,9 @@ const AVATAR_EXPORT_TYPE = "image/webp";
 const AVATAR_EXPORT_QUALITY = 0.9;
 const GIF_EXPORT_TYPE = "image/gif";
 const GIF_PALETTE_FORMAT = "rgba4444";
+const GIF_AVATAR_RETRY_SIZES = [384, 320, 256, 192, 160, 128, 96];
+const GIF_AVATAR_COLOR_COUNTS = [256, 128, 64];
+const SOURCE_CROP_EPSILON = 1;
 
 const blobExtensionByType: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -115,9 +118,10 @@ function getAvatarSourceCrop(image: HTMLImageElement, crop: PercentCrop) {
 function drawCroppedAvatar(
   ctx: CanvasRenderingContext2D,
   source: CanvasImageSource,
-  crop: ReturnType<typeof getAvatarSourceCrop>
+  crop: ReturnType<typeof getAvatarSourceCrop>,
+  outputSize = AVATAR_OUTPUT_SIZE
 ) {
-  ctx.clearRect(0, 0, AVATAR_OUTPUT_SIZE, AVATAR_OUTPUT_SIZE);
+  ctx.clearRect(0, 0, outputSize, outputSize);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(
@@ -128,9 +132,26 @@ function drawCroppedAvatar(
     crop.height,
     0,
     0,
-    AVATAR_OUTPUT_SIZE,
-    AVATAR_OUTPUT_SIZE
+    outputSize,
+    outputSize
   );
+}
+
+function getGifAvatarExportSizes(crop: ReturnType<typeof getAvatarSourceCrop>) {
+  const largestUsefulSize = Math.max(1, Math.min(AVATAR_OUTPUT_SIZE, Math.floor(Math.min(crop.width, crop.height))));
+  const sizes = [
+    largestUsefulSize,
+    ...GIF_AVATAR_RETRY_SIZES.filter((size) => size < largestUsefulSize),
+  ];
+
+  return Array.from(new Set(sizes));
+}
+
+function isWholeSourceCrop(crop: ReturnType<typeof getAvatarSourceCrop>, width: number, height: number) {
+  return crop.x <= SOURCE_CROP_EPSILON
+    && crop.y <= SOURCE_CROP_EPSILON
+    && Math.abs(crop.width - width) <= SOURCE_CROP_EPSILON
+    && Math.abs(crop.height - height) <= SOURCE_CROP_EPSILON;
 }
 
 export function ImageUploadModal({
@@ -303,6 +324,14 @@ export function ImageUploadModal({
       throw new Error("Failed to crop image");
     }
 
+    const basename = sourceFile.name.replace(/\.[^.]+$/, "") || "avatar";
+    if (sourceFile.size <= maxSizeBytes && isWholeSourceCrop(sourceCrop, image.naturalWidth, image.naturalHeight)) {
+      return new File([sourceFile], `${basename}-avatar.gif`, {
+        type: sourceFile.type || GIF_EXPORT_TYPE,
+        lastModified: Date.now(),
+      });
+    }
+
     const parsedGif = parseGIF(await sourceFile.arrayBuffer());
     const frames = decompressFrames(parsedGif, true);
     if (!frames.length) {
@@ -321,74 +350,82 @@ export function ImageUploadModal({
     const patchCanvas = document.createElement("canvas");
     const patchCtx = patchCanvas.getContext("2d");
     const outputCanvas = document.createElement("canvas");
-    outputCanvas.width = AVATAR_OUTPUT_SIZE;
-    outputCanvas.height = AVATAR_OUTPUT_SIZE;
     const outputCtx = outputCanvas.getContext("2d", { willReadFrequently: true });
 
     if (!patchCtx || !outputCtx) {
       throw new Error("Failed to prepare animated GIF");
     }
 
-    const gif = GIFEncoder();
-    let previousFrame: ParsedFrame | null = null;
-    let restoreImageData: ImageData | null = null;
+    const encodeAvatarGif = (outputSize: number, colorCount: number) => {
+      gifCtx.clearRect(0, 0, gifCanvas.width, gifCanvas.height);
+      outputCanvas.width = outputSize;
+      outputCanvas.height = outputSize;
 
-    for (const frame of frames) {
-      if (previousFrame?.disposalType === 2) {
-        gifCtx.clearRect(
-          previousFrame.dims.left,
-          previousFrame.dims.top,
-          previousFrame.dims.width,
-          previousFrame.dims.height
-        );
-      } else if (previousFrame?.disposalType === 3 && restoreImageData) {
-        gifCtx.putImageData(restoreImageData, previousFrame.dims.left, previousFrame.dims.top);
+      const gif = GIFEncoder();
+      let previousFrame: ParsedFrame | null = null;
+      let restoreImageData: ImageData | null = null;
+
+      for (const frame of frames) {
+        if (previousFrame?.disposalType === 2) {
+          gifCtx.clearRect(
+            previousFrame.dims.left,
+            previousFrame.dims.top,
+            previousFrame.dims.width,
+            previousFrame.dims.height
+          );
+        } else if (previousFrame?.disposalType === 3 && restoreImageData) {
+          gifCtx.putImageData(restoreImageData, previousFrame.dims.left, previousFrame.dims.top);
+        }
+
+        restoreImageData = frame.disposalType === 3
+          ? gifCtx.getImageData(frame.dims.left, frame.dims.top, frame.dims.width, frame.dims.height)
+          : null;
+
+        patchCanvas.width = frame.dims.width;
+        patchCanvas.height = frame.dims.height;
+        const patchImageData = patchCtx.createImageData(frame.dims.width, frame.dims.height);
+        patchImageData.data.set(frame.patch);
+        patchCtx.putImageData(patchImageData, 0, 0);
+        gifCtx.drawImage(patchCanvas, frame.dims.left, frame.dims.top);
+
+        drawCroppedAvatar(outputCtx, gifCanvas, sourceCrop, outputSize);
+        const imageData = outputCtx.getImageData(0, 0, outputSize, outputSize);
+        const palette = quantize(imageData.data, colorCount, {
+          format: GIF_PALETTE_FORMAT,
+          oneBitAlpha: true,
+        });
+        const index = applyPalette(imageData.data, palette, GIF_PALETTE_FORMAT);
+        const transparentIndex = palette.findIndex((color) => (color[3] ?? 255) < 128);
+
+        gif.writeFrame(index, outputSize, outputSize, {
+          palette,
+          delay: frame.delay || 100,
+          repeat: 0,
+          transparent: transparentIndex >= 0,
+          transparentIndex: transparentIndex >= 0 ? transparentIndex : 0,
+          dispose: transparentIndex >= 0 ? 2 : 1,
+        });
+
+        previousFrame = frame;
       }
 
-      restoreImageData = frame.disposalType === 3
-        ? gifCtx.getImageData(frame.dims.left, frame.dims.top, frame.dims.width, frame.dims.height)
-        : null;
+      gif.finish();
+      return new Blob([gif.bytes()], { type: GIF_EXPORT_TYPE });
+    };
 
-      patchCanvas.width = frame.dims.width;
-      patchCanvas.height = frame.dims.height;
-      const patchImageData = patchCtx.createImageData(frame.dims.width, frame.dims.height);
-      patchImageData.data.set(frame.patch);
-      patchCtx.putImageData(patchImageData, 0, 0);
-      gifCtx.drawImage(patchCanvas, frame.dims.left, frame.dims.top);
-
-      drawCroppedAvatar(outputCtx, gifCanvas, sourceCrop);
-      const imageData = outputCtx.getImageData(0, 0, AVATAR_OUTPUT_SIZE, AVATAR_OUTPUT_SIZE);
-      const palette = quantize(imageData.data, 256, {
-        format: GIF_PALETTE_FORMAT,
-        oneBitAlpha: true,
-      });
-      const index = applyPalette(imageData.data, palette, GIF_PALETTE_FORMAT);
-      const transparentIndex = palette.findIndex((color) => (color[3] ?? 255) < 128);
-
-      gif.writeFrame(index, AVATAR_OUTPUT_SIZE, AVATAR_OUTPUT_SIZE, {
-        palette,
-        delay: frame.delay || 100,
-        repeat: 0,
-        transparent: transparentIndex >= 0,
-        transparentIndex: transparentIndex >= 0 ? transparentIndex : 0,
-        dispose: transparentIndex >= 0 ? 2 : 1,
-      });
-
-      previousFrame = frame;
+    for (const outputSize of getGifAvatarExportSizes(sourceCrop)) {
+      for (const colorCount of GIF_AVATAR_COLOR_COUNTS) {
+        const blob = encodeAvatarGif(outputSize, colorCount);
+        if (blob.size <= maxSizeBytes) {
+          return new File([blob], `${basename}-avatar.gif`, {
+            type: GIF_EXPORT_TYPE,
+            lastModified: Date.now(),
+          });
+        }
+      }
     }
 
-    gif.finish();
-
-    const blob = new Blob([gif.bytes()], { type: GIF_EXPORT_TYPE });
-    if (blob.size > maxSizeBytes) {
-      throw new Error(`Cropped file is still too large. Maximum size: ${maxSizeMB}MB`);
-    }
-
-    const basename = sourceFile.name.replace(/\.[^.]+$/, "") || "avatar";
-    return new File([blob], `${basename}-avatar.gif`, {
-      type: GIF_EXPORT_TYPE,
-      lastModified: Date.now(),
-    });
+    throw new Error(`Cropped file is still too large. Maximum size: ${maxSizeMB}MB`);
   };
 
   const createAvatarFile = async (sourceFile: File) => {
@@ -482,11 +519,11 @@ export function ImageUploadModal({
         onEscapeKeyDown={handleEscapeKeyDown}
         className={cn(
           "max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md",
-          isAvatarCropView && "gap-0 p-0 sm:max-w-[28rem]"
+          isAvatarCropView && "gap-0 p-0 sm:max-w-[28rem] [&_[data-slot=dialog-close]]:right-3 [&_[data-slot=dialog-close]]:top-3"
         )}
       >
-        <DialogHeader className={cn(isAvatarCropView && "border-b border-border/60 px-5 py-4 pr-12")}>
-          <DialogTitle className={cn("flex items-center gap-2", isAvatarCropView && "text-base")}>
+        <DialogHeader className={cn(isAvatarCropView && "border-b border-border/60 px-4 py-3 pr-11")}>
+          <DialogTitle className={cn("flex items-center gap-2", isAvatarCropView && "text-[15px] leading-6")}>
             {!isAvatarCropView && <ImageIcon className="h-5 w-5" />}
             {isAvatarCropView ? "Crop your new profile picture" : title}
           </DialogTitle>
@@ -506,9 +543,15 @@ export function ImageUploadModal({
         <div className={cn(isAvatarCropView ? "mt-0" : "mt-4")}>
           {/* Error Information */}
           {errorMessage && (
-            <Alert variant="destructive" className="mb-4">
+            <Alert
+              variant="destructive"
+              className={cn(
+                "mb-4",
+                isAvatarCropView && "mx-4 mb-3 rounded-md border-destructive/30 bg-destructive/10 px-3 py-2 text-sm [&>svg]:size-3.5 [&>svg]:translate-y-0.5"
+              )}
+            >
               <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{errorMessage}</AlertDescription>
+              <AlertDescription className={cn(isAvatarCropView && "text-sm leading-5")}>{errorMessage}</AlertDescription>
             </Alert>
           )}
 
@@ -527,7 +570,7 @@ export function ImageUploadModal({
                   )}
                 >
                   {isAvatar && file ? (
-                    <div className="flex justify-center bg-black p-4">
+                    <div className="flex justify-center bg-black p-3">
                       <ReactCrop
                         crop={avatarCrop}
                         onChange={(_, percentCrop) => setAvatarCrop(percentCrop)}
@@ -536,7 +579,7 @@ export function ImageUploadModal({
                         keepSelection
                         minWidth={96}
                         className={cn(
-                          "max-h-[min(62dvh,34rem)] max-w-full",
+                          "max-h-[min(58dvh,32rem)] max-w-full",
                           "[&_.ReactCrop__crop-selection]:border-white/90",
                           "[&_.ReactCrop__drag-handle]:bg-white",
                           "[&_.ReactCrop__drag-handle]:border-2",
@@ -550,7 +593,7 @@ export function ImageUploadModal({
                           ref={avatarImageRef}
                           src={previewUrl}
                           alt="Crop preview"
-                          className="block max-h-[min(62dvh,34rem)] max-w-full select-none object-contain"
+                          className="block max-h-[min(58dvh,32rem)] max-w-full select-none object-contain"
                           onLoad={handleAvatarImageLoad}
                         />
                       </ReactCrop>
@@ -602,19 +645,21 @@ export function ImageUploadModal({
 
               <div className={cn(
                 "flex justify-end gap-2",
-                isAvatarCropView && "border-t border-border/60 px-5 py-4"
+                isAvatarCropView && "border-t border-border/60 px-4 py-3"
               )}>
                 <Button
                   variant="outline"
+                  size={isAvatarCropView ? "sm" : "default"}
                   onClick={isAvatarCropView ? handleBack : handleClose}
                   disabled={isBusy}
                 >
                   {isAvatarCropView ? 'Back' : 'Cancel'}
                 </Button>
                 <Button
+                  size={isAvatarCropView ? "sm" : "default"}
                   onClick={handleUpload}
                   disabled={isBusy}
-                  className={cn(isAvatarCropView && "min-w-48")}
+                  className={cn(isAvatarCropView && "min-w-44")}
                 >
                   {status === 'uploading' ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
