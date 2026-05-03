@@ -168,17 +168,17 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
   };
 
   return (
-    <div className={`group rounded-[14px] border border-border bg-card p-4 shadow-sm transition-colors ${isConnecting ? "border-amber-500/40 shadow-amber-500/10" : ""}`}>
+    <div className={`group rounded-[14px] border border-border bg-card p-4 shadow-sm transition-colors ${isConnecting ? "border-muted-foreground/20 shadow-muted-foreground/5" : ""}`}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 flex-1 gap-4">
           <div className="flex w-14 items-center justify-center shrink-0 relative">
             <img
               src="/docker.svg"
               alt="Docker"
-              className={`w-14 h-14 transition-all duration-300 ${isConnecting ? "animate-pulse" : ""}`}
+              className={`w-14 h-14 transition-all duration-300 ${isConnecting ? "animate-pulse grayscale opacity-50" : ""}`}
               style={
                 isConnecting
-                  ? { filter: "brightness(0) saturate(100%) invert(72%) sepia(77%) saturate(711%) hue-rotate(354deg) brightness(101%) contrast(94%)" }
+                  ? undefined
                   : isOffline
                   ? { filter: "brightness(0) saturate(100%) invert(47%) sepia(22%) saturate(1388%) hue-rotate(312deg) brightness(94%) contrast(88%)" }
                   : undefined
@@ -192,7 +192,7 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
               <span
                 className={`inline-flex h-5 shrink-0 items-center justify-center gap-1.5 rounded border px-2 text-[11px] font-semibold uppercase leading-none ${
                   isConnecting
-                    ? "animate-pulse border-amber-500/30 bg-amber-500/10 text-amber-400"
+                    ? "animate-pulse border-muted-foreground/25 bg-muted/30 text-muted-foreground"
                     : isOnline
                     ? "border-primary/35 bg-primary/10 text-primary"
                     : "border-red-500/30 bg-red-500/10 text-red-400"
@@ -223,8 +223,8 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
 
             {isConnecting && !info ? (
               <div className="flex items-center gap-2 mt-3">
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-400" />
-                <span className="text-[12px] text-amber-400/80">Connecting to agent...</span>
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                <span className="text-[12px] text-muted-foreground/80">Connecting to agent...</span>
               </div>
             ) : infoLoading && !info && !isOffline ? (
               <div className="flex items-center gap-2 mt-3">
