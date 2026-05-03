@@ -1000,12 +1000,8 @@ function AuditPage() {
                 const toastId = savedAuditId ? `audit-complete-${id}-${savedAuditId}` : `audit-complete-${id}-${Date.now()}`;
                 const toastOptions: NonNullable<Parameters<typeof toast.success>[1]> = {
                     id: toastId,
-                    description: "Open the saved audit result, or swipe/close this toast to hide it.",
+                    description: "Open the saved audit result.",
                     duration: 12_000,
-                    cancel: {
-                        label: "Hide",
-                        onClick: () => toast.dismiss(toastId),
-                    },
                 };
                 if (savedAuditId) {
                     toastOptions.action = {

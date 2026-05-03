@@ -1949,12 +1949,12 @@ function AuditDetailPage() {
                     <span className="flex items-baseline justify-center gap-1.5">
                       <span className="text-3xl font-black leading-none text-[#00d9a5]">{auditData.summary.passed}</span>
                       {hasProjectedFixes && projectedFixScore && (
-                        <span className="font-mono text-xs font-bold text-[#2496ED]">→ {projectedFixScore.projectedPassed}</span>
+                        <span className="font-mono text-xs font-bold text-[#00d9a5]">→ {projectedFixScore.projectedPassed}</span>
                       )}
                     </span>
                     <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pass</span>
                     {hasProjectedFixes && projectedFixScore && (
-                      <span className="mt-0.5 font-mono text-[10px] font-semibold text-[#2496ED]/85">+{projectedFixScore.fixedCount} after fixes</span>
+                      <span className="mt-0.5 font-mono text-[10px] font-semibold text-[#00d9a5]/85">+{projectedFixScore.fixedCount} after fixes</span>
                     )}
                   </button>
                   <button
@@ -1971,12 +1971,12 @@ function AuditDetailPage() {
                     <span className="flex items-baseline justify-center gap-1.5">
                       <span className="text-3xl font-black leading-none text-rose-400">{auditData.summary.failed}</span>
                       {hasProjectedFixes && projectedFixScore && (
-                        <span className="font-mono text-xs font-bold text-[#2496ED]">→ {projectedFixScore.projectedFailed}</span>
+                        <span className="font-mono text-xs font-bold text-rose-300/80">→ {projectedFixScore.projectedFailed}</span>
                       )}
                     </span>
                     <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Fail</span>
                     {hasProjectedFixes && projectedFixScore && (
-                      <span className="mt-0.5 font-mono text-[10px] font-semibold text-[#2496ED]/85">-{projectedFixScore.fixedCount} after fixes</span>
+                      <span className="mt-0.5 font-mono text-[10px] font-semibold text-rose-300/75">-{projectedFixScore.fixedCount} after fixes</span>
                     )}
                   </button>
                   <div className="flex min-h-[84px] flex-col items-center justify-center rounded-[12px] border border-border bg-muted/20 px-3 py-2.5 text-center">

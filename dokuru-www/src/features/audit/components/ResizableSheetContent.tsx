@@ -33,7 +33,7 @@ export function ResizableSheetContent({
         if (!dragging) return;
         const previousCursor = document.documentElement.style.cursor;
         const previousUserSelect = document.documentElement.style.userSelect;
-        document.documentElement.style.cursor = "ew-resize";
+        document.documentElement.style.cursor = "e-resize";
         document.documentElement.style.userSelect = "none";
         return () => {
             document.documentElement.style.cursor = previousCursor;
@@ -57,8 +57,9 @@ export function ResizableSheetContent({
             }}
             {...props}
         >
-            <button
-                type="button"
+            <div
+                role="separator"
+                aria-orientation="vertical"
                 aria-label="Resize remediation sidebar"
                 onPointerDown={(event) => {
                     event.preventDefault();
@@ -74,14 +75,15 @@ export function ResizableSheetContent({
                     event.currentTarget.releasePointerCapture(event.pointerId);
                 }}
                 onPointerCancel={() => setDragging(false)}
+                style={{ cursor: "e-resize" }}
                 className={cn(
-                    "group absolute inset-y-0 left-0 z-50 hidden w-5 -translate-x-2.5 cursor-ew-resize touch-none sm:block",
-                    dragging && "cursor-ew-resize",
+                    "group absolute inset-y-0 left-0 z-50 hidden w-4 touch-none !cursor-e-resize sm:block",
+                    dragging && "!cursor-e-resize",
                 )}
             >
-                <span className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-transparent transition-colors group-hover:bg-primary/60" />
-                <span className="absolute left-1/2 top-1/2 h-16 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-border transition-colors group-hover:bg-primary" />
-            </button>
+                <span className="absolute left-0 top-0 h-full w-px bg-transparent transition-colors group-hover:bg-primary/60" />
+                <span className="absolute left-0 top-1/2 h-16 w-1 -translate-y-1/2 rounded-r-full bg-border transition-colors group-hover:bg-primary" />
+            </div>
             {children}
         </SheetContent>
     );
