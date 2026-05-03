@@ -22,6 +22,7 @@ import {
 import { toast } from "sonner";
 import { agentApi } from "@/lib/api/agent";
 import { PageHeader } from "@/components/ui/page-header";
+import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/images/")({
   component: ImagesPage,
@@ -66,6 +67,7 @@ function ImagesPage() {
     enabled: canUseDockerAgent(agent),
     refetchInterval: 10000,
   });
+  useWindowScrollMemory(`agent:${id}:images`, !isLoading && !!images);
 
   const removeMutation = useMutation({
     mutationFn: (imageId: string) => {

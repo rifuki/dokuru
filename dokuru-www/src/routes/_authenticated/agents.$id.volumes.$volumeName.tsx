@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/detail-layout";
 import { toast } from "sonner";
 import { useState } from "react";
+import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/volumes/$volumeName")({
   component: VolumeDetailPage,
@@ -179,6 +180,7 @@ function VolumeDetailPage() {
     },
     enabled: canUseDockerAgent(agent) && !!volume,
   });
+  useWindowScrollMemory(`agent:${id}:volume-detail:${volumeName}`, !isLoading && !!volume);
 
   const removeMutation = useMutation({
     mutationFn: () => {

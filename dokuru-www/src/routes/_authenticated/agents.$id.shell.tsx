@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { agentApi } from "@/lib/api/agent";
 import { dockerCredential } from "@/services/docker-api";
 import { HOST_SHELL_ENABLED } from "@/lib/host-shell";
+import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/shell")({
   component: AgentHostShellPage,
@@ -18,6 +19,7 @@ function AgentHostShellPage() {
     queryKey: ["agent", id],
     queryFn: () => agentApi.getById(id),
   });
+  useWindowScrollMemory(`agent:${id}:shell`, !isLoading || !HOST_SHELL_ENABLED);
 
   if (!HOST_SHELL_ENABLED) {
     return (

@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 import { agentApi } from "@/lib/api/agent";
 import { PageHeader } from "@/components/ui/page-header";
+import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/networks/")({
   component: NetworksPage,
@@ -47,6 +48,7 @@ function NetworksPage() {
     },
     enabled: canUseDockerAgent(agent),
   });
+  useWindowScrollMemory(`agent:${id}:networks`, !isLoading && !!networks);
 
   const removeMutation = useMutation({
     mutationFn: (networkId: string) => {

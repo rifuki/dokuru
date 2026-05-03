@@ -7,6 +7,7 @@ import { dockerCredential } from "@/services/docker-api";
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 import {
   Select,
   SelectContent,
@@ -48,6 +49,7 @@ const EVENT_GRID_COLUMNS = "grid-cols-[180px_90px_280px_minmax(0,1fr)]";
 function EventsPage() {
   const { id } = Route.useParams();
   const agent = useAgentStore((s) => s.agents.find((a) => a.id === id));
+  useWindowScrollMemory(`agent:${id}:events`, true);
   const [paused, setPaused] = useState(false);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");

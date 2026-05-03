@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/detail-layout";
 import { toast } from "sonner";
 import { useState } from "react";
+import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/networks/$networkId")({
   component: NetworkDetailPage,
@@ -139,6 +140,7 @@ function NetworkDetailPage() {
     },
     enabled: canUseDockerAgent(agent) && !!network,
   });
+  useWindowScrollMemory(`agent:${id}:network-detail:${networkId}`, !isLoading && !!network);
 
   const removeMutation = useMutation({
     mutationFn: () => {

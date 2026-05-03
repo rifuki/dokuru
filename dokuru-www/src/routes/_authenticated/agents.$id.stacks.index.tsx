@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/stacks/")({
   component: StacksPage,
@@ -760,6 +761,7 @@ function StacksPage() {
     enabled: canUseDockerAgent(agent),
     refetchInterval: 10000,
   });
+  useWindowScrollMemory(`agent:${id}:stacks`, !isLoading && !!stacks);
 
   const filtered = (stacks ?? []).filter((s) => {
     if (!search) return true;

@@ -64,6 +64,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/")({
     component: AgentDashboard,
@@ -243,6 +244,7 @@ function AgentDashboard() {
     const isOnline = !!dockerInfo;
     const isInitialLoading = agentQuery.isLoading || (dockerInfoQuery.isLoading && !dockerInfoQuery.isError);
     const isRefreshing = agentQuery.isFetching || dockerInfoQuery.isFetching || auditsQuery.isFetching || containersQuery.isFetching || stacksQuery.isFetching;
+    useWindowScrollMemory(`agent:${id}:dashboard`, !agentQuery.isLoading);
 
     const openEdit = () => {
         if (!agent) return;

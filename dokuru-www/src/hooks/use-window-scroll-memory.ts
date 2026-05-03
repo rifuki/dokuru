@@ -21,6 +21,7 @@ function writeSavedWindowScrollY(key: string, scrollY: number) {
 
 export function useWindowScrollMemory(key: string, canRestore = true) {
   const lastObservedScrollYRef = useRef(0);
+  const restoreGuardUntilRef = useRef(0);
 
   useEffect(() => {
     lastObservedScrollYRef.current = readSavedWindowScrollY(key) || window.scrollY;
@@ -32,12 +33,17 @@ export function useWindowScrollMemory(key: string, canRestore = true) {
     const persistScroll = (scrollY: number) => writeSavedWindowScrollY(key, scrollY);
     const saveLatestScroll = () => {
       frameId = null;
-      lastObservedScrollYRef.current = window.scrollY;
-      persistScroll(lastObservedScrollYRef.current);
+      const scrollY = window.scrollY;
+      if (scrollY === 0 && lastObservedScrollYRef.current > 0 && Date.now() < restoreGuardUntilRef.current) return;
+      lastObservedScrollYRef.current = scrollY;
+      persistScroll(scrollY);
     };
 
     const handleScroll = () => {
-      lastObservedScrollYRef.current = window.scrollY;
+      const scrollY = window.scrollY;
+      if (!(scrollY === 0 && lastObservedScrollYRef.current > 0 && Date.now() < restoreGuardUntilRef.current)) {
+        lastObservedScrollYRef.current = scrollY;
+      }
       if (frameId !== null) return;
       frameId = window.requestAnimationFrame(saveLatestScroll);
     };
@@ -59,6 +65,7 @@ export function useWindowScrollMemory(key: string, canRestore = true) {
     if (!canRestore) return;
     const savedScrollY = readSavedWindowScrollY(key);
     if (savedScrollY <= 0) return;
+    restoreGuardUntilRef.current = Date.now() + 1_200;
 
     let cancelled = false;
     const frameIds: number[] = [];

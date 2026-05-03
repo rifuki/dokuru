@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Clock, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
+import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/audits/")({
     component: AuditHistoryPage,
@@ -16,6 +17,7 @@ function AuditHistoryPage() {
     const navigate = useNavigate();
     const [audits, setAudits] = useState<AuditResponse[]>([]);
     const [loading, setLoading] = useState(true);
+    useWindowScrollMemory(`agent:${id}:audit-history`, !loading);
 
     useEffect(() => {
         agentApi.listAudits(id)

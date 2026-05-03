@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
+import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 
 export const Route = createFileRoute(
   "/_authenticated/agents/$id/images/$imageId"
@@ -121,6 +122,7 @@ function ImageDetailPage() {
     },
     enabled: canUseDockerAgent(agent),
   });
+  useWindowScrollMemory(`agent:${id}:image-detail:${imageId}`, !imageLoading && !!image);
 
   const removeMutation = useMutation({
     mutationFn: () => {
