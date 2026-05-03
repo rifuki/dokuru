@@ -81,8 +81,7 @@ export function ResizableSheetContent({
                     dragging && "!cursor-e-resize",
                 )}
             >
-                <span className="absolute left-0 top-0 h-full w-px bg-transparent transition-colors group-hover:bg-primary/60" />
-                <span className="absolute left-0 top-1/2 h-16 w-1 -translate-y-1/2 rounded-r-full bg-border transition-colors group-hover:bg-primary" />
+                <span className="absolute left-0 top-1/2 h-14 w-px -translate-y-1/2 bg-white/18 opacity-0 transition-opacity group-hover:opacity-100" />
             </div>
             {children}
         </SheetContent>

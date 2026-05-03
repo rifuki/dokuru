@@ -124,7 +124,7 @@ function ApplyModePicker({
     const effectiveValue = canCompose ? value : "docker_update";
 
     return (
-        <div className="audit-fix-mode-control grid grid-cols-3 overflow-hidden rounded-[10px] border border-white/10 bg-black/25 p-0.5" role="radiogroup" aria-label="Apply mode">
+        <div className="audit-fix-mode-control grid grid-cols-3 rounded-md border border-white/10 bg-black/20 p-0.5" role="radiogroup" aria-label="Apply mode">
             {APPLY_MODE_OPTIONS.map((option) => {
                 const disabled = !canCompose && option.value !== "docker_update";
                 const active = effectiveValue === option.value;
@@ -138,8 +138,8 @@ function ApplyModePicker({
                         disabled={disabled}
                         onClick={() => onChange(option.value)}
                         className={cn(
-                            "rounded-md px-2 py-1.5 text-[10px] font-semibold transition-colors whitespace-nowrap",
-                            active && option.value === "dokuru_override" && canCompose && "audit-on-primary bg-[#2496ED] text-white",
+                            "h-8 rounded-[6px] px-2 text-[10px] font-semibold transition-colors whitespace-nowrap outline-none focus-visible:bg-white/10",
+                            active && option.value === "dokuru_override" && canCompose && "bg-[#2496ED] text-white",
                             active && option.value !== "dokuru_override" && "bg-white/12 text-white",
                             !active && "text-white/38 hover:text-white/70",
                             disabled && "cursor-not-allowed opacity-35 hover:text-white/38",
@@ -161,7 +161,6 @@ function ConfirmStep({
     previewLoading,
     targetConfig,
     onConfirm,
-    onCancel,
     onTargetChange,
 }: {
     result: AuditResult;
@@ -169,7 +168,6 @@ function ConfirmStep({
     previewLoading: boolean;
     targetConfig: Record<string, TargetConfig>;
     onConfirm: () => void;
-    onCancel: () => void;
     onTargetChange: (containerId: string, patch: Partial<TargetConfig>) => void;
 }) {
     const { rule, affected } = result;
@@ -256,17 +254,17 @@ function ConfirmStep({
                     </div>
 
                     {isCgroup && targets.some(target => target.compose_project) && (
-                        <div className="rounded-lg border border-[#2496ED]/15 border-l-[#2496ED]/55 bg-[#2496ED]/6 px-3 py-2.5 text-xs text-[#2496ED]/80">
+                        <div className="rounded-md border border-white/8 bg-white/[0.018] px-3 py-2.5 text-xs text-white/48">
                             <div className="flex items-start gap-2.5">
-                                <FileCode2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                <FileCode2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#2496ED]/70" />
                                 <p className="leading-relaxed">
-                                    Compose-managed containers default to <span className="font-semibold text-[#2496ED]">Dokuru override</span>, so source YAML stays clean while the fix survives <code className="font-mono">docker compose up</code>. Use Patch source only when you want Dokuru to edit the base compose file.
+                                    Compose-managed containers default to <span className="font-semibold text-[#7dd3fc]">Dokuru override</span>. Source YAML stays clean; use Patch only when you want to edit the base compose file.
                                 </p>
                             </div>
                         </div>
                     )}
 
-                    <div className="audit-fix-target-list overflow-hidden rounded-lg border border-white/8 bg-white/[0.018]">
+                    <div className="audit-fix-target-list overflow-hidden rounded-md border border-white/8 bg-white/[0.012]">
                         {targets.map((target, i) => {
                             const config = targetConfig[target.container_id];
                             const canCompose = Boolean(target.compose_project && target.compose_service);
@@ -328,7 +326,7 @@ function ConfirmStep({
                                                     }
                                                 }}
                                                 className={cn(
-                                                    "h-9 w-full rounded-lg border bg-black/35 px-3 text-right text-[13px] font-semibold outline-none transition-colors focus:bg-black/50",
+                                                    "h-9 w-full rounded-md border bg-black/30 px-3 text-right text-[13px] font-semibold outline-none transition-colors focus:bg-black/45",
                                                     value < meta.min
                                                         ? "border-red-500/60 text-red-400 focus:border-red-500/80"
                                                         : "border-white/10 text-white/85 focus:border-[#2496ED]/60"
@@ -347,7 +345,7 @@ function ConfirmStep({
                     </div>
                     {isCgroup && (
                         <p className="px-1 text-[10px] text-white/25 font-mono">
-                            Default: Override writes <code>docker-compose.dokuru.override.yml</code>. Patch edits source YAML. Live is temporary.
+                            Override writes <code>docker-compose.dokuru.override.yml</code>. Patch edits source YAML. Live is temporary.
                         </p>
                     )}
                 </div>
@@ -385,18 +383,12 @@ function ConfirmStep({
             </div>
 
             {/* Actions */}
-            <div className="grid grid-cols-2 gap-2 pt-1 sm:flex sm:justify-end">
-                <button
-                    onClick={onCancel}
-                    className="h-10 rounded-lg border border-white/12 bg-white/[0.03] px-4 text-sm font-medium text-white/60 transition-all hover:bg-white/[0.07] hover:text-white/90 sm:w-32"
-                >
-                    Cancel
-                </button>
+            <div className="flex justify-end pt-1">
                 <button
                     onClick={onConfirm}
                     disabled={previewLoading || hasInvalidValues}
                     className={cn(
-                        "audit-on-primary inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold text-white transition-all active:scale-[0.98] sm:w-40",
+                        "audit-on-primary inline-flex h-9 w-full max-w-[156px] items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold text-white transition-all active:scale-[0.98]",
                         previewLoading || hasInvalidValues
                             ? "bg-white/10 cursor-not-allowed opacity-50"
                             : "bg-[#2496ED] hover:bg-[#1e80cc]"
@@ -678,14 +670,14 @@ function ResultStep({
             <div className="grid grid-cols-2 gap-2 pt-1 sm:flex sm:justify-end">
                 <button
                     onClick={onClose}
-                    className="h-10 rounded-lg border border-white/12 bg-white/[0.03] px-4 text-sm font-medium text-white/60 transition-all hover:bg-white/[0.07] hover:text-white/90 sm:w-32"
+                    className="h-9 rounded-md border border-white/12 bg-white/[0.03] px-4 text-sm font-medium text-white/60 transition-all hover:bg-white/[0.07] hover:text-white/90 sm:w-28"
                 >
                     Close
                 </button>
                 {isApplied && (
                     <button
                         onClick={onRerunAudit}
-                        className="audit-on-primary inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#2496ED] px-4 text-sm font-semibold text-white transition-all hover:bg-[#1e80cc] active:scale-[0.98] sm:w-40"
+                        className="audit-on-primary inline-flex h-9 items-center justify-center gap-2 rounded-md bg-[#2496ED] px-4 text-sm font-semibold text-white transition-all hover:bg-[#1e80cc] active:scale-[0.98] sm:w-36"
                     >
                         <RefreshCw className="h-3.5 w-3.5" />
                         Re-run Audit
@@ -764,7 +756,6 @@ export function FixWizard({
                             previewLoading={previewLoading}
                             targetConfig={targetConfig}
                             onConfirm={onConfirm}
-                            onCancel={onClose}
                             onTargetChange={onTargetChange}
                         />
                     )}
