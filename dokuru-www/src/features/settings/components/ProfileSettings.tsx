@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -261,10 +262,10 @@ export function ProfileSettings() {
                 </AlertDialogContent>
             </AlertDialog>
 
-            {isAvatarPreviewOpen && avatarSrc && (
+            {isAvatarPreviewOpen && avatarSrc && createPortal(
                 <div
                     data-settings-escape-layer="true"
-                    className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-6 backdrop-blur-sm animate-in fade-in-0"
+                    className="fixed inset-0 z-[200] flex h-dvh w-dvw items-center justify-center bg-black/85 p-6 backdrop-blur-sm animate-in fade-in-0"
                     role="dialog"
                     aria-modal="true"
                     aria-label="Profile picture preview"
@@ -287,7 +288,8 @@ export function ProfileSettings() {
                         className="rounded-full object-cover shadow-2xl ring-1 ring-white/10 animate-in zoom-in-95"
                         style={{ width: "min(78vw, 78vh, 680px)", height: "min(78vw, 78vh, 680px)" }}
                     />
-                </div>
+                </div>,
+                document.body
             )}
 
             <div>
