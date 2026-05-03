@@ -1,4 +1,4 @@
-import { Link, useLocation } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   PanelLeft,
@@ -106,16 +106,36 @@ const agentNavItems = (agentId: string) => {
   return HOST_SHELL_ENABLED ? items : items.filter((item) => !item.devOnly);
 };
 
+function rememberableAgentDetail(pathname: string) {
+  const auditMatch = pathname.match(/^\/agents\/([^/]+)\/audits\/[^/]+$/);
+  if (auditMatch) {
+    return {
+      defaultHref: `/agents/${auditMatch[1]}/audit`,
+      detailHref: pathname,
+    };
+  }
+
+  const detailMatch = pathname.match(/^\/agents\/([^/]+)\/(containers|images|networks|volumes)\/[^/]+$/);
+  if (!detailMatch) return null;
+
+  return {
+    defaultHref: `/agents/${detailMatch[1]}/${detailMatch[2]}`,
+    detailHref: pathname,
+  };
+}
+
 export function AppSidebar() {
   const user = useAuthUser();
   const isAdmin = user?.role === "admin";
   const location = useLocation();
+  const navigate = useNavigate();
   const { agents, fetchAgents, agentOnlineStatus, agentConnectingStatus, setAgentOnline } = useAgentStore();
   const auditStreams = useAuditStore((state) => state.auditStreams);
   const viewedAuditResults = useAuditStore((state) => state.viewedAuditResults);
   const { state: sidebarState } = useSidebar();
   const isIconMode = sidebarState === "collapsed";
   const [openAgents, setOpenAgents] = useState<Record<string, boolean>>({});
+  const [lastDetailHrefByDefaultHref, setLastDetailHrefByDefaultHref] = useState<Record<string, string>>({});
 
   // Backend WS: relay agents + server-level events (agent:connected / agent:disconnected)
   useRealtimeAgents();
@@ -145,6 +165,24 @@ export function AppSidebar() {
       });
     }
   }, [agents, location.pathname]);
+
+  useEffect(() => {
+    const detail = rememberableAgentDetail(location.pathname);
+    if (!detail) return;
+
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setLastDetailHrefByDefaultHref((prev) => {
+        if (prev[detail.defaultHref] === detail.detailHref) return prev;
+        return { ...prev, [detail.defaultHref]: detail.detailHref };
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname]);
 
   // Seed relay agents as offline on load (their status comes from backend WS events only).
   useEffect(() => {
@@ -180,6 +218,11 @@ export function AppSidebar() {
 
   const toggleAgent = (id: string) => {
     setOpenAgents((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const getAgentNavTarget = (href: string, active: boolean) => {
+    if (active && location.pathname !== href) return href;
+    return lastDetailHrefByDefaultHref[href] ?? href;
   };
 
   return (
@@ -355,6 +398,7 @@ export function AppSidebar() {
                                 const auditStatus = isCurrentAuditPage || completedAuditViewed ? null : auditSidebarStatus(auditStream);
                                 const active = isActive(item.href);
                                 const disabled = item.requiresOnline && !isOnline;
+                                const targetHref = getAgentNavTarget(item.href, active);
                                 return disabled ? (
                                   <span
                                     key={item.href}
@@ -367,8 +411,13 @@ export function AppSidebar() {
                                 ) : (
                                   <Link
                                      key={item.href}
-                                      to={item.href}
+                                      to={targetHref}
                                      title={auditStatus?.title}
+                                     onClick={(event) => {
+                                       if (event.detail < 2 || targetHref === item.href) return;
+                                       event.preventDefault();
+                                       void navigate({ to: item.href });
+                                     }}
                                       className={`flex items-center gap-3 border-l-4 px-3 py-2 text-sm transition-colors ${
                                         active
                                           ? "border-miku-primary bg-miku-primary/18 font-medium text-miku-primary"
