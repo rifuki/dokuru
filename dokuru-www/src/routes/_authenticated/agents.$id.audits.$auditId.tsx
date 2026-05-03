@@ -129,6 +129,29 @@ function writeAuditDetailUiState(key: string, state: AuditDetailUiState) {
   }
 }
 
+function normalizeSearchRuleId(value: unknown) {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (typeof parsed === "string" && parsed.trim()) return parsed.trim();
+    } catch {
+      return trimmed.slice(1, -1).trim() || undefined;
+    }
+  }
+  return trimmed;
+}
+
+function scrollToAuditRuleCard(ruleId: string) {
+  window.setTimeout(() => {
+    const target = [...document.querySelectorAll<HTMLElement>("[data-audit-rule-id]")]
+      .find(element => element.dataset.auditRuleId === ruleId);
+    target?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, 120);
+}
+
 function useStableAuditListAnchor(anchorRef: RefObject<HTMLElement | null>, signature: string, enabled: boolean) {
   const previousRef = useRef<{ signature: string; top: number } | null>(null);
 
@@ -155,7 +178,7 @@ function useStableAuditListAnchor(anchorRef: RefObject<HTMLElement | null>, sign
 
 export const Route = createFileRoute("/_authenticated/agents/$id/audits/$auditId")({
   validateSearch: (search: Record<string, unknown>): AuditDetailSearch => ({
-    ruleId: typeof search.ruleId === "string" ? search.ruleId : undefined,
+    ruleId: normalizeSearchRuleId(search.ruleId),
   }),
   component: AuditDetailPage,
 });
@@ -556,7 +579,11 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
   const visibleActiveTab = tabs.some(tab => tab.id === activeTab) ? activeTab : "overview";
 
   return (
-    <div ref={cardRef} className={cn("overflow-hidden rounded-xl border border-l-[3px] shadow-sm transition-colors", statusTone.borderLeft, statusTone.cardTone, isFocused && "ring-2 ring-primary/40")}>
+    <div
+      ref={cardRef}
+      data-audit-rule-id={rule.id}
+      className={cn("overflow-hidden rounded-xl border border-l-[3px] shadow-sm transition-colors", statusTone.borderLeft, statusTone.cardTone, isFocused && "ring-2 ring-primary/40")}
+    >
       {/* Header row */}
       <div className="px-5 py-4 flex items-center gap-3">
         <button onClick={() => onOpenChange(!open)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
@@ -1668,6 +1695,26 @@ function AuditDetailPage() {
     setActiveRuleTabs((prev) => (prev[ruleId] === tab ? prev : { ...prev, [ruleId]: tab }));
   };
 
+  const focusFixedRule = (ruleId: string) => {
+    setStatusFilter("Fail");
+    setSectionFilter("all");
+    setPillarFilter("all");
+    setSearchQuery("");
+    setOpenRuleIds((prev) => {
+      if (prev.has(ruleId)) return prev;
+      const next = new Set(prev);
+      next.add(ruleId);
+      return next;
+    });
+    setActiveRuleTabs((prev) => (prev[ruleId] === "fix" ? prev : { ...prev, [ruleId]: "fix" }));
+    void navigate({
+      to: "/agents/$id/audits/$auditId",
+      params: { id, auditId },
+      search: { ruleId },
+    });
+    scrollToAuditRuleCard(ruleId);
+  };
+
   const agentQuery = useQuery({
     queryKey: ["agent", id],
     queryFn: () => agentApi.getById(id),
@@ -2307,13 +2354,8 @@ function AuditDetailPage() {
                   variant="outline"
                   onClick={() => {
                     const firstFixedRule = fixedResultPreviews[0];
-                    setStatusFilter("Fail");
                     if (!firstFixedRule) return;
-                    void navigate({
-                      to: "/agents/$id/audits/$auditId",
-                      params: { id, auditId },
-                      search: { ruleId: firstFixedRule.rule.id },
-                    });
+                    focusFixedRule(firstFixedRule.rule.id);
                   }}
                   className="shrink-0 border-[#2496ED]/25 text-[#2496ED] hover:text-[#2496ED]"
                 >
@@ -2329,11 +2371,7 @@ function AuditDetailPage() {
                     <button
                       key={result.rule.id}
                       type="button"
-                      onClick={() => void navigate({
-                        to: "/agents/$id/audits/$auditId",
-                        params: { id, auditId },
-                        search: { ruleId: result.rule.id },
-                      })}
+                      onClick={() => focusFixedRule(result.rule.id)}
                       className="group min-w-[240px] rounded-lg border border-[#2496ED]/20 bg-background/45 px-3 py-2 text-left transition-colors hover:border-[#2496ED]/45 hover:bg-[#2496ED]/10"
                     >
                       <div className="flex items-center gap-2">
