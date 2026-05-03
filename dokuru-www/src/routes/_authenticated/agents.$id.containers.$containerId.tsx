@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
 import { ContainerTabPanel } from "@/components/containers/ContainerTabs";
 import { useState } from "react";
+import { containerUiKey, useContainerUiStore } from "@/stores/use-container-ui-store";
 
 type ContainerDetailSearch = {
   from?: "audit" | "containers";
@@ -129,6 +130,8 @@ function ContainerDetailPage() {
 
   const container = findRoutedContainer(containers, containerId, containerName);
   const resolvedContainerId = container?.id ?? containerId;
+  const activeTab = useContainerUiStore((state) => state.activeTabs[containerUiKey(id, resolvedContainerId)] ?? "overview");
+  const setContainerTab = useContainerUiStore((state) => state.setContainerTab);
   const isRunning = container?.state.toLowerCase() === "running";
   const name = container?.names[0]?.replace("/", "") || containerId.slice(0, 12);
 
@@ -300,6 +303,8 @@ function ContainerDetailPage() {
           agentUrl={agent?.url ?? ""}
           token={dockerCredential(agent)}
           agentId={id}
+          activeTab={activeTab}
+          onTabChange={(tab) => setContainerTab(id, container.id, tab)}
         />
       </div>
     </div>

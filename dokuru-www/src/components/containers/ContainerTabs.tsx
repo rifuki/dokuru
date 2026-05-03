@@ -23,9 +23,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import useWebSocket, { ReadyState } from "react-use-websocket";
 import { wsApiUrl } from "@/lib/api/api-config";
 import { useAuthStore } from "@/stores/use-auth-store";
+import type { ContainerTab } from "@/stores/use-container-ui-store";
 
 const TERMINAL_BG = "#090909";
 const TERMINAL_FG = "#d4d4d4";
@@ -522,6 +522,244 @@ function normalizeShell(shell: string | null | undefined): ShellPath {
   return shell === "/bin/bash" ? "/bin/bash" : "/bin/sh";
 }
 
+type TerminalDisposable = { dispose: () => void };
+
+interface ContainerTerminalSession {
+  key: string;
+  term: Terminal;
+  fit: FitAddon;
+  inputDisposable: TerminalDisposable;
+  socket: WebSocket | null;
+  status: TermStatus;
+  selectedShell: ShellPath;
+  detectedShell: ShellPath | null;
+  detectingShell: boolean;
+  dimensions: { cols: number; rows: number };
+  subscribers: Set<() => void>;
+}
+
+const containerTerminalSessions = new Map<string, ContainerTerminalSession>();
+const terminalEncoder = new TextEncoder();
+
+function terminalSessionKey(agentUrl: string, token: string, containerId: string) {
+  return `${agentUrl}\0${token}\0${containerId}`;
+}
+
+function notifyTerminalSession(session: ContainerTerminalSession) {
+  for (const subscriber of session.subscribers) subscriber();
+}
+
+function getContainerTerminalSession(key: string) {
+  const existing = containerTerminalSessions.get(key);
+  if (existing) return existing;
+
+  const term = new Terminal({
+    cursorBlink: true,
+    fontSize: 13,
+    fontFamily: '"Cascadia Code", "Fira Code", monospace',
+    theme: { background: TERMINAL_BG, foreground: TERMINAL_FG, cursor: TERMINAL_CURSOR },
+    allowTransparency: true,
+    scrollback: 5000,
+  });
+  const fit = new FitAddon();
+  term.loadAddon(fit);
+  term.options.disableStdin = true;
+
+  const session: ContainerTerminalSession = {
+    key,
+    term,
+    fit,
+    inputDisposable: { dispose: () => undefined },
+    socket: null,
+    status: "idle",
+    selectedShell: "/bin/sh",
+    detectedShell: null,
+    detectingShell: false,
+    dimensions: { cols: 80, rows: 24 },
+    subscribers: new Set(),
+  };
+
+  session.inputDisposable = term.onData((data) => {
+    if (session.socket?.readyState === WebSocket.OPEN) {
+      session.socket.send(terminalEncoder.encode(data));
+    }
+  });
+
+  containerTerminalSessions.set(key, session);
+  return session;
+}
+
+function subscribeTerminalSession(session: ContainerTerminalSession, subscriber: () => void) {
+  session.subscribers.add(subscriber);
+  return () => {
+    session.subscribers.delete(subscriber);
+  };
+}
+
+function resizeTerminalSession(session: ContainerTerminalSession) {
+  try {
+    session.fit.fit();
+  } catch {
+    return;
+  }
+
+  const nextDimensions = { cols: session.term.cols, rows: session.term.rows };
+  const changed = nextDimensions.cols !== session.dimensions.cols || nextDimensions.rows !== session.dimensions.rows;
+  session.dimensions = nextDimensions;
+
+  if (changed && session.socket?.readyState === WebSocket.OPEN) {
+    session.socket.send(JSON.stringify({ type: "resize", ...nextDimensions }));
+  }
+}
+
+function attachTerminalSession(session: ContainerTerminalSession, wrapper: HTMLDivElement) {
+  if (session.term.element) {
+    wrapper.replaceChildren(session.term.element);
+  } else {
+    wrapper.replaceChildren();
+    session.term.open(wrapper);
+  }
+
+  resizeTerminalSession(session);
+  const frameId = window.requestAnimationFrame(() => resizeTerminalSession(session));
+  const resizeObserver = new ResizeObserver(() => resizeTerminalSession(session));
+  resizeObserver.observe(wrapper);
+
+  return () => {
+    window.cancelAnimationFrame(frameId);
+    resizeObserver.disconnect();
+  };
+}
+
+function writeTerminalMessage(session: ContainerTerminalSession, message: MessageEvent["data"]) {
+  const data = message instanceof ArrayBuffer ? new Uint8Array(message) : message;
+  session.term.write(data);
+}
+
+function connectTerminalSession(session: ContainerTerminalSession, wsUrl: string) {
+  const currentState = session.socket?.readyState;
+  if (currentState === WebSocket.OPEN || currentState === WebSocket.CONNECTING) return;
+
+  session.status = "connecting";
+  session.term.options.disableStdin = true;
+  notifyTerminalSession(session);
+
+  const socket = new WebSocket(wsUrl);
+  socket.binaryType = "arraybuffer";
+  session.socket = socket;
+
+  socket.onopen = () => {
+    if (session.socket !== socket) return;
+    session.status = "connected";
+    session.term.options.disableStdin = false;
+    socket.send(JSON.stringify({ type: "resize", ...session.dimensions }));
+    notifyTerminalSession(session);
+  };
+
+  socket.onmessage = (event) => {
+    if (session.socket !== socket) return;
+    writeTerminalMessage(session, event.data);
+  };
+
+  socket.onerror = () => {
+    if (session.socket !== socket) return;
+    session.status = "error";
+    session.term.options.disableStdin = true;
+    notifyTerminalSession(session);
+  };
+
+  socket.onclose = () => {
+    if (session.socket !== socket) return;
+    session.socket = null;
+    session.status = "disconnected";
+    session.term.options.disableStdin = true;
+    notifyTerminalSession(session);
+  };
+}
+
+function disconnectTerminalSession(session: ContainerTerminalSession) {
+  session.term.write("\r\n\x1b[33m⏻ Disconnected\x1b[0m\r\n");
+  session.term.options.disableStdin = true;
+
+  const socket = session.socket;
+  session.socket = null;
+  session.status = "disconnected";
+  notifyTerminalSession(session);
+
+  if (socket?.readyState === WebSocket.OPEN) {
+    socket.send(terminalEncoder.encode("exit\n"));
+    window.setTimeout(() => socket.close(), 100);
+  } else {
+    socket?.close();
+  }
+}
+
+function reconnectTerminalSession(session: ContainerTerminalSession, wsUrl: string, nextShell?: ShellPath) {
+  if (nextShell) session.selectedShell = nextShell;
+
+  const socket = session.socket;
+  session.socket = null;
+  socket?.close();
+  session.term.clear();
+  session.status = "idle";
+  session.term.options.disableStdin = true;
+  notifyTerminalSession(session);
+  connectTerminalSession(session, wsUrl);
+}
+
+function detectTerminalShell(session: ContainerTerminalSession, agentUrl: string, token: string, containerId: string) {
+  if (session.detectedShell !== null || session.detectingShell) return;
+
+  session.detectingShell = true;
+  notifyTerminalSession(session);
+
+  dockerApi.detectContainerShell(agentUrl, token, containerId)
+    .then((res) => {
+      const shell = normalizeShell(res.data.shell);
+      session.detectedShell = shell;
+      session.selectedShell = shell;
+    })
+    .catch(() => {
+      session.detectedShell = "/bin/sh";
+      session.selectedShell = "/bin/sh";
+    })
+    .finally(() => {
+      session.detectingShell = false;
+      notifyTerminalSession(session);
+    });
+}
+
+function terminalWsUrl({
+  accessToken,
+  agentUrl,
+  containerId,
+  dimensions,
+  shell,
+  token,
+}: {
+  accessToken: string | null;
+  agentUrl: string;
+  containerId: string;
+  dimensions: { cols: number; rows: number };
+  shell: ShellPath;
+  token: string;
+}) {
+  const params = new URLSearchParams({
+    cols: String(dimensions.cols),
+    rows: String(dimensions.rows),
+    shell,
+  });
+
+  if (agentUrl === "relay") {
+    if (!accessToken) return null;
+    params.set("access_token", accessToken);
+    return `${wsApiUrl}/agents/${token}/docker/containers/${encodeURIComponent(containerId)}/exec?${params.toString()}`;
+  }
+
+  params.set("token", token);
+  return `${agentUrl.replace(/^http/, "ws")}/docker/containers/${encodeURIComponent(containerId)}/exec?${params.toString()}`;
+}
+
 export function ContainerTerminal({
   agentUrl,
   token,
@@ -534,17 +772,19 @@ export function ContainerTerminal({
   active: boolean;
 }) {
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const termRef = useRef<Terminal | null>(null);
-  const fitRef = useRef<FitAddon | null>(null);
-  const roRef = useRef<ResizeObserver | null>(null);
   const shellMenuRef = useRef<HTMLDivElement>(null);
-  const [shouldConnect, setShouldConnect] = useState(false);
-  const [termDimensions, setTermDimensions] = useState({ cols: 80, rows: 24 });
-  const [selectedShell, setSelectedShell] = useState<ShellPath>("/bin/sh");
-  const [detectedShell, setDetectedShell] = useState<ShellPath | null>(null);
   const [shellMenuOpen, setShellMenuOpen] = useState(false);
+  const [, forceRender] = useState(0);
   const accessToken = useAuthStore((s) => s.accessToken);
-  const isRelay = agentUrl === "relay";
+  const session = useMemo(
+    () => getContainerTerminalSession(terminalSessionKey(agentUrl, token, containerId)),
+    [agentUrl, containerId, token],
+  );
+  const detectedShell = session.detectedShell;
+  const detectingShell = session.detectingShell;
+  const selectedShell = session.selectedShell;
+  const status = session.status;
+
   const availableShells = useMemo<ShellPath[]>(() => {
     if (detectedShell === "/bin/bash") return ["/bin/bash", "/bin/sh"];
     if (detectedShell === "/bin/sh") return ["/bin/sh"];
@@ -554,65 +794,24 @@ export function ContainerTerminal({
     ? selectedShell
     : availableShells[0] ?? "/bin/sh";
 
-  // Build WebSocket URL
-  const wsUrl = useMemo(() => {
-    if (!shouldConnect || detectedShell === null) return null;
-    const params = new URLSearchParams({
-      cols: String(termDimensions.cols),
-      rows: String(termDimensions.rows),
-      shell: activeShell,
-    });
+  const buildWsUrl = useCallback((shell: ShellPath = activeShell) => (
+    terminalWsUrl({
+      accessToken,
+      agentUrl,
+      containerId,
+      dimensions: session.dimensions,
+      shell,
+      token,
+    })
+  ), [accessToken, activeShell, agentUrl, containerId, session, token]);
 
-    if (isRelay) {
-      if (!accessToken) return null;
-      params.set("access_token", accessToken);
-      return `${wsApiUrl}/agents/${token}/docker/containers/${encodeURIComponent(containerId)}/exec?${params.toString()}`;
-    }
-
-    params.set("token", token);
-    return `${agentUrl.replace(/^http/, "ws")}/docker/containers/${encodeURIComponent(containerId)}/exec?${params.toString()}`;
-  }, [accessToken, activeShell, agentUrl, containerId, detectedShell, isRelay, shouldConnect, termDimensions, token]);
-
-  const { sendMessage, lastMessage, readyState, getWebSocket } = useWebSocket(wsUrl, {
-    shouldReconnect: () => false,
-    reconnectAttempts: 0,
-    reconnectInterval: 0,
-    retryOnError: false,
-    share: false,
-    onOpen: () => {
-      if (termRef.current) termRef.current.options.disableStdin = false;
-      // Set binary type to arraybuffer
-      const ws = getWebSocket();
-      if (ws && 'binaryType' in ws) ws.binaryType = 'arraybuffer';
-    },
-    onClose: () => {
-      if (termRef.current) termRef.current.options.disableStdin = true;
-    },
-    onError: () => {
-      if (termRef.current) termRef.current.options.disableStdin = true;
-    },
-  }, wsUrl !== null);
-
-  const status: TermStatus =
-    readyState === ReadyState.OPEN ? "connected" :
-    readyState === ReadyState.CONNECTING ? "connecting" :
-    readyState === ReadyState.UNINSTANTIATED ? "idle" :
-    readyState === ReadyState.CLOSED ? "disconnected" : "error";
+  useEffect(() => subscribeTerminalSession(session, () => forceRender((value) => value + 1)), [session]);
 
   // Detect available shell when tab becomes active (once)
   useEffect(() => {
-    if (!active || detectedShell !== null) return;
-    dockerApi.detectContainerShell(agentUrl, token, containerId)
-      .then((res) => {
-        const shell = normalizeShell(res.data.shell);
-        setDetectedShell(shell);
-        setSelectedShell(shell);
-      })
-      .catch(() => {
-        setDetectedShell("/bin/sh");
-        setSelectedShell("/bin/sh");
-      });
-  }, [active, agentUrl, token, containerId, detectedShell]);
+    if (!active) return;
+    detectTerminalShell(session, agentUrl, token, containerId);
+  }, [active, agentUrl, containerId, session, token]);
 
   // Close shell dropdown when clicking outside
   useEffect(() => {
@@ -626,130 +825,33 @@ export function ContainerTerminal({
     return () => document.removeEventListener("mousedown", handler);
   }, [shellMenuOpen]);
 
-  // Initialize terminal
+  // Attach the existing terminal DOM to the current route mount.
   useEffect(() => {
-    if (!active || detectedShell === null || !wrapperRef.current || termRef.current) return;
+    if (!active || detectedShell === null || !wrapperRef.current) return;
+    return attachTerminalSession(session, wrapperRef.current);
+  }, [active, detectedShell, session]);
 
-    const term = new Terminal({
-      cursorBlink: true,
-      fontSize: 13,
-      fontFamily: '"Cascadia Code", "Fira Code", monospace',
-      theme: { background: TERMINAL_BG, foreground: TERMINAL_FG, cursor: TERMINAL_CURSOR },
-      allowTransparency: true,
-      scrollback: 5000,
-    });
-    const fit = new FitAddon();
-    term.loadAddon(fit);
-    term.open(wrapperRef.current);
-    fit.fit();
-    term.clear(); // Clear any previous content
-    termRef.current = term;
-    fitRef.current = fit;
-
-    queueMicrotask(() => {
-      setTermDimensions({ cols: term.cols, rows: term.rows });
-      setShouldConnect(true);
-    });
-
-    const ro = new ResizeObserver(() => {
-      fit.fit();
-      queueMicrotask(() => setTermDimensions({ cols: term.cols, rows: term.rows }));
-    });
-    ro.observe(wrapperRef.current);
-    roRef.current = ro;
-
-    return () => {
-      ro.disconnect();
-      roRef.current = null;
-      term.dispose();
-      termRef.current = null;
-      setShouldConnect(false);
-    };
-  }, [active, detectedShell]);
-
-  // Handle terminal input
   useEffect(() => {
-    if (!termRef.current) return;
-    const disposable = termRef.current.onData((data) => {
-      if (readyState === ReadyState.OPEN) sendMessage(new TextEncoder().encode(data));
-    });
-    return () => disposable.dispose();
-  }, [readyState, sendMessage]);
-
-  // Handle terminal resize
-  useEffect(() => {
-    if (!termRef.current) return;
-    const disposable = termRef.current.onResize(({ cols, rows }) => {
-      if (readyState === ReadyState.OPEN) sendMessage(JSON.stringify({ type: "resize", cols, rows }));
-    });
-    return () => disposable.dispose();
-  }, [readyState, sendMessage]);
-
-  // Handle incoming messages
-  useEffect(() => {
-    if (!lastMessage || !termRef.current) return;
-    const data = lastMessage.data instanceof ArrayBuffer ? new Uint8Array(lastMessage.data) : lastMessage.data;
-    termRef.current.write(data);
-  }, [lastMessage]);
+    if (!active || detectedShell === null || status !== "idle") return;
+    const wsUrl = buildWsUrl();
+    if (wsUrl) connectTerminalSession(session, wsUrl);
+  }, [active, buildWsUrl, detectedShell, session, status]);
 
   const disconnect = useCallback(() => {
-    if (termRef.current) {
-      termRef.current.write("\r\n\x1b[33m⏻ Disconnected\x1b[0m\r\n");
-      termRef.current.options.disableStdin = true;
-    }
-    if (readyState === ReadyState.OPEN) {
-      sendMessage(new TextEncoder().encode("exit\n"));
-      setTimeout(() => getWebSocket()?.close(), 100);
-    }
-  }, [readyState, sendMessage, getWebSocket]);
+    disconnectTerminalSession(session);
+  }, [session]);
 
   const reconnect = useCallback((nextShell?: ShellPath) => {
-    if (!wrapperRef.current) return;
-    if (nextShell) setSelectedShell(nextShell);
-    
-    // Cleanup existing terminal and observer
-    roRef.current?.disconnect();
-    roRef.current = null;
-    termRef.current?.dispose();
-    termRef.current = null;
-    setShouldConnect(false);
-
-    // Reinitialize terminal
-    queueMicrotask(() => {
-      if (!wrapperRef.current) return;
-      
-      const term = new Terminal({
-        cursorBlink: true,
-        fontSize: 13,
-        fontFamily: '"Cascadia Code", "Fira Code", monospace',
-        theme: { background: TERMINAL_BG, foreground: TERMINAL_FG, cursor: TERMINAL_CURSOR },
-        allowTransparency: true,
-        scrollback: 5000,
-      });
-      const fit = new FitAddon();
-      term.loadAddon(fit);
-      term.open(wrapperRef.current);
-      fit.fit();
-      term.clear(); // Clear any previous content
-      termRef.current = term;
-      fitRef.current = fit;
-
-      const ro = new ResizeObserver(() => {
-        fit.fit();
-        queueMicrotask(() => setTermDimensions({ cols: term.cols, rows: term.rows }));
-      });
-      ro.observe(wrapperRef.current);
-      roRef.current = ro;
-
-      setTermDimensions({ cols: term.cols, rows: term.rows });
-      setShouldConnect(true);
-    });
-  }, []);
+    const shell = nextShell ?? activeShell;
+    const wsUrl = buildWsUrl(shell);
+    if (!wsUrl) return;
+    reconnectTerminalSession(session, wsUrl, nextShell);
+  }, [activeShell, buildWsUrl, session]);
 
   const isConnected    = status === "connected";
   const isConnecting   = status === "connecting";
   const isDisconnected = status === "disconnected" || status === "error";
-  const isDetecting    = active && detectedShell === null;
+  const isDetecting    = active && (detectedShell === null || detectingShell);
   const shellLabel     = selectedShell.split("/").pop()!;
 
   return (
@@ -954,23 +1056,27 @@ export function ContainerInspect({
 
 // ─── Full tab panel ───────────────────────────────────────────────────────────
 
-type Tab = "overview" | "logs" | "stats" | "terminal" | "inspect";
-
 export function ContainerTabPanel({
   container,
   agentUrl,
   token,
   agentId,
+  activeTab,
+  onTabChange,
 }: {
   container: Container;
   agentUrl: string;
   token: string;
   agentId: string;
+  activeTab?: ContainerTab;
+  onTabChange?: (tab: ContainerTab) => void;
 }) {
-  const [tab, setTab] = useState<Tab>("overview");
+  const [localTab, setLocalTab] = useState<ContainerTab>("overview");
   const isRunning = container.state.toLowerCase() === "running";
+  const selectedTab = activeTab ?? localTab;
+  const tab = !isRunning && (selectedTab === "stats" || selectedTab === "terminal") ? "overview" : selectedTab;
 
-  const tabs: { id: Tab; label: string; icon: React.ReactNode; disabled?: boolean }[] = [
+  const tabs: { id: ContainerTab; label: string; icon: React.ReactNode; disabled?: boolean }[] = [
     { id: "overview", label: "Overview", icon: <Info className="h-4 w-4" /> },
     { id: "logs",     label: "Logs",     icon: <FileText className="h-4 w-4" /> },
     { id: "stats",    label: "Stats",    icon: <BarChart2 className="h-4 w-4" />, disabled: !isRunning },
@@ -985,7 +1091,13 @@ export function ContainerTabPanel({
           <button
             key={t.id}
             disabled={t.disabled}
-            onClick={() => setTab(t.id)}
+            onClick={() => {
+              if (onTabChange) {
+                onTabChange(t.id);
+              } else {
+                setLocalTab(t.id);
+              }
+            }}
             className={`
               flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-all border-t border-x
               ${t.disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}

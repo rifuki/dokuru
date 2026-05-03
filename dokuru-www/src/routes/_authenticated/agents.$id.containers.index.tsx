@@ -24,9 +24,12 @@ import {
 } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { agentApi } from "@/lib/api/agent";
-import { useState } from "react";
+import { useEffect } from "react";
 import { ContainerTabPanel } from "@/components/containers/ContainerTabs";
 import { PageHeader } from "@/components/ui/page-header";
+import { containerUiKey, useContainerUiStore, type ContainerTab } from "@/stores/use-container-ui-store";
+
+const EMPTY_EXPANDED_CONTAINERS: Record<string, boolean> = {};
 
 export const Route = createFileRoute("/_authenticated/agents/$id/containers/")({
   component: ContainersPage,
@@ -79,6 +82,10 @@ function ContainerRow({
   onStop,
   onRestart,
   onRemove,
+  expanded,
+  onExpandedChange,
+  activeTab,
+  onTabChange,
   startPendingId,
   stopPendingId,
   restartPendingId,
@@ -92,12 +99,15 @@ function ContainerRow({
   onStop: (id: string) => void;
   onRestart: (id: string) => void;
   onRemove: (id: string) => void;
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
+  activeTab: ContainerTab;
+  onTabChange: (tab: ContainerTab) => void;
   startPendingId: string | undefined;
   stopPendingId: string | undefined;
   restartPendingId: string | undefined;
   removePendingId: string | undefined;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const isRunning = container.state.toLowerCase() === "running";
   const name = container.names[0]?.replace("/", "") || container.id.slice(0, 12);
 
@@ -113,7 +123,7 @@ function ContainerRow({
         {/* Row header */}
         <div
           className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-accent/50 transition-colors select-none"
-          onClick={() => setExpanded((v) => !v)}
+          onClick={() => onExpandedChange(!expanded)}
         >
           <div className="relative flex items-center justify-center w-8 h-8 shrink-0 rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
             <ContainerIcon className="h-4 w-4" />
@@ -226,7 +236,14 @@ function ContainerRow({
         {/* Inline detail panel */}
         {expanded && (
           <div className="animate-in slide-in-from-top-2 duration-200">
-            <ContainerTabPanel container={container} agentUrl={agentUrl} token={token} agentId={agentId} />
+            <ContainerTabPanel
+              container={container}
+              agentUrl={agentUrl}
+              token={token}
+              agentId={agentId}
+              activeTab={activeTab}
+              onTabChange={onTabChange}
+            />
           </div>
         )}
       </div>
@@ -237,8 +254,45 @@ function ContainerRow({
 function ContainersPage() {
   const { id } = Route.useParams();
   const queryClient = useQueryClient();
-  const [showAll, setShowAll] = useState(true);
-  const [search, setSearch] = useState("");
+  const showAll = useContainerUiStore((state) => state.showAllByAgent[id] ?? true);
+  const search = useContainerUiStore((state) => state.searchByAgent[id] ?? "");
+  const expandedContainers = useContainerUiStore((state) => state.expandedByAgent[id] ?? EMPTY_EXPANDED_CONTAINERS);
+  const activeTabs = useContainerUiStore((state) => state.activeTabs);
+  const setShowAll = useContainerUiStore((state) => state.setShowAll);
+  const setSearch = useContainerUiStore((state) => state.setSearch);
+  const setScrollY = useContainerUiStore((state) => state.setScrollY);
+  const setContainerExpanded = useContainerUiStore((state) => state.setContainerExpanded);
+  const setContainerTab = useContainerUiStore((state) => state.setContainerTab);
+
+  useEffect(() => {
+    const savedScrollY = useContainerUiStore.getState().scrollYByAgent[id] ?? 0;
+    if (savedScrollY <= 0) return;
+
+    const frameId = window.requestAnimationFrame(() => window.scrollTo({ top: savedScrollY }));
+    return () => window.cancelAnimationFrame(frameId);
+  }, [id]);
+
+  useEffect(() => {
+    let frameId: number | null = null;
+
+    const saveScrollY = () => {
+      frameId = null;
+      setScrollY(id, window.scrollY);
+    };
+
+    const handleScroll = () => {
+      if (frameId !== null) return;
+      frameId = window.requestAnimationFrame(saveScrollY);
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
+      setScrollY(id, window.scrollY);
+    };
+  }, [id, setScrollY]);
 
   const { data: agent } = useQuery({
     queryKey: ["agent", id],
@@ -331,14 +385,14 @@ function ContainersPage() {
             className="pl-9 h-9 w-52 text-sm bg-muted/40 border-border/60 focus:bg-background"
             placeholder="Search containers…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => setSearch(id, e.target.value)}
           />
         </div>
         <Button
           size="sm"
           variant={showAll ? "default" : "outline"}
           className="h-9 px-4"
-          onClick={() => setShowAll((v) => !v)}
+          onClick={() => setShowAll(id, !showAll)}
         >
           {showAll ? "All" : "Running"}
         </Button>
@@ -371,6 +425,10 @@ function ContainersPage() {
               agentUrl={agent?.url ?? ""}
               token={dockerCredential(agent)}
               agentId={id}
+              expanded={!!expandedContainers[container.id]}
+              onExpandedChange={(expanded) => setContainerExpanded(id, container.id, expanded)}
+              activeTab={activeTabs[containerUiKey(id, container.id)] ?? "overview"}
+              onTabChange={(tab) => setContainerTab(id, container.id, tab)}
               onStart={(cid) => startMutation.mutate(cid)}
               onStop={(cid) => stopMutation.mutate(cid)}
               onRestart={(cid) => restartMutation.mutate(cid)}
