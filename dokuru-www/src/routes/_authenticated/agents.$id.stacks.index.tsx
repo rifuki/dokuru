@@ -16,11 +16,13 @@ import {
   Save,
   Loader2,
   RotateCcw,
+  X,
+  ListOrdered,
 } from "lucide-react";
 import { canUseDockerAgent, dockerApi, dockerCredential, type Stack, type StackContainer } from "@/services/docker-api";
 import { Input } from "@/components/ui/input";
 import { agentApi } from "@/lib/api/agent";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/ui/page-header";
 import {
@@ -62,6 +64,59 @@ function composeErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+const COMPOSE_DIALOG_MIN_WIDTH = 620;
+const COMPOSE_DIALOG_MIN_HEIGHT = 460;
+const COMPOSE_DIALOG_MARGIN = 24;
+
+type DialogFrame = { left: number; top: number; width: number; height: number };
+type ResizeEdge = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
+
+function centeredComposeDialogFrame(): DialogFrame {
+  if (typeof window === "undefined") {
+    return { left: 0, top: 0, width: 960, height: 720 };
+  }
+  const width = Math.min(1060, window.innerWidth - COMPOSE_DIALOG_MARGIN * 2);
+  const height = Math.min(760, window.innerHeight - COMPOSE_DIALOG_MARGIN * 2);
+  return {
+    left: Math.max(COMPOSE_DIALOG_MARGIN, Math.round((window.innerWidth - width) / 2)),
+    top: Math.max(COMPOSE_DIALOG_MARGIN, Math.round((window.innerHeight - height) / 2)),
+    width,
+    height,
+  };
+}
+
+function clampComposeDialogFrame(frame: DialogFrame): DialogFrame {
+  if (typeof window === "undefined") return frame;
+  const maxWidth = Math.max(COMPOSE_DIALOG_MIN_WIDTH, window.innerWidth - COMPOSE_DIALOG_MARGIN * 2);
+  const maxHeight = Math.max(COMPOSE_DIALOG_MIN_HEIGHT, window.innerHeight - COMPOSE_DIALOG_MARGIN * 2);
+  const width = Math.min(maxWidth, Math.max(COMPOSE_DIALOG_MIN_WIDTH, frame.width));
+  const height = Math.min(maxHeight, Math.max(COMPOSE_DIALOG_MIN_HEIGHT, frame.height));
+  return {
+    width,
+    height,
+    left: Math.min(window.innerWidth - COMPOSE_DIALOG_MARGIN - width, Math.max(COMPOSE_DIALOG_MARGIN, frame.left)),
+    top: Math.min(window.innerHeight - COMPOSE_DIALOG_MARGIN - height, Math.max(COMPOSE_DIALOG_MARGIN, frame.top)),
+  };
+}
+
+function resizeCursor(edge: ResizeEdge) {
+  if (edge === "n" || edge === "s") return "ns-resize";
+  if (edge === "e" || edge === "w") return "ew-resize";
+  if (edge === "ne" || edge === "sw") return "nesw-resize";
+  return "nwse-resize";
+}
+
+const resizeHandles: { edge: ResizeEdge; className: string }[] = [
+  { edge: "n", className: "left-4 right-4 top-0 h-2 -translate-y-1/2 cursor-n-resize" },
+  { edge: "s", className: "bottom-0 left-4 right-4 h-2 translate-y-1/2 cursor-s-resize" },
+  { edge: "e", className: "bottom-4 right-0 top-4 w-2 translate-x-1/2 cursor-e-resize" },
+  { edge: "w", className: "bottom-4 left-0 top-4 w-2 -translate-x-1/2 cursor-w-resize" },
+  { edge: "ne", className: "right-0 top-0 h-4 w-4 -translate-y-1/2 translate-x-1/2 cursor-ne-resize" },
+  { edge: "nw", className: "left-0 top-0 h-4 w-4 -translate-x-1/2 -translate-y-1/2 cursor-nw-resize" },
+  { edge: "se", className: "bottom-0 right-0 h-4 w-4 translate-x-1/2 translate-y-1/2 cursor-se-resize" },
+  { edge: "sw", className: "bottom-0 left-0 h-4 w-4 -translate-x-1/2 translate-y-1/2 cursor-sw-resize" },
+];
+
 // ---------- Compose file dialog ----------
 
 function ComposeDialog({
@@ -80,8 +135,12 @@ function ComposeDialog({
   const queryClient = useQueryClient();
   const [copied, setCopied] = useState(false);
   const [wordWrap, setWordWrap] = useState(false);
+  const [showLineNumbers, setShowLineNumbers] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState("");
+  const [dialogFrame, setDialogFrame] = useState<DialogFrame>(() => centeredComposeDialogFrame());
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeRef = useRef<{ edge: ResizeEdge; startX: number; startY: number; frame: DialogFrame } | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["stack-compose", agentUrl, stackName],
@@ -114,6 +173,64 @@ function ComposeDialog({
     setDraft(data.content);
     setIsEditing(false);
   }, [open, data?.content]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleResize = () => setDialogFrame((current) => clampComposeDialogFrame(current));
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [open]);
+
+  useEffect(() => {
+    if (!isResizing) return;
+    const previousCursor = document.documentElement.style.cursor;
+    const previousUserSelect = document.documentElement.style.userSelect;
+    const resizeState = resizeRef.current;
+    if (resizeState) document.documentElement.style.cursor = resizeCursor(resizeState.edge);
+    document.documentElement.style.userSelect = "none";
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const state = resizeRef.current;
+      if (!state) return;
+      const dx = event.clientX - state.startX;
+      const dy = event.clientY - state.startY;
+      const next = { ...state.frame };
+
+      if (state.edge.includes("e")) next.width = state.frame.width + dx;
+      if (state.edge.includes("s")) next.height = state.frame.height + dy;
+      if (state.edge.includes("w")) {
+        next.width = state.frame.width - dx;
+        next.left = state.frame.left + dx;
+      }
+      if (state.edge.includes("n")) {
+        next.height = state.frame.height - dy;
+        next.top = state.frame.top + dy;
+      }
+
+      const clamped = clampComposeDialogFrame(next);
+      const right = state.frame.left + state.frame.width;
+      const bottom = state.frame.top + state.frame.height;
+      if (state.edge.includes("w") && clamped.width === COMPOSE_DIALOG_MIN_WIDTH) clamped.left = right - clamped.width;
+      if (state.edge.includes("n") && clamped.height === COMPOSE_DIALOG_MIN_HEIGHT) clamped.top = bottom - clamped.height;
+      setDialogFrame(clampComposeDialogFrame(clamped));
+    };
+
+    const handlePointerUp = () => {
+      resizeRef.current = null;
+      setIsResizing(false);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+    return () => {
+      document.documentElement.style.cursor = previousCursor;
+      document.documentElement.style.userSelect = previousUserSelect;
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+    };
+  }, [isResizing]);
 
   // Extract error detail from the agent's JSON response if available.
   const errorDetail = (() => {
@@ -149,43 +266,89 @@ function ComposeDialog({
     saveMutation.mutate(draft);
   }
 
+  function startResize(edge: ResizeEdge, event: ReactPointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    resizeRef.current = { edge, startX: event.clientX, startY: event.clientY, frame: dialogFrame };
+    setIsResizing(true);
+  }
+
   const hasContent = data?.content !== undefined;
   const hasChanges = hasContent && draft !== data.content;
+  const editorContent = isEditing ? draft : data?.content ?? "";
+  const editorLineCount = Math.max(24, editorContent.split("\n").length + 1);
+  const toolbarButtonClass = "h-8 rounded-md px-2.5 text-xs font-semibold gap-1.5 text-muted-foreground hover:text-foreground";
+  const toolbarActiveClass = "border-[#2496ED]/30 bg-[#2496ED]/10 text-[#2496ED] hover:text-[#2496ED]";
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="compose-code-dialog max-w-3xl w-full max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden">
+      <DialogContent
+        showCloseButton={false}
+        style={{
+          left: dialogFrame.left,
+          top: dialogFrame.top,
+          width: dialogFrame.width,
+          height: dialogFrame.height,
+        }}
+        className="compose-code-dialog !max-w-none !translate-x-0 !translate-y-0 flex flex-col gap-0 overflow-hidden p-0"
+      >
+        {resizeHandles.map((handle) => (
+          <div
+            key={handle.edge}
+            aria-hidden="true"
+            onPointerDown={(event) => startResize(handle.edge, event)}
+            className={cn("absolute z-30 touch-none", handle.className)}
+          />
+        ))}
         {/* Header */}
-        <DialogHeader className="flex-row items-start justify-between gap-3 px-5 py-4 pr-12 border-b border-border/60 shrink-0">
+        <DialogHeader className="flex-row items-center justify-between gap-4 border-b border-border/60 px-5 py-4 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shrink-0">
               <FileCode2 className="h-4 w-4" />
             </div>
             <div className="min-w-0">
-              <DialogTitle className="text-base font-semibold leading-tight">
-                {stackName}
-              </DialogTitle>
-              {data?.path && (
-                <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate">
-                  {data.path}
-                </p>
-              )}
-              {isEditing && (
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  Save updates the compose file only. Run docker compose up when you want to apply it.
-                </p>
-              )}
+              <div className="flex items-center gap-2">
+                <DialogTitle className="truncate text-base font-semibold leading-tight">
+                  {stackName}
+                </DialogTitle>
+                {isEditing && (
+                  <span className="rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-cyan-300">
+                    Editing
+                  </span>
+                )}
+              </div>
+              <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
+                {data?.path ?? "Docker Compose file"}
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex shrink-0 items-center gap-1.5">
             {hasContent && (
               <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn(toolbarButtonClass, showLineNumbers && toolbarActiveClass)}
+                  onClick={() => setShowLineNumbers((value) => !value)}
+                >
+                  <ListOrdered className="h-3.5 w-3.5" />
+                  Lines
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn(toolbarButtonClass, wordWrap && toolbarActiveClass)}
+                  onClick={() => setWordWrap(!wordWrap)}
+                >
+                  <FileCode2 className="h-3.5 w-3.5" />
+                  Wrap
+                </Button>
                 {isEditing ? (
                   <>
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      className="h-7 px-2 text-xs gap-1.5"
+                      className="h-8 gap-1.5 rounded-md px-2.5 text-xs font-semibold"
                       onClick={handleCancelEdit}
                       disabled={saveMutation.isPending}
                     >
@@ -194,7 +357,7 @@ function ComposeDialog({
                     </Button>
                     <Button
                       size="sm"
-                      className="h-7 px-2 text-xs gap-1.5"
+                      className="h-8 min-w-20 gap-1.5 rounded-md px-3 text-xs font-semibold"
                       onClick={handleSave}
                       disabled={!hasChanges || saveMutation.isPending}
                     >
@@ -211,7 +374,7 @@ function ComposeDialog({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-7 px-2 text-xs gap-1.5"
+                      className={toolbarButtonClass}
                       onClick={() => setIsEditing(true)}
                     >
                       <Pencil className="h-3.5 w-3.5" />
@@ -220,16 +383,7 @@ function ComposeDialog({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-7 px-2 text-xs gap-1.5"
-                      onClick={() => setWordWrap(!wordWrap)}
-                    >
-                      <FileCode2 className="h-3.5 w-3.5" />
-                      {wordWrap ? "No Wrap" : "Wrap"}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs gap-1.5"
+                      className={toolbarButtonClass}
                       onClick={handleCopy}
                     >
                       {copied ? (
@@ -243,11 +397,28 @@ function ComposeDialog({
                 )}
               </>
             )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded-md text-muted-foreground hover:text-foreground"
+              onClick={onClose}
+            >
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </Button>
           </div>
         </DialogHeader>
 
         {/* Body */}
-        <div className="compose-code-panel flex-1 overflow-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-700/70 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-2 [&::-webkit-scrollbar-thumb]:border-transparent hover:[&::-webkit-scrollbar-thumb]:bg-slate-600/80">
+        <div className="flex min-h-0 flex-1 flex-col">
+          {isEditing && (
+            <div className="flex items-center gap-2 border-b border-white/8 bg-[#070b12] px-4 py-2 font-mono text-[11px] text-slate-400">
+              <Save className="h-3.5 w-3.5 text-cyan-300" />
+              <span className="text-slate-300">Save writes the compose file.</span>
+              <span className="hidden text-slate-500 sm:inline">Run <code className="rounded bg-white/5 px-1 py-0.5 text-slate-300">docker compose up -d</code> when ready to apply.</span>
+            </div>
+          )}
+          <div className="compose-code-panel flex-1 overflow-auto [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-2 [&::-webkit-scrollbar-thumb]:border-transparent [&::-webkit-scrollbar-thumb]:bg-slate-700/70 hover:[&::-webkit-scrollbar-thumb]:bg-slate-600/80">
           {isLoading ? (
             <div className="flex items-center justify-center h-48 text-sm text-muted-foreground gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-pulse" />
@@ -266,21 +437,42 @@ function ComposeDialog({
               )}
             </div>
           ) : isEditing ? (
-            <textarea
-              className="block min-h-[55vh] w-full resize-none bg-transparent p-5 text-xs leading-relaxed font-mono text-slate-100 outline-none selection:bg-cyan-500/30"
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              spellCheck={false}
-              wrap={wordWrap ? "soft" : "off"}
-            />
+            <div className="flex min-h-full">
+              {showLineNumbers && <LineNumberGutter content={draft} />}
+              <textarea
+                rows={editorLineCount}
+                className="block flex-1 resize-none bg-transparent p-5 font-mono text-xs leading-relaxed text-slate-100 outline-none selection:bg-cyan-500/30"
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                spellCheck={false}
+                wrap={wordWrap ? "soft" : "off"}
+              />
+            </div>
           ) : (
-            <pre className={`p-5 text-xs leading-relaxed font-mono text-slate-100 ${wordWrap ? 'whitespace-pre-wrap break-all' : 'whitespace-pre overflow-x-auto'}`}>
-              <YamlHighlight content={data?.content ?? ""} />
-            </pre>
+            <div className="flex min-h-full">
+              {showLineNumbers && <LineNumberGutter content={editorContent} />}
+              <pre className={`p-5 text-xs leading-relaxed font-mono text-slate-100 ${wordWrap ? 'whitespace-pre-wrap break-all' : 'whitespace-pre'}`}>
+                <YamlHighlight content={editorContent} />
+              </pre>
+            </div>
           )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function LineNumberGutter({ content }: { content: string }) {
+  const count = Math.max(1, content.split("\n").length);
+  return (
+    <div className="sticky left-0 z-10 shrink-0 select-none border-r border-white/8 bg-[#070a10] px-3 py-5 text-right font-mono text-xs leading-relaxed text-slate-500">
+      {Array.from({ length: count }, (_, index) => (
+        <span key={index} className="block min-w-8 tabular-nums">
+          {index + 1}
+        </span>
+      ))}
+    </div>
   );
 }
 

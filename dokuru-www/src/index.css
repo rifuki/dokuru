@@ -285,9 +285,7 @@
   }
 
   .compose-code-panel {
-    background:
-      radial-gradient(circle at top left, rgba(14, 165, 233, 0.10), transparent 38%),
-      #05080d;
+    background: #05070b;
     color: #dbeafe;
   }
 

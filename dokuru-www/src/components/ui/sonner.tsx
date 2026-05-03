@@ -17,6 +17,12 @@ const Toaster = ({ ...props }: ToasterProps) => {
       className="toaster group"
       closeButton
       swipeDirections={["right", "left"]}
+      toastOptions={{
+        classNames: {
+          actionButton: "!h-8 !rounded-md !border !border-white/15 !bg-white/[0.08] !px-3 !text-xs !font-semibold !text-white !shadow-none transition-colors hover:!bg-white/[0.14]",
+          cancelButton: "!h-8 !rounded-md !border !border-white/10 !bg-white/[0.04] !px-3 !text-xs !font-semibold !text-white/80 !shadow-none transition-colors hover:!bg-white/[0.10]",
+        },
+      }}
       icons={{
         success: <CircleCheckIcon className="size-4" />,
         info: <InfoIcon className="size-4" />,
