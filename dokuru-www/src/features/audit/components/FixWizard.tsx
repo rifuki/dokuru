@@ -25,6 +25,14 @@ const WIZARD_STEPS: { key: WizardStep; label: string }[] = [
     { key: "result",   label: "Result"   },
 ];
 
+type ApplyStrategy = TargetConfig["strategy"];
+
+const APPLY_MODE_OPTIONS: { value: ApplyStrategy; label: string; title: string }[] = [
+    { value: "dokuru_override", label: "Override", title: "Write Dokuru override file" },
+    { value: "compose_update", label: "Patch", title: "Patch source Compose YAML" },
+    { value: "docker_update", label: "Live", title: "Update current container only" },
+];
+
 function StepIndicator({ current, complete = false }: { current: WizardStep; complete?: boolean }) {
     const idx = WIZARD_STEPS.findIndex(s => s.key === current);
     return (
@@ -42,13 +50,13 @@ function StepIndicator({ current, complete = false }: { current: WizardStep; com
                                     ? "bg-[#2496ED] border-[#2496ED] text-white"
                                     : active
                                     ? "border-[#2496ED] text-[#2496ED] bg-[#2496ED]/10"
-                                    : "border-white/15 text-white/20 bg-transparent"
+                                    : "border-border bg-muted/20 text-muted-foreground"
                             )}>
                                 {done ? <Check size={10} strokeWidth={3} /> : i + 1}
                             </div>
                             <span className={cn(
                                 "text-[9px] uppercase tracking-[0.18em] font-mono whitespace-nowrap",
-                                active ? "text-[#2496ED]" : done ? "text-white/50" : "text-white/20"
+                                active ? "text-[#2496ED]" : done ? "text-muted-foreground" : "text-muted-foreground/70"
                             )}>
                                 {s.label}
                             </span>
@@ -56,7 +64,7 @@ function StepIndicator({ current, complete = false }: { current: WizardStep; com
                         {i < WIZARD_STEPS.length - 1 && (
                             <div className={cn(
                                 "mt-3 h-px min-w-8 flex-1 transition-all",
-                                i < idx ? "bg-[#2496ED]/60" : "bg-white/10"
+                                i < idx ? "bg-[#2496ED]/70" : "bg-border"
                             )} />
                         )}
                     </div>
@@ -101,7 +109,48 @@ function currentValueLabel(ruleId: string, target: FixPreview["targets"][number]
 function valueMeta(ruleId: string) {
     if (ruleId === "5.11") return { label: "Memory", unit: "MB", key: "memoryMb" as const, min: 64 };
     if (ruleId === "5.12") return { label: "CPU shares", unit: "shares", key: "cpuShares" as const, min: 128 };
-    return { label: "PIDs limit", unit: "PIDs", key: "pidsLimit" as const, min: 50 };
+    return { label: "Limit", unit: "PIDs", key: "pidsLimit" as const, min: 50 };
+}
+
+function ApplyModePicker({
+    value,
+    canCompose,
+    onChange,
+}: {
+    value: ApplyStrategy;
+    canCompose: boolean;
+    onChange: (strategy: ApplyStrategy) => void;
+}) {
+    const effectiveValue = canCompose ? value : "docker_update";
+
+    return (
+        <div className="audit-fix-mode-control grid grid-cols-3 overflow-hidden rounded-[10px] border border-white/10 bg-black/25 p-0.5" role="radiogroup" aria-label="Apply mode">
+            {APPLY_MODE_OPTIONS.map((option) => {
+                const disabled = !canCompose && option.value !== "docker_update";
+                const active = effectiveValue === option.value;
+                return (
+                    <button
+                        key={option.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        title={option.title}
+                        disabled={disabled}
+                        onClick={() => onChange(option.value)}
+                        className={cn(
+                            "rounded-md px-2 py-1.5 text-[10px] font-semibold transition-colors whitespace-nowrap",
+                            active && option.value === "dokuru_override" && canCompose && "audit-on-primary bg-[#2496ED] text-white",
+                            active && option.value !== "dokuru_override" && "bg-white/12 text-white",
+                            !active && "text-white/38 hover:text-white/70",
+                            disabled && "cursor-not-allowed opacity-35 hover:text-white/38",
+                        )}
+                    >
+                        {option.label}
+                    </button>
+                );
+            })}
+        </div>
+    );
 }
 
 // ── Step 1: Confirm ───────────────────────────────────────────────────────────
@@ -207,9 +256,9 @@ function ConfirmStep({
                     </div>
 
                     {isCgroup && targets.some(target => target.compose_project) && (
-                        <div className="rounded-xl border border-[#2496ED]/20 bg-[#2496ED]/7 px-3.5 py-3 text-xs text-[#2496ED]/80">
+                        <div className="rounded-lg border border-[#2496ED]/15 border-l-[#2496ED]/55 bg-[#2496ED]/6 px-3 py-2.5 text-xs text-[#2496ED]/80">
                             <div className="flex items-start gap-2.5">
-                                <FileCode2 className="mt-0.5 h-4 w-4 shrink-0" />
+                                <FileCode2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                                 <p className="leading-relaxed">
                                     Compose-managed containers default to <span className="font-semibold text-[#2496ED]">Dokuru override</span>, so source YAML stays clean while the fix survives <code className="font-mono">docker compose up</code>. Use Patch source only when you want Dokuru to edit the base compose file.
                                 </p>
@@ -217,15 +266,7 @@ function ConfirmStep({
                         </div>
                     )}
 
-                    <div className="overflow-hidden rounded-xl border border-white/8 bg-white/[0.025]">
-                        {isCgroup && (
-                            <div className="hidden border-b border-white/6 bg-white/[0.025] px-4 py-2.5 text-[9px] font-mono uppercase tracking-[0.16em] text-white/30 sm:grid sm:grid-cols-[minmax(0,1.25fr)_minmax(116px,.7fr)_210px_150px] sm:gap-4">
-                                <span>Container</span>
-                                <span>Source</span>
-                                <span>Apply via</span>
-                                <span className="text-right">Value</span>
-                            </div>
-                        )}
+                    <div className="audit-fix-target-list overflow-hidden rounded-lg border border-white/8 bg-white/[0.018]">
                         {targets.map((target, i) => {
                             const config = targetConfig[target.container_id];
                             const canCompose = Boolean(target.compose_project && target.compose_service);
@@ -237,12 +278,12 @@ function ConfirmStep({
                                 <div
                                     key={target.container_id}
                                     className={cn(
-                                        "grid gap-3 px-4 py-3 text-xs font-mono sm:items-center",
-                                        isCgroup ? "sm:grid-cols-[minmax(0,1.25fr)_minmax(116px,.7fr)_210px_150px] sm:gap-4" : "sm:grid-cols-[minmax(0,1fr)_auto]",
+                                        "text-xs font-mono",
+                                        isCgroup ? "audit-fix-target-row" : "grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center",
                                         i < targets.length - 1 && "border-b border-white/6"
                                     )}
                                 >
-                                    <div className="flex min-w-0 items-center gap-2.5">
+                                    <div className="audit-fix-target-identity flex min-w-0 items-center gap-2.5">
                                         <Server className="h-3.5 w-3.5 shrink-0 text-white/32" />
                                         <div className="min-w-0">
                                             <span className="block truncate text-[13px] font-semibold text-white/75">{target.container_name}</span>
@@ -251,7 +292,7 @@ function ConfirmStep({
                                     </div>
 
                                     {isCgroup && (
-                                        <div className="flex min-w-0 items-center gap-2 rounded-lg border border-white/8 bg-black/20 px-2.5 py-2">
+                                        <div className="audit-fix-source-chip flex min-w-0 items-center gap-2">
                                             {canCompose ? <FileCode2 className="h-3.5 w-3.5 shrink-0 text-[#2496ED]" /> : <Box className="h-3.5 w-3.5 shrink-0 text-white/35" />}
                                             <div className="min-w-0">
                                                 <span className={cn("block truncate text-[10px] uppercase tracking-[0.12em]", canCompose ? "text-[#2496ED]/80" : "text-white/35")}>{canCompose ? "compose" : "runtime"}</span>
@@ -261,46 +302,15 @@ function ConfirmStep({
                                     )}
 
                                     {isCgroup && config && (
-                                        <div className="grid grid-cols-3 overflow-hidden rounded-lg border border-white/10 bg-black/25 p-0.5">
-                                            <button
-                                                type="button"
-                                                disabled={!canCompose}
-                                                onClick={() => onTargetChange(target.container_id, { strategy: "dokuru_override" })}
-                                                className={cn(
-                                                    "rounded-md px-2 py-1.5 text-[10px] font-semibold transition-colors",
-                                                    strategy === "dokuru_override" && canCompose ? "bg-[#2496ED] text-white" : "text-white/38 hover:text-white/70",
-                                                    !canCompose && "cursor-not-allowed opacity-35 hover:text-white/38"
-                                                )}
-                                            >
-                                                Override
-                                            </button>
-                                            <button
-                                                type="button"
-                                                disabled={!canCompose}
-                                                onClick={() => onTargetChange(target.container_id, { strategy: "compose_update" })}
-                                                className={cn(
-                                                    "rounded-md px-2 py-1.5 text-[10px] font-semibold transition-colors",
-                                                    strategy === "compose_update" && canCompose ? "bg-white/14 text-white" : "text-white/38 hover:text-white/70",
-                                                    !canCompose && "cursor-not-allowed opacity-35 hover:text-white/38"
-                                                )}
-                                            >
-                                                Patch
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => onTargetChange(target.container_id, { strategy: "docker_update" })}
-                                                className={cn(
-                                                    "rounded-md px-2 py-1.5 text-[10px] font-semibold transition-colors",
-                                                    strategy === "docker_update" ? "bg-white/12 text-white" : "text-white/38 hover:text-white/70"
-                                                )}
-                                            >
-                                                Live only
-                                            </button>
-                                        </div>
+                                        <ApplyModePicker
+                                            value={strategy}
+                                            canCompose={canCompose}
+                                            onChange={(nextStrategy) => onTargetChange(target.container_id, { strategy: nextStrategy })}
+                                        />
                                     )}
 
                                     {isCgroup && config && (
-                                        <label className="block text-[10px] text-white/35 sm:text-right">
+                                        <label className="audit-fix-target-value block text-[10px] text-white/35">
                                             <span className="mb-1 block uppercase tracking-[0.12em]">{meta.label} <span className="text-white/20">{meta.unit}</span></span>
                                             <input
                                                 type="number"
@@ -337,7 +347,7 @@ function ConfirmStep({
                     </div>
                     {isCgroup && (
                         <p className="px-1 text-[10px] text-white/25 font-mono">
-                            Override writes <code>docker-compose.dokuru.override.yml</code>; Patch edits the source compose file; Live only updates the current container instance.
+                            Default: Override writes <code>docker-compose.dokuru.override.yml</code>. Patch edits source YAML. Live is temporary.
                         </p>
                     )}
                 </div>
@@ -375,10 +385,10 @@ function ConfirmStep({
             </div>
 
             {/* Actions */}
-            <div className="flex items-center gap-3 pt-1">
+            <div className="grid grid-cols-2 gap-2 pt-1 sm:flex sm:justify-end">
                 <button
                     onClick={onCancel}
-                    className="flex-1 rounded-md border border-white/12 bg-white/[0.03] hover:bg-white/[0.07] px-4 py-2.5 text-sm font-medium text-white/60 hover:text-white/90 transition-all"
+                    className="h-10 rounded-lg border border-white/12 bg-white/[0.03] px-4 text-sm font-medium text-white/60 transition-all hover:bg-white/[0.07] hover:text-white/90 sm:w-32"
                 >
                     Cancel
                 </button>
@@ -386,10 +396,10 @@ function ConfirmStep({
                     onClick={onConfirm}
                     disabled={previewLoading || hasInvalidValues}
                     className={cn(
-                        "audit-on-primary flex-1 inline-flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98]",
+                        "audit-on-primary inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold text-white transition-all active:scale-[0.98] sm:w-40",
                         previewLoading || hasInvalidValues
                             ? "bg-white/10 cursor-not-allowed opacity-50"
-                            : "bg-[#2496ED] hover:bg-[#1e80cc] shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] hover:shadow-[0_0_24px_-4px_rgba(36,150,237,0.65)]"
+                            : "bg-[#2496ED] hover:bg-[#1e80cc]"
                     )}
                 >
                     <Wrench className="h-3.5 w-3.5" />
@@ -665,17 +675,17 @@ function ResultStep({
             )}
 
             {/* Actions */}
-            <div className="flex items-center gap-3 pt-1">
+            <div className="grid grid-cols-2 gap-2 pt-1 sm:flex sm:justify-end">
                 <button
                     onClick={onClose}
-                    className="flex-1 rounded-md border border-white/12 bg-white/[0.03] hover:bg-white/[0.07] px-4 py-2.5 text-sm font-medium text-white/60 hover:text-white/90 transition-all"
+                    className="h-10 rounded-lg border border-white/12 bg-white/[0.03] px-4 text-sm font-medium text-white/60 transition-all hover:bg-white/[0.07] hover:text-white/90 sm:w-32"
                 >
                     Close
                 </button>
                 {isApplied && (
                     <button
                         onClick={onRerunAudit}
-                        className="audit-on-primary flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-[#2496ED] hover:bg-[#1e80cc] px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98]"
+                        className="audit-on-primary inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#2496ED] px-4 text-sm font-semibold text-white transition-all hover:bg-[#1e80cc] active:scale-[0.98] sm:w-40"
                     >
                         <RefreshCw className="h-3.5 w-3.5" />
                         Re-run Audit
@@ -728,7 +738,7 @@ export function FixWizard({
                     {/* Rule badge + title */}
                     <div className="space-y-2 pr-8">
                         <div className="flex items-center gap-2.5">
-                            <span className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.15em] text-[#2496ED] bg-[#2496ED]/10 border border-[#2496ED]/25 px-2.5 py-1 rounded">
+                            <span className="inline-flex items-center gap-1.5 rounded-md border border-[#2496ED]/25 bg-[#2496ED]/8 px-2.5 py-1 font-mono text-[11px] uppercase tracking-[0.15em] text-[#2496ED]">
                                 <Wrench className="h-3 w-3" />
                                 Rule {rule.id}
                             </span>
