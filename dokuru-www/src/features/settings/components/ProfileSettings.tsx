@@ -301,7 +301,7 @@ export function ProfileSettings() {
 
             <form onSubmit={handleProfileSubmit} noValidate className="space-y-8 max-w-2xl">
                 {/* Avatar Section */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 p-6 rounded-xl bg-muted/20 border border-border/30">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 rounded-xl border border-border bg-card p-6 shadow-xs">
                     <button
                         type="button"
                         className={cn(
@@ -364,7 +364,7 @@ export function ProfileSettings() {
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             placeholder="Your display name"
-                            className="h-11 bg-muted/40 border-transparent transition-colors focus-visible:ring-1 focus-visible:ring-primary/50 hover:bg-muted/60"
+                            className="h-11 bg-card border-border shadow-xs hover:border-border/80 focus-visible:border-primary/60 focus-visible:ring-primary/20"
                         />
                     </div>
                     <div className="space-y-2">
@@ -376,7 +376,7 @@ export function ProfileSettings() {
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             placeholder="username"
-                            className="h-11 bg-muted/40 border-transparent transition-colors focus-visible:ring-1 focus-visible:ring-primary/50 hover:bg-muted/60"
+                            className="h-11 bg-card border-border shadow-xs hover:border-border/80 focus-visible:border-primary/60 focus-visible:ring-primary/20"
                         />
                         <p className="text-[13px] text-muted-foreground mt-1">
                             You can only change this once every 30 days.
@@ -402,7 +402,7 @@ export function ProfileSettings() {
                                 onChange={(e) => setEmail(e.target.value)}
                                 placeholder="your@email.com"
                                 disabled={isSendingVerification}
-                                className="h-11 bg-muted/40 border-transparent transition-colors focus-visible:ring-1 focus-visible:ring-primary/50 hover:bg-muted/60 disabled:opacity-70 disabled:cursor-not-allowed pr-24"
+                                className="h-11 bg-card border-border pr-24 shadow-xs hover:border-border/80 focus-visible:border-primary/60 focus-visible:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-70"
                             />
                             {(isEmailChanged || !user.email_verified) && (
                                 <button
@@ -410,10 +410,10 @@ export function ProfileSettings() {
                                     onClick={handleSendVerification}
                                     disabled={!canSendVerification}
                                     className={cn(
-                                        "absolute right-2 top-1/2 -translate-y-1/2 h-7 px-3 text-[12px] font-medium rounded-md transition-colors disabled:cursor-not-allowed flex items-center gap-1.5",
+                                        "absolute right-2 top-1/2 flex h-7 -translate-y-1/2 items-center gap-1.5 rounded-md border px-3 text-[12px] font-medium shadow-xs transition-colors disabled:cursor-not-allowed",
                                         canSendVerification
-                                            ? "bg-muted text-muted-foreground hover:bg-primary hover:text-primary-foreground"
-                                            : "bg-muted text-muted-foreground opacity-60"
+                                            ? "border-border bg-background text-foreground hover:border-primary/50 hover:bg-primary hover:text-primary-foreground"
+                                            : "border-border/60 bg-muted/40 text-muted-foreground opacity-70"
                                     )}
                                 >
                                     {isSendingVerification ? (
