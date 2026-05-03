@@ -45,33 +45,11 @@ import { FixHistoryPanel } from "@/features/audit/components/FixHistoryPanel";
 import { AffectedItems } from "@/features/audit/components/AffectedItems";
 import { useFix } from "@/features/audit/hooks/useFix";
 import { useFixAll } from "@/features/audit/hooks/useFixAll";
+import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 
 type AuditDetailSearch = {
   ruleId?: string;
 };
-
-const AUDIT_DETAIL_SCROLL_PREFIX = "dokuru_audit_detail_scroll_";
-
-function auditDetailScrollKey(agentId: string, auditId: string) {
-  return `${AUDIT_DETAIL_SCROLL_PREFIX}${agentId}:${auditId}`;
-}
-
-function readSavedWindowScrollY(key: string) {
-  try {
-    const value = Number(window.sessionStorage.getItem(key));
-    return Number.isFinite(value) && value > 0 ? value : 0;
-  } catch {
-    return 0;
-  }
-}
-
-function writeSavedWindowScrollY(key: string, scrollY: number) {
-  try {
-    window.sessionStorage.setItem(key, String(Math.max(0, Math.round(scrollY))));
-  } catch {
-    // Scroll memory is a convenience; ignore storage failures.
-  }
-}
 
 export const Route = createFileRoute("/_authenticated/agents/$id/audits/$auditId")({
   validateSearch: (search: Record<string, unknown>): AuditDetailSearch => ({
@@ -1619,7 +1597,7 @@ function AuditDetailPage() {
     staleTime: 10_000,
   });
   const containers = containersQuery.data ?? [];
-  const auditScrollStorageKey = auditDetailScrollKey(id, auditId);
+  useWindowScrollMemory(`agent:${id}:audit-detail:${auditId}`, !!auditData && !focusedRuleId);
 
   const {
     open: wizardOpen,
@@ -1701,45 +1679,6 @@ function AuditDetailPage() {
     if (!containersQuery.isError) return;
     console.warn("Failed to load containers for affected links:", containersQuery.error);
   }, [containersQuery.error, containersQuery.isError]);
-
-  useEffect(() => {
-    if (!auditData || focusedRuleId) return;
-    const savedScrollY = readSavedWindowScrollY(auditScrollStorageKey);
-    if (savedScrollY <= 0) return;
-
-    let secondFrameId: number | null = null;
-    const firstFrameId = window.requestAnimationFrame(() => {
-      window.scrollTo({ top: savedScrollY });
-      secondFrameId = window.requestAnimationFrame(() => window.scrollTo({ top: savedScrollY }));
-    });
-
-    return () => {
-      window.cancelAnimationFrame(firstFrameId);
-      if (secondFrameId !== null) window.cancelAnimationFrame(secondFrameId);
-    };
-  }, [auditData, auditScrollStorageKey, focusedRuleId]);
-
-  useEffect(() => {
-    let frameId: number | null = null;
-    const saveScroll = () => writeSavedWindowScrollY(auditScrollStorageKey, window.scrollY);
-    const handleScroll = () => {
-      if (frameId !== null) return;
-      frameId = window.requestAnimationFrame(() => {
-        frameId = null;
-        saveScroll();
-      });
-    };
-
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    window.addEventListener("pagehide", saveScroll);
-
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-      window.removeEventListener("pagehide", saveScroll);
-      if (frameId !== null) window.cancelAnimationFrame(frameId);
-      saveScroll();
-    };
-  }, [auditScrollStorageKey]);
 
   const previousAudit = auditData ? (() => {
     const sortedHistory = [...auditHistory].sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));

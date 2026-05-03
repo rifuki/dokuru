@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { AffectedItems } from "@/features/audit/components/AffectedItems";
 import { LOCAL_AGENT_ID } from "@/lib/local-agent";
+import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/audit/")({
     component: AuditPage,
@@ -924,6 +925,7 @@ function AuditPage() {
     const [historyLoading, setHistoryLoading] = useState(true);
     const [historyError, setHistoryError] = useState<string | null>(null);
     const mountedRef = useRef(false);
+    useWindowScrollMemory(`agent:${id}:audit`, !historyLoading || hasAnyAudit || showAuditTerminal);
 
     useEffect(() => {
         let cancelled = false;

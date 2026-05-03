@@ -22,6 +22,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { ContainerTabPanel } from "@/components/containers/ContainerTabs";
 import { useState } from "react";
 import { containerUiKey, useContainerUiStore } from "@/stores/use-container-ui-store";
+import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 
 type ContainerDetailSearch = {
   from?: "audit" | "containers";
@@ -134,6 +135,7 @@ function ContainerDetailPage() {
   const setContainerTab = useContainerUiStore((state) => state.setContainerTab);
   const isRunning = container?.state.toLowerCase() === "running";
   const name = container?.names[0]?.replace("/", "") || containerId.slice(0, 12);
+  useWindowScrollMemory(`agent:${id}:container-detail:${containerId}`, !!container);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["containers", id] });
 

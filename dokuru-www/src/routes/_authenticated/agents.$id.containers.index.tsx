@@ -24,10 +24,10 @@ import {
 } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { agentApi } from "@/lib/api/agent";
-import { useEffect } from "react";
 import { ContainerTabPanel } from "@/components/containers/ContainerTabs";
 import { PageHeader } from "@/components/ui/page-header";
 import { containerUiKey, useContainerUiStore, type ContainerTab } from "@/stores/use-container-ui-store";
+import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 
 const EMPTY_EXPANDED_CONTAINERS: Record<string, boolean> = {};
 
@@ -260,39 +260,8 @@ function ContainersPage() {
   const activeTabs = useContainerUiStore((state) => state.activeTabs);
   const setShowAll = useContainerUiStore((state) => state.setShowAll);
   const setSearch = useContainerUiStore((state) => state.setSearch);
-  const setScrollY = useContainerUiStore((state) => state.setScrollY);
   const setContainerExpanded = useContainerUiStore((state) => state.setContainerExpanded);
   const setContainerTab = useContainerUiStore((state) => state.setContainerTab);
-
-  useEffect(() => {
-    const savedScrollY = useContainerUiStore.getState().scrollYByAgent[id] ?? 0;
-    if (savedScrollY <= 0) return;
-
-    const frameId = window.requestAnimationFrame(() => window.scrollTo({ top: savedScrollY }));
-    return () => window.cancelAnimationFrame(frameId);
-  }, [id]);
-
-  useEffect(() => {
-    let frameId: number | null = null;
-
-    const saveScrollY = () => {
-      frameId = null;
-      setScrollY(id, window.scrollY);
-    };
-
-    const handleScroll = () => {
-      if (frameId !== null) return;
-      frameId = window.requestAnimationFrame(saveScrollY);
-    };
-
-    window.addEventListener("scroll", handleScroll, { passive: true });
-
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-      if (frameId !== null) window.cancelAnimationFrame(frameId);
-      setScrollY(id, window.scrollY);
-    };
-  }, [id, setScrollY]);
 
   const { data: agent } = useQuery({
     queryKey: ["agent", id],
@@ -310,6 +279,7 @@ function ContainersPage() {
     enabled: canUseDockerAgent(agent),
     refetchInterval: 5000,
   });
+  useWindowScrollMemory(`agent:${id}:containers`, !isLoading && !!containers);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["containers", id] });
 
