@@ -1,6 +1,13 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { getSidebarNavigationIntentForPath } from "@/lib/sidebar-navigation";
 
 const RESTORE_DELAYS = [0, 32, 100, 250, 500, 900];
+
+type ScrollRestoreIntent = {
+  token: string;
+  fromSidebar: boolean;
+  savedScrollY: number;
+};
 
 function readSavedWindowScrollY(key: string) {
   try {
@@ -19,9 +26,30 @@ function writeSavedWindowScrollY(key: string, scrollY: number) {
   }
 }
 
+function windowScrollRestoreIntent(key: string): ScrollRestoreIntent {
+  const sidebarIntent = getSidebarNavigationIntentForPath();
+  if (!sidebarIntent) {
+    return {
+      token: `${key}:normal`,
+      fromSidebar: false,
+      savedScrollY: 0,
+    };
+  }
+
+  return {
+    token: `${key}:${sidebarIntent.pathname}:${sidebarIntent.createdAt}`,
+    fromSidebar: true,
+    savedScrollY: readSavedWindowScrollY(key),
+  };
+}
+
 export function useWindowScrollMemory(key: string, canRestore = true) {
+  const restoreIntent = windowScrollRestoreIntent(key);
+  const shouldPersistRef = useRef(restoreIntent.fromSidebar);
   const lastObservedScrollYRef = useRef(0);
   const restoreGuardUntilRef = useRef(0);
+  const [completedRestoreToken, setCompletedRestoreToken] = useState<string | null>(null);
+  const isRestoring = restoreIntent.fromSidebar && canRestore && restoreIntent.savedScrollY > 0 && completedRestoreToken !== restoreIntent.token;
 
   useEffect(() => {
     lastObservedScrollYRef.current = readSavedWindowScrollY(key) || window.scrollY;
@@ -29,8 +57,12 @@ export function useWindowScrollMemory(key: string, canRestore = true) {
 
   useEffect(() => {
     let frameId: number | null = null;
+    const shouldPersist = shouldPersistRef.current;
 
-    const persistScroll = (scrollY: number) => writeSavedWindowScrollY(key, scrollY);
+    const persistScroll = (scrollY: number) => {
+      if (!shouldPersist) return;
+      writeSavedWindowScrollY(key, scrollY);
+    };
     const saveLatestScroll = () => {
       frameId = null;
       const scrollY = window.scrollY;
@@ -61,28 +93,48 @@ export function useWindowScrollMemory(key: string, canRestore = true) {
     };
   }, [key]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const intent = windowScrollRestoreIntent(key);
+    shouldPersistRef.current = intent.fromSidebar;
+
+    if (!intent.fromSidebar) {
+      if (window.scrollY !== 0) window.scrollTo({ top: 0, left: 0 });
+      return;
+    }
+
     if (!canRestore) return;
-    const savedScrollY = readSavedWindowScrollY(key);
-    if (savedScrollY <= 0) return;
+    if (intent.savedScrollY <= 0) {
+      const frameId = window.requestAnimationFrame(() => setCompletedRestoreToken(intent.token));
+      return () => window.cancelAnimationFrame(frameId);
+    }
+
     restoreGuardUntilRef.current = Date.now() + 1_200;
 
     let cancelled = false;
     const frameIds: number[] = [];
     const timeoutIds: ReturnType<typeof window.setTimeout>[] = [];
+    let completed = false;
 
-    const restore = () => {
-      if (cancelled) return;
-      const maxScrollY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-      if (maxScrollY <= 0) return;
-      window.scrollTo({ top: Math.min(savedScrollY, maxScrollY), left: 0 });
+    const finishRestore = () => {
+      if (cancelled || completed) return;
+      completed = true;
+      setCompletedRestoreToken(intent.token);
     };
 
-    for (const delay of RESTORE_DELAYS) {
+    const restore = (finalAttempt = false) => {
+      if (cancelled) return;
+      const maxScrollY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+      const nextScrollY = Math.min(intent.savedScrollY, maxScrollY);
+      if (nextScrollY !== window.scrollY) window.scrollTo({ top: nextScrollY, left: 0 });
+      if (maxScrollY > 0 || finalAttempt) finishRestore();
+    };
+
+    for (const [index, delay] of RESTORE_DELAYS.entries()) {
+      const finalAttempt = index === RESTORE_DELAYS.length - 1;
       const timeoutId = window.setTimeout(() => {
         const frameId = window.requestAnimationFrame(() => {
-          restore();
-          const secondFrameId = window.requestAnimationFrame(restore);
+          restore(finalAttempt);
+          const secondFrameId = window.requestAnimationFrame(() => restore(finalAttempt));
           frameIds.push(secondFrameId);
         });
         frameIds.push(frameId);
@@ -96,4 +148,10 @@ export function useWindowScrollMemory(key: string, canRestore = true) {
       for (const frameId of frameIds) window.cancelAnimationFrame(frameId);
     };
   }, [canRestore, key]);
+
+  return {
+    isRestoring,
+    restoreFromSidebar: restoreIntent.fromSidebar,
+    savedScrollY: restoreIntent.savedScrollY,
+  };
 }

@@ -50,6 +50,7 @@ import { useRealtimeAgents } from "@/hooks/useRealtimeAgents";
 import { useAgentConnections } from "@/hooks/useAgentConnections";
 import { HOST_SHELL_ENABLED } from "@/lib/host-shell";
 import { IS_LOCAL_AGENT_MODE } from "@/lib/env";
+import { markSidebarNavigation } from "@/lib/sidebar-navigation";
 
 function auditSidebarStatus(stream?: AuditStreamState) {
   if (!stream) return null;
@@ -423,6 +424,7 @@ export function AppSidebar() {
                                       to={targetHref}
                                      title={auditStatus?.title}
                                      onClick={(event) => {
+                                       markSidebarNavigation(targetHref);
                                        if (targetHref === item.href) {
                                          forgetAgentNavDetail(item.href);
                                          return;
@@ -430,6 +432,7 @@ export function AppSidebar() {
                                        if (event.detail < 2) return;
                                        event.preventDefault();
                                        forgetAgentNavDetail(item.href);
+                                       markSidebarNavigation(item.href);
                                        void navigate({ to: item.href });
                                      }}
                                       className={`flex items-center gap-3 border-l-4 px-3 py-2 text-sm transition-colors ${

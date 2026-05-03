@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { type ReactNode, useEffect, useReducer, useRef, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { agentApi } from "@/lib/api/agent";
 import {
@@ -46,10 +46,88 @@ import { AffectedItems } from "@/features/audit/components/AffectedItems";
 import { useFix } from "@/features/audit/hooks/useFix";
 import { useFixAll } from "@/features/audit/hooks/useFixAll";
 import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
+import { isSidebarNavigationForPath } from "@/lib/sidebar-navigation";
 
 type AuditDetailSearch = {
   ruleId?: string;
 };
+
+type StatusFilter = "all" | "Pass" | "Fail" | "Error";
+type ViewMode = "pillar" | "section";
+type RuleCardTab = "overview" | "fix" | "debug";
+
+type AuditDetailUiState = {
+  statusFilter: StatusFilter;
+  sectionFilter: string;
+  pillarFilter: SecurityPillar | "all";
+  searchQuery: string;
+  viewMode: ViewMode;
+  openRuleIds: string[];
+  activeRuleTabs: Record<string, RuleCardTab>;
+};
+
+const DEFAULT_AUDIT_DETAIL_UI_STATE: AuditDetailUiState = {
+  statusFilter: "all",
+  sectionFilter: "all",
+  pillarFilter: "all",
+  searchQuery: "",
+  viewMode: "pillar",
+  openRuleIds: [],
+  activeRuleTabs: {},
+};
+
+function auditDetailUiStorageKey(agentId: string, auditId: string) {
+  return `dokuru_audit_detail_ui_${agentId}:${auditId}`;
+}
+
+function isStatusFilter(value: unknown): value is StatusFilter {
+  return value === "all" || value === "Pass" || value === "Fail" || value === "Error";
+}
+
+function isViewMode(value: unknown): value is ViewMode {
+  return value === "pillar" || value === "section";
+}
+
+function isRuleCardTab(value: unknown): value is RuleCardTab {
+  return value === "overview" || value === "fix" || value === "debug";
+}
+
+function isSecurityPillarOrAll(value: unknown): value is SecurityPillar | "all" {
+  return value === "all" || (typeof value === "string" && value in PILLAR_META);
+}
+
+function readAuditDetailUiState(key: string): AuditDetailUiState {
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    if (!raw) return DEFAULT_AUDIT_DETAIL_UI_STATE;
+    const parsed = JSON.parse(raw) as Partial<AuditDetailUiState>;
+    const activeRuleTabs = Object.fromEntries(
+      Object.entries(parsed.activeRuleTabs ?? {}).filter((entry): entry is [string, RuleCardTab] => (
+        typeof entry[0] === "string" && isRuleCardTab(entry[1])
+      )),
+    );
+
+    return {
+      statusFilter: isStatusFilter(parsed.statusFilter) ? parsed.statusFilter : "all",
+      sectionFilter: typeof parsed.sectionFilter === "string" ? parsed.sectionFilter : "all",
+      pillarFilter: isSecurityPillarOrAll(parsed.pillarFilter) ? parsed.pillarFilter : "all",
+      searchQuery: typeof parsed.searchQuery === "string" ? parsed.searchQuery : "",
+      viewMode: isViewMode(parsed.viewMode) ? parsed.viewMode : "pillar",
+      openRuleIds: Array.isArray(parsed.openRuleIds) ? parsed.openRuleIds.filter((ruleId): ruleId is string => typeof ruleId === "string") : [],
+      activeRuleTabs,
+    };
+  } catch {
+    return DEFAULT_AUDIT_DETAIL_UI_STATE;
+  }
+}
+
+function writeAuditDetailUiState(key: string, state: AuditDetailUiState) {
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify(state));
+  } catch {
+    // UI memory is best-effort; failing storage should not block the page.
+  }
+}
 
 export const Route = createFileRoute("/_authenticated/agents/$id/audits/$auditId")({
   validateSearch: (search: Record<string, unknown>): AuditDetailSearch => ({
@@ -401,7 +479,7 @@ function AgentVerificationPanel({
   );
 }
 
-function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAccessMode, token, containers, focusedRuleId, appliedFixEntry, onOpenWizard }: {
+function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAccessMode, token, containers, focusedRuleId, open, activeTab, appliedFixEntry, onOpenChange, onActiveTabChange, onOpenWizard }: {
   result: AuditResult;
   agentId: string;
   auditId: string;
@@ -411,7 +489,11 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
   token?: string;
   containers?: DockerContainer[];
   focusedRuleId?: string;
+  open: boolean;
+  activeTab: RuleCardTab;
   appliedFixEntry?: FixHistoryEntry;
+  onOpenChange: (open: boolean) => void;
+  onActiveTabChange: (tab: RuleCardTab) => void;
   onOpenWizard: (result: AuditResult) => void;
 }) {
   const { rule, status, message, affected, audit_command, raw_output, command_stderr, command_exit_code, references, rationale, impact, remediation_guide } = result;
@@ -420,8 +502,6 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
   const storedOutcome = useAuditStore((state) => state.fixOutcomes[agentId]?.[rule.id] ?? null);
   const isFocused = focusedRuleId === rule.id;
   const cardRef = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(isFocused);
-  const [activeTab, setActiveTab] = useState<"overview" | "fix" | "debug">(isFocused ? "fix" : "overview");
   const [cisDialogOpen, setCisDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -449,12 +529,13 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
     { id: "fix" as const, label: "Fix", show: hasFix },
     { id: "debug" as const, label: "Debug", show: hasDebug },
   ].filter(t => t.show);
+  const visibleActiveTab = tabs.some(tab => tab.id === activeTab) ? activeTab : "overview";
 
   return (
     <div ref={cardRef} className={cn("overflow-hidden rounded-xl border border-l-[3px] shadow-sm transition-colors", statusTone.borderLeft, statusTone.cardTone, isFocused && "ring-2 ring-primary/40")}>
       {/* Header row */}
       <div className="px-5 py-4 flex items-center gap-3">
-        <button onClick={() => setOpen(v => !v)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+        <button onClick={() => onOpenChange(!open)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
           <StatusIcon status={status} />
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
@@ -518,7 +599,7 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
               {isFixing ? "View Progress" : isFixed ? "View Result" : "Apply Fix"}
             </button>
           )}
-          <button onClick={() => setOpen(v => !v)} className="p-1 hover:bg-muted/40 rounded transition-colors">
+          <button onClick={() => onOpenChange(!open)} className="p-1 hover:bg-muted/40 rounded transition-colors">
             {open
               ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
               : <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -535,10 +616,10 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
             {tabs.map(tab => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => onActiveTabChange(tab.id)}
                 className={cn(
                   "px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px",
-                  activeTab === tab.id
+                  visibleActiveTab === tab.id
                     ? "border-[#2496ED] text-[#2496ED]"
                     : "border-transparent text-muted-foreground hover:text-foreground"
                 )}
@@ -550,7 +631,7 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
 
           <div className="p-4">
             {/* Overview: description + rationale/impact */}
-            {activeTab === "overview" && (
+            {visibleActiveTab === "overview" && (
               <div className="space-y-3">
                 {rule.description && (
                   <p className="text-sm text-foreground/70 leading-relaxed">{rule.description}</p>
@@ -578,7 +659,7 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
             )}
 
             {/* Fix: affected + remediation + fix guide */}
-            {activeTab === "fix" && (
+            {visibleActiveTab === "fix" && (
               <div className="space-y-3">
                 {affected.length > 0 && (
                   <div>
@@ -613,7 +694,7 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
             )}
 
             {/* Debug: audit command + raw output + references */}
-            {activeTab === "debug" && (
+            {visibleActiveTab === "debug" && (
               <div className="space-y-3">
                 <AgentVerificationPanel
                   agentId={agentId}
@@ -1523,9 +1604,6 @@ function buildAuditDocumentHtml({
 
 // ── Main Page ────────────────────────────────────────────────────────────────
 
-type StatusFilter = "all" | "Pass" | "Fail" | "Error";
-type ViewMode = "pillar" | "section";
-
 function AuditDetailPage() {
   const { id, auditId } = Route.useParams();
   const { ruleId: focusedRuleId } = Route.useSearch();
@@ -1534,13 +1612,36 @@ function AuditDetailPage() {
   const markAuditResultViewed = useAuditStore((state) => state.markAuditResultViewed);
   const hydrateFixJobFromHistory = useAuditStore((state) => state.hydrateFixJobFromHistory);
   const storedAuditHistory = useAuditStore((state) => state.auditHistories[id]);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [sectionFilter, setSectionFilter] = useState<string>("all");
-  const [pillarFilter, setPillarFilter] = useState<SecurityPillar | "all">("all");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [viewMode, setViewMode] = useState<ViewMode>("pillar");
+  const auditUiMemoryKey = auditDetailUiStorageKey(id, auditId);
+  const shouldUseInitialAuditUiMemory = isSidebarNavigationForPath();
+  const shouldUseAuditUiMemoryRef = useRef(shouldUseInitialAuditUiMemory);
+  const [initialAuditUiState] = useState(() => shouldUseInitialAuditUiMemory ? readAuditDetailUiState(auditUiMemoryKey) : DEFAULT_AUDIT_DETAIL_UI_STATE);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialAuditUiState.statusFilter);
+  const [sectionFilter, setSectionFilter] = useState<string>(initialAuditUiState.sectionFilter);
+  const [pillarFilter, setPillarFilter] = useState<SecurityPillar | "all">(initialAuditUiState.pillarFilter);
+  const [searchQuery, setSearchQuery] = useState(initialAuditUiState.searchQuery);
+  const [viewMode, setViewMode] = useState<ViewMode>(initialAuditUiState.viewMode);
+  const [openRuleIds, setOpenRuleIds] = useState<Set<string>>(() => new Set(initialAuditUiState.openRuleIds));
+  const [activeRuleTabs, setActiveRuleTabs] = useState<Record<string, RuleCardTab>>(initialAuditUiState.activeRuleTabs);
   const [documentExporting, setDocumentExporting] = useState<"html" | "pdf" | null>(null);
   const fixJobs = useAuditStore((state) => state.fixJobs);
+  const auditUiMemoryKeyRef = useRef(auditUiMemoryKey);
+  const skipNextAuditUiWriteRef = useRef(false);
+
+  const handleRuleOpenChange = (ruleId: string, nextOpen: boolean) => {
+    setOpenRuleIds((prev) => {
+      if (nextOpen && prev.has(ruleId)) return prev;
+      if (!nextOpen && !prev.has(ruleId)) return prev;
+      const next = new Set(prev);
+      if (nextOpen) next.add(ruleId);
+      else next.delete(ruleId);
+      return next;
+    });
+  };
+
+  const handleRuleTabChange = (ruleId: string, tab: RuleCardTab) => {
+    setActiveRuleTabs((prev) => (prev[ruleId] === tab ? prev : { ...prev, [ruleId]: tab }));
+  };
 
   const agentQuery = useQuery({
     queryKey: ["agent", id],
@@ -1597,7 +1698,7 @@ function AuditDetailPage() {
     staleTime: 10_000,
   });
   const containers = containersQuery.data ?? [];
-  useWindowScrollMemory(`agent:${id}:audit-detail:${auditId}`, !!auditData && !focusedRuleId);
+  const scrollMemory = useWindowScrollMemory(`agent:${id}:audit-detail:${auditId}`, !!auditData && !focusedRuleId);
 
   const {
     open: wizardOpen,
@@ -1658,6 +1759,39 @@ function AuditDetailPage() {
   useEffect(() => {
     markAuditResultViewed(id, auditId);
   }, [auditId, id, markAuditResultViewed]);
+
+  useLayoutEffect(() => {
+    if (auditUiMemoryKeyRef.current === auditUiMemoryKey) return;
+    auditUiMemoryKeyRef.current = auditUiMemoryKey;
+    skipNextAuditUiWriteRef.current = true;
+    const shouldUseAuditUiMemory = isSidebarNavigationForPath();
+    shouldUseAuditUiMemoryRef.current = shouldUseAuditUiMemory;
+    const savedState = shouldUseAuditUiMemory ? readAuditDetailUiState(auditUiMemoryKey) : DEFAULT_AUDIT_DETAIL_UI_STATE;
+    setStatusFilter(savedState.statusFilter);
+    setSectionFilter(savedState.sectionFilter);
+    setPillarFilter(savedState.pillarFilter);
+    setSearchQuery(savedState.searchQuery);
+    setViewMode(savedState.viewMode);
+    setOpenRuleIds(new Set(savedState.openRuleIds));
+    setActiveRuleTabs(savedState.activeRuleTabs);
+  }, [auditUiMemoryKey]);
+
+  useEffect(() => {
+    if (!shouldUseAuditUiMemoryRef.current) return;
+    if (skipNextAuditUiWriteRef.current) {
+      skipNextAuditUiWriteRef.current = false;
+      return;
+    }
+    writeAuditDetailUiState(auditUiMemoryKey, {
+      statusFilter,
+      sectionFilter,
+      pillarFilter,
+      searchQuery,
+      viewMode,
+      openRuleIds: [...openRuleIds],
+      activeRuleTabs,
+    });
+  }, [activeRuleTabs, auditUiMemoryKey, openRuleIds, pillarFilter, searchQuery, sectionFilter, statusFilter, viewMode]);
 
   useEffect(() => {
     if (!auditQuery.isError) return;
@@ -1828,7 +1962,7 @@ function AuditDetailPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto w-full space-y-6 pb-10">
+    <div className={cn("max-w-5xl mx-auto w-full space-y-6 pb-10", scrollMemory.isRestoring && "invisible")}>
       {/* ── Top bar ─────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -2505,7 +2639,11 @@ function AuditDetailPage() {
                                 token={token}
                                 containers={containers}
                                 focusedRuleId={focusedRuleId}
+                                open={openRuleIds.has(r.rule.id) || focusedRuleId === r.rule.id}
+                                activeTab={activeRuleTabs[r.rule.id] ?? (focusedRuleId === r.rule.id ? "fix" : "overview")}
                                 appliedFixEntry={appliedHistoryByRule.get(r.rule.id)}
+                                onOpenChange={(nextOpen) => handleRuleOpenChange(r.rule.id, nextOpen)}
+                                onActiveTabChange={(tab) => handleRuleTabChange(r.rule.id, tab)}
                                 onOpenWizard={openWizard}
                               />
                             ))
@@ -2540,7 +2678,11 @@ function AuditDetailPage() {
                                 token={token}
                                 containers={containers}
                                 focusedRuleId={focusedRuleId}
+                                open={openRuleIds.has(r.rule.id) || focusedRuleId === r.rule.id}
+                                activeTab={activeRuleTabs[r.rule.id] ?? (focusedRuleId === r.rule.id ? "fix" : "overview")}
                                 appliedFixEntry={appliedHistoryByRule.get(r.rule.id)}
+                                onOpenChange={(nextOpen) => handleRuleOpenChange(r.rule.id, nextOpen)}
+                                onActiveTabChange={(tab) => handleRuleTabChange(r.rule.id, tab)}
                                 onOpenWizard={openWizard}
                               />
                             ))
