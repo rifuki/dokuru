@@ -225,6 +225,15 @@ export function AppSidebar() {
     return lastDetailHrefByDefaultHref[href] ?? href;
   };
 
+  const forgetAgentNavDetail = (href: string) => {
+    setLastDetailHrefByDefaultHref((prev) => {
+      if (!prev[href]) return prev;
+      const next = { ...prev };
+      delete next[href];
+      return next;
+    });
+  };
+
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -414,8 +423,13 @@ export function AppSidebar() {
                                       to={targetHref}
                                      title={auditStatus?.title}
                                      onClick={(event) => {
-                                       if (event.detail < 2 || targetHref === item.href) return;
+                                       if (targetHref === item.href) {
+                                         forgetAgentNavDetail(item.href);
+                                         return;
+                                       }
+                                       if (event.detail < 2) return;
                                        event.preventDefault();
+                                       forgetAgentNavDetail(item.href);
                                        void navigate({ to: item.href });
                                      }}
                                       className={`flex items-center gap-3 border-l-4 px-3 py-2 text-sm transition-colors ${
