@@ -124,7 +124,7 @@ function ApplyModePicker({
     const effectiveValue = canCompose ? value : "docker_update";
 
     return (
-        <div className="audit-fix-mode-control grid h-9 grid-cols-3 rounded-md border border-white/10 bg-black/20 p-0.5" role="radiogroup" aria-label="Apply mode">
+        <div className="audit-fix-mode-control grid h-9 grid-cols-3 rounded-md border p-0.5" role="radiogroup" aria-label="Apply mode">
             {APPLY_MODE_OPTIONS.map((option) => {
                 const disabled = !canCompose && option.value !== "docker_update";
                 const active = effectiveValue === option.value;
@@ -138,11 +138,10 @@ function ApplyModePicker({
                         disabled={disabled}
                         onClick={() => onChange(option.value)}
                         className={cn(
-                            "h-full min-w-0 rounded-[6px] px-2 text-[10px] font-semibold transition-colors whitespace-nowrap outline-none focus-visible:bg-white/10",
-                            active && option.value === "dokuru_override" && canCompose && "bg-[#2496ED] text-white",
-                            active && option.value !== "dokuru_override" && "bg-white/12 text-white",
-                            !active && "text-white/38 hover:text-white/70",
-                            disabled && "cursor-not-allowed opacity-35 hover:text-white/38",
+                            "audit-fix-mode-button h-full min-w-0 rounded-[6px] px-2 text-[10px] font-semibold transition-colors whitespace-nowrap outline-none",
+                            active && "audit-fix-mode-button-active",
+                            !active && "audit-fix-mode-button-idle",
+                            disabled && "cursor-not-allowed opacity-35",
                         )}
                     >
                         {option.label}

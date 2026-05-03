@@ -112,8 +112,7 @@ export function useWindowScrollMemory(key: string, canRestore = true) {
       window.removeEventListener("pagehide", saveLatestScroll);
       if (frameId !== null) window.cancelAnimationFrame(frameId);
 
-      const currentScrollY = window.scrollY;
-      persistScroll(currentScrollY === 0 && lastObservedScrollYRef.current > 0 ? lastObservedScrollYRef.current : currentScrollY);
+      persistScroll(lastObservedScrollYRef.current);
     };
   }, [key]);
 
