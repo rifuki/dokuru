@@ -43,8 +43,17 @@ import { useState } from "react";
 import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/networks/$networkId")({
+  validateSearch: (search: Record<string, unknown>): NetworkDetailSearch => ({
+    from: search.from === "container" ? search.from : undefined,
+    containerId: typeof search.containerId === "string" ? search.containerId : undefined,
+  }),
   component: NetworkDetailPage,
 });
+
+type NetworkDetailSearch = {
+  from?: "container";
+  containerId?: string;
+};
 
 type NetworkInspect = {
   Containers?: Record<
@@ -110,6 +119,7 @@ function stateColor(state?: string) {
 
 function NetworkDetailPage() {
   const { id, networkId } = Route.useParams();
+  const { from, containerId } = Route.useSearch();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
@@ -176,8 +186,8 @@ function NetworkDetailPage() {
   }
 
   const handleBack = () => {
-    if (window.history.length > 1) {
-      window.history.back();
+    if (from === "container" && containerId) {
+      navigate({ to: "/agents/$id/containers/$containerId", params: { id, containerId } });
       return;
     }
     navigate({ to: "/agents/$id/networks", params: { id } });
@@ -276,6 +286,7 @@ function NetworkDetailPage() {
                 key={cid}
                 to="/agents/$id/containers/$containerId"
                 params={{ id, containerId: cid }}
+                search={{ from: "network", networkId }}
                 className="group flex items-center gap-3 rounded-lg border bg-muted/20 px-3.5 py-3 min-w-0 transition-colors hover:border-primary/45 hover:bg-primary/5"
               >
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">

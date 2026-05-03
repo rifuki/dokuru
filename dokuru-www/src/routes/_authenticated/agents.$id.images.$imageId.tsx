@@ -38,8 +38,17 @@ import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 export const Route = createFileRoute(
   "/_authenticated/agents/$id/images/$imageId"
 )({
+  validateSearch: (search: Record<string, unknown>): ImageDetailSearch => ({
+    from: search.from === "container" ? search.from : undefined,
+    containerId: typeof search.containerId === "string" ? search.containerId : undefined,
+  }),
   component: ImageDetailPage,
 });
+
+type ImageDetailSearch = {
+  from?: "container";
+  containerId?: string;
+};
 
 function formatSize(bytes: number) {
   if (bytes === 0) return "0 B";
@@ -91,6 +100,7 @@ function Section({ title, icon: Icon, children }: { title: string; icon: React.E
 
 function ImageDetailPage() {
   const { id, imageId } = Route.useParams();
+  const { from, containerId } = Route.useSearch();
   const decodedImageId = decodeURIComponent(imageId);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -223,8 +233,8 @@ function ImageDetailPage() {
   const hasConfig = cmd || entrypoint || workdir || exposedPorts.length > 0 || envs.length > 0;
 
   const handleBack = () => {
-    if (window.history.length > 1) {
-      window.history.back();
+    if (from === "container" && containerId) {
+      navigate({ to: "/agents/$id/containers/$containerId", params: { id, containerId } });
       return;
     }
     navigate({ to: "/agents/$id/images", params: { id } });

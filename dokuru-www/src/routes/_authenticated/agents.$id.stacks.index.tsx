@@ -578,6 +578,7 @@ function ContainerRow({
     <Link
       to="/agents/$id/containers/$containerId"
       params={{ id: agentId, containerId: container.id }}
+      search={{ from: "stacks" }}
       className="group/row flex items-center gap-3 px-5 py-3 hover:bg-muted/40 transition-colors cursor-pointer"
     >
       <div className="relative flex items-center justify-center w-7 h-7 rounded-lg bg-muted/60 shrink-0 group-hover/row:bg-muted transition-colors">

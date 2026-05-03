@@ -120,6 +120,12 @@ function mountTypeBadgeClass(type: string) {
   }
 }
 
+function volumeNameFromMount(mount: { Name?: string; Source?: string }) {
+  if (mount.Name) return mount.Name;
+  const match = mount.Source?.match(/\/volumes\/([^/]+)\/_data(?:\/|$)/);
+  return match?.[1] ?? null;
+}
+
 // ─── Overview tab ─────────────────────────────────────────────────────────────
 
 export function ContainerOverview({
@@ -148,7 +154,7 @@ export function ContainerOverview({
   const cfg = data.Config as Record<string, unknown> | undefined;
   const hostCfg = data.HostConfig as Record<string, unknown> | undefined;
   const networkSettings = data.NetworkSettings as Record<string, unknown> | undefined;
-  const mounts = data.Mounts as { Type: string; Source: string; Destination: string }[] | undefined;
+  const mounts = data.Mounts as { Type: string; Source: string; Destination: string; Name?: string }[] | undefined;
 
   const env = (cfg?.Env as string[] | undefined) ?? [];
   const ports = networkSettings?.Ports as Record<string, { HostPort: string }[] | null> | undefined;
@@ -158,6 +164,8 @@ export function ContainerOverview({
   const stackName = labels["com.docker.compose.project"] || "";
   const serviceName = labels["com.docker.compose.service"] || "";
   const created = data.Created ? new Date(data.Created as string).toLocaleString() : "N/A";
+  const imageReference = (data.Image as string | undefined) || (cfg?.Image as string | undefined);
+  const imageLabel = (cfg?.Image as string | undefined) || imageReference;
 
   return (
     <div className="p-5 sm:p-6 space-y-6 text-sm">
@@ -172,6 +180,20 @@ export function ContainerOverview({
               <span className="text-muted-foreground">Created:</span>
               <span className="font-mono text-right truncate">{created}</span>
             </div>
+
+            {imageReference && imageLabel && (
+              <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-3 text-xs">
+                <span className="text-muted-foreground">Image:</span>
+                <Link
+                  to="/agents/$id/images/$imageId"
+                  params={{ id: agentId, imageId: imageReference }}
+                  search={{ from: "container", containerId }}
+                  className="ml-auto min-w-0 max-w-full truncate rounded-md border border-primary/20 bg-primary/10 px-2 py-1 text-right font-mono text-primary transition-colors hover:bg-primary/15"
+                >
+                  {imageLabel}
+                </Link>
+              </div>
+            )}
 
             <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-3 text-xs">
               <span className="text-muted-foreground">Stack:</span>
@@ -238,6 +260,7 @@ export function ContainerOverview({
                     <Link
                       to="/agents/$id/networks/$networkId"
                       params={{ id: agentId, networkId: networkData.NetworkID || name }}
+                      search={{ from: "container", containerId }}
                       className="bg-primary/10 text-primary border border-primary/20 rounded-md px-2 py-1 text-xs font-mono font-medium hover:bg-primary/20 transition-colors"
                     >
                       {name}
@@ -262,17 +285,40 @@ export function ContainerOverview({
             Volume Mounts
           </h4>
           <div className="space-y-2 rounded-[19px] border border-border bg-muted/55 p-4 shadow-sm dark:bg-white/[0.045]">
-            {(mounts ?? []).map((m, i) => (
-              <div key={i} className="flex items-center gap-3 rounded-lg bg-background/50 px-3 py-2.5 font-mono text-xs transition-colors hover:bg-background">
-                <Badge variant="outline" className={`h-7 min-w-16 justify-center rounded-full px-2.5 text-[10px] uppercase tracking-[0.12em] ${mountTypeBadgeClass(m.Type)}`}>
-                  {m.Type}
-                </Badge>
-                <div className="flex-1 min-w-0">
-                  <div className="text-foreground font-medium truncate">{m.Destination}</div>
-                  <div className="text-muted-foreground text-[11px] truncate mt-0.5">← {m.Source}</div>
+            {(mounts ?? []).map((m, i) => {
+              const volumeName = m.Type.toLowerCase() === "volume" ? volumeNameFromMount(m) : null;
+              const content = (
+                <>
+                  <Badge variant="outline" className={`h-7 min-w-16 justify-center rounded-full px-2.5 text-[10px] uppercase tracking-[0.12em] ${mountTypeBadgeClass(m.Type)}`}>
+                    {m.Type}
+                  </Badge>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-foreground font-medium truncate">{m.Destination}</div>
+                    <div className="text-muted-foreground text-[11px] truncate mt-0.5">← {m.Source}</div>
+                  </div>
+                </>
+              );
+
+              if (volumeName) {
+                return (
+                  <Link
+                    key={`${m.Destination}-${i}`}
+                    to="/agents/$id/volumes/$volumeName"
+                    params={{ id: agentId, volumeName }}
+                    search={{ from: "container", containerId }}
+                    className="flex items-center gap-3 rounded-lg bg-background/50 px-3 py-2.5 font-mono text-xs transition-colors hover:bg-background hover:ring-1 hover:ring-primary/25"
+                  >
+                    {content}
+                  </Link>
+                );
+              }
+
+              return (
+                <div key={`${m.Destination}-${i}`} className="flex items-center gap-3 rounded-lg bg-background/50 px-3 py-2.5 font-mono text-xs transition-colors hover:bg-background">
+                  {content}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}

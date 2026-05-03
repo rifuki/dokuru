@@ -25,18 +25,22 @@ import { containerUiKey, useContainerUiStore, type ContainerTab } from "@/stores
 import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 
 type ContainerDetailSearch = {
-  from?: "audit" | "containers";
+  from?: "audit" | "containers" | "network" | "volume" | "stacks";
   auditId?: string;
   ruleId?: string;
   containerName?: string;
+  networkId?: string;
+  volumeName?: string;
 };
 
 export const Route = createFileRoute("/_authenticated/agents/$id/containers/$containerId")({
   validateSearch: (search: Record<string, unknown>): ContainerDetailSearch => ({
-    from: search.from === "audit" || search.from === "containers" ? search.from : undefined,
+    from: search.from === "audit" || search.from === "containers" || search.from === "network" || search.from === "volume" || search.from === "stacks" ? search.from : undefined,
     auditId: typeof search.auditId === "string" ? search.auditId : undefined,
     ruleId: typeof search.ruleId === "string" ? search.ruleId : undefined,
     containerName: typeof search.containerName === "string" ? search.containerName : undefined,
+    networkId: typeof search.networkId === "string" ? search.networkId : undefined,
+    volumeName: typeof search.volumeName === "string" ? search.volumeName : undefined,
   }),
   component: ContainerDetailPage,
 });
@@ -105,7 +109,7 @@ function ContainerDetailSkeleton() {
 
 function ContainerDetailPage() {
   const { id, containerId } = Route.useParams();
-  const { from, auditId, ruleId, containerName } = Route.useSearch();
+  const { from, auditId, ruleId, containerName, networkId, volumeName } = Route.useSearch();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const hasAuditBack = from === "audit" && !!auditId;
@@ -186,12 +190,20 @@ function ContainerDetailPage() {
   const anyPending = startMutation.isPending || stopMutation.isPending || restartMutation.isPending || removeMutation.isPending;
 
   const handleBack = () => {
-    if (window.history.length > 1) {
-      window.history.back();
-      return;
-    }
     if (hasAuditBack) {
       navigate({ to: "/agents/$id/audits/$auditId", params: { id, auditId: auditId! }, search: { ruleId } });
+      return;
+    }
+    if (from === "network" && networkId) {
+      navigate({ to: "/agents/$id/networks/$networkId", params: { id, networkId } });
+      return;
+    }
+    if (from === "volume" && volumeName) {
+      navigate({ to: "/agents/$id/volumes/$volumeName", params: { id, volumeName } });
+      return;
+    }
+    if (from === "stacks") {
+      navigate({ to: "/agents/$id/stacks", params: { id } });
       return;
     }
     navigate({ to: "/agents/$id/containers", params: { id } });
@@ -211,6 +223,18 @@ function ContainerDetailPage() {
           <Button asChild className="mt-4" variant="outline">
             {hasAuditBack ? (
               <Link to="/agents/$id/audits/$auditId" params={{ id, auditId }} search={{ ruleId }}>
+                Back
+              </Link>
+            ) : from === "network" && networkId ? (
+              <Link to="/agents/$id/networks/$networkId" params={{ id, networkId }}>
+                Back
+              </Link>
+            ) : from === "volume" && volumeName ? (
+              <Link to="/agents/$id/volumes/$volumeName" params={{ id, volumeName }}>
+                Back
+              </Link>
+            ) : from === "stacks" ? (
+              <Link to="/agents/$id/stacks" params={{ id }}>
                 Back
               </Link>
             ) : (
