@@ -5085,6 +5085,7 @@ pub async fn record_fix_history(
     request: FixRequest,
     outcome: FixOutcome,
     rollback_plan: RollbackPlan,
+    progress_events: Vec<FixProgress>,
 ) -> FixHistoryEntry {
     let RollbackPlan {
         cgroup_targets: rollback_targets,
@@ -5111,6 +5112,7 @@ pub async fn record_fix_history(
         rollback_supported,
         rollback_targets,
         compose_rollback_targets,
+        progress_events,
         rollback_note,
     };
 

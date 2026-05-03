@@ -26,7 +26,8 @@ pub async fn apply_fix(
 
     match Box::pin(registry.fix_request(&payload, &state.docker)).await {
         Ok(outcome) => {
-            fix_helpers::record_fix_history(payload, outcome.clone(), rollback_plan).await;
+            fix_helpers::record_fix_history(payload, outcome.clone(), rollback_plan, Vec::new())
+                .await;
             Ok(ApiSuccess::default()
                 .with_message("Remediation handled")
                 .with_data(outcome))
@@ -143,10 +144,12 @@ async fn handle_fix_socket(mut socket: WebSocket, state: AppState, payload: Stri
     });
 
     tokio::pin!(outcome_rx);
+    let mut progress_events = Vec::new();
     let final_outcome = loop {
         tokio::select! {
             progress = progress_rx.recv() => {
                 if let Some(progress) = progress {
+                    progress_events.push(progress.clone());
                     send_stream_message(&mut socket, &FixStreamMessage::Progress { data: progress }).await;
                 }
             }
@@ -156,9 +159,20 @@ async fn handle_fix_socket(mut socket: WebSocket, state: AppState, payload: Stri
         }
     };
 
+    while let Ok(progress) = progress_rx.try_recv() {
+        progress_events.push(progress.clone());
+        send_stream_message(&mut socket, &FixStreamMessage::Progress { data: progress }).await;
+    }
+
     match final_outcome {
         Ok(Ok(outcome)) => {
-            fix_helpers::record_fix_history(request, outcome.clone(), rollback_plan).await;
+            fix_helpers::record_fix_history(
+                request,
+                outcome.clone(),
+                rollback_plan,
+                progress_events,
+            )
+            .await;
             send_stream_message(&mut socket, &FixStreamMessage::Outcome { data: outcome }).await;
         }
         Ok(Err(error)) => {

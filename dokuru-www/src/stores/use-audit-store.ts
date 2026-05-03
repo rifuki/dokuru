@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { agentApi } from "@/lib/api/agent";
-import { agentDirectApi, type AuditResponse, type AuditResult, type AuditStreamMessage, type FixOutcome, type FixProgress, type FixTarget } from "@/lib/api/agent-direct";
+import { agentDirectApi, type AuditResponse, type AuditResult, type AuditStreamMessage, type FixHistoryEntry, type FixOutcome, type FixProgress, type FixTarget } from "@/lib/api/agent-direct";
 import { LOCAL_AGENT_ID } from "@/lib/local-agent";
 import type { Agent } from "@/types/agent";
 
@@ -106,6 +106,7 @@ interface AuditState {
     setAuditHistory: (agentId: string, history: AuditResponse[]) => void;
     setFixing: (agentId: string, ruleId: string, fixing: boolean) => void;
     setFixOutcome: (agentId: string, ruleId: string, outcome: FixOutcome | null) => void;
+    hydrateFixJobFromHistory: (agentId: string, entry: FixHistoryEntry) => void;
     markAuditResultViewed: (agentId: string, auditId: string) => void;
     startAudit: (agent: Agent, token?: string) => Promise<AuditResponse>;
     startFixJob: (request: StartFixJobRequest) => Promise<FixOutcome>;
@@ -145,6 +146,41 @@ export const useAuditStore = create<AuditState>((set) => ({
                 [agentId]: { ...s.fixOutcomes[agentId], [ruleId]: outcome },
             },
         })),
+
+    hydrateFixJobFromHistory: (agentId, entry) =>
+        set((s) => {
+            const ruleId = entry.request.rule_id;
+            const key = fixJobKey(agentId, ruleId);
+            const currentJob = s.fixJobs[key];
+            if (currentJob?.status === "running") return s;
+
+            const status: FixJobStatus = entry.outcome.status === "Applied"
+                ? "applied"
+                : entry.outcome.status === "Blocked"
+                ? "blocked"
+                : "failed";
+
+            return {
+                fixOutcomes: {
+                    ...s.fixOutcomes,
+                    [agentId]: { ...s.fixOutcomes[agentId], [ruleId]: entry.outcome },
+                },
+                fixJobs: {
+                    ...s.fixJobs,
+                    [key]: {
+                        agentId,
+                        ruleId,
+                        status,
+                        outcome: entry.outcome,
+                        error: status === "applied" ? undefined : entry.outcome.message,
+                        progressEvents: entry.progress_events ?? [],
+                        stepIndex: Number.MAX_SAFE_INTEGER,
+                        startedAt: entry.timestamp,
+                        completedAt: entry.timestamp,
+                    },
+                },
+            };
+        }),
 
     markAuditResultViewed: (agentId, auditId) =>
         set((s) => ({

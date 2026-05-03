@@ -117,6 +117,7 @@ export interface FixHistoryEntry {
   outcome: FixOutcome;
   rollback_supported: boolean;
   rollback_targets: FixTarget[];
+  progress_events?: FixProgress[];
   rollback_note?: string;
 }
 

@@ -196,6 +196,8 @@ pub struct FixHistoryEntry {
     pub rollback_targets: Vec<FixTarget>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub compose_rollback_targets: Vec<ComposeRollbackTarget>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub progress_events: Vec<FixProgress>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rollback_note: Option<String>,
 }

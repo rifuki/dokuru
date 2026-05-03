@@ -669,6 +669,7 @@ async fn fix_progress_stream(
     });
 
     tokio::pin!(outcome_rx);
+    let mut progress_events = Vec::new();
     let outcome = loop {
         tokio::select! {
             input = input_rx.recv() => {
@@ -678,6 +679,7 @@ async fn fix_progress_stream(
             }
             progress = progress_rx.recv() => {
                 if let Some(progress) = progress {
+                    progress_events.push(progress.clone());
                     let payload = serde_json::to_vec(&FixStreamMessage::Progress { data: progress })?;
                     send_stream_data(tx, id, payload)?;
                 }
@@ -686,9 +688,21 @@ async fn fix_progress_stream(
         }
     };
 
+    while let Ok(progress) = progress_rx.try_recv() {
+        progress_events.push(progress.clone());
+        let payload = serde_json::to_vec(&FixStreamMessage::Progress { data: progress })?;
+        send_stream_data(tx, id, payload)?;
+    }
+
     match outcome {
         Ok(Ok(outcome)) => {
-            fix_helpers::record_fix_history(request, outcome.clone(), rollback_plan).await;
+            fix_helpers::record_fix_history(
+                request,
+                outcome.clone(),
+                rollback_plan,
+                progress_events,
+            )
+            .await;
             send_stream_data(
                 tx,
                 id,
@@ -981,7 +995,8 @@ async fn execute_command(command: &str, payload: serde_json::Value) -> Result<se
                 .unwrap_or_default();
             let registry = RuleRegistry::new();
             let outcome = Box::pin(registry.fix_request(&payload, &docker)).await?;
-            fix_helpers::record_fix_history(payload, outcome.clone(), rollback_plan).await;
+            fix_helpers::record_fix_history(payload, outcome.clone(), rollback_plan, Vec::new())
+                .await;
             serde_json::to_value(outcome).wrap_err("Failed to serialize fix outcome")
         }
         "fix_preview" => {

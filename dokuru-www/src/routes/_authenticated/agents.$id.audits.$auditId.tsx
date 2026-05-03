@@ -1527,7 +1527,7 @@ function AuditDetailPage() {
   const { ruleId: focusedRuleId } = Route.useSearch();
   const navigate = useNavigate();
   const markAuditResultViewed = useAuditStore((state) => state.markAuditResultViewed);
-  const setFixOutcome = useAuditStore((state) => state.setFixOutcome);
+  const hydrateFixJobFromHistory = useAuditStore((state) => state.hydrateFixJobFromHistory);
   const [agent, setAgent] = useState<Agent | null>(null);
   const [token, setToken] = useState<string | undefined>();
   const [containers, setContainers] = useState<DockerContainer[]>([]);
@@ -1789,10 +1789,10 @@ function AuditDetailPage() {
   useEffect(() => {
     if (!auditData || !fixHistoryQuery.data?.length) return;
     const appliedFixes = latestAppliedFixesAfterAudit(fixHistoryQuery.data, auditData);
-    for (const [ruleId, entry] of appliedFixes) {
-      setFixOutcome(id, ruleId, entry.outcome);
+    for (const entry of appliedFixes.values()) {
+      hydrateFixJobFromHistory(id, entry);
     }
-  }, [auditData, fixHistoryQuery.data, id, setFixOutcome]);
+  }, [auditData, fixHistoryQuery.data, hydrateFixJobFromHistory, id]);
 
   if (loading) {
     return <AuditDetailSkeleton />;

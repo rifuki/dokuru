@@ -28,14 +28,14 @@ const WIZARD_STEPS: { key: WizardStep; label: string }[] = [
 function StepIndicator({ current, complete = false }: { current: WizardStep; complete?: boolean }) {
     const idx = WIZARD_STEPS.findIndex(s => s.key === current);
     return (
-        <div className="flex items-center gap-0">
+        <div className="flex w-full items-start">
             {WIZARD_STEPS.map((s, i) => {
                 const done = i < idx || (complete && i === idx);
                 const active = i === idx && !done;
 
                 return (
-                    <div key={s.key} className="flex items-center">
-                        <div className="flex flex-col items-center gap-1.5">
+                    <div key={s.key} className={cn("flex items-start", i < WIZARD_STEPS.length - 1 ? "flex-1" : "flex-none")}>
+                        <div className="flex w-20 flex-col items-center gap-1.5">
                             <div className={cn(
                                 "w-6 h-6 rounded-full border flex items-center justify-center text-[10px] font-mono font-bold transition-all",
                                 done
@@ -55,7 +55,7 @@ function StepIndicator({ current, complete = false }: { current: WizardStep; com
                         </div>
                         {i < WIZARD_STEPS.length - 1 && (
                             <div className={cn(
-                                "w-10 h-px mx-1 mb-4 transition-all",
+                                "mt-3 h-px min-w-8 flex-1 transition-all",
                                 i < idx ? "bg-[#2496ED]/60" : "bg-white/10"
                             )} />
                         )}
@@ -555,10 +555,10 @@ function ResultStep({
 
     return (
         <div className="flex flex-col gap-5">
-            <div className="rounded-2xl border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(36,150,237,0.18),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.055),rgba(255,255,255,0.018))] p-4">
+            <div className="rounded-xl border border-white/10 bg-white/[0.025] p-4">
                 <div className="flex items-start gap-3">
                     <div className={cn(
-                        "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border",
+                        "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border",
                         isApplied ? "border-emerald-400/25 bg-emerald-500/12 text-emerald-300" : isBlocked ? "border-rose-400/25 bg-rose-500/12 text-rose-300" : "border-amber-400/25 bg-amber-500/12 text-amber-300"
                     )}>
                         {isApplied ? <CheckCircle2 className="h-5 w-5" /> : isBlocked ? <XCircle className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
@@ -576,15 +576,15 @@ function ResultStep({
                 </div>
 
                 <div className="mt-4 grid grid-cols-3 gap-2">
-                    <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
+                    <div className="rounded-lg border border-white/8 bg-black/20 px-3 py-2">
                         <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/28">events</p>
                         <p className="mt-1 text-lg font-bold text-white">{progressEvents.length}</p>
                     </div>
-                    <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
+                    <div className="rounded-lg border border-white/8 bg-black/20 px-3 py-2">
                         <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/28">affected</p>
                         <p className="mt-1 text-lg font-bold text-white">{affectedItems.length}</p>
                     </div>
-                    <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
+                    <div className="rounded-lg border border-white/8 bg-black/20 px-3 py-2">
                         <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/28">mode</p>
                         <p className="mt-1 truncate text-sm font-semibold text-[#2496ED]">{progressEvents.some(event => event.action.includes("compose")) ? "Compose" : "Live"}</p>
                     </div>
