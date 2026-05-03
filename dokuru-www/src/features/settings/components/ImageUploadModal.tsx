@@ -42,6 +42,8 @@ interface ImageUploadModalProps {
 }
 
 type ModalStatus = 'idle' | 'selecting' | 'preview' | 'uploading' | 'success';
+type UploadPhase = 'processing' | 'uploading';
+type ProcessingProgressCallback = (progress: number) => void;
 
 const AVATAR_OUTPUT_SIZE = 512;
 const AVATAR_SOURCE_MAX_SIZE_MB = 20;
@@ -89,6 +91,16 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number) 
       reject(new Error("Failed to prepare cropped image"));
     }, type, quality);
   });
+}
+
+function waitForPaint() {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+}
+
+function clampProgress(progress: number) {
+  return Math.max(0, Math.min(99, Math.round(progress)));
 }
 
 function getCenteredAvatarCrop(width: number, height: number) {
@@ -168,6 +180,7 @@ export function ImageUploadModal({
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+  const [uploadPhase, setUploadPhase] = useState<UploadPhase>('uploading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [avatarCrop, setAvatarCrop] = useState<Crop>();
   const [completedAvatarCrop, setCompletedAvatarCrop] = useState<PercentCrop | null>(null);
@@ -275,7 +288,7 @@ export function ImageUploadModal({
     setCompletedAvatarCrop(nextCrop);
   };
 
-  const createStaticAvatarFile = async (sourceFile: File) => {
+  const createStaticAvatarFile = async (sourceFile: File, onProcessingProgress: ProcessingProgressCallback) => {
     const image = avatarImageRef.current;
     const crop = completedAvatarCrop;
     if (!image || !crop?.width || !crop?.height) {
@@ -287,6 +300,9 @@ export function ImageUploadModal({
       throw new Error("Failed to crop image");
     }
 
+    onProcessingProgress(10);
+    await waitForPaint();
+
     const canvas = document.createElement("canvas");
     canvas.width = AVATAR_OUTPUT_SIZE;
     canvas.height = AVATAR_OUTPUT_SIZE;
@@ -297,6 +313,8 @@ export function ImageUploadModal({
     }
 
     drawCroppedAvatar(ctx, image, sourceCrop);
+    onProcessingProgress(45);
+    await waitForPaint();
 
     const blob = await canvasToBlob(canvas, AVATAR_EXPORT_TYPE, AVATAR_EXPORT_QUALITY);
     if (blob.size > maxSizeBytes) {
@@ -305,6 +323,7 @@ export function ImageUploadModal({
 
     const extension = blobExtensionByType[blob.type] || "webp";
     const basename = sourceFile.name.replace(/\.[^.]+$/, "") || "avatar";
+    onProcessingProgress(75);
 
     return new File([blob], `${basename}-avatar.${extension}`, {
       type: blob.type || AVATAR_EXPORT_TYPE,
@@ -312,7 +331,7 @@ export function ImageUploadModal({
     });
   };
 
-  const createAnimatedGifAvatarFile = async (sourceFile: File) => {
+  const createAnimatedGifAvatarFile = async (sourceFile: File, onProcessingProgress: ProcessingProgressCallback) => {
     const image = avatarImageRef.current;
     const crop = completedAvatarCrop;
     if (!image || !crop?.width || !crop?.height) {
@@ -326,17 +345,26 @@ export function ImageUploadModal({
 
     const basename = sourceFile.name.replace(/\.[^.]+$/, "") || "avatar";
     if (sourceFile.size <= maxSizeBytes && isWholeSourceCrop(sourceCrop, image.naturalWidth, image.naturalHeight)) {
+      onProcessingProgress(75);
       return new File([sourceFile], `${basename}-avatar.gif`, {
         type: sourceFile.type || GIF_EXPORT_TYPE,
         lastModified: Date.now(),
       });
     }
 
+    onProcessingProgress(5);
+    await waitForPaint();
+
     const parsedGif = parseGIF(await sourceFile.arrayBuffer());
+    onProcessingProgress(8);
+    await waitForPaint();
+
     const frames = decompressFrames(parsedGif, true);
     if (!frames.length) {
       throw new Error("Failed to read animated GIF");
     }
+    onProcessingProgress(10);
+    await waitForPaint();
 
     const gifCanvas = document.createElement("canvas");
     gifCanvas.width = parsedGif.lsd.width;
@@ -356,7 +384,7 @@ export function ImageUploadModal({
       throw new Error("Failed to prepare animated GIF");
     }
 
-    const encodeAvatarGif = (outputSize: number, colorCount: number) => {
+    const encodeAvatarGif = async (outputSize: number, colorCount: number) => {
       gifCtx.clearRect(0, 0, gifCanvas.width, gifCanvas.height);
       outputCanvas.width = outputSize;
       outputCanvas.height = outputSize;
@@ -365,7 +393,7 @@ export function ImageUploadModal({
       let previousFrame: ParsedFrame | null = null;
       let restoreImageData: ImageData | null = null;
 
-      for (const frame of frames) {
+      for (const [frameIndex, frame] of frames.entries()) {
         if (previousFrame?.disposalType === 2) {
           gifCtx.clearRect(
             previousFrame.dims.left,
@@ -407,6 +435,11 @@ export function ImageUploadModal({
         });
 
         previousFrame = frame;
+
+        onProcessingProgress(10 + ((frameIndex + 1) / frames.length) * 60);
+        if (frameIndex % 2 === 0 || frameIndex === frames.length - 1) {
+          await waitForPaint();
+        }
       }
 
       gif.finish();
@@ -415,8 +448,9 @@ export function ImageUploadModal({
 
     for (const outputSize of getGifAvatarExportSizes(sourceCrop)) {
       for (const colorCount of GIF_AVATAR_COLOR_COUNTS) {
-        const blob = encodeAvatarGif(outputSize, colorCount);
+        const blob = await encodeAvatarGif(outputSize, colorCount);
         if (blob.size <= maxSizeBytes) {
+          onProcessingProgress(75);
           return new File([blob], `${basename}-avatar.gif`, {
             type: GIF_EXPORT_TYPE,
             lastModified: Date.now(),
@@ -428,40 +462,51 @@ export function ImageUploadModal({
     throw new Error(`Cropped file is still too large. Maximum size: ${maxSizeMB}MB`);
   };
 
-  const createAvatarFile = async (sourceFile: File) => {
+  const createAvatarFile = async (sourceFile: File, onProcessingProgress: ProcessingProgressCallback) => {
     if (sourceFile.type === GIF_EXPORT_TYPE) {
-      return createAnimatedGifAvatarFile(sourceFile);
+      return createAnimatedGifAvatarFile(sourceFile, onProcessingProgress);
     }
 
-    return createStaticAvatarFile(sourceFile);
+    return createStaticAvatarFile(sourceFile, onProcessingProgress);
   };
 
   const handleUpload = async () => {
     if (!file) return;
 
     setStatus('uploading');
+    setUploadPhase(isAvatar ? 'processing' : 'uploading');
     setProgress(0);
     setErrorMessage(null);
+    await waitForPaint();
 
-    // Simulate progress updates for UX
-    const progressInterval = setInterval(() => {
-      setProgress(prev => {
-        if (prev < 90) return prev + 10;
-        return prev;
-      });
-    }, 200);
+    let progressInterval: ReturnType<typeof setInterval> | undefined;
 
     try {
-      const uploadFile = isAvatar ? await createAvatarFile(file) : file;
+      const uploadFile = isAvatar
+        ? await createAvatarFile(file, (nextProgress) => setProgress(clampProgress(nextProgress)))
+        : file;
+
+      setUploadPhase('uploading');
+      setProgress((prev) => Math.max(prev, isAvatar ? 80 : 0));
+      await waitForPaint();
+
+      // The backend does not expose upload progress here, so keep this as upload UX feedback.
+      progressInterval = setInterval(() => {
+        setProgress(prev => {
+          if (prev < 95) return Math.min(95, prev + (isAvatar ? 3 : 10));
+          return prev;
+        });
+      }, 200);
+
       await onUpload(uploadFile);
-      clearInterval(progressInterval);
+      if (progressInterval) clearInterval(progressInterval);
       setProgress(100);
       setStatus('success');
       setTimeout(() => {
         handleClose();
       }, 1500);
     } catch (error) {
-      clearInterval(progressInterval);
+      if (progressInterval) clearInterval(progressInterval);
       setErrorMessage(error instanceof Error ? error.message : 'Upload failed');
       setStatus('preview');
     }
@@ -476,6 +521,7 @@ export function ImageUploadModal({
     setFile(null);
     setPreviewUrl(null);
     setProgress(0);
+    setUploadPhase('uploading');
     setErrorMessage(null);
     setAvatarCrop(undefined);
     setCompletedAvatarCrop(null);
@@ -511,6 +557,10 @@ export function ImageUploadModal({
     ? `${acceptedFileTypes} • Max ${sourceMaxSizeMB} MB`
     : `${acceptedFileTypes} • Max ${maxSizeMB} MB`;
   const uploadSubHint = isAvatar ? `Final avatar stays under ${maxSizeMB} MB.` : undefined;
+  const busyProgressLabel = uploadPhase === 'processing'
+    ? file?.type === GIF_EXPORT_TYPE ? 'Processing GIF...' : 'Preparing image...'
+    : 'Uploading...';
+  const busyButtonLabel = uploadPhase === 'processing' ? 'Processing...' : 'Uploading...';
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -619,7 +669,7 @@ export function ImageUploadModal({
                         <div className="w-full max-w-56 space-y-3 text-center">
                           <div className="flex items-center justify-center gap-2 text-sm font-medium">
                             <Loader2 className="h-4 w-4 animate-spin" />
-                            <span>Uploading... {progress}%</span>
+                            <span>{busyProgressLabel} {progress}%</span>
                           </div>
                           <Progress
                             value={progress}
@@ -676,7 +726,7 @@ export function ImageUploadModal({
                     <Upload className="mr-2 h-4 w-4" />
                   )}
                   {status === 'uploading'
-                    ? 'Uploading...'
+                    ? busyButtonLabel
                     : status === 'success'
                       ? 'Success'
                       : isAvatarCropView
