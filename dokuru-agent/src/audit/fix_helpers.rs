@@ -3879,7 +3879,7 @@ pub async fn apply_privileged_fix_with_progress(
                     .await
                 {
                     Ok(()) => {
-                        updated.push(format!("{}:{} (dokuru override)", ctx.project, ctx.service))
+                        updated.push(format!("{}:{} (dokuru override)", ctx.project, ctx.service));
                     }
                     Err(e) => failed.push(format!("{label}: compose fix failed: {e}")),
                 }
@@ -4200,7 +4200,7 @@ pub async fn apply_namespace_fix_with_progress(
                     .await
                 {
                     Ok(()) => {
-                        updated.push(format!("{}:{} (dokuru override)", ctx.project, ctx.service))
+                        updated.push(format!("{}:{} (dokuru override)", ctx.project, ctx.service));
                     }
                     Err(e) => failed.push(format!("{label}: compose fix failed: {e}")),
                 }
@@ -4808,21 +4808,23 @@ fn upsert_dokuru_override_content(
 ) -> eyre::Result<String> {
     let mut lines = existing
         .filter(|content| !content.trim().is_empty())
-        .map(split_yaml_lines)
-        .unwrap_or_else(|| {
-            vec!["# Managed by Dokuru. Keep this file after the base compose files.".to_string()]
-        });
+        .map_or_else(
+            || {
+                vec![
+                    "# Managed by Dokuru. Keep this file after the base compose files.".to_string(),
+                ]
+            },
+            split_yaml_lines,
+        );
 
-    let services_section_line = match find_mapping_key(&lines, 0..lines.len(), 0, "services") {
-        Some(line) => line,
-        None => {
+    let services_section_line = find_mapping_key(&lines, 0..lines.len(), 0, "services")
+        .unwrap_or_else(|| {
             if !lines.last().is_none_or(|line| line.trim().is_empty()) {
                 lines.push(String::new());
             }
             lines.push("services:".to_string());
             lines.len() - 1
-        }
-    };
+        });
 
     let services_section_indent = leading_spaces(&lines[services_section_line]);
     let mut services_end = block_end(&lines, services_section_line + 1, services_section_indent);
