@@ -1,6 +1,6 @@
 use axum::{
     Router,
-    extract::Path,
+    extract::{Path, Query},
     http::StatusCode,
     response::{IntoResponse, Json, Response},
     routing::get,
@@ -299,6 +299,28 @@ fn config_file_paths(config_files: Option<&str>, working_dir: Option<&str>) -> V
         .collect()
 }
 
+fn push_unique_path(paths: &mut Vec<PathBuf>, path: PathBuf) {
+    if !paths.iter().any(|existing| existing == &path) {
+        paths.push(path);
+    }
+}
+
+fn requested_compose_path(raw: &str, working_dir: Option<&str>) -> Option<PathBuf> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return None;
+    }
+
+    let path = PathBuf::from(raw);
+    Some(if path.is_absolute() {
+        path
+    } else if let Some(working_dir) = working_dir.filter(|value| !value.trim().is_empty()) {
+        PathBuf::from(working_dir).join(path)
+    } else {
+        path
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Compose file reading — mirrors Dockge's approach
 // ---------------------------------------------------------------------------
@@ -318,6 +340,11 @@ struct ComposeErrorResponse {
 #[derive(Deserialize)]
 struct UpdateComposeFileRequest {
     content: String,
+}
+
+#[derive(Deserialize, Default)]
+struct ComposeFileQuery {
+    path: Option<String>,
 }
 
 fn compose_status(
@@ -362,30 +389,26 @@ async fn compose_ls() -> Option<Vec<ComposeLsEntry>> {
     serde_json::from_slice(&out.stdout).ok()
 }
 
-async fn resolve_compose_file(name: &str) -> Result<(PathBuf, String), ComposeErrorResponse> {
-    // ── Step 1: get ConfigFiles from `docker compose ls` ──────────────────
+async fn compose_file_candidates(
+    name: &str,
+) -> Result<(Vec<PathBuf>, Option<String>), ComposeErrorResponse> {
+    let mut paths = Vec::new();
     let compose_ls_entry = compose_ls()
         .await
         .and_then(|list| list.into_iter().find(|e| e.name == name));
 
     if let Some(entry) = &compose_ls_entry {
-        for raw in entry.config_files.split(',') {
-            let path = PathBuf::from(raw.trim());
-            match tokio::fs::read_to_string(&path).await {
-                Ok(content) => {
-                    return Ok((path, content));
-                }
-                Err(e) => {
-                    warn!("compose ls path {}: {e}", path.display());
-                }
-            }
+        for path in config_file_paths(Some(&entry.config_files), None) {
+            push_unique_path(&mut paths, path);
         }
     }
 
-    // ── Step 2: fall back to working_dir label + accepted filenames ────────
     let docker = match get_docker_client() {
         Ok(d) => d,
         Err(e) => {
+            if !paths.is_empty() {
+                return Ok((paths, None));
+            }
             return Err(ComposeErrorResponse {
                 error: "Docker client error".to_string(),
                 detail: e.to_string(),
@@ -402,6 +425,9 @@ async fn resolve_compose_file(name: &str) -> Result<(PathBuf, String), ComposeEr
     {
         Ok(c) => c,
         Err(e) => {
+            if !paths.is_empty() {
+                return Ok((paths, None));
+            }
             return Err(ComposeErrorResponse {
                 error: "Failed to list containers".to_string(),
                 detail: e.to_string(),
@@ -409,34 +435,85 @@ async fn resolve_compose_file(name: &str) -> Result<(PathBuf, String), ComposeEr
         }
     };
 
-    let working_dir = containers.iter().find_map(|c| {
+    let labels = containers.iter().find_map(|c| {
         let labels = c.labels.as_ref()?;
         if labels.get("com.docker.compose.project")?.as_str() != name {
             return None;
         }
-        labels
-            .get("com.docker.compose.project.working_dir")
-            .cloned()
+        Some((
+            labels
+                .get("com.docker.compose.project.working_dir")
+                .cloned(),
+            labels
+                .get("com.docker.compose.project.config_files")
+                .cloned(),
+        ))
     });
 
-    let Some(working_dir) = working_dir else {
+    let Some((working_dir, config_files)) = labels else {
+        if !paths.is_empty() {
+            return Ok((paths, None));
+        }
         return Err(ComposeErrorResponse {
             error: "Stack not found".to_string(),
             detail: format!("No container found for stack '{name}'"),
         });
     };
 
-    let base = PathBuf::from(&working_dir);
-    let mut tried = Vec::new();
+    for path in config_file_paths(config_files.as_deref(), working_dir.as_deref()) {
+        push_unique_path(&mut paths, path);
+    }
 
-    for filename in COMPOSE_FILENAMES {
-        let path = base.join(filename);
+    if let Some(working_dir) = &working_dir {
+        let base = PathBuf::from(working_dir);
+        for filename in COMPOSE_FILENAMES {
+            push_unique_path(&mut paths, base.join(filename));
+        }
+    }
+
+    if let Some(path) = stack_dokuru_override_path(working_dir.as_deref(), config_files.as_deref())
+    {
+        push_unique_path(&mut paths, path);
+    }
+
+    Ok((paths, working_dir))
+}
+
+async fn resolve_compose_file(
+    name: &str,
+    requested_path: Option<&str>,
+) -> Result<(PathBuf, String), ComposeErrorResponse> {
+    let (candidates, working_dir) = compose_file_candidates(name).await?;
+    let mut paths = if let Some(requested_path) = requested_path {
+        let Some(requested_path) = requested_compose_path(requested_path, working_dir.as_deref())
+        else {
+            return Err(ComposeErrorResponse {
+                error: "Compose file path is required".to_string(),
+                detail: String::new(),
+            });
+        };
+
+        if !candidates.iter().any(|path| path == &requested_path) {
+            return Err(ComposeErrorResponse {
+                error: "Compose file does not belong to this stack".to_string(),
+                detail: requested_path.to_string_lossy().into_owned(),
+            });
+        }
+
+        vec![requested_path]
+    } else {
+        candidates
+    };
+
+    let mut tried = Vec::new();
+    for path in paths.drain(..) {
         match tokio::fs::read_to_string(&path).await {
             Ok(content) => {
                 return Ok((path, content));
             }
             Err(e) => {
                 tried.push(format!("{}: {e}", path.display()));
+                warn!("compose path {}: {e}", path.display());
             }
         }
     }
@@ -452,11 +529,15 @@ async fn resolve_compose_file(name: &str) -> Result<(PathBuf, String), ComposeEr
 /// Strategy (same as Dockge):
 /// 1. Run `docker compose ls --all --format json` to get the canonical
 ///    `ConfigFiles` path for the requested stack.
-/// 2. Try reading each comma-separated path from `ConfigFiles`.
+/// 2. Try the requested path if it belongs to the stack, otherwise read the first
+///    readable comma-separated path from `ConfigFiles`.
 /// 3. If that fails, fall back to the `working_dir` label + each accepted
 ///    compose filename (`compose.yaml`, `docker-compose.yml`, …).
-async fn get_compose_file(Path(name): Path<String>) -> Response {
-    match resolve_compose_file(&name).await {
+async fn get_compose_file(
+    Path(name): Path<String>,
+    Query(query): Query<ComposeFileQuery>,
+) -> Response {
+    match resolve_compose_file(&name, query.path.as_deref()).await {
         Ok((path, content)) => Json(ComposeFileResponse {
             path: path.to_string_lossy().into_owned(),
             content,
@@ -468,6 +549,7 @@ async fn get_compose_file(Path(name): Path<String>) -> Response {
 
 async fn update_compose_file(
     Path(name): Path<String>,
+    Query(query): Query<ComposeFileQuery>,
     Json(payload): Json<UpdateComposeFileRequest>,
 ) -> Response {
     if payload.content.trim().is_empty() {
@@ -478,7 +560,7 @@ async fn update_compose_file(
         );
     }
 
-    let (path, _) = match resolve_compose_file(&name).await {
+    let (path, _) = match resolve_compose_file(&name, query.path.as_deref()).await {
         Ok(file) => file,
         Err(error) => return compose_error(error.error, error.detail),
     };
@@ -510,8 +592,8 @@ async fn write_compose_content(
 #[cfg(test)]
 mod tests {
     use super::{
-        DEFAULT_COMPOSE_OVERRIDE_FILENAME, config_files_include_path, stack_dokuru_override_path,
-        write_compose_content,
+        DEFAULT_COMPOSE_OVERRIDE_FILENAME, config_files_include_path, requested_compose_path,
+        stack_dokuru_override_path, write_compose_content,
     };
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -580,5 +662,18 @@ mod tests {
             Some("/srv/app"),
             &override_path,
         ));
+    }
+
+    #[test]
+    fn requested_compose_path_resolves_relative_to_working_dir() {
+        assert_eq!(
+            requested_compose_path("docker-compose.override.yml", Some("/srv/app")),
+            Some(PathBuf::from("/srv/app/docker-compose.override.yml")),
+        );
+        assert_eq!(
+            requested_compose_path("/srv/app/docker-compose.yml", Some("/other")),
+            Some(PathBuf::from("/srv/app/docker-compose.yml")),
+        );
+        assert_eq!(requested_compose_path("  ", Some("/srv/app")), None);
     }
 }

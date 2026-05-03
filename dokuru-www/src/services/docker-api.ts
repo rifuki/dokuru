@@ -174,11 +174,11 @@ export const dockerApi = {
   getStack: (agentUrl: string, token: string, name: string) =>
     dockerRequest<Stack>(agentUrl, token, "GET", `/docker/stacks/${encodeURIComponent(name)}`),
 
-  getStackCompose: (agentUrl: string, token: string, name: string) =>
-    dockerRequest<{ path: string; content: string }>(agentUrl, token, "GET", `/docker/stacks/${encodeURIComponent(name)}/compose`),
+  getStackCompose: (agentUrl: string, token: string, name: string, path?: string) =>
+    dockerRequest<{ path: string; content: string }>(agentUrl, token, "GET", `/docker/stacks/${encodeURIComponent(name)}/compose`, { path }),
 
-  updateStackCompose: (agentUrl: string, token: string, name: string, content: string) =>
-    dockerRequest<{ path: string; content: string }>(agentUrl, token, "PUT", `/docker/stacks/${encodeURIComponent(name)}/compose`, undefined, { content }),
+  updateStackCompose: (agentUrl: string, token: string, name: string, content: string, path?: string) =>
+    dockerRequest<{ path: string; content: string }>(agentUrl, token, "PUT", `/docker/stacks/${encodeURIComponent(name)}/compose`, { path }, { content }),
 
   // Networks
   listNetworks: (agentUrl: string, token: string) =>

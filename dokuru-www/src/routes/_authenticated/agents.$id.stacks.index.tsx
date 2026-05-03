@@ -66,6 +66,31 @@ function composeErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+function composeFileName(path: string) {
+  const trimmed = path.trim();
+  return trimmed.split(/[\\/]/).pop() || trimmed;
+}
+
+function stackComposeFiles(stack: Stack) {
+  const files = (stack.config_file ?? "")
+    .split(",")
+    .map((path) => path.trim())
+    .filter(Boolean);
+
+  const overrideFile = stack.dokuru_override_file;
+  if (overrideFile && (stack.dokuru_override_exists || stack.dokuru_override_active)) {
+    const overrideFileName = composeFileName(overrideFile);
+    const exists = files.some((path) => path === overrideFile || composeFileName(path) === overrideFileName);
+    if (!exists) files.push(overrideFile);
+  }
+
+  return files;
+}
+
+function isOverrideComposeFile(path: string) {
+  return composeFileName(path).includes(".override.");
+}
+
 const COMPOSE_DIALOG_MIN_WIDTH = 620;
 const COMPOSE_DIALOG_MIN_HEIGHT = 460;
 const COMPOSE_DIALOG_MARGIN = 24;
@@ -125,12 +150,14 @@ function ComposeDialog({
   open,
   onClose,
   stackName,
+  composePath,
   agentUrl,
   token,
 }: {
   open: boolean;
   onClose: () => void;
   stackName: string;
+  composePath: string;
   agentUrl: string;
   token: string;
 }) {
@@ -145,9 +172,9 @@ function ComposeDialog({
   const resizeRef = useRef<{ edge: ResizeEdge; startX: number; startY: number; frame: DialogFrame } | null>(null);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["stack-compose", agentUrl, stackName],
+    queryKey: ["stack-compose", agentUrl, stackName, composePath],
     queryFn: async () => {
-      const res = await dockerApi.getStackCompose(agentUrl, token, stackName);
+      const res = await dockerApi.getStackCompose(agentUrl, token, stackName, composePath);
       return res.data;
     },
     enabled: open,
@@ -157,11 +184,11 @@ function ComposeDialog({
 
   const saveMutation = useMutation({
     mutationFn: async (content: string) => {
-      const res = await dockerApi.updateStackCompose(agentUrl, token, stackName, content);
+      const res = await dockerApi.updateStackCompose(agentUrl, token, stackName, content, composePath);
       return res.data;
     },
     onSuccess: (updated) => {
-      queryClient.setQueryData(["stack-compose", agentUrl, stackName], updated);
+      queryClient.setQueryData(["stack-compose", agentUrl, stackName, composePath], updated);
       setDraft(updated.content);
       setIsEditing(false);
       toast.success("Compose file saved");
@@ -320,7 +347,7 @@ function ComposeDialog({
                 )}
               </div>
               <DialogDescription className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
-                {data?.path ?? "Docker Compose file"}
+                {data?.path ?? composePath}
               </DialogDescription>
             </div>
           </div>
@@ -607,6 +634,7 @@ function StackCard({
   token: string;
 }) {
   const [composeOpen, setComposeOpen] = useState(false);
+  const [selectedComposePath, setSelectedComposePath] = useState<string | null>(null);
 
   const allRunning = stack.running === stack.total;
   const noneRunning = stack.running === 0;
@@ -633,6 +661,13 @@ function StackCard({
     : noneRunning
     ? "bg-gray-500"
     : "bg-yellow-500";
+  const composeFiles = stackComposeFiles(stack);
+  const activeComposePath = selectedComposePath ?? composeFiles[0] ?? null;
+
+  function openComposeFile(path: string) {
+    setSelectedComposePath(path);
+    setComposeOpen(true);
+  }
 
   return (
     <>
@@ -676,17 +711,29 @@ function StackCard({
                   <span className="truncate font-mono">{stack.working_dir}</span>
                 </span>
               )}
-              {stack.config_file && (
-                <button
-                  onClick={() => setComposeOpen(true)}
-                  className="flex items-center gap-1.5 hover:text-foreground transition-colors group/compose"
-                >
-                  <FileText className="h-3 w-3 shrink-0 group-hover/compose:text-cyan-400 transition-colors" />
-                  <span className="font-mono group-hover/compose:text-cyan-400 transition-colors underline underline-offset-2 decoration-dashed">
-                    {stack.config_file.split("/").pop()}
-                  </span>
-                </button>
-              )}
+              {composeFiles.map((path) => {
+                const isOverride = isOverrideComposeFile(path);
+                return (
+                  <button
+                    key={path}
+                    title={path}
+                    onClick={() => openComposeFile(path)}
+                    className={cn(
+                      "flex items-center gap-1.5 transition-colors group/compose",
+                      isOverride ? "text-cyan-400/90 hover:text-cyan-300" : "hover:text-foreground",
+                    )}
+                  >
+                    {isOverride ? (
+                      <FileCode2 className="h-3 w-3 shrink-0 transition-colors" />
+                    ) : (
+                      <FileText className="h-3 w-3 shrink-0 group-hover/compose:text-cyan-400 transition-colors" />
+                    )}
+                    <span className="font-mono group-hover/compose:text-cyan-400 transition-colors underline underline-offset-2 decoration-dashed">
+                      {composeFileName(path)}
+                    </span>
+                  </button>
+                );
+              })}
               {stack.dokuru_override_file && (
                 <span
                   title={stack.dokuru_override_file}
@@ -726,11 +773,12 @@ function StackCard({
         </div>
       </div>
 
-      {stack.config_file && (
+      {activeComposePath && (
         <ComposeDialog
           open={composeOpen}
           onClose={() => setComposeOpen(false)}
           stackName={stack.name}
+          composePath={activeComposePath}
           agentUrl={agentUrl}
           token={token}
         />

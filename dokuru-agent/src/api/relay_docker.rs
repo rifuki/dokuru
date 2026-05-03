@@ -206,7 +206,7 @@ async fn route(docker: &Docker, payload: &DockerCommandPayload) -> Result<Docker
         ["docker", "stacks"] if method == "GET" => list_stacks(docker).await,
         ["docker", "stacks", name] if method == "GET" => get_stack(docker, name).await,
         ["docker", "stacks", name, "compose"] if method == "GET" => {
-            get_compose_file(docker, name).await
+            get_compose_file(docker, name, payload).await
         }
         ["docker", "stacks", name, "compose"] if method == "PUT" => {
             update_compose_file(docker, name, payload).await
@@ -895,22 +895,39 @@ fn config_file_paths(config_files: Option<&str>, working_dir: Option<&str>) -> V
         .collect()
 }
 
-async fn resolve_compose_file(
+fn push_unique_path(paths: &mut Vec<PathBuf>, path: PathBuf) {
+    if !paths.iter().any(|existing| existing == &path) {
+        paths.push(path);
+    }
+}
+
+fn requested_compose_path(raw: &str, working_dir: Option<&str>) -> Option<PathBuf> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return None;
+    }
+
+    let path = PathBuf::from(raw);
+    Some(if path.is_absolute() {
+        path
+    } else if let Some(working_dir) = working_dir.filter(|value| !value.trim().is_empty()) {
+        PathBuf::from(working_dir).join(path)
+    } else {
+        path
+    })
+}
+
+async fn compose_file_candidates(
     docker: &Docker,
     name: &str,
-) -> Result<(PathBuf, String), ComposeErrorResponse> {
+) -> Result<(Vec<PathBuf>, Option<String>), ComposeErrorResponse> {
+    let mut paths = Vec::new();
     if let Some(entry) = compose_ls()
         .await
         .and_then(|list| list.into_iter().find(|entry| entry.name == name))
     {
-        for raw in entry.config_files.split(',') {
-            let path = PathBuf::from(raw.trim());
-            match tokio::fs::read_to_string(&path).await {
-                Ok(content) => {
-                    return Ok((path, content));
-                }
-                Err(error) => warn!("compose ls path {}: {error}", path.display()),
-            }
+        for path in config_file_paths(Some(&entry.config_files), None) {
+            push_unique_path(&mut paths, path);
         }
     }
 
@@ -924,31 +941,86 @@ async fn resolve_compose_file(
             error: "Failed to list containers for compose lookup".to_string(),
             detail: error.to_string(),
         })?;
-    let working_dir = containers.iter().find_map(|container| {
+    let labels = containers.iter().find_map(|container| {
         let labels = container.labels.as_ref()?;
         if labels.get("com.docker.compose.project")?.as_str() != name {
             return None;
         }
-        labels
-            .get("com.docker.compose.project.working_dir")
-            .cloned()
+        Some((
+            labels
+                .get("com.docker.compose.project.working_dir")
+                .cloned(),
+            labels
+                .get("com.docker.compose.project.config_files")
+                .cloned(),
+        ))
     });
-    let Some(working_dir) = working_dir else {
+    let Some((working_dir, config_files)) = labels else {
+        if !paths.is_empty() {
+            return Ok((paths, None));
+        }
         return Err(ComposeErrorResponse {
             error: "Stack not found".to_string(),
             detail: format!("No container found for stack '{name}'"),
         });
     };
 
-    let base = PathBuf::from(&working_dir);
+    for path in config_file_paths(config_files.as_deref(), working_dir.as_deref()) {
+        push_unique_path(&mut paths, path);
+    }
+
+    if let Some(working_dir) = &working_dir {
+        let base = PathBuf::from(working_dir);
+        for filename in COMPOSE_FILENAMES {
+            push_unique_path(&mut paths, base.join(filename));
+        }
+    }
+
+    if let Some(path) = stack_dokuru_override_path(working_dir.as_deref(), config_files.as_deref())
+    {
+        push_unique_path(&mut paths, path);
+    }
+
+    Ok((paths, working_dir))
+}
+
+async fn resolve_compose_file(
+    docker: &Docker,
+    name: &str,
+    requested_path: Option<&str>,
+) -> Result<(PathBuf, String), ComposeErrorResponse> {
+    let (candidates, working_dir) = compose_file_candidates(docker, name).await?;
+    let mut paths = if let Some(requested_path) = requested_path {
+        let Some(requested_path) = requested_compose_path(requested_path, working_dir.as_deref())
+        else {
+            return Err(ComposeErrorResponse {
+                error: "Compose file path is required".to_string(),
+                detail: String::new(),
+            });
+        };
+
+        if !candidates.iter().any(|path| path == &requested_path) {
+            return Err(ComposeErrorResponse {
+                error: "Compose file does not belong to this stack".to_string(),
+                detail: requested_path.to_string_lossy().into_owned(),
+            });
+        }
+
+        vec![requested_path]
+    } else {
+        candidates
+    };
+
     let mut tried = Vec::new();
-    for filename in COMPOSE_FILENAMES {
-        let path = base.join(filename);
+    for path in paths.drain(..) {
         match tokio::fs::read_to_string(&path).await {
             Ok(content) => {
                 return Ok((path, content));
             }
-            Err(error) => tried.push(format!("{}: {error}", path.display())),
+            Err(error) => {
+                tried.push(format!("{}: {error}", path.display()));
+                warn!("compose path {}: {error}", path.display());
+            }
         }
     }
 
@@ -958,8 +1030,12 @@ async fn resolve_compose_file(
     })
 }
 
-async fn get_compose_file(docker: &Docker, name: &str) -> Result<DockerCommandResponse> {
-    match resolve_compose_file(docker, name).await {
+async fn get_compose_file(
+    docker: &Docker,
+    name: &str,
+    payload: &DockerCommandPayload,
+) -> Result<DockerCommandResponse> {
+    match resolve_compose_file(docker, name, payload.query.get("path").map(String::as_str)).await {
         Ok((path, content)) => json_ok(ComposeFileResponse {
             path: path.to_string_lossy().into_owned(),
             content,
@@ -997,10 +1073,13 @@ async fn update_compose_file(
         );
     }
 
-    let (path, _) = match resolve_compose_file(docker, name).await {
-        Ok(file) => file,
-        Err(error) => return json_status(422, error),
-    };
+    let (path, _) =
+        match resolve_compose_file(docker, name, payload.query.get("path").map(String::as_str))
+            .await
+        {
+            Ok(file) => file,
+            Err(error) => return json_status(422, error),
+        };
 
     match write_compose_content(&path, request.content, name).await {
         Ok(response) => json_ok(response),
