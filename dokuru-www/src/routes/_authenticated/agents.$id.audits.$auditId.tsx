@@ -23,7 +23,7 @@ import {
   Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
   Terminal, Wrench, AlertTriangle, Server,
   ArrowLeft, Clock, Cpu, Container, BookOpen,
-  Search, X, Layers, ArrowLeftRight, Link, FileText,
+  Search, X, Layers, ArrowLeftRight, Link, FileText, Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -986,7 +986,10 @@ function AuditDetailSkeleton() {
           <Skeleton className="h-8 w-56" />
           <Skeleton className="h-4 w-72" />
         </div>
-        <Skeleton className="h-9 w-24 rounded-md" />
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-9 w-36 rounded-md" />
+          <Skeleton className="h-9 w-24 rounded-md" />
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-[16px] border border-border bg-card shadow-sm">
@@ -1099,6 +1102,285 @@ function projectedScoreFromFixes(audit: AuditResponse, results: AuditResult[], f
   };
 }
 
+function scoreBarColor(score: number) {
+  if (score >= 80) return "#10b981";
+  if (score >= 60) return "#f59e0b";
+  return "#f43f5e";
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function slugifyFilePart(value: string): string {
+  const slug = value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return slug || "audit";
+}
+
+function formatDocumentDate(value: string | Date): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function scoreBand(score: number) {
+  if (score >= 80) return "Healthy";
+  if (score >= 60) return "Watch";
+  return "Critical";
+}
+
+function statusClass(status: AuditResult["status"]) {
+  if (status === "Pass") return "pass";
+  if (status === "Fail") return "fail";
+  return "error";
+}
+
+function severityClass(severity: string) {
+  if (severity === "High") return "high";
+  if (severity === "Medium") return "medium";
+  return "low";
+}
+
+function buildAuditDocumentFilename(audit: AuditResponse) {
+  const date = new Date(audit.timestamp);
+  const stamp = Number.isNaN(date.getTime()) ? "audit" : date.toISOString().slice(0, 10);
+  return `dokuru-audit-${slugifyFilePart(audit.hostname)}-${stamp}.html`;
+}
+
+function downloadHtmlDocument(filename: string, html: string) {
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function buildAuditDocumentHtml({
+  audit,
+  agent,
+  results,
+  sectionSummaries,
+  pillarSummaries,
+  remediationPlan,
+  appliedFixes,
+  projectedFixScore,
+  previousAudit,
+}: {
+  audit: AuditResponse;
+  agent: Agent | null;
+  results: AuditResult[];
+  sectionSummaries: AuditGroupSummary[];
+  pillarSummaries: AuditGroupSummary[];
+  remediationPlan: AuditRemediationPlan;
+  appliedFixes: Map<string, FixHistoryEntry>;
+  projectedFixScore: ReturnType<typeof projectedScoreFromFixes> | null;
+  previousAudit: AuditResponse | null;
+}) {
+  const failedResults = results.filter(result => result.status === "Fail");
+  const passedResults = results.filter(result => result.status === "Pass");
+  const errorResults = results.filter(result => result.status === "Error");
+  const generatedAt = new Date();
+  const scoreColor = scoreBarColor(audit.summary.score);
+  const projectedScore = projectedFixScore && projectedFixScore.fixedCount > 0 ? projectedFixScore.projectedScore : null;
+  const projectedWidth = projectedScore && projectedScore > audit.summary.score ? projectedScore : audit.summary.score;
+  const scoreBridge = projectedScore && projectedScore > audit.summary.score
+    ? `linear-gradient(90deg, ${scoreColor} 0%, ${scoreColor} ${Math.max(0, (audit.summary.score / projectedScore) * 100 - 8)}%, #2496ed ${Math.min(100, (audit.summary.score / projectedScore) * 100 + 8)}%, #2496ed 100%)`
+    : scoreColor;
+  const topRisks = remediationPlan.actions.slice(0, 8);
+  const appliedEntries = [...appliedFixes.values()].sort((a, b) => (Date.parse(b.timestamp) || 0) - (Date.parse(a.timestamp) || 0));
+
+  const summaryCard = (label: string, value: string | number, tone: string) => `
+    <div class="metric ${tone}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </div>
+  `;
+
+  const groupRows = (groups: AuditGroupSummary[]) => groups.map(group => `
+    <tr>
+      <td>${escapeHtml(group.label)}</td>
+      <td>${escapeHtml(group.passed)}/${escapeHtml(group.total)}</td>
+      <td>${escapeHtml(group.failed)}</td>
+      <td>
+        <div class="mini-bar"><span style="width:${group.percent}%"></span></div>
+      </td>
+      <td class="num">${escapeHtml(group.percent)}%</td>
+    </tr>
+  `).join("");
+
+  const riskRows = topRisks.length > 0 ? topRisks.map(action => `
+    <tr>
+      <td class="rank">${escapeHtml(action.rank)}</td>
+      <td><strong>${escapeHtml(action.rule_id)}</strong><br><span>${escapeHtml(action.title)}</span></td>
+      <td><span class="pill ${severityClass(action.severity)}">${escapeHtml(action.severity)}</span></td>
+      <td>${escapeHtml(action.pillar_label)}</td>
+      <td>${escapeHtml(action.remediation_kind)}</td>
+    </tr>
+  `).join("") : `<tr><td colspan="5" class="empty">No failed checks in this audit.</td></tr>`;
+
+  const appliedRows = appliedEntries.length > 0 ? appliedEntries.map(entry => `
+    <tr>
+      <td><strong>${escapeHtml(entry.request.rule_id)}</strong></td>
+      <td>${escapeHtml(formatDocumentDate(entry.timestamp))}</td>
+      <td><span class="pill pass">${escapeHtml(entry.outcome.status)}</span></td>
+      <td>${escapeHtml(entry.outcome.message)}</td>
+    </tr>
+  `).join("") : `<tr><td colspan="4" class="empty">No applied fixes were recorded after this audit timestamp.</td></tr>`;
+
+  const ruleRows = results.map(result => `
+    <tr class="rule-row ${statusClass(result.status)}">
+      <td><strong>${escapeHtml(result.rule.id)}</strong></td>
+      <td>
+        <strong>${escapeHtml(result.rule.title)}</strong>
+        <p>${escapeHtml(result.message)}</p>
+      </td>
+      <td><span class="pill ${statusClass(result.status)}">${escapeHtml(result.status)}</span></td>
+      <td><span class="pill ${severityClass(result.rule.severity)}">${escapeHtml(result.rule.severity)}</span></td>
+      <td>${escapeHtml(result.affected.length || "-")}</td>
+    </tr>
+  `).join("");
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dokuru Audit Report - ${escapeHtml(audit.hostname)}</title>
+  <style>
+    :root { --ink:#111827; --muted:#6b7280; --line:#d9dee7; --soft:#f5f7fb; --brand:#2496ed; --pass:#059669; --fail:#e11d48; --warn:#d97706; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #e9edf3; color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .page { max-width: 980px; margin: 32px auto; background: #fff; border: 1px solid var(--line); box-shadow: 0 24px 70px rgba(15,23,42,.12); }
+    .hero { padding: 42px 48px 34px; color: white; background: radial-gradient(circle at 12% 0%, rgba(36,150,237,.45), transparent 32%), linear-gradient(135deg, #0b1220 0%, #111827 55%, #172033 100%); }
+    .brand { display:flex; align-items:center; justify-content:space-between; gap:24px; color:#cbd5e1; font-size:12px; font-weight:800; letter-spacing:.16em; text-transform:uppercase; }
+    .hero h1 { margin: 34px 0 10px; font-size: 44px; line-height: 1; letter-spacing: -.04em; }
+    .hero p { margin: 0; color: #b9c4d4; font-size: 15px; }
+    .hero-grid { display:grid; grid-template-columns: 210px 1fr; gap:28px; margin-top:34px; align-items:end; }
+    .score { font-size: 82px; line-height: .85; font-weight: 950; letter-spacing:-.08em; color:${scoreColor}; }
+    .score small { color: rgba(255,255,255,.35); font-size: 28px; letter-spacing:-.04em; }
+    .score-band { display:inline-flex; margin-top:14px; border:1px solid rgba(255,255,255,.18); border-radius:999px; padding:7px 11px; color:#dbeafe; font-size:12px; font-weight:800; }
+    .score-track { height: 12px; border-radius:999px; background:rgba(255,255,255,.1); overflow:hidden; }
+    .score-fill { height:100%; width:${projectedWidth}%; border-radius:999px; background:${scoreBridge}; }
+    .projected { display:flex; align-items:center; justify-content:space-between; gap:18px; margin-top:13px; color:#bfdbfe; font-size:13px; }
+    .projected strong { color:#7dd3fc; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .content { padding: 34px 48px 48px; }
+    .metrics { display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap:14px; margin-bottom:30px; }
+    .metric { border:1px solid var(--line); border-radius:18px; padding:16px; background:var(--soft); }
+    .metric span { display:block; color:var(--muted); font-size:11px; font-weight:900; letter-spacing:.16em; text-transform:uppercase; }
+    .metric strong { display:block; margin-top:9px; font-size:30px; line-height:1; }
+    .metric.pass strong { color:var(--pass); } .metric.fail strong { color:var(--fail); } .metric.warn strong { color:var(--warn); }
+    .section { margin-top:34px; break-inside: avoid; }
+    .section h2 { margin:0 0 6px; font-size:20px; letter-spacing:-.03em; }
+    .section .lead { margin:0 0 16px; color:var(--muted); font-size:13px; }
+    table { width:100%; border-collapse:collapse; font-size:12px; }
+    th { text-align:left; color:var(--muted); font-size:10px; letter-spacing:.14em; text-transform:uppercase; border-bottom:1px solid var(--line); padding:10px 8px; }
+    td { border-bottom:1px solid #edf0f5; padding:12px 8px; vertical-align:top; }
+    td p { margin:5px 0 0; color:var(--muted); line-height:1.45; }
+    .rank { width:44px; color:var(--muted); font-weight:900; }
+    .num { text-align:right; color:var(--muted); font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .mini-bar { height:8px; border-radius:999px; background:#eef2f7; overflow:hidden; min-width:120px; }
+    .mini-bar span { display:block; height:100%; border-radius:999px; background:var(--brand); }
+    .pill { display:inline-flex; border-radius:999px; padding:4px 8px; font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:.08em; border:1px solid transparent; }
+    .pill.pass { color:#047857; background:#ecfdf5; border-color:#a7f3d0; } .pill.fail { color:#be123c; background:#fff1f2; border-color:#fecdd3; } .pill.error { color:#b45309; background:#fffbeb; border-color:#fde68a; }
+    .pill.high { color:#be123c; background:#fff1f2; border-color:#fecdd3; } .pill.medium { color:#b45309; background:#fffbeb; border-color:#fde68a; } .pill.low { color:#475569; background:#f1f5f9; border-color:#cbd5e1; }
+    .rule-row.fail td:first-child { color:var(--fail); } .rule-row.pass td:first-child { color:var(--pass); }
+    .empty { color:var(--muted); font-style:italic; text-align:center; padding:22px 8px; }
+    .footer { margin-top:36px; padding-top:18px; border-top:1px solid var(--line); color:var(--muted); font-size:11px; display:flex; justify-content:space-between; gap:20px; }
+    @media print { body { background:#fff; } .page { margin:0; max-width:none; border:0; box-shadow:none; } .section { break-inside:avoid; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div class="brand"><span>Dokuru Security Audit</span><span>CIS Docker Benchmark v1.8.0</span></div>
+      <h1>${escapeHtml(agent?.name ?? "Docker Agent")}</h1>
+      <p>${escapeHtml(audit.hostname)} &middot; Docker ${escapeHtml(audit.docker_version)} &middot; ${escapeHtml(formatDocumentDate(audit.timestamp))}</p>
+      <div class="hero-grid">
+        <div>
+          <div class="score">${escapeHtml(audit.summary.score)}<small>/100</small></div>
+          <span class="score-band">${escapeHtml(scoreBand(audit.summary.score))}</span>
+        </div>
+        <div>
+          <div class="score-track"><div class="score-fill"></div></div>
+          <div class="projected">
+            <span>${projectedScore ? `Projected after applied fixes: <strong>~${escapeHtml(projectedScore)}/100</strong>` : "No post-audit fixes included in this report."}</span>
+            <span>${escapeHtml(audit.summary.total)} rules audited</span>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="content">
+      <div class="metrics">
+        ${summaryCard("Passed", passedResults.length, "pass")}
+        ${summaryCard("Failed", failedResults.length, "fail")}
+        ${summaryCard("Errors", errorResults.length, "warn")}
+        ${summaryCard("Containers", audit.total_containers, "")}
+      </div>
+
+      <section class="section">
+        <h2>Executive Summary</h2>
+        <p class="lead">Snapshot of the host security posture at audit time, with remediation forecast separated from verified score.</p>
+        <table>
+          <tbody>
+            <tr><th>Host</th><td>${escapeHtml(audit.hostname)}</td><th>Agent</th><td>${escapeHtml(agent?.name ?? "Unknown")}</td></tr>
+            <tr><th>Audit ID</th><td>${escapeHtml(audit.id ?? "unsaved")}</td><th>Generated</th><td>${escapeHtml(formatDocumentDate(generatedAt))}</td></tr>
+            <tr><th>Previous score</th><td>${escapeHtml(previousAudit ? `${previousAudit.summary.score}/100` : "Not available")}</td><th>Rerun estimate</th><td>${projectedScore ? `~${escapeHtml(projectedScore)}/100` : "No post-audit fixes"}</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="section">
+        <h2>Security Pillars</h2>
+        <p class="lead">Control coverage grouped by Dokuru security area.</p>
+        <table><thead><tr><th>Pillar</th><th>Pass</th><th>Fail</th><th>Coverage</th><th></th></tr></thead><tbody>${groupRows(pillarSummaries)}</tbody></table>
+      </section>
+
+      <section class="section">
+        <h2>CIS Sections</h2>
+        <p class="lead">Benchmark sections sorted as rendered in the audit result.</p>
+        <table><thead><tr><th>Section</th><th>Pass</th><th>Fail</th><th>Coverage</th><th></th></tr></thead><tbody>${groupRows(sectionSummaries)}</tbody></table>
+      </section>
+
+      <section class="section">
+        <h2>Remediation Priorities</h2>
+        <p class="lead">Highest impact failed checks to handle first. Auto-fix means Dokuru has an agent-side remediation path.</p>
+        <table><thead><tr><th>#</th><th>Rule</th><th>Severity</th><th>Pillar</th><th>Mode</th></tr></thead><tbody>${riskRows}</tbody></table>
+      </section>
+
+      <section class="section">
+        <h2>Applied Fixes After This Audit</h2>
+        <p class="lead">These fixes are recorded after the audit timestamp. Re-run audit to turn estimates into verified score.</p>
+        <table><thead><tr><th>Rule</th><th>Time</th><th>Status</th><th>Outcome</th></tr></thead><tbody>${appliedRows}</tbody></table>
+      </section>
+
+      <section class="section">
+        <h2>Full Rule Results</h2>
+        <p class="lead">Complete rule inventory from this audit run.</p>
+        <table><thead><tr><th>Rule</th><th>Finding</th><th>Status</th><th>Severity</th><th>Affected</th></tr></thead><tbody>${ruleRows}</tbody></table>
+      </section>
+
+      <div class="footer"><span>Generated by Dokuru</span><span>Open this HTML and use Print / Save as PDF for a PDF copy.</span></div>
+    </section>
+  </main>
+</body>
+</html>`;
+}
+
 // ── Main Page ────────────────────────────────────────────────────────────────
 
 type StatusFilter = "all" | "Pass" | "Fail" | "Error";
@@ -1122,6 +1404,7 @@ function AuditDetailPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("pillar");
   const [loading, setLoading] = useState(true);
+  const [documentExporting, setDocumentExporting] = useState(false);
   const fixJobs = useAuditStore((state) => state.fixJobs);
 
   const {
@@ -1326,6 +1609,33 @@ function AuditDetailPage() {
     navigate({ to: "/agents/$id/audits", params: { id } });
   };
 
+  const handleExportDocument = async () => {
+    if (!auditData || documentExporting) return;
+    setDocumentExporting(true);
+    try {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const html = buildAuditDocumentHtml({
+        audit: auditData,
+        agent,
+        results: baseResults,
+        sectionSummaries,
+        pillarSummaries,
+        remediationPlan,
+        appliedFixes: appliedHistoryByRule,
+        projectedFixScore,
+        previousAudit,
+      });
+      downloadHtmlDocument(buildAuditDocumentFilename(auditData), html);
+      toast.success("Audit document downloaded", {
+        description: "Open the HTML report and use Print / Save as PDF if you need a PDF copy.",
+      });
+    } catch {
+      toast.error("Failed to build audit document");
+    } finally {
+      setDocumentExporting(false);
+    }
+  };
+
   useEffect(() => {
     if (!auditData || !fixHistoryQuery.data?.length) return;
     const appliedFixes = latestAppliedFixesAfterAudit(fixHistoryQuery.data, auditData);
@@ -1346,14 +1656,34 @@ function AuditDetailPage() {
           <h2 className="text-2xl font-bold tracking-tight">Security Audit</h2>
           <p className="text-muted-foreground text-sm mt-0.5">CIS Docker Benchmark v1.8.0</p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="shrink-0"
-          onClick={handleBack}
-        >
-          <ArrowLeft className="h-4 w-4" /> Back
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="min-w-[138px]"
+            disabled={!auditData || documentExporting}
+            onClick={() => void handleExportDocument()}
+          >
+            {documentExporting ? (
+              <>
+                <Skeleton className="h-4 w-4 rounded" />
+                <Skeleton className="h-4 w-20" />
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4" />
+                Export Report
+              </>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleBack}
+          >
+            <ArrowLeft className="h-4 w-4" /> Back
+          </Button>
+        </div>
       </div>
 
       {auditData ? (
@@ -1392,7 +1722,19 @@ function AuditDetailPage() {
               {/* Left: Score + stats */}
               <div className="p-6 flex flex-col">
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground mb-3">Audit Score</p>
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Audit Score</p>
+                    {projectedFixScore && projectedFixScore.fixedCount > 0 && (
+                      <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2496ED]">
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        <span>Rerun estimate</span>
+                        <span className="font-mono text-sm tracking-normal">~{projectedFixScore.projectedScore}</span>
+                        {projectedFixScore.scoreDelta > 0 && (
+                          <span className="rounded-full bg-[#2496ED]/10 px-1.5 py-0.5 font-mono text-[10px] tracking-normal">+{projectedFixScore.scoreDelta}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex items-baseline gap-3">
                     <span className={cn("text-7xl font-black tabular-nums leading-none",
                       auditData.summary.score >= 80 ? "text-emerald-400"
@@ -1403,36 +1745,27 @@ function AuditDetailPage() {
                     </span>
                     <span className="text-xl text-muted-foreground/40 font-bold">/ 100</span>
                   </div>
-                  <div className="mt-3 h-2 w-full rounded-full bg-muted/40 overflow-hidden shadow-inner">
-                    <div
-                      className={cn("h-full rounded-full transition-all duration-1000 ease-out",
-                        auditData.summary.score >= 80 ? "bg-emerald-500"
-                          : auditData.summary.score >= 60 ? "bg-amber-500"
-                            : "bg-rose-500"
-                      )}
-                      style={{ width: `${auditData.summary.score}%` }}
-                    />
+                  <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-muted/40 shadow-inner">
+                    {projectedFixScore && projectedFixScore.fixedCount > 0 && projectedFixScore.projectedScore > auditData.summary.score ? (
+                      <div
+                        className="h-full rounded-full shadow-[0_0_16px_rgba(36,150,237,0.35)] transition-all duration-1000 ease-out"
+                        style={{
+                          width: `${projectedFixScore.projectedScore}%`,
+                          background: `linear-gradient(90deg, ${scoreBarColor(auditData.summary.score)} 0%, ${scoreBarColor(auditData.summary.score)} ${Math.max(0, (auditData.summary.score / projectedFixScore.projectedScore) * 100 - 8)}%, #2496ED ${Math.min(100, (auditData.summary.score / projectedFixScore.projectedScore) * 100 + 8)}%, #2496ED 100%)`,
+                        }}
+                      />
+                    ) : (
+                      <div
+                        className={cn("h-full rounded-full transition-all duration-1000 ease-out",
+                          auditData.summary.score >= 80 ? "bg-emerald-500"
+                            : auditData.summary.score >= 60 ? "bg-amber-500"
+                              : "bg-rose-500"
+                        )}
+                        style={{ width: `${auditData.summary.score}%` }}
+                      />
+                    )}
                   </div>
                   <p className="mt-2 text-sm text-muted-foreground">CIS Docker Benchmark v1.8.0 · {auditData.summary.total} rules</p>
-                  {projectedFixScore && projectedFixScore.fixedCount > 0 && (
-                    <div className="mt-4 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-emerald-500 dark:text-emerald-400">
-                          <ShieldCheck className="h-3.5 w-3.5" />
-                          Projected after fixes
-                        </span>
-                        <span className="font-mono text-sm font-black text-emerald-500 dark:text-emerald-400">
-                          ~{projectedFixScore.projectedScore}/100
-                          {projectedFixScore.scoreDelta > 0 && (
-                            <span className="ml-1 text-xs">+{projectedFixScore.scoreDelta}</span>
-                          )}
-                        </span>
-                      </div>
-                      <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                        Preview if {projectedFixScore.fixedCount} fixed failed check{projectedFixScore.fixedCount > 1 ? "s" : ""} pass on the next audit. Re-run audit to confirm the real score.
-                      </p>
-                    </div>
-                  )}
                 </div>
 
                 <div className="grid grid-cols-3 gap-3 mt-6">
