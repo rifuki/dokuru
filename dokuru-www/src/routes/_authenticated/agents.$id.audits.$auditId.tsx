@@ -50,8 +50,10 @@ import { isSidebarNavigationForPath } from "@/lib/sidebar-navigation";
 
 type AuditDetailSearch = {
   ruleId?: string;
+  from?: AuditDetailSource;
 };
 
+type AuditDetailSource = "latest" | "history";
 type StatusFilter = "all" | "Pass" | "Fail" | "Error";
 type ViewMode = "pillar" | "section";
 type RuleCardTab = "overview" | "fix" | "debug";
@@ -144,6 +146,10 @@ function normalizeSearchRuleId(value: unknown) {
   return trimmed;
 }
 
+function normalizeAuditDetailSource(value: unknown): AuditDetailSource | undefined {
+  return value === "latest" || value === "history" ? value : undefined;
+}
+
 function scrollToAuditRuleCard(ruleId: string) {
   window.setTimeout(() => {
     const target = [...document.querySelectorAll<HTMLElement>("[data-audit-rule-id]")]
@@ -179,6 +185,7 @@ function useStableAuditListAnchor(anchorRef: RefObject<HTMLElement | null>, sign
 export const Route = createFileRoute("/_authenticated/agents/$id/audits/$auditId")({
   validateSearch: (search: Record<string, unknown>): AuditDetailSearch => ({
     ruleId: normalizeSearchRuleId(search.ruleId),
+    from: normalizeAuditDetailSource(search.from),
   }),
   component: AuditDetailPage,
 });
@@ -1657,7 +1664,7 @@ function buildAuditDocumentHtml({
 
 function AuditDetailPage() {
   const { id, auditId } = Route.useParams();
-  const { ruleId: focusedRuleId } = Route.useSearch();
+  const { ruleId: focusedRuleId, from: detailSource } = Route.useSearch();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const markAuditResultViewed = useAuditStore((state) => state.markAuditResultViewed);
@@ -1710,7 +1717,7 @@ function AuditDetailPage() {
     void navigate({
       to: "/agents/$id/audits/$auditId",
       params: { id, auditId },
-      search: { ruleId },
+      search: { ruleId, from: detailSource },
     });
     scrollToAuditRuleCard(ruleId);
   };
@@ -1979,14 +1986,18 @@ function AuditDetailPage() {
       (acc[pillarName] ??= []).push(r);
       return acc;
     }, {});
+  const latestAuditId = auditHistory.length > 0
+    ? [...auditHistory].sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))[0]?.id
+    : undefined;
+  const auditDetailBackTarget = detailSource ?? (auditData?.id && latestAuditId === auditData.id ? "latest" : "history");
 
   const fmtDate = (ts: string) => {
     try { return new Date(ts).toLocaleString(); } catch { return ts; }
   };
 
   const handleBack = () => {
-    if (window.history.length > 1) {
-      window.history.back();
+    if (auditDetailBackTarget === "latest") {
+      navigate({ to: "/agents/$id/audit", params: { id } });
       return;
     }
     navigate({ to: "/agents/$id/audits", params: { id } });

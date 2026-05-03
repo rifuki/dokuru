@@ -28,7 +28,7 @@ function AuditHistoryPage() {
 
     const handleAuditClick = (audit: AuditResponse) => {
         if (audit.id) {
-            navigate({ to: "/agents/$id/audits/$auditId", params: { id, auditId: audit.id } });
+            navigate({ to: "/agents/$id/audits/$auditId", params: { id, auditId: audit.id }, search: { from: "history" } });
         }
     };
 

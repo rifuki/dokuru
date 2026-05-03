@@ -332,6 +332,7 @@ function RuleCard({ result, agentId, agentUrl, agentAccessMode, token, container
                     navigate({
                         to: "/agents/$id/audits/$auditId",
                         params: { id: agentId, auditId: refreshedAudit.id },
+                        search: { from: "latest" },
                     });
                     return;
                 }
@@ -1025,6 +1026,7 @@ function AuditPage() {
                             void navigate({
                                 to: "/agents/$id/audits/$auditId",
                                 params: { id, auditId: savedAuditId },
+                                search: { from: "latest" },
                             });
                         },
                     };
@@ -1046,6 +1048,7 @@ function AuditPage() {
         void navigate({
             to: "/agents/$id/audits/$auditId",
             params: { id, auditId: savedAuditId },
+            search: { from: "latest" },
         });
     };
 
@@ -1365,6 +1368,7 @@ function AuditPage() {
                             <Link
                                 to="/agents/$id/audits/$auditId"
                                 params={{ id, auditId: latestAudit.id }}
+                                search={{ from: "latest" }}
                                 className="flex items-center gap-4 p-4 rounded-xl border bg-card hover:bg-muted/50 transition-colors text-left w-full group"
                             >
                                 <div className="flex-shrink-0">

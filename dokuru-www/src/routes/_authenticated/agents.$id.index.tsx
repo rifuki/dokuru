@@ -1213,6 +1213,7 @@ function FailingRules({
                         <Link
                             to="/agents/$id/audits/$auditId"
                             params={{ id, auditId: latestAuditId }}
+                            search={{ from: "latest" }}
                             className="text-sm font-medium text-primary hover:underline"
                         >
                             View all {failedResults.length} failing rules →
@@ -1289,7 +1290,7 @@ function FailingRuleRow({
         <Link
             to="/agents/$id/audits/$auditId"
             params={{ id, auditId: latestAuditId }}
-            search={{ ruleId: result.rule.id }}
+            search={{ ruleId: result.rule.id, from: "latest" }}
             className={rowClassName}
             aria-label={`Open rule ${result.rule.id}`}
         >
