@@ -519,7 +519,14 @@ export function ImageUploadModal({
         onEscapeKeyDown={handleEscapeKeyDown}
         className={cn(
           "max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md",
-          isAvatarCropView && "gap-0 p-0 sm:max-w-[28rem] [&_[data-slot=dialog-close]]:right-3 [&_[data-slot=dialog-close]]:top-3"
+          isAvatarCropView && [
+            "gap-0 p-0 sm:max-w-[28rem]",
+            "[&_[data-slot=dialog-close]]:right-4 [&_[data-slot=dialog-close]]:top-[14px]",
+            "[&_[data-slot=dialog-close]]:flex [&_[data-slot=dialog-close]]:size-5",
+            "[&_[data-slot=dialog-close]]:items-center [&_[data-slot=dialog-close]]:justify-center",
+            "[&_[data-slot=dialog-close]]:rounded-sm [&_[data-slot=dialog-close]]:opacity-70 [&_[data-slot=dialog-close]]:hover:opacity-100",
+            "[&_[data-slot=dialog-close]>svg]:!size-4 [&_[data-slot=dialog-close]>svg]:stroke-2"
+          ]
         )}
       >
         <DialogHeader className={cn(isAvatarCropView && "border-b border-border/60 px-4 py-3 pr-11")}>
