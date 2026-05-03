@@ -23,10 +23,18 @@ import {
   Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
   Terminal, Wrench, AlertTriangle, Server,
   ArrowLeft, Clock, Cpu, Container, BookOpen,
-  Search, X, Layers, ArrowLeftRight, Link, FileText, Download,
+  Search, X, Layers, ArrowLeftRight, Link, FileText, Download, Printer,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { PILLAR_META, getRulePillar, type SecurityPillar } from "@/lib/audit-pillars";
 import { userDocumentApi } from "@/lib/api/document";
 import { getOrFetchPdfBlob } from "@/lib/pdf-cache";
@@ -676,13 +684,21 @@ function AuditBreakdownRow({
   label,
   total,
   passed,
+  fixedCount = 0,
+  fixedRuleIds = [],
 }: {
   leading: ReactNode;
   label: string;
   total: number;
   passed: number;
+  fixedCount?: number;
+  fixedRuleIds?: string[];
 }) {
   const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
+  const projectedPassed = Math.min(total, passed + fixedCount);
+  const projectedPct = total > 0 ? Math.round((projectedPassed / total) * 100) : 0;
+  const hasProjection = fixedCount > 0 && projectedPct > pct;
+  const bridgePoint = hasProjection && projectedPct > 0 ? (pct / projectedPct) * 100 : pct;
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
@@ -690,19 +706,37 @@ function AuditBreakdownRow({
           {leading}
         </span>
         <span className="text-sm font-semibold leading-5 text-foreground/90">{label}</span>
-        <span className="text-xs text-muted-foreground/60 font-mono ml-auto">{passed}<span className="text-muted-foreground/40">/</span>{total}</span>
+        {hasProjection && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-[#2496ED]/10 px-2 py-0.5 text-[10px] font-bold text-[#2496ED]" title={fixedRuleIds.join(", ")}>
+            +{fixedCount} fixed
+          </span>
+        )}
+        <span className="text-xs text-muted-foreground/60 font-mono ml-auto">
+          {passed}<span className="text-muted-foreground/40">/</span>{total}
+          {hasProjection && <span className="text-[#2496ED]"> → {projectedPassed}<span className="text-[#2496ED]/50">/</span>{total}</span>}
+        </span>
       </div>
       <div className="h-2 bg-muted/40 rounded-full overflow-hidden">
-        <div
-          className={cn("h-full rounded-full transition-all duration-700", progressTone(pct))}
-          style={{ width: `${pct}%` }}
-        />
+        {hasProjection ? (
+          <div
+            className="h-full rounded-full shadow-[0_0_14px_rgba(36,150,237,0.25)] transition-all duration-700"
+            style={{
+              width: `${projectedPct}%`,
+              background: `linear-gradient(90deg, ${progressBarColor(pct)} 0%, ${progressBarColor(pct)} ${Math.max(0, bridgePoint - 8)}%, #2496ED ${Math.min(100, bridgePoint + 8)}%, #2496ED 100%)`,
+            }}
+          />
+        ) : (
+          <div
+            className={cn("h-full rounded-full transition-all duration-700", progressTone(pct))}
+            style={{ width: `${pct}%` }}
+          />
+        )}
       </div>
     </div>
   );
 }
 
-function SectionHeader({ section, total, passed }: { section: string; total: number; passed: number }) {
+function SectionHeader({ section, total, passed, fixedCount, fixedRuleIds }: { section: string; total: number; passed: number; fixedCount?: number; fixedRuleIds?: string[] }) {
   const meta = sectionMeta(section);
   return (
     <AuditBreakdownRow
@@ -714,6 +748,8 @@ function SectionHeader({ section, total, passed }: { section: string; total: num
       label={meta.label}
       total={total}
       passed={passed}
+      fixedCount={fixedCount}
+      fixedRuleIds={fixedRuleIds}
     />
   );
 }
@@ -1102,9 +1138,35 @@ function projectedScoreFromFixes(audit: AuditResponse, results: AuditResult[], f
   };
 }
 
+function fixedFailedResults(results: AuditResult[], fixedRuleIds: Set<string>) {
+  return results.filter(result => result.status === "Fail" && fixedRuleIds.has(result.rule.id));
+}
+
+function groupProjectionFromFixes(
+  results: AuditResult[],
+  fixedRuleIds: Set<string>,
+  keyForResult: (result: AuditResult) => string,
+) {
+  const projections = new Map<string, { fixedCount: number; ruleIds: string[] }>();
+  for (const result of fixedFailedResults(results, fixedRuleIds)) {
+    const key = keyForResult(result);
+    const projection = projections.get(key) ?? { fixedCount: 0, ruleIds: [] };
+    projection.fixedCount += 1;
+    projection.ruleIds.push(result.rule.id);
+    projections.set(key, projection);
+  }
+  return projections;
+}
+
 function scoreBarColor(score: number) {
   if (score >= 80) return "#10b981";
   if (score >= 60) return "#f59e0b";
+  return "#f43f5e";
+}
+
+function progressBarColor(percent: number) {
+  if (percent === 100) return "#10b981";
+  if (percent >= 50) return "#f59e0b";
   return "#f43f5e";
 }
 
@@ -1170,6 +1232,16 @@ function downloadHtmlDocument(filename: string, html: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function openPrintableDocument(html: string, targetWindow?: Window | null) {
+  const reportWindow = targetWindow ?? window.open("", "_blank");
+  if (!reportWindow) throw new Error("Popup blocked");
+  reportWindow.document.open();
+  reportWindow.document.write(html);
+  reportWindow.document.close();
+  reportWindow.focus();
+  reportWindow.setTimeout(() => reportWindow.print(), 350);
+}
+
 function buildAuditDocumentHtml({
   audit,
   agent,
@@ -1203,6 +1275,9 @@ function buildAuditDocumentHtml({
     : scoreColor;
   const topRisks = remediationPlan.actions.slice(0, 8);
   const appliedEntries = [...appliedFixes.values()].sort((a, b) => (Date.parse(b.timestamp) || 0) - (Date.parse(a.timestamp) || 0));
+  const projectedRuleIds = new Set(projectedFixScore?.fixedRuleIds ?? []);
+  const pillarProjections = groupProjectionFromFixes(results, projectedRuleIds, result => getRulePillar(result.rule.id));
+  const sectionProjections = groupProjectionFromFixes(results, projectedRuleIds, result => result.rule.section);
 
   const summaryCard = (label: string, value: string | number, tone: string) => `
     <div class="metric ${tone}">
@@ -1211,17 +1286,22 @@ function buildAuditDocumentHtml({
     </div>
   `;
 
-  const groupRows = (groups: AuditGroupSummary[]) => groups.map(group => `
+  const groupRows = (groups: AuditGroupSummary[], projections: Map<string, { fixedCount: number; ruleIds: string[] }>) => groups.map(group => {
+    const projection = projections.get(group.key);
+    const projectedPassed = Math.min(group.total, group.passed + (projection?.fixedCount ?? 0));
+    const projectedPercent = group.total > 0 ? Math.round((projectedPassed / group.total) * 100) : 0;
+    return `
     <tr>
-      <td>${escapeHtml(group.label)}</td>
-      <td>${escapeHtml(group.passed)}/${escapeHtml(group.total)}</td>
+      <td>${escapeHtml(group.label)}${projection ? `<br><span class="gain">+${escapeHtml(projection.fixedCount)} fixed: ${escapeHtml(projection.ruleIds.join(", "))}</span>` : ""}</td>
+      <td>${escapeHtml(group.passed)}/${escapeHtml(group.total)}${projection ? ` → ${escapeHtml(projectedPassed)}/${escapeHtml(group.total)}` : ""}</td>
       <td>${escapeHtml(group.failed)}</td>
       <td>
-        <div class="mini-bar"><span style="width:${group.percent}%"></span></div>
+        <div class="mini-bar"><span style="width:${projection ? projectedPercent : group.percent}%;${projection ? `background:linear-gradient(90deg, var(--brand-fail) 0%, var(--brand-fail) 72%, var(--brand) 100%)` : ""}"></span></div>
       </td>
       <td class="num">${escapeHtml(group.percent)}%</td>
     </tr>
-  `).join("");
+  `;
+  }).join("");
 
   const riskRows = topRisks.length > 0 ? topRisks.map(action => `
     <tr>
@@ -1262,7 +1342,7 @@ function buildAuditDocumentHtml({
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dokuru Audit Report - ${escapeHtml(audit.hostname)}</title>
   <style>
-    :root { --ink:#111827; --muted:#6b7280; --line:#d9dee7; --soft:#f5f7fb; --brand:#2496ed; --pass:#059669; --fail:#e11d48; --warn:#d97706; }
+    :root { --ink:#111827; --muted:#6b7280; --line:#d9dee7; --soft:#f5f7fb; --brand:#2496ed; --brand-fail:#e11d48; --pass:#059669; --fail:#e11d48; --warn:#d97706; }
     * { box-sizing: border-box; }
     body { margin: 0; background: #e9edf3; color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     .page { max-width: 980px; margin: 32px auto; background: #fff; border: 1px solid var(--line); box-shadow: 0 24px 70px rgba(15,23,42,.12); }
@@ -1295,6 +1375,7 @@ function buildAuditDocumentHtml({
     .num { text-align:right; color:var(--muted); font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
     .mini-bar { height:8px; border-radius:999px; background:#eef2f7; overflow:hidden; min-width:120px; }
     .mini-bar span { display:block; height:100%; border-radius:999px; background:var(--brand); }
+    .gain { display:inline-block; margin-top:3px; color:var(--brand); font-size:10px; font-weight:800; }
     .pill { display:inline-flex; border-radius:999px; padding:4px 8px; font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:.08em; border:1px solid transparent; }
     .pill.pass { color:#047857; background:#ecfdf5; border-color:#a7f3d0; } .pill.fail { color:#be123c; background:#fff1f2; border-color:#fecdd3; } .pill.error { color:#b45309; background:#fffbeb; border-color:#fde68a; }
     .pill.high { color:#be123c; background:#fff1f2; border-color:#fecdd3; } .pill.medium { color:#b45309; background:#fffbeb; border-color:#fde68a; } .pill.low { color:#475569; background:#f1f5f9; border-color:#cbd5e1; }
@@ -1347,13 +1428,13 @@ function buildAuditDocumentHtml({
       <section class="section">
         <h2>Security Pillars</h2>
         <p class="lead">Control coverage grouped by Dokuru security area.</p>
-        <table><thead><tr><th>Pillar</th><th>Pass</th><th>Fail</th><th>Coverage</th><th></th></tr></thead><tbody>${groupRows(pillarSummaries)}</tbody></table>
+        <table><thead><tr><th>Pillar</th><th>Pass</th><th>Fail</th><th>Coverage</th><th></th></tr></thead><tbody>${groupRows(pillarSummaries, pillarProjections)}</tbody></table>
       </section>
 
       <section class="section">
         <h2>CIS Sections</h2>
         <p class="lead">Benchmark sections sorted as rendered in the audit result.</p>
-        <table><thead><tr><th>Section</th><th>Pass</th><th>Fail</th><th>Coverage</th><th></th></tr></thead><tbody>${groupRows(sectionSummaries)}</tbody></table>
+        <table><thead><tr><th>Section</th><th>Pass</th><th>Fail</th><th>Coverage</th><th></th></tr></thead><tbody>${groupRows(sectionSummaries, sectionProjections)}</tbody></table>
       </section>
 
       <section class="section">
@@ -1404,7 +1485,7 @@ function AuditDetailPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("pillar");
   const [loading, setLoading] = useState(true);
-  const [documentExporting, setDocumentExporting] = useState(false);
+  const [documentExporting, setDocumentExporting] = useState<"html" | "pdf" | null>(null);
   const fixJobs = useAuditStore((state) => state.fixJobs);
 
   const {
@@ -1534,6 +1615,9 @@ function AuditDetailPage() {
     if (job?.status === "applied" && isFixJobAfterAudit(job, auditData)) fixedRuleIds.add(ruleId);
   }
   const projectedFixScore = auditData ? projectedScoreFromFixes(auditData, baseResults, fixedRuleIds) : null;
+  const fixedResultPreviews = fixedFailedResults(baseResults, fixedRuleIds);
+  const pillarProjections = groupProjectionFromFixes(baseResults, fixedRuleIds, result => getRulePillar(result.rule.id));
+  const sectionProjections = groupProjectionFromFixes(baseResults, fixedRuleIds, result => result.rule.section);
   const sectionSummaries = groupSummariesFromResults(baseResults, result => result.rule.section, key => key);
   const sections = sectionSummaries.map(section => section.key);
   const sectionStats: Record<string, { total: number; passed: number; percent: number }> = Object.fromEntries(sectionSummaries.map(section => [
@@ -1609,30 +1693,47 @@ function AuditDetailPage() {
     navigate({ to: "/agents/$id/audits", params: { id } });
   };
 
-  const handleExportDocument = async () => {
+  const buildCurrentAuditDocumentHtml = () => {
+    if (!auditData) return null;
+    return buildAuditDocumentHtml({
+      audit: auditData,
+      agent,
+      results: baseResults,
+      sectionSummaries,
+      pillarSummaries,
+      remediationPlan,
+      appliedFixes: appliedHistoryByRule,
+      projectedFixScore,
+      previousAudit,
+    });
+  };
+
+  const handleExportDocument = async (format: "html" | "pdf") => {
     if (!auditData || documentExporting) return;
-    setDocumentExporting(true);
+    const printWindow = format === "pdf" ? window.open("", "_blank") : null;
+    if (format === "pdf" && !printWindow) {
+      toast.error("Popup blocked. Allow popups, then try Print / Save PDF again.");
+      return;
+    }
+    setDocumentExporting(format);
     try {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      const html = buildAuditDocumentHtml({
-        audit: auditData,
-        agent,
-        results: baseResults,
-        sectionSummaries,
-        pillarSummaries,
-        remediationPlan,
-        appliedFixes: appliedHistoryByRule,
-        projectedFixScore,
-        previousAudit,
-      });
-      downloadHtmlDocument(buildAuditDocumentFilename(auditData), html);
-      toast.success("Audit document downloaded", {
-        description: "Open the HTML report and use Print / Save as PDF if you need a PDF copy.",
-      });
-    } catch {
-      toast.error("Failed to build audit document");
+      const html = buildCurrentAuditDocumentHtml();
+      if (!html) return;
+      if (format === "html") {
+        downloadHtmlDocument(buildAuditDocumentFilename(auditData), html);
+        toast.success("Audit HTML report downloaded");
+      } else {
+        openPrintableDocument(html, printWindow);
+        toast.success("Print view opened", {
+          description: "Choose Save as PDF in the browser print dialog.",
+        });
+      }
+    } catch (error) {
+      printWindow?.close();
+      toast.error(error instanceof Error ? error.message : "Failed to build audit document");
     } finally {
-      setDocumentExporting(false);
+      setDocumentExporting(null);
     }
   };
 
@@ -1657,25 +1758,41 @@ function AuditDetailPage() {
           <p className="text-muted-foreground text-sm mt-0.5">CIS Docker Benchmark v1.8.0</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="min-w-[138px]"
-            disabled={!auditData || documentExporting}
-            onClick={() => void handleExportDocument()}
-          >
-            {documentExporting ? (
-              <>
-                <Skeleton className="h-4 w-4 rounded" />
-                <Skeleton className="h-4 w-20" />
-              </>
-            ) : (
-              <>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-w-[150px]"
+                disabled={!auditData || !!documentExporting}
+              >
+                {documentExporting ? (
+                  <>
+                    <Skeleton className="h-4 w-4 rounded" />
+                    <Skeleton className="h-4 w-24" />
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" />
+                    Export Report
+                    <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                  </>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Document Format</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => void handleExportDocument("pdf")}>
+                <Printer className="h-4 w-4" />
+                Print / Save PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => void handleExportDocument("html")}>
                 <Download className="h-4 w-4" />
-                Export Report
-              </>
-            )}
-          </Button>
+                Download HTML
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             variant="outline"
             size="sm"
@@ -1867,6 +1984,7 @@ function AuditDetailPage() {
                       const meta = PILLAR_META[pillar];
                       if (!meta) return null;
                       const Icon = meta.icon;
+                      const projection = pillarProjections.get(pillar);
 
                       return (
                         <AuditBreakdownRow
@@ -1875,6 +1993,8 @@ function AuditDetailPage() {
                           label={meta.name}
                           total={pillarSummary.total}
                           passed={pillarSummary.passed}
+                          fixedCount={projection?.fixedCount}
+                          fixedRuleIds={projection?.ruleIds}
                         />
                       );
                     })
@@ -1883,6 +2003,8 @@ function AuditDetailPage() {
                       <SectionHeader key={s} section={s}
                         total={sectionStats[s]?.total ?? 0}
                         passed={sectionStats[s]?.passed ?? 0}
+                        fixedCount={sectionProjections.get(s)?.fixedCount}
+                        fixedRuleIds={sectionProjections.get(s)?.ruleIds}
                       />
                     ))
                   )}
@@ -1902,6 +2024,54 @@ function AuditDetailPage() {
               </div>
             </div>
           </div>
+
+          {fixedResultPreviews.length > 0 && (
+            <div className="rounded-xl border border-[#2496ED]/25 bg-[#2496ED]/5 px-5 py-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 text-sm font-bold text-[#2496ED]">
+                    <ShieldCheck className="h-4 w-4" />
+                    Fix impact preview
+                    {projectedFixScore && projectedFixScore.scoreDelta > 0 && (
+                      <span className="rounded-full bg-[#2496ED]/10 px-2 py-0.5 font-mono text-xs">score +{projectedFixScore.scoreDelta}</span>
+                    )}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    These checks were fixed after this audit. Blue segments show the estimated pass gain if rerun confirms them.
+                  </p>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => setStatusFilter("Fail")} className="shrink-0 border-[#2496ED]/25 text-[#2496ED] hover:text-[#2496ED]">
+                  Review fixed rules
+                </Button>
+              </div>
+              <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                {fixedResultPreviews.map((result) => {
+                  const pillar = getRulePillar(result.rule.id);
+                  const meta = PILLAR_META[pillar];
+                  const Icon = meta.icon;
+                  return (
+                    <button
+                      key={result.rule.id}
+                      type="button"
+                      onClick={() => void navigate({
+                        to: "/agents/$id/audits/$auditId",
+                        params: { id, auditId },
+                        search: { ruleId: result.rule.id },
+                      })}
+                      className="group min-w-[240px] rounded-lg border border-[#2496ED]/20 bg-background/45 px-3 py-2 text-left transition-colors hover:border-[#2496ED]/45 hover:bg-[#2496ED]/10"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="rounded border border-border/70 bg-muted/30 px-1.5 py-0.5 font-mono text-[10px] font-bold text-foreground/80">{result.rule.id}</span>
+                        <Icon className={cn("h-3.5 w-3.5", meta.color)} />
+                        <span className="truncate text-[11px] font-semibold text-muted-foreground group-hover:text-[#2496ED]">{meta.name}</span>
+                      </div>
+                      <p className="mt-1 line-clamp-1 text-xs font-medium text-foreground/85">{result.rule.title}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {previousAudit && (
             <BeforeAfterComparison

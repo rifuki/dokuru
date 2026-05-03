@@ -196,7 +196,7 @@ function VolumeDetailPage() {
   });
 
   if (isLoading) {
-    return <DetailPageSkeleton />;
+    return <DetailPageSkeleton statsCount={5} usageRows={1} />;
   }
 
   const labels = volume?.Labels ?? {};

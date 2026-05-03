@@ -6,6 +6,7 @@ import { agentApi } from "@/lib/api/agent";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import { DetailPageSkeleton } from "@/components/ui/detail-layout";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -137,13 +138,7 @@ function ImageDetailPage() {
   });
 
   if (imageLoading) {
-    return (
-      <div className="max-w-5xl mx-auto w-full space-y-4">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="rounded-xl border bg-card animate-pulse h-40" />
-        ))}
-      </div>
-    );
+    return <DetailPageSkeleton showUsageSection={false} showConfigSection showTableSection showRawSection={false} />;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
