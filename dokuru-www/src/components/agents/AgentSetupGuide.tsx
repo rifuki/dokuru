@@ -26,10 +26,10 @@ type AgentSetupDialogProps = {
 
 export function AgentSetupGuide({ className = "" }: AgentSetupGuideProps) {
     return (
-        <div className={`rounded-xl border border-primary/20 bg-primary/5 p-4 ${className}`}>
+        <div className={`rounded-xl border border-border bg-muted/20 p-4 ${className}`}>
             <div className="grid gap-4 lg:grid-cols-[1fr_1.25fr] lg:items-center">
                 <div className="flex items-center gap-3">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/30 bg-primary/10 text-primary">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-primary">
                         <Terminal className="h-4 w-4" />
                     </span>
                     <div className="min-w-0">
@@ -78,7 +78,7 @@ export function AgentSetupDialog({ open, onOpenChange, onStartAddAgent }: AgentS
                         />
                     </div>
 
-                    <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs leading-5 text-muted-foreground">
+                    <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs leading-5 text-muted-foreground">
                         Token is shown once on the host. If you lose it, rotate or regenerate the token from the agent CLI.
                     </div>
                 </div>
@@ -113,10 +113,10 @@ function AgentInstallCommand() {
     };
 
     return (
-        <div className="group flex min-w-0 items-center gap-3 rounded-lg border border-border bg-black/50 p-2 pl-3 font-mono text-sm shadow-inner">
-            <span className="select-none text-primary">$</span>
+        <div className="group flex min-w-0 items-center gap-3 rounded-lg border border-slate-800 bg-slate-950 p-2 pl-3 font-mono text-sm text-slate-100 shadow-sm dark:border-border dark:bg-black/55">
+            <span className="select-none text-sky-400 dark:text-primary">$</span>
             <div className="flex min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <code className="block w-max whitespace-nowrap pr-2 text-foreground/90">
+                <code className="block w-max whitespace-nowrap pr-2 text-slate-100 dark:text-foreground/90">
                     {AGENT_INSTALL_COMMAND}
                 </code>
             </div>
@@ -125,7 +125,7 @@ function AgentInstallCommand() {
                 variant="outline"
                 size="sm"
                 onClick={() => void copyCommand()}
-                className="h-9 shrink-0 border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
+                className="h-9 shrink-0 border-white/15 bg-white/10 text-sky-300 hover:bg-white/15 hover:text-sky-200 dark:border-primary/30 dark:bg-primary/10 dark:text-primary dark:hover:bg-primary/20"
             >
                 {copied ? <Check className="mr-2 h-3.5 w-3.5" /> : <Copy className="mr-2 h-3.5 w-3.5" />}
                 {copied ? "Copied" : "Copy"}
@@ -136,7 +136,7 @@ function AgentInstallCommand() {
 
 function SetupStep({ icon, title, description }: { icon: ReactNode; title: string; description: string }) {
     return (
-        <div className="rounded-xl border border-border/70 bg-background/60 p-4">
+        <div className="rounded-xl border border-border bg-card p-4">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
                 <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
                     {icon}

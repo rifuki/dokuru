@@ -697,15 +697,19 @@ export function ImageUploadModal({
               onDragEnter={handleDragEnter}
               onDragLeave={handleDragLeave}
               className={cn(
-                "relative border-2 border-dashed rounded-lg transition-all cursor-pointer",
-                isAvatar ? "px-6 py-10" : "p-8",
-                "hover:border-primary/50 hover:bg-muted/50",
-                isDragging && "border-primary bg-primary/5"
+                "relative rounded-lg transition-all cursor-pointer",
+                isAvatar
+                  ? "border border-dashed border-border/70 bg-background/40 px-6 py-9 hover:border-primary/35 hover:bg-muted/20 dark:bg-muted/10 dark:hover:bg-muted/20"
+                  : "border-2 border-dashed p-8 hover:border-primary/50 hover:bg-muted/50",
+                isDragging && (isAvatar ? "border-primary/50 bg-primary/5" : "border-primary bg-primary/5")
               )}
             >
               <div className="text-center space-y-2">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted">
-                  <Upload className="h-6 w-6 text-muted-foreground" />
+                <div className={cn(
+                  "inline-flex items-center justify-center rounded-full",
+                  isAvatar ? "h-11 w-11 bg-muted/40 dark:bg-muted/30" : "h-12 w-12 bg-muted"
+                )}>
+                  <Upload className={cn(isAvatar ? "h-5 w-5 text-muted-foreground" : "h-6 w-6 text-muted-foreground")} />
                 </div>
                 <div>
                   <p className="text-sm font-medium">
