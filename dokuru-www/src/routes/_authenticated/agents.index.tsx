@@ -460,7 +460,7 @@ function AgentsList() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentOnlineStatus, agents]);
 
-  // Collect available Docker versions for the version filter dropdown.
+  // Collect available Docker versions for the Docker version filter dropdown.
   const availableVersions = Array.from(
     new Set(
       agents
@@ -675,7 +675,7 @@ function AgentsList() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              {/* Agent Version filter */}
+              {/* Docker Version filter */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button className={`px-3 py-1.5 border rounded text-sm flex items-center gap-2 transition-colors ${
@@ -683,7 +683,7 @@ function AgentsList() {
                       ? "bg-primary/10 border-primary/40 text-primary"
                       : "bg-muted/50 border-border text-muted-foreground hover:bg-muted"
                   }`}>
-                    Agent Version
+                    Docker Version
                     {versionFilter !== "all" && <span className="font-semibold">· {versionFilter}</span>}
                     <ChevronDown className="w-3.5 h-3.5" />
                   </button>
@@ -693,7 +693,7 @@ function AgentsList() {
                     checked={versionFilter === "all"}
                     onCheckedChange={() => applyVer("all")}
                   >
-                    All versions
+                    All Docker versions
                   </DropdownMenuCheckboxItem>
                   {availableVersions.length > 0 && <DropdownMenuSeparator />}
                   {availableVersions.map((v) => (
@@ -706,7 +706,7 @@ function AgentsList() {
                     </DropdownMenuCheckboxItem>
                   ))}
                   {availableVersions.length === 0 && (
-                    <div className="px-3 py-2 text-xs text-muted-foreground">No version data yet</div>
+                    <div className="px-3 py-2 text-xs text-muted-foreground">No Docker version data yet</div>
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>

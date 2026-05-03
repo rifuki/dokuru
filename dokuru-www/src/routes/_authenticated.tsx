@@ -12,6 +12,7 @@ import { CommandMenu, CommandMenuTrigger } from "@/components/layout/CommandMenu
 import { HeaderUserMenu } from "@/components/layout/HeaderUserMenu";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,6 +40,54 @@ const getWsUrl = () => {
 };
 
 const WS_URL = getWsUrl();
+const HEADER_REVEAL_OFFSET = 72;
+const HEADER_SCROLL_DELTA = 8;
+
+function useRevealHeaderOnScroll() {
+    const [visible, setVisible] = useState(true);
+
+    useEffect(() => {
+        let lastScrollY = window.scrollY;
+        let ticking = false;
+        let animationFrameId: number | null = null;
+
+        const updateVisibility = () => {
+            const currentScrollY = Math.max(0, window.scrollY);
+            const delta = currentScrollY - lastScrollY;
+
+            if (currentScrollY <= HEADER_REVEAL_OFFSET) {
+                setVisible(true);
+                lastScrollY = currentScrollY;
+                ticking = false;
+                return;
+            }
+
+            if (Math.abs(delta) >= HEADER_SCROLL_DELTA) {
+                setVisible(delta < 0);
+                lastScrollY = currentScrollY;
+            }
+
+            ticking = false;
+        };
+
+        const handleScroll = () => {
+            if (ticking) return;
+            ticking = true;
+            animationFrameId = window.requestAnimationFrame(updateVisibility);
+        };
+
+        window.addEventListener("scroll", handleScroll, { passive: true });
+
+        return () => {
+            window.removeEventListener("scroll", handleScroll);
+            if (animationFrameId !== null) {
+                window.cancelAnimationFrame(animationFrameId);
+            }
+        };
+    }, []);
+
+    return visible;
+}
 
 export const Route = createFileRoute("/_authenticated")({
     component: AppLayout,
@@ -82,13 +131,19 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 
 function DashboardLayout() {
     const [commandOpen, setCommandOpen] = useState(false);
+    const headerVisible = useRevealHeaderOnScroll();
 
     return (
         <SidebarProvider>
             <AppSidebar />
-            <SidebarInset className="min-w-0 overflow-x-hidden bg-transparent">
+            <SidebarInset className="min-w-0 overflow-x-clip bg-transparent">
                 {/* Top Header - Shared for all authenticated users */}
-                <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between gap-2 border-b border-border/60 bg-background/80 px-4 backdrop-blur-xl transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-16">
+                <header
+                    className={cn(
+                        "sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-2 border-b border-border/60 bg-background/80 px-4 backdrop-blur-xl transition-[transform,opacity,width,height] duration-200 ease-out motion-reduce:transition-none group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-16",
+                        headerVisible ? "translate-y-0 opacity-100" : "pointer-events-none -translate-y-full opacity-0"
+                    )}
+                >
                     <div className="flex items-center gap-2">
                         <SidebarTrigger className="-ml-1 md:hidden">
                             <Menu className="h-5 w-5" />
@@ -109,7 +164,7 @@ function DashboardLayout() {
                 </header>
 
                 {/* Page Content */}
-                <main className="relative flex-1 p-6 min-w-0 overflow-x-hidden md:p-8">
+                <main className="relative flex-1 p-6 min-w-0 overflow-x-clip md:p-8">
                     <Outlet />
                 </main>
             </SidebarInset>
