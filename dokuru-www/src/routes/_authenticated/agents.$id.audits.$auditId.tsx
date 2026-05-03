@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { type ReactNode, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { agentApi } from "@/lib/api/agent";
 import {
@@ -127,6 +127,30 @@ function writeAuditDetailUiState(key: string, state: AuditDetailUiState) {
   } catch {
     // UI memory is best-effort; failing storage should not block the page.
   }
+}
+
+function useStableAuditListAnchor(anchorRef: RefObject<HTMLElement | null>, signature: string, enabled: boolean) {
+  const previousRef = useRef<{ signature: string; top: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) {
+      previousRef.current = null;
+      return;
+    }
+
+    const previous = previousRef.current;
+    const nextTop = anchor.getBoundingClientRect().top;
+
+    if (enabled && previous && previous.signature !== signature && window.scrollY > 0) {
+      const delta = nextTop - previous.top;
+      if (Math.abs(delta) > 1) {
+        window.scrollTo({ top: Math.max(0, window.scrollY + delta), left: 0, behavior: "instant" });
+      }
+    }
+
+    previousRef.current = { signature, top: anchor.getBoundingClientRect().top };
+  });
 }
 
 export const Route = createFileRoute("/_authenticated/agents/$id/audits/$auditId")({
@@ -1627,6 +1651,7 @@ function AuditDetailPage() {
   const fixJobs = useAuditStore((state) => state.fixJobs);
   const auditUiMemoryKeyRef = useRef(auditUiMemoryKey);
   const skipNextAuditUiWriteRef = useRef(false);
+  const resultsAnchorRef = useRef<HTMLDivElement>(null);
 
   const handleRuleOpenChange = (ruleId: string, nextOpen: boolean) => {
     setOpenRuleIds((prev) => {
@@ -1886,6 +1911,14 @@ function AuditDetailPage() {
     medium: baseResults.filter(r => r.rule.severity === "Medium" && r.status === "Fail").length,
   };
   const remediationPlan = buildRemediationPlan(baseResults);
+  const autoFixableResults = baseResults.filter(result => isAutoFixableResult(result) && !fixedRuleIds.has(result.rule.id));
+  const auditListLayoutSignature = [
+    fixedResultPreviews.map(result => result.rule.id).join(","),
+    autoFixableResults.length,
+    fixHistoryQuery.data?.length ?? 0,
+    fixHistoryQuery.isFetching ? "fetching" : "idle",
+  ].join(":");
+  useStableAuditListAnchor(resultsAnchorRef, auditListLayoutSignature, wizardOpen || fixAllOpen);
 
   // Group filtered results by section OR pillar based on viewMode
   const groupedResults = viewMode === "section"
@@ -2325,29 +2358,25 @@ function AuditDetailPage() {
           )}
 
           {/* ── Fix All banner ───────────────────────────────── */}
-          {(() => {
-            const autoFixable = baseResults.filter(result => isAutoFixableResult(result) && !fixedRuleIds.has(result.rule.id));
-            if (autoFixable.length === 0) return null;
-            return (
-              <div className="flex items-center justify-between gap-4 rounded-xl border border-[#2496ED]/25 bg-[#2496ED]/5 px-5 py-4">
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-[#2496ED]">
-                    {autoFixable.length} rule{autoFixable.length > 1 ? "s" : ""} can be auto-fixed
-                  </p>
-                  <p className="text-xs text-[#2496ED]/60 mt-0.5">
-                    Image config, namespace isolation, cgroup limits, and privileged containers — one click.
-                  </p>
-                </div>
-                <button
-                  onClick={() => openFixAll(autoFixable)}
-                  className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-[#2496ED] hover:bg-[#1e80cc] px-4 py-2.5 text-sm font-bold text-white shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] transition-all hover:shadow-[0_0_24px_-4px_rgba(36,150,237,0.7)] active:scale-[0.98]"
-                >
-                  <Wrench className="h-4 w-4" />
-                  Fix All ({autoFixable.length})
-                </button>
+          {autoFixableResults.length > 0 && (
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-[#2496ED]/25 bg-[#2496ED]/5 px-5 py-4">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-[#2496ED]">
+                  {autoFixableResults.length} rule{autoFixableResults.length > 1 ? "s" : ""} can be auto-fixed
+                </p>
+                <p className="text-xs text-[#2496ED]/60 mt-0.5">
+                  Image config, namespace isolation, cgroup limits, and privileged containers — one click.
+                </p>
               </div>
-            );
-          })()}
+              <button
+                onClick={() => openFixAll(autoFixableResults)}
+                className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-[#2496ED] hover:bg-[#1e80cc] px-4 py-2.5 text-sm font-bold text-white shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] transition-all hover:shadow-[0_0_24px_-4px_rgba(36,150,237,0.7)] active:scale-[0.98]"
+              >
+                <Wrench className="h-4 w-4" />
+                Fix All ({autoFixableResults.length})
+              </button>
+            </div>
+          )}
 
           {agent && (
             <FixHistoryPanel
@@ -2441,7 +2470,7 @@ function AuditDetailPage() {
           ) : null}
 
           {/* ── Search & Filters ────────────────────────────── */}
-          <div className="space-y-2">
+          <div ref={resultsAnchorRef} className="space-y-2">
             {/* Row 1: Search + view toggle + clear */}
             <div className="flex items-center gap-2">
               <div className="flex items-stretch overflow-hidden border border-border rounded-lg bg-muted/20 shrink-0">

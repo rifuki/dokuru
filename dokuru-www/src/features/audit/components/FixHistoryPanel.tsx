@@ -94,7 +94,8 @@ export function FixHistoryPanel({
     });
 
     const history = historyQuery.data ?? [];
-    const loading = historyQuery.isLoading || historyQuery.isFetching;
+    const loading = historyQuery.isLoading && history.length === 0;
+    const refreshing = historyQuery.isFetching && !loading;
 
     const rollback = useCallback(async (entry: FixHistoryEntry) => {
         setRollingBackId(entry.id);
@@ -133,9 +134,9 @@ export function FixHistoryPanel({
                             </p>
                         </div>
                     </div>
-                    <Button variant="outline" size="sm" onClick={() => void historyQuery.refetch()} disabled={loading}>
-                        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                        Refresh
+                    <Button variant="outline" size="sm" onClick={() => void historyQuery.refetch()} disabled={historyQuery.isFetching}>
+                        {historyQuery.isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                        {refreshing ? "Refreshing" : "Refresh"}
                     </Button>
                 </div>
 
