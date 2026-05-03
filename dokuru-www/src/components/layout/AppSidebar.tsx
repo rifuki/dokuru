@@ -195,7 +195,7 @@ export function AppSidebar() {
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-semibold">Dokuru</span>
                     <span className="truncate text-xs text-muted-foreground">
-                      {isAdmin ? "Admin Dashboard" : "Docker Security"}
+                      {isAdmin ? "Admin Dashboard" : "Docker Security Audit"}
                     </span>
                   </div>
                 </Link>

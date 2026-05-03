@@ -273,12 +273,12 @@ function AuditCommandBlock({ label, command }: { label: string; command: string 
   return (
     <div>
       <div className="mb-1.5 flex items-center justify-between gap-2">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">{label}</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">{label}</p>
         <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => void copyText(command)}>
           Copy
         </Button>
       </div>
-      <code className="block rounded border border-border/50 bg-muted/50 p-3 font-mono text-xs text-primary overflow-x-auto whitespace-pre-wrap dark:bg-zinc-950 dark:text-emerald-400">
+      <code className="block overflow-x-auto whitespace-pre-wrap rounded border border-border/70 bg-background p-3 font-mono text-xs text-[#0969aa] shadow-xs dark:bg-zinc-950 dark:text-emerald-400">
         $ {command}
       </code>
     </div>
@@ -288,8 +288,8 @@ function AuditCommandBlock({ label, command }: { label: string; command: string 
 function CommandOutputBlock({ label, output }: { label: string; output?: string }) {
   return (
     <div>
-      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">{label}</p>
-      <pre className="rounded border border-border/50 bg-muted/50 p-3 font-mono text-xs text-muted-foreground whitespace-pre-wrap overflow-x-auto dark:bg-zinc-950 dark:text-zinc-300">
+      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">{label}</p>
+      <pre className="overflow-x-auto whitespace-pre-wrap rounded border border-border/70 bg-background p-3 font-mono text-xs text-foreground/80 shadow-xs dark:bg-zinc-950 dark:text-zinc-300">
         {output || "(no output)"}
       </pre>
     </div>
@@ -341,13 +341,13 @@ function AgentVerificationPanel({
   };
 
   return (
-    <div className="rounded-lg border border-[#2496ED]/20 bg-[#2496ED]/5 overflow-hidden">
-      <div className="flex items-center justify-between gap-3 border-b border-[#2496ED]/10 px-3 py-2">
+    <div className="overflow-hidden rounded-lg border border-[#2496ED]/35 bg-[#2496ED]/8 dark:border-[#2496ED]/20 dark:bg-[#2496ED]/5">
+      <div className="flex items-center justify-between gap-3 border-b border-[#2496ED]/20 bg-background/55 px-3 py-2 dark:bg-transparent">
         <div className="flex items-center gap-2 min-w-0">
             <Terminal className="h-3.5 w-3.5 text-[#2496ED] shrink-0" />
             <div className="min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-widest text-[#2496ED]">Agent Verify</p>
-              <p className="text-[11px] text-muted-foreground truncate">Run the registered audit command on the remote host now.</p>
+              <p className="truncate text-[11px] text-foreground/65 dark:text-muted-foreground">Run the registered audit command on the remote host now.</p>
             </div>
           </div>
         <Button size="sm" variant="outline" disabled={!canRun || loading} onClick={() => void runVerification()} className="h-8 shrink-0">
@@ -358,7 +358,7 @@ function AgentVerificationPanel({
 
       <div className="space-y-3 p-3">
         {!result && !error && (
-          <p className="text-xs text-muted-foreground/70">
+          <p className="text-xs text-foreground/70 dark:text-muted-foreground/70">
             Dokuru only executes the whitelisted audit command for rule {ruleId}, then returns real stdout, stderr, and exit code from the agent host.
           </p>
         )}
@@ -624,7 +624,7 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
                   auditCommand={audit_command}
                 />
                 {(raw_output !== undefined || command_stderr || typeof command_exit_code === "number") && (
-                  <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+                  <div className="space-y-2 rounded-lg border border-border/80 bg-background/80 p-3 dark:bg-muted/20">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">Saved Audit Run</p>
                       {typeof command_exit_code === "number" && (
@@ -2106,8 +2106,22 @@ function AuditDetailPage() {
                     These checks were fixed after this audit. Blue segments show the estimated pass gain if rerun confirms them.
                   </p>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => setStatusFilter("Fail")} className="shrink-0 border-[#2496ED]/25 text-[#2496ED] hover:text-[#2496ED]">
-                  Review fixed rules
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const firstFixedRule = fixedResultPreviews[0];
+                    setStatusFilter("Fail");
+                    if (!firstFixedRule) return;
+                    void navigate({
+                      to: "/agents/$id/audits/$auditId",
+                      params: { id, auditId },
+                      search: { ruleId: firstFixedRule.rule.id },
+                    });
+                  }}
+                  className="shrink-0 border-[#2496ED]/25 text-[#2496ED] hover:text-[#2496ED]"
+                >
+                  Jump to fixed rules
                 </Button>
               </div>
               <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
