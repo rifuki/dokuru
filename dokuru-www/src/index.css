@@ -385,15 +385,15 @@
     min-width: 0;
   }
 
-  .audit-fix-target-identity {
+  .audit-fix-target-row > .audit-fix-target-identity {
     grid-area: identity;
   }
 
-  .audit-fix-target-source {
+  .audit-fix-target-row > .audit-fix-target-source {
     grid-area: source;
   }
 
-  .audit-fix-mode-control {
+  .audit-fix-target-row > .audit-fix-mode-control {
     grid-area: mode;
   }
 
@@ -401,7 +401,7 @@
     min-width: 0;
   }
 
-  .audit-fix-target-value {
+  .audit-fix-target-row > .audit-fix-target-value {
     grid-area: value;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -440,7 +440,7 @@
       align-items: center;
     }
 
-    .audit-fix-target-value {
+    .audit-fix-target-row > .audit-fix-target-value {
       text-align: right;
     }
 
@@ -455,7 +455,7 @@
       gap: 1rem;
     }
 
-    .audit-fix-target-value {
+    .audit-fix-target-row > .audit-fix-target-value {
       position: relative;
     }
 
