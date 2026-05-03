@@ -168,9 +168,9 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
   };
 
   return (
-    <div className={`group rounded-[14px] border border-border bg-card p-4 shadow-sm transition-colors ${isConnecting ? "border-blue-500/40 shadow-blue-500/10" : ""}`}>
+    <div className={`group rounded-[14px] border border-border bg-card p-4 shadow-sm transition-colors ${isConnecting ? "border-amber-500/40 shadow-amber-500/10" : ""}`}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex min-w-0 gap-4">
+        <div className="flex min-w-0 flex-1 gap-4">
           <div className="flex w-14 items-center justify-center shrink-0 relative">
             <img
               src="/docker.svg"
@@ -178,7 +178,7 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
               className={`w-14 h-14 transition-all duration-300 ${isConnecting ? "animate-pulse" : ""}`}
               style={
                 isConnecting
-                  ? { filter: "brightness(0) saturate(100%) invert(47%) sepia(93%) saturate(2000%) hue-rotate(194deg) brightness(105%) contrast(101%)" }
+                  ? { filter: "brightness(0) saturate(100%) invert(72%) sepia(77%) saturate(711%) hue-rotate(354deg) brightness(101%) contrast(94%)" }
                   : isOffline
                   ? { filter: "brightness(0) saturate(100%) invert(47%) sepia(22%) saturate(1388%) hue-rotate(312deg) brightness(94%) contrast(88%)" }
                   : undefined
@@ -187,12 +187,12 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
           </div>
 
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-base font-semibold text-foreground tracking-tight">{agent.name}</span>
+            <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap">
+              <span className="min-w-0 truncate text-base font-semibold tracking-tight text-foreground">{agent.name}</span>
               <span
-                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-[11px] font-semibold uppercase ${
+                className={`inline-flex h-5 shrink-0 items-center justify-center gap-1.5 rounded border px-2 text-[11px] font-semibold uppercase leading-none ${
                   isConnecting
-                    ? "animate-pulse border-blue-500/30 bg-blue-500/10 text-blue-400"
+                    ? "animate-pulse border-amber-500/30 bg-amber-500/10 text-amber-400"
                     : isOnline
                     ? "border-primary/35 bg-primary/10 text-primary"
                     : "border-red-500/30 bg-red-500/10 text-red-400"
@@ -205,26 +205,26 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
                   : <>○ DOWN</>
                 }
               </span>
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-[11px] font-medium border-blue-500/30 bg-blue-500/10 text-blue-400">
+              <span className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded border border-blue-500/30 bg-blue-500/10 px-2 text-[11px] font-medium leading-none text-blue-400">
                 {agent.access_mode === 'cloudflare' && <><Cloud className="h-3 w-3" /> Cloudflare</>}
                 {agent.access_mode === 'direct' && <><Globe className="h-3 w-3" /> Direct</>}
                 {agent.access_mode === 'domain' && <><Globe className="h-3 w-3" /> Domain</>}
                 {agent.access_mode === 'relay' && <><Link2 className="h-3 w-3" /> Relay</>}
               </span>
               {info && (
-                <span className="text-[12px] text-muted-foreground font-mono font-medium">
+                <span className="shrink-0 truncate font-mono text-[12px] font-medium text-muted-foreground">
                   Docker {info.docker_version}
                 </span>
               )}
-              <span className="min-w-0 max-w-full truncate text-[12px] text-muted-foreground/70 font-mono lg:max-w-[520px]">
+              <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-muted-foreground/70">
                 {agent.url.replace(/^https?:\/\//, '')}
               </span>
             </div>
 
             {isConnecting && !info ? (
               <div className="flex items-center gap-2 mt-3">
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-400" />
-                <span className="text-[12px] text-blue-400/80">Connecting to agent...</span>
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-400" />
+                <span className="text-[12px] text-amber-400/80">Connecting to agent...</span>
               </div>
             ) : infoLoading && !info && !isOffline ? (
               <div className="flex items-center gap-2 mt-3">
