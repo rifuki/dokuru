@@ -484,7 +484,7 @@ async fn resolve_compose_file(
     requested_path: Option<&str>,
 ) -> Result<(PathBuf, String), ComposeErrorResponse> {
     let (candidates, working_dir) = compose_file_candidates(name).await?;
-    let mut paths = if let Some(requested_path) = requested_path {
+    let paths = if let Some(requested_path) = requested_path {
         let Some(requested_path) = requested_compose_path(requested_path, working_dir.as_deref())
         else {
             return Err(ComposeErrorResponse {
@@ -506,7 +506,7 @@ async fn resolve_compose_file(
     };
 
     let mut tried = Vec::new();
-    for path in paths.drain(..) {
+    for path in paths {
         match tokio::fs::read_to_string(&path).await {
             Ok(content) => {
                 return Ok((path, content));
