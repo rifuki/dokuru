@@ -5,7 +5,7 @@ import {
 import {
     AlertTriangle, CheckCircle2, Loader2, RotateCcw, Server,
     ShieldAlert, XCircle, Wrench, ChevronRight, Terminal, Copy, Check,
-    RefreshCw, FileCode2, Activity, ArrowRight, Box,
+    RefreshCw, FileCode2, Activity, ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AffectedItems } from "@/features/audit/components/AffectedItems";
@@ -258,7 +258,7 @@ function ConfirmStep({
                             <div className="flex items-start gap-2.5">
                                 <FileCode2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#2496ED]/70" />
                                 <p className="leading-relaxed">
-                                    Compose-managed containers default to <span className="font-semibold text-[#7dd3fc]">Dokuru override</span>. Source YAML stays clean; use Patch only when you want to edit the base compose file.
+                                    Compose targets use <span className="font-semibold text-[#7dd3fc]">Dokuru override</span> by default. Patch edits source YAML; Live is temporary.
                                 </p>
                             </div>
                         </div>
@@ -284,20 +284,25 @@ function ConfirmStep({
                                     <div className="audit-fix-target-identity flex min-w-0 items-center gap-2.5">
                                         <Server className="h-3.5 w-3.5 shrink-0 text-white/32" />
                                         <div className="min-w-0">
-                                            <span className="block truncate text-[13px] font-semibold text-white/75">{target.container_name}</span>
+                                            <div className="flex min-w-0 items-center gap-2">
+                                                <span className="truncate text-[13px] font-semibold text-white/75">{target.container_name}</span>
+                                                {isCgroup && (
+                                                    <span
+                                                        title={canCompose ? `${target.compose_project}/${target.compose_service}` : "Runtime-only target"}
+                                                        className={cn(
+                                                            "shrink-0 rounded border px-1.5 py-0.5 text-[8px] uppercase tracking-[0.12em]",
+                                                            canCompose
+                                                                ? "border-[#2496ED]/25 bg-[#2496ED]/8 text-[#2496ED]/75"
+                                                                : "border-white/8 bg-white/[0.025] text-white/30",
+                                                        )}
+                                                    >
+                                                        {canCompose ? "compose" : "runtime"}
+                                                    </span>
+                                                )}
+                                            </div>
                                             <span className="block truncate text-[10px] text-white/28">current: {currentValueLabel(rule.id, target)}</span>
                                         </div>
                                     </div>
-
-                                    {isCgroup && (
-                                        <div className="audit-fix-source-chip flex min-w-0 items-center gap-2">
-                                            {canCompose ? <FileCode2 className="h-3.5 w-3.5 shrink-0 text-[#2496ED]" /> : <Box className="h-3.5 w-3.5 shrink-0 text-white/35" />}
-                                            <div className="min-w-0">
-                                                <span className={cn("block truncate text-[10px] uppercase tracking-[0.12em]", canCompose ? "text-[#2496ED]/80" : "text-white/35")}>{canCompose ? "compose" : "runtime"}</span>
-                                                <span className="block truncate text-[10px] text-white/30">{canCompose ? `${target.compose_project}/${target.compose_service}` : "standalone"}</span>
-                                            </div>
-                                        </div>
-                                    )}
 
                                     {isCgroup && config && (
                                         <ApplyModePicker
@@ -343,11 +348,6 @@ function ConfirmStep({
                             );
                         })}
                     </div>
-                    {isCgroup && (
-                        <p className="px-1 text-[10px] text-white/25 font-mono">
-                            Override writes <code>docker-compose.dokuru.override.yml</code>. Patch edits source YAML. Live is temporary.
-                        </p>
-                    )}
                 </div>
             ) : affected.length > 0 && !previewLoading ? (
                 <div className="rounded-lg border border-white/8 bg-white/[0.02] px-4 py-3 text-xs font-mono text-white/50">

@@ -368,74 +368,52 @@
 
   .audit-fix-target-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(112px, 132px);
     gap: 0.625rem;
     padding: 0.75rem 0.875rem;
+    align-items: end;
   }
 
   .audit-fix-target-identity,
-  .audit-fix-source-chip,
   .audit-fix-mode-control,
   .audit-fix-target-value {
     min-width: 0;
   }
 
-  .audit-fix-target-value {
-    text-align: left;
+  .audit-fix-target-identity {
+    grid-column: 1 / -1;
   }
 
-  @container (min-width: 660px) {
+  .audit-fix-mode-control {
+    grid-column: 1;
+  }
+
+  .audit-fix-target-value {
+    grid-column: 2;
+    text-align: right;
+  }
+
+  @container (min-width: 560px) {
     .audit-fix-target-row {
-      grid-template-columns: minmax(0, 1fr) minmax(128px, 144px);
+      grid-template-columns: minmax(0, 1fr) minmax(188px, 220px) minmax(112px, 128px);
+      gap: 0.75rem;
       align-items: center;
     }
 
-    .audit-fix-target-identity {
-      grid-column: 1;
-      grid-row: 1;
+    .audit-fix-target-identity,
+    .audit-fix-mode-control {
+      grid-column: auto;
     }
 
     .audit-fix-target-value {
-      grid-column: 2;
-      grid-row: 1;
-      text-align: right;
-    }
-
-    .audit-fix-source-chip {
-      grid-column: 1;
-      grid-row: 2;
-    }
-
-    .audit-fix-mode-control {
-      grid-column: 1 / -1;
-      grid-row: 2;
-      max-width: 240px;
-      justify-self: end;
+      grid-column: auto;
     }
   }
 
-  @container (min-width: 980px) {
+  @container (min-width: 900px) {
     .audit-fix-target-row {
-      display: grid;
-      grid-template-columns: minmax(0, 1.1fr) minmax(150px, 0.85fr) minmax(196px, 0.74fr) minmax(118px, 0.45fr);
-      gap: 0.875rem;
-    }
-
-    .audit-fix-target-identity,
-    .audit-fix-source-chip,
-    .audit-fix-mode-control,
-    .audit-fix-target-value {
-      grid-column: auto;
-      grid-row: auto;
-    }
-
-    .audit-fix-mode-control {
-      max-width: none;
-      justify-self: stretch;
-    }
-
-    .audit-fix-target-value {
-      text-align: right;
+      grid-template-columns: minmax(0, 1fr) 220px 132px;
+      gap: 1rem;
     }
   }
 
