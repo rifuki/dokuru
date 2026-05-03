@@ -1391,8 +1391,8 @@ function buildAuditDocumentHtml({
     .hero h1 { margin: 24px 0 8px; font-size: 40px; line-height: 1; letter-spacing: -.04em; }
     .hero p { margin: 0; color: #b9c4d4; font-size: 15px; }
     .hero-grid { display:grid; grid-template-columns: 190px 1fr; gap:24px; margin-top:26px; align-items:end; }
-    .score { font-size: 72px; line-height: .85; font-weight: 950; letter-spacing:-.08em; color:${scoreColor}; }
-    .score small { color: rgba(255,255,255,.35); font-size: 28px; letter-spacing:-.04em; }
+    .score { display:inline-flex; align-items:flex-end; gap:10px; white-space:nowrap; font-size: 72px; line-height: .85; font-weight: 950; letter-spacing:-.05em; color:${scoreColor}; }
+    .score small { flex:none; padding-bottom:6px; color: rgba(255,255,255,.35); font-size: 28px; line-height:1; letter-spacing:-.02em; }
     .score-band { display:inline-flex; margin-top:10px; border:1px solid rgba(255,255,255,.18); border-radius:999px; padding:6px 10px; color:#dbeafe; font-size:12px; font-weight:800; }
     .score-track { height: 12px; border-radius:999px; background:rgba(255,255,255,.1); overflow:hidden; }
     .score-fill { height:100%; width:${projectedWidth}%; border-radius:999px; background:${scoreBridge}; }
