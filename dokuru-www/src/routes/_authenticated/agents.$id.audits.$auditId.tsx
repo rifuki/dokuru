@@ -1670,6 +1670,7 @@ function AuditDetailPage() {
     if (job?.status === "applied" && isFixJobAfterAudit(job, auditData)) fixedRuleIds.add(ruleId);
   }
   const projectedFixScore = auditData ? projectedScoreFromFixes(auditData, baseResults, fixedRuleIds) : null;
+  const hasProjectedFixes = (projectedFixScore?.fixedCount ?? 0) > 0;
   const fixedResultPreviews = fixedFailedResults(baseResults, fixedRuleIds);
   const pillarProjections = groupProjectionFromFixes(baseResults, fixedRuleIds, result => getRulePillar(result.rule.id));
   const sectionProjections = groupProjectionFromFixes(baseResults, fixedRuleIds, result => result.rule.section);
@@ -1885,11 +1886,11 @@ function AuditDetailPage() {
             {/* Body: score left + breakdown right */}
             <div className="grid grid-cols-1 divide-y divide-border md:grid-cols-2 md:divide-x md:divide-y-0">
               {/* Left: Score + stats */}
-              <div className="p-6 flex flex-col">
+              <div className="flex flex-col p-5 md:p-6">
                 <div>
-                  <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="mb-2 flex items-center justify-between gap-3">
                     <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Audit Score</p>
-                    {projectedFixScore && projectedFixScore.fixedCount > 0 && (
+                    {hasProjectedFixes && projectedFixScore && (
                       <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2496ED]">
                         <ShieldCheck className="h-3.5 w-3.5" />
                         <span>Rerun estimate</span>
@@ -1910,7 +1911,7 @@ function AuditDetailPage() {
                     </span>
                     <span className="text-xl text-muted-foreground/40 font-bold">/ 100</span>
                   </div>
-                  <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-muted/40 shadow-inner">
+                  <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted/40 shadow-inner">
                     {projectedFixScore && projectedFixScore.fixedCount > 0 && projectedFixScore.projectedScore > auditData.summary.score ? (
                       <div
                         className="h-full rounded-full shadow-[0_0_16px_rgba(36,150,237,0.35)] transition-all duration-1000 ease-out"
@@ -1930,55 +1931,72 @@ function AuditDetailPage() {
                       />
                     )}
                   </div>
-                  <p className="mt-2 text-sm text-muted-foreground">CIS Docker Benchmark v1.8.0 · {auditData.summary.total} rules</p>
+                  <p className="mt-2 text-xs text-muted-foreground">CIS Docker Benchmark v1.8.0 · {auditData.summary.total} rules</p>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3 mt-6">
+                <div className="mt-5 grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => setStatusFilter(f => f === "Pass" ? "all" : "Pass")}
                     aria-pressed={statusFilter === "Pass"}
                     className={cn(
-                      "flex min-h-24 flex-col items-center justify-center rounded-[12px] border px-3 py-3 text-center transition-all duration-200",
+                      "flex min-h-[84px] flex-col items-center justify-center rounded-[12px] border px-3 py-2.5 text-center transition-all duration-200",
                       statusFilter === "Pass"
                         ? "border-[#00d9a5]/50 bg-[#00d9a5]/10 ring-1 ring-[#00d9a5]/20"
                         : "border-[#00d9a5]/25 bg-[#00d9a5]/5 hover:bg-[#00d9a5]/10 hover:border-[#00d9a5]/35"
                     )}
                   >
-                    <span className="block text-3xl font-black text-[#00d9a5]">{auditData.summary.passed}</span>
-                    <span className="mt-2 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pass</span>
+                    <span className="flex items-baseline justify-center gap-1.5">
+                      <span className="text-3xl font-black leading-none text-[#00d9a5]">{auditData.summary.passed}</span>
+                      {hasProjectedFixes && projectedFixScore && (
+                        <span className="font-mono text-xs font-bold text-[#2496ED]">→ {projectedFixScore.projectedPassed}</span>
+                      )}
+                    </span>
+                    <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pass</span>
+                    {hasProjectedFixes && projectedFixScore && (
+                      <span className="mt-0.5 font-mono text-[10px] font-semibold text-[#2496ED]/85">+{projectedFixScore.fixedCount} after fixes</span>
+                    )}
                   </button>
                   <button
                     type="button"
                     onClick={() => setStatusFilter(f => f === "Fail" ? "all" : "Fail")}
                     aria-pressed={statusFilter === "Fail"}
                     className={cn(
-                      "flex min-h-24 flex-col items-center justify-center rounded-[12px] border px-3 py-3 text-center transition-all duration-200",
+                      "flex min-h-[84px] flex-col items-center justify-center rounded-[12px] border px-3 py-2.5 text-center transition-all duration-200",
                       statusFilter === "Fail"
                         ? "bg-rose-500/15 border-rose-500/45 ring-1 ring-rose-500/25"
                         : "bg-rose-500/5 border-rose-500/25 hover:bg-rose-500/10 hover:border-rose-500/35"
                     )}
                   >
-                    <span className="block text-3xl font-black text-rose-400">{auditData.summary.failed}</span>
-                    <span className="mt-2 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Fail</span>
+                    <span className="flex items-baseline justify-center gap-1.5">
+                      <span className="text-3xl font-black leading-none text-rose-400">{auditData.summary.failed}</span>
+                      {hasProjectedFixes && projectedFixScore && (
+                        <span className="font-mono text-xs font-bold text-[#2496ED]">→ {projectedFixScore.projectedFailed}</span>
+                      )}
+                    </span>
+                    <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Fail</span>
+                    {hasProjectedFixes && projectedFixScore && (
+                      <span className="mt-0.5 font-mono text-[10px] font-semibold text-[#2496ED]/85">-{projectedFixScore.fixedCount} after fixes</span>
+                    )}
                   </button>
-                  <div className="flex min-h-24 flex-col items-center justify-center rounded-[12px] border border-border bg-muted/20 px-3 py-3 text-center">
-                    <span className="block text-3xl font-black text-foreground/80">{auditData.summary.total}</span>
-                    <span className="mt-2 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Total</span>
+                  <div className="flex min-h-[84px] flex-col items-center justify-center rounded-[12px] border border-border bg-muted/20 px-3 py-2.5 text-center">
+                    <span className="block text-3xl font-black leading-none text-foreground/80">{auditData.summary.total}</span>
+                    <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Total</span>
+                    <span className="mt-0.5 text-[10px] font-medium text-muted-foreground/60">audited</span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 mt-auto pt-6">
+                <div className="mt-auto grid grid-cols-2 gap-2 pt-5">
                   {[
                     { icon: Server, label: "Host", value: auditData.hostname },
                     { icon: Cpu, label: "Docker", value: auditData.docker_version },
                     { icon: Container, label: "Containers", value: String(auditData.total_containers) },
                     { icon: Clock, label: "Ran", value: fmtDate(auditData.timestamp).split(",")[1]?.trim() ?? fmtDate(auditData.timestamp) },
                   ].map(({ icon: Icon, label, value }) => (
-                    <div key={label} className="flex min-w-0 items-center gap-2 rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2.5 transition-colors hover:bg-muted/30">
+                    <div key={label} className="flex min-w-0 items-center gap-2 rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2 transition-colors hover:bg-muted/30">
                       <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
                       <div className="min-w-0">
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-[0.14em]">{label}</p>
+                        <p className="text-[9px] text-muted-foreground uppercase tracking-[0.14em]">{label}</p>
                         <p className="truncate text-sm font-semibold text-foreground/90">{value}</p>
                       </div>
                     </div>
@@ -1987,7 +2005,7 @@ function AuditDetailPage() {
               </div>
 
               {/* Right: Pillar/Section breakdown with toggle */}
-              <div className="p-6 space-y-4">
+              <div className="flex flex-col p-5 md:p-6">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0 flex-1">
                     <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
@@ -2003,7 +2021,7 @@ function AuditDetailPage() {
                       onClick={() => setViewMode("pillar")}
                       aria-pressed={viewMode === "pillar"}
                       className={cn(
-                        "inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold transition-colors",
+                        "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors",
                         viewMode === "pillar" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                       )}
                     >
@@ -2015,7 +2033,7 @@ function AuditDetailPage() {
                       onClick={() => setViewMode("section")}
                       aria-pressed={viewMode === "section"}
                       className={cn(
-                        "inline-flex items-center gap-1.5 border-l border-border/60 px-3 py-2 text-xs font-semibold transition-colors",
+                        "inline-flex items-center gap-1.5 border-l border-border/60 px-3 py-1.5 text-xs font-semibold transition-colors",
                         viewMode === "section" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                       )}
                     >
@@ -2025,7 +2043,7 @@ function AuditDetailPage() {
                   </div>
                 </div>
 
-                <div className="min-h-[244px] space-y-4">
+                <div className="mt-4 space-y-3.5">
                   {viewMode === "pillar" ? (
                     pillarSummaries.map(pillarSummary => {
                       const pillar = pillarSummary.key as SecurityPillar;
@@ -2059,13 +2077,13 @@ function AuditDetailPage() {
                 </div>
 
                 {/* Quick Stats */}
-                <div className="pt-4 mt-4 border-t border-border grid grid-cols-2 gap-2">
-                  <div className="rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2.5">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-[0.14em]">Critical</p>
+                <div className="mt-auto grid grid-cols-2 gap-2 border-t border-border pt-5">
+                  <div className="rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2">
+                    <p className="text-[9px] text-muted-foreground uppercase tracking-[0.14em]">Critical</p>
                     <p className="text-lg font-black text-rose-400">{severityFailures.high}</p>
                   </div>
-                  <div className="rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2.5">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-[0.14em]">Medium</p>
+                  <div className="rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2">
+                    <p className="text-[9px] text-muted-foreground uppercase tracking-[0.14em]">Medium</p>
                     <p className="text-lg font-black text-amber-400">{severityFailures.medium}</p>
                   </div>
                 </div>
