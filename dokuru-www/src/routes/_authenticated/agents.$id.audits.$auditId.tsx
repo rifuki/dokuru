@@ -2081,7 +2081,7 @@ function AuditDetailPage() {
     }
 
     const auditRun = startAudit(agent, token);
-    toast.success("Audit re-run started", { description: "Opening live audit progress." });
+    toast("Audit re-run started", { description: "Opening live audit progress." });
     void navigate({ to: "/agents/$id/audit", params: { id } });
 
     void auditRun.then(async (savedAudit) => {
