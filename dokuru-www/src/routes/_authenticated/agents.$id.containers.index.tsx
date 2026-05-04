@@ -125,7 +125,7 @@ function ContainerRow({
       <div className={`group border rounded-lg bg-card hover:shadow-md transition-all duration-200 overflow-hidden ${!isRunning ? "opacity-60 hover:opacity-100" : ""}`}>
         {/* Row header */}
         <div
-          className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-accent/50 transition-colors select-none"
+          className="flex cursor-pointer select-none flex-wrap items-center gap-3 px-4 py-4 transition-colors hover:bg-accent/50 sm:flex-nowrap sm:gap-4 sm:px-5"
           onClick={() => onExpandedChange(!expanded)}
         >
           <div className="relative flex items-center justify-center w-8 h-8 shrink-0 rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
@@ -135,7 +135,7 @@ function ContainerRow({
             }`} />
           </div>
 
-          <div className="min-w-0 flex-1 grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_6rem_minmax(0,2fr)] gap-4 items-center">
+          <div className="grid min-w-0 flex-1 grid-cols-1 items-center gap-2 sm:min-w-[15rem] md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_6rem_minmax(0,2fr)] md:gap-4">
             <div className="flex flex-col gap-0.5 min-w-0">
               <span className="font-semibold text-sm truncate">{name}</span>
               <span className="text-xs text-muted-foreground font-mono truncate">{container.id.slice(0, 12)}</span>
@@ -149,12 +149,12 @@ function ContainerRow({
             <span className="text-xs text-muted-foreground truncate hidden md:block">{container.status}</span>
           </div>
 
-          <span className="text-muted-foreground transition-transform duration-200 shrink-0" style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }}>
+          <span className="shrink-0 text-muted-foreground transition-transform duration-200" style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }}>
             <ChevronDown className="h-4 w-4" />
           </span>
 
           {/* Actions — stop propagation so row click doesn't toggle expand */}
-          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+          <div className="order-last ml-11 flex w-[calc(100%-2.75rem)] shrink-0 items-center justify-end gap-1 sm:order-none sm:ml-0 sm:w-auto" onClick={(e) => e.stopPropagation()}>
             {/* Slot 1: stop (running) or start (stopped) */}
             <Tooltip>
               <TooltipTrigger asChild>
@@ -357,7 +357,7 @@ function ContainersPage() {
   const running = filtered.filter((c) => c.state.toLowerCase() === "running").length;
 
   return (
-    <div className={`max-w-7xl mx-auto w-full ${scrollMemory.isRestoring ? "invisible" : ""}`}>
+    <div className={`mx-auto w-full max-w-7xl ${scrollMemory.isRestoring ? "invisible" : ""}`}>
       <PageHeader
         icon={ContainerIcon}
         title="Containers"
@@ -370,7 +370,7 @@ function ContainersPage() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
-            className="pl-9 h-9 w-52 text-sm bg-muted/40 border-border/60 focus:bg-background"
+            className="h-9 w-full bg-muted/40 pl-9 text-sm border-border/60 focus:bg-background sm:w-52"
             placeholder="Search containers…"
             value={search}
             onChange={(e) => setSearch(id, e.target.value)}

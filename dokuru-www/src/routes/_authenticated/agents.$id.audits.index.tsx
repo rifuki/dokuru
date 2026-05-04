@@ -54,14 +54,14 @@ function AuditHistoryPage() {
 
     return (
         <div className="max-w-4xl mx-auto w-full space-y-6 pb-10">
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                     <h2 className="text-2xl font-bold tracking-tight">Audit History</h2>
                     <p className="text-muted-foreground text-sm mt-0.5">
                         All security audit results for this agent
                     </p>
                 </div>
-                <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={handleBack}>
+                <Button type="button" variant="outline" size="sm" className="w-full shrink-0 sm:w-auto" onClick={handleBack}>
                     <ArrowLeft className="h-4 w-4" />
                     Back
                 </Button>
@@ -84,7 +84,7 @@ function AuditHistoryPage() {
                             <button
                                 key={idx}
                                 onClick={() => handleAuditClick(audit)}
-                                className="flex items-center gap-4 p-4 rounded-xl border bg-card hover:bg-muted/50 transition-colors text-left group"
+                                className="group flex flex-col gap-4 rounded-xl border bg-card p-4 text-left transition-colors hover:bg-muted/50 sm:flex-row sm:items-center"
                             >
                                 {/* Score ring */}
                                 <div className="flex-shrink-0">
@@ -108,14 +108,14 @@ function AuditHistoryPage() {
 
                                 {/* Info */}
                                 <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 mb-1">
+                                    <div className="mb-1 flex flex-wrap items-center gap-2">
                                         <Clock className="h-3.5 w-3.5 text-muted-foreground" />
                                         <span className="text-sm font-medium">{fmtDate(audit.timestamp)}</span>
                                     </div>
                                     <p className="text-xs text-muted-foreground truncate mb-2">
                                         {audit.hostname} • Docker {audit.docker_version} • {audit.total_containers} containers
                                     </p>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
                                         <Badge variant="outline" className="text-[10px]">
                                             {audit.summary.passed} passed
                                         </Badge>
@@ -129,7 +129,7 @@ function AuditHistoryPage() {
                                 </div>
 
                                 {/* Arrow */}
-                                <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                                <ChevronRight className="hidden h-5 w-5 text-muted-foreground transition-colors group-hover:text-foreground sm:block" />
                             </button>
                         );
                     })}

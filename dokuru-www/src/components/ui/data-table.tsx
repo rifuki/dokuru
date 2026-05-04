@@ -93,11 +93,11 @@ export function DataTable<TData>({
   return (
     <div className="space-y-3">
       {/* Toolbar */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full sm:max-w-sm sm:flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            className="pl-9 h-9 text-sm"
+            className="h-9 pl-9 text-sm"
             placeholder={searchPlaceholder}
             value={globalFilter}
             onChange={(e) => setGlobalFilter(e.target.value)}
@@ -108,7 +108,7 @@ export function DataTable<TData>({
           <Button
             size="sm"
             variant="destructive"
-            className="gap-1.5"
+            className="w-full gap-1.5 sm:w-auto"
             disabled={isDeleting}
             onClick={() => onDeleteSelected(selectedIds)}
           >

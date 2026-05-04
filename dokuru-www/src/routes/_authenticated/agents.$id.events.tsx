@@ -126,11 +126,11 @@ function EventsPage() {
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="outline" size="sm" onClick={() => setPaused((p) => !p)} className="gap-2">
+        <Button variant="outline" size="sm" onClick={() => setPaused((p) => !p)} className="flex-1 gap-2 sm:flex-none">
           {paused ? <Play className="size-4" /> : <Pause className="size-4" />}
           {paused ? "Resume" : "Pause"}
         </Button>
-        <Button variant="outline" size="sm" onClick={clearEvents} className="gap-2">
+        <Button variant="outline" size="sm" onClick={clearEvents} className="flex-1 gap-2 sm:flex-none">
           <Trash2 className="size-4" /> Clear
         </Button>
 
@@ -138,11 +138,11 @@ function EventsPage() {
           placeholder="Search type, action, name…"
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          className="max-w-56"
+          className="order-last w-full sm:order-none sm:max-w-56"
         />
 
         <Select value={typeFilter} onValueChange={(v) => { setTypeFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-36">
+          <SelectTrigger className="w-[calc(50%-0.25rem)] sm:w-36">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -155,7 +155,7 @@ function EventsPage() {
           </SelectContent>
         </Select>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
           <span className="text-xs text-muted-foreground whitespace-nowrap">Rows per page</span>
           <Select
             value={String(perPage)}
@@ -170,7 +170,7 @@ function EventsPage() {
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" onClick={exportJSON} className="gap-2">
+          <Button variant="outline" size="sm" onClick={exportJSON} className="ml-auto gap-2 sm:ml-0">
             <Download className="size-4" /> JSON
           </Button>
           <Button variant="outline" size="sm" onClick={exportTXT} className="gap-2">

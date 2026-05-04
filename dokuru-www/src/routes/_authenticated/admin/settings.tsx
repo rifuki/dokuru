@@ -222,7 +222,7 @@ function ConfigRow({
 
   return (
     <div className="flex flex-col border-b last:border-0 border-border/30 rounded-sm">
-      <div className="grid grid-cols-[minmax(150px,1fr)_100px_minmax(150px,1fr)] items-center gap-4 py-2.5 px-3 hover:bg-muted/20 transition-colors">
+      <div className="grid grid-cols-1 gap-2 px-3 py-2.5 transition-colors hover:bg-muted/20 sm:grid-cols-[minmax(150px,1fr)_100px_minmax(150px,1fr)] sm:items-center sm:gap-4">
         {/* Left: icon + label */}
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground/60">
@@ -251,7 +251,7 @@ function ConfigRow({
         </div>
 
         {/* Right: value + edit */}
-        <div className="flex items-center justify-end gap-2 shrink-0 min-w-0">
+        <div className="flex min-w-0 shrink-0 items-center justify-start gap-2 sm:justify-end">
           {editing ? (
             <>
               <input
@@ -304,16 +304,16 @@ function ConfigRow({
       </div>
 
       {expanded && hasMultiple && (
-        <div className="pl-[46px] pr-3 pb-3 pt-1 bg-muted/5 border-t border-border/10 space-y-2">
+        <div className="space-y-2 border-t border-border/10 bg-muted/5 px-3 pb-3 pt-1 sm:pl-[46px]">
           {sources!.slice(1).map((src, i) => {
             const parsed = parseSource(src.source);
             return (
-              <div key={i} className="grid grid-cols-[100px_minmax(150px,1fr)] items-center gap-4">
+              <div key={i} className="grid grid-cols-1 gap-1 sm:grid-cols-[100px_minmax(150px,1fr)] sm:items-center sm:gap-4">
                 <div className="flex items-center gap-1.5" title={parsed.detail || parsed.label}>
                   <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${SOURCE_DOT[parsed.kind]}`} />
                   <span className="text-[10px] uppercase tracking-widest text-muted-foreground/40">{parsed.label}</span>
                 </div>
-                <div className="flex justify-end pr-9">
+                <div className="flex justify-start sm:justify-end sm:pr-9">
                   <MaskedValue 
                     value={src.value} 
                     isSensitive={parsed.kind === "env" || parsed.kind === "secrets"} 

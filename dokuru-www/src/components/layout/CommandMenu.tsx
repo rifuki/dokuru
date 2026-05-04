@@ -268,10 +268,11 @@ export function CommandMenuTrigger({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="inline-flex h-10 w-[240px] items-center gap-3 rounded-[12px] border border-border bg-card px-3.5 text-sm text-muted-foreground transition-colors hover:border-primary/35 hover:bg-muted/60 hover:text-foreground xl:w-[300px]"
+      className="inline-flex h-10 w-10 shrink-0 items-center justify-center gap-3 rounded-[12px] border border-border bg-card px-0 text-sm text-muted-foreground transition-colors hover:border-primary/35 hover:bg-muted/60 hover:text-foreground sm:w-[180px] sm:justify-start sm:px-3.5 lg:w-[220px] xl:w-[240px]"
+      aria-label="Open command search"
     >
-      <Search className="h-3.5 w-3.5" />
-      <span className="min-w-0 flex-1 truncate text-left">Search...</span>
+      <Search className="h-3.5 w-3.5 shrink-0" />
+      <span className="hidden min-w-0 flex-1 truncate text-left sm:block">Search...</span>
       <kbd className="pointer-events-none hidden h-5 select-none items-center gap-1 rounded-[6px] border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex">
         <span className="text-xs">⌘</span>K
       </kbd>

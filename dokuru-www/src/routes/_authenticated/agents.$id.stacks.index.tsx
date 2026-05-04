@@ -91,8 +91,8 @@ function isOverrideComposeFile(path: string) {
   return composeFileName(path).includes(".override.");
 }
 
-const COMPOSE_DIALOG_MIN_WIDTH = 620;
-const COMPOSE_DIALOG_MIN_HEIGHT = 460;
+const COMPOSE_DIALOG_MIN_WIDTH = 320;
+const COMPOSE_DIALOG_MIN_HEIGHT = 420;
 const COMPOSE_DIALOG_MARGIN = 24;
 
 type DialogFrame = { left: number; top: number; width: number; height: number };
@@ -114,10 +114,12 @@ function centeredComposeDialogFrame(): DialogFrame {
 
 function clampComposeDialogFrame(frame: DialogFrame): DialogFrame {
   if (typeof window === "undefined") return frame;
-  const maxWidth = Math.max(COMPOSE_DIALOG_MIN_WIDTH, window.innerWidth - COMPOSE_DIALOG_MARGIN * 2);
-  const maxHeight = Math.max(COMPOSE_DIALOG_MIN_HEIGHT, window.innerHeight - COMPOSE_DIALOG_MARGIN * 2);
-  const width = Math.min(maxWidth, Math.max(COMPOSE_DIALOG_MIN_WIDTH, frame.width));
-  const height = Math.min(maxHeight, Math.max(COMPOSE_DIALOG_MIN_HEIGHT, frame.height));
+  const maxWidth = Math.max(280, window.innerWidth - COMPOSE_DIALOG_MARGIN * 2);
+  const maxHeight = Math.max(360, window.innerHeight - COMPOSE_DIALOG_MARGIN * 2);
+  const minWidth = Math.min(COMPOSE_DIALOG_MIN_WIDTH, maxWidth);
+  const minHeight = Math.min(COMPOSE_DIALOG_MIN_HEIGHT, maxHeight);
+  const width = Math.min(maxWidth, Math.max(minWidth, frame.width));
+  const height = Math.min(maxHeight, Math.max(minHeight, frame.height));
   return {
     width,
     height,
@@ -326,11 +328,11 @@ function ComposeDialog({
             key={handle.edge}
             aria-hidden="true"
             onPointerDown={(event) => startResize(handle.edge, event)}
-            className={cn("absolute z-30 touch-none", handle.className)}
+            className={cn("absolute z-30 hidden touch-none sm:block", handle.className)}
           />
         ))}
         {/* Header */}
-        <DialogHeader className="flex-row items-center justify-between gap-4 border-b border-border/60 px-5 py-4 shrink-0">
+        <DialogHeader className="shrink-0 flex-col items-stretch justify-between gap-3 border-b border-border/60 px-4 py-4 text-left sm:flex-row sm:items-center sm:px-5">
           <div className="flex items-center gap-3 min-w-0">
             <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shrink-0">
               <FileCode2 className="h-4 w-4" />
@@ -351,7 +353,7 @@ function ComposeDialog({
               </DialogDescription>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex shrink-0 flex-wrap items-center gap-1.5">
             {hasContent && (
               <>
                 <Button
@@ -674,14 +676,14 @@ function StackCard({
     <>
       <div className="group border border-border/60 rounded-2xl bg-card hover:border-border hover:shadow-lg hover:shadow-black/5 transition-all duration-300 overflow-hidden">
         {/* Header */}
-        <div className="flex items-center gap-4 px-6 py-4 bg-gradient-to-r from-muted/30 to-transparent border-b border-border/40">
+        <div className="flex flex-col gap-4 border-b border-border/40 bg-gradient-to-r from-muted/30 to-transparent px-4 py-4 sm:flex-row sm:items-center sm:px-6">
           <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-cyan-500/10 text-cyan-400 group-hover:bg-cyan-500/15 transition-colors shrink-0 border border-cyan-500/20">
             <SquareStack className="h-5 w-5" />
           </div>
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2.5 flex-wrap">
-              <span className="font-semibold text-base tracking-tight">{stack.name}</span>
+              <span className="min-w-0 truncate text-base font-semibold tracking-tight">{stack.name}</span>
               <span
                 className={cn(
                   "inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full border",
@@ -750,7 +752,7 @@ function StackCard({
             </div>
           </div>
 
-          <div className="shrink-0 flex flex-col items-end gap-1">
+          <div className="flex shrink-0 flex-row items-end gap-2 sm:flex-col sm:gap-1">
             <span className="text-2xl font-bold tabular-nums leading-none">
               {stack.total}
             </span>
@@ -828,7 +830,7 @@ function StacksPage() {
   const totalContainers = filtered.reduce((sum, s) => sum + s.total, 0);
 
   return (
-    <div className="max-w-7xl mx-auto w-full">
+    <div className="mx-auto w-full max-w-7xl">
       <PageHeader
         icon={Layers}
         title="Stacks"
@@ -841,7 +843,7 @@ function StacksPage() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
-            className="pl-9 h-9 w-56 text-sm bg-muted/40 border-border/60 focus:bg-background"
+            className="h-9 w-full bg-muted/40 pl-9 text-sm border-border/60 focus:bg-background sm:w-56"
             placeholder="Search stacks…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}

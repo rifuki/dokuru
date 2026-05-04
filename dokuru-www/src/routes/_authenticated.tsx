@@ -140,18 +140,18 @@ function DashboardLayout() {
                 {/* Top Header - Shared for all authenticated users */}
                 <header
                     className={cn(
-                        "sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-2 border-b border-border/60 bg-background/80 px-4 backdrop-blur-xl transition-[transform,opacity,width,height] duration-200 ease-out motion-reduce:transition-none group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-16",
+                        "sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-2 border-b border-border/60 bg-background/80 px-3 backdrop-blur-xl transition-[transform,opacity,width,height] duration-200 ease-out motion-reduce:transition-none sm:px-4 group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-16",
                         headerVisible ? "translate-y-0 opacity-100" : "pointer-events-none -translate-y-full opacity-0"
                     )}
                 >
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
                         <SidebarTrigger className="-ml-1 md:hidden">
                             <Menu className="h-5 w-5" />
                         </SidebarTrigger>
                         <BreadcrumbNav />
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
                         {/* Command Menu - Available for all */}
                         <CommandMenuTrigger onClick={() => setCommandOpen(true)} />
                         <CommandMenu open={commandOpen} setOpen={setCommandOpen} />
@@ -164,7 +164,7 @@ function DashboardLayout() {
                 </header>
 
                 {/* Page Content */}
-                <main className="relative flex-1 p-6 min-w-0 overflow-x-clip md:p-8">
+                <main className="relative flex-1 min-w-0 overflow-x-clip p-4 sm:p-6 md:p-8">
                     <Outlet />
                 </main>
             </SidebarInset>

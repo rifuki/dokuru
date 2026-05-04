@@ -592,8 +592,8 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
       className={cn("overflow-hidden rounded-xl border border-l-[3px] shadow-sm transition-colors", statusTone.borderLeft, statusTone.cardTone, isFocused && "ring-2 ring-primary/40")}
     >
       {/* Header row */}
-      <div className="px-5 py-4 flex items-center gap-3">
-        <button onClick={() => onOpenChange(!open)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+      <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:px-5">
+        <button onClick={() => onOpenChange(!open)} className="flex min-w-0 flex-1 items-start gap-3 text-left sm:items-center">
           <StatusIcon status={status} />
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
@@ -636,7 +636,7 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
           </div>
         </button>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="ml-8 flex shrink-0 flex-wrap items-center justify-end gap-2 sm:ml-0">
           {status === "Fail" && remediation_kind === "auto" && (
             <button
               onClick={(e) => {
@@ -670,13 +670,13 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
       {open && (
         <div className="border-t border-border/60">
           {/* Tab bar */}
-          <div className="flex items-center px-4 border-b border-border/60">
+          <div className="flex overflow-x-auto px-4 border-b border-border/60">
             {tabs.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => onActiveTabChange(tab.id)}
                 className={cn(
-                  "px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px",
+                  "shrink-0 px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px",
                   visibleActiveTab === tab.id
                     ? "border-[#2496ED] text-[#2496ED]"
                     : "border-transparent text-muted-foreground hover:text-foreground"
@@ -787,19 +787,19 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
                             <button
                               key={i}
                               onClick={() => setCisDialogOpen(true)}
-                              className="flex items-center gap-1.5 text-xs text-[#2496ED] hover:underline w-full text-left"
+                              className="flex min-w-0 items-center gap-1.5 text-left text-xs text-[#2496ED] hover:underline w-full"
                             >
                               <BookOpen className="h-3 w-3 shrink-0" />
-                              {ref}
+                              <span className="min-w-0 truncate">{ref}</span>
                             </button>
                           );
                         }
                         return (
                           <a key={i} href={ref.startsWith("http") ? ref : undefined}
                             target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-1.5 text-xs text-[#2496ED] hover:underline">
+                            className="flex min-w-0 items-center gap-1.5 text-xs text-[#2496ED] hover:underline">
                             <Link className="h-3 w-3 shrink-0" />
-                            {ref}
+                            <span className="min-w-0 truncate">{ref}</span>
                           </a>
                         );
                       })}
@@ -840,17 +840,17 @@ function AuditBreakdownRow({
   const bridgePoint = hasProjection && projectedPct > 0 ? (pct / projectedPct) * 100 : pct;
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         <span className="flex h-5 w-9 shrink-0 items-center justify-start">
           {leading}
         </span>
-        <span className="text-sm font-semibold leading-5 text-foreground/90">{label}</span>
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold leading-5 text-foreground/90">{label}</span>
         {hasProjection && (
           <span className="inline-flex items-center gap-1 rounded-full bg-[#2496ED]/10 px-2 py-0.5 text-[10px] font-bold text-[#2496ED]" title={fixedRuleIds.join(", ")}>
             +{fixedCount} fixed
           </span>
         )}
-        <span className="text-xs text-muted-foreground/60 font-mono ml-auto">
+        <span className="shrink-0 text-xs text-muted-foreground/60 font-mono">
           {passed}<span className="text-muted-foreground/40">/</span>{total}
           {hasProjection && <span className="text-[#2496ED]"> → {projectedPassed}<span className="text-[#2496ED]/50">/</span>{total}</span>}
         </span>
@@ -925,7 +925,7 @@ function BeforeAfterComparison({
 
   return (
     <div className="rounded-2xl border border-border bg-card dark:bg-gradient-to-br dark:from-[#0A0A0B] dark:to-[#111113] overflow-hidden">
-      <div className="flex flex-col gap-4 border-b border-border px-5 py-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-4 border-b border-border px-4 py-4 md:flex-row md:items-center md:justify-between md:px-5">
         <div>
           <h3 className="text-base font-bold tracking-tight">Before / After Comparison</h3>
           <p className="text-sm text-muted-foreground">Compare the previous audit against the current one to track hardening progress.</p>
@@ -937,8 +937,8 @@ function BeforeAfterComparison({
       </div>
 
       <div className="grid grid-cols-1 divide-y divide-border md:grid-cols-2 md:divide-x md:divide-y-0">
-        <div className="p-5 space-y-5">
-          <div className="flex items-center justify-between">
+        <div className="space-y-5 p-4 sm:p-5">
+          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Before</p>
             <span className="text-xs font-mono text-muted-foreground/60">{fmtDate(before.timestamp)}</span>
           </div>
@@ -969,8 +969,8 @@ function BeforeAfterComparison({
           </div>
         </div>
 
-        <div className="p-5 space-y-5">
-          <div className="flex items-center justify-between">
+        <div className="space-y-5 p-4 sm:p-5">
+          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">After</p>
             <span className="text-xs font-mono text-muted-foreground/60">{fmtDate(after.timestamp)}</span>
           </div>
@@ -1008,7 +1008,7 @@ function BeforeAfterComparison({
         </div>
       </div>
 
-      <div className="border-t border-border px-5 py-4">
+      <div className="border-t border-border px-4 py-4 sm:px-5">
         {fixedRules.length === 0 && regressedRules.length === 0 ? (
           <p className="text-sm text-muted-foreground">No rule status changes from the previous audit.</p>
         ) : (
@@ -1112,7 +1112,7 @@ function CisPdfDialog({ open, onClose }: { open: boolean; onClose: () => void })
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-5xl w-full h-[85vh] p-0 flex flex-col gap-0" showCloseButton={false}>
+      <DialogContent className="flex h-[85vh] w-[calc(100vw-1rem)] max-w-5xl flex-col gap-0 p-0" showCloseButton={false}>
         <DialogTitle className="sr-only">CIS Docker Benchmark PDF</DialogTitle>
         <DialogDescription className="sr-only">
           Preview the CIS Docker Benchmark document attached to this audit.
@@ -1159,21 +1159,21 @@ function CisPdfDialog({ open, onClose }: { open: boolean; onClose: () => void })
 
 function AuditDetailSkeleton() {
   return (
-    <div className="max-w-5xl mx-auto w-full space-y-6 pb-10">
-      <div className="flex items-start justify-between gap-4">
+    <div className="mx-auto w-full max-w-5xl space-y-6 pb-10">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-3">
           <Skeleton className="h-8 w-56" />
           <Skeleton className="h-4 w-72" />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
           <Skeleton className="h-9 w-36 rounded-md" />
           <Skeleton className="h-9 w-24 rounded-md" />
         </div>
       </div>
 
       <div className="overflow-hidden rounded-[16px] border border-border bg-card shadow-sm">
-        <div className="flex items-center justify-between border-b border-border bg-muted/20 px-5 py-4">
-          <div className="flex items-center gap-4">
+        <div className="flex flex-col gap-3 border-b border-border bg-muted/20 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+          <div className="flex min-w-0 items-center gap-4">
             <div className="flex gap-2">
               <Skeleton className="h-3 w-3 rounded-full" />
               <Skeleton className="h-3 w-3 rounded-full" />
@@ -1204,7 +1204,7 @@ function AuditDetailSkeleton() {
             </div>
           </div>
           <div className="space-y-5 p-6">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
               <div className="space-y-2">
                 <Skeleton className="h-3 w-36" />
                 <Skeleton className="h-3 w-44" />
@@ -1226,7 +1226,7 @@ function AuditDetailSkeleton() {
       </div>
 
       <div className="space-y-3">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <Skeleton className="h-9 w-40 rounded-lg" />
           <Skeleton className="h-9 flex-1 rounded-lg" />
         </div>
@@ -2053,20 +2053,20 @@ function AuditDetailPage() {
   }
 
   return (
-    <div className={cn("max-w-5xl mx-auto w-full space-y-6 pb-10", scrollMemory.isRestoring && "invisible")}>
+    <div className={cn("mx-auto w-full max-w-5xl space-y-6 pb-10", scrollMemory.isRestoring && "invisible")}>
       {/* ── Top bar ─────────────────────────────────────────── */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Security Audit</h2>
           <p className="text-muted-foreground text-sm mt-0.5">CIS Docker Benchmark v1.8.0</p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] gap-2 sm:flex sm:w-auto sm:shrink-0 sm:items-center">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="outline"
                 size="sm"
-                className="min-w-[150px]"
+                className="w-full min-w-0 sm:min-w-[150px]"
                 disabled={!auditData || !!documentExporting}
               >
                 {documentExporting ? (
@@ -2100,6 +2100,7 @@ function AuditDetailPage() {
             variant="outline"
             size="sm"
             onClick={handleBack}
+            className="shrink-0"
           >
             <ArrowLeft className="h-4 w-4" /> Back
           </Button>
@@ -2111,14 +2112,14 @@ function AuditDetailPage() {
           {/* ── Summary Card ────────────────────────────────── */}
           <div className="overflow-hidden rounded-[16px] border border-border bg-card shadow-sm">
             <div className="border-b border-border bg-muted/20 px-5 py-3 dark:bg-[#111111]/90">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex min-w-0 items-center gap-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                <div className="flex min-w-0 items-center gap-3 sm:gap-4">
                   <div className="flex shrink-0 items-center gap-2" aria-hidden="true">
                     <span className="h-3 w-3 rounded-full bg-[#ff5f57] shadow-[0_0_14px_rgba(255,95,87,0.45)]" />
                     <span className="h-3 w-3 rounded-full bg-[#ffbd2e] shadow-[0_0_14px_rgba(255,189,46,0.35)]" />
                     <span className="h-3 w-3 rounded-full bg-[#28c840] shadow-[0_0_14px_rgba(40,200,64,0.35)]" />
                   </div>
-                  <div className="flex min-w-0 items-center gap-2 text-base">
+                  <div className="flex min-w-0 items-center gap-2 text-sm sm:text-base">
                     <span className="truncate font-semibold tracking-tight text-foreground">
                       {agent?.name ?? id}
                     </span>
@@ -2142,7 +2143,7 @@ function AuditDetailPage() {
               {/* Left: Score + stats */}
               <div className="flex flex-col p-5 md:p-6">
                 <div>
-                  <div className="mb-2 flex items-center justify-between gap-3">
+                  <div className="mb-2 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                     <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Audit Score</p>
                     {hasProjectedFixes && projectedFixScore && (
                       <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2496ED]">
@@ -2156,7 +2157,7 @@ function AuditDetailPage() {
                     )}
                   </div>
                   <div className="flex items-baseline gap-3">
-                    <span className={cn("text-7xl font-black tabular-nums leading-none",
+                    <span className={cn("text-5xl font-black tabular-nums leading-none sm:text-7xl",
                       auditData.summary.score >= 80 ? "text-emerald-400"
                         : auditData.summary.score >= 60 ? "text-amber-400"
                           : "text-rose-400"
@@ -2194,14 +2195,14 @@ function AuditDetailPage() {
                     onClick={() => setStatusFilter(f => f === "Pass" ? "all" : "Pass")}
                     aria-pressed={statusFilter === "Pass"}
                     className={cn(
-                      "flex min-h-[84px] flex-col items-center justify-center rounded-[12px] border px-3 py-2.5 text-center transition-all duration-200",
+                      "flex min-h-[76px] flex-col items-center justify-center rounded-[12px] border px-2 py-2.5 text-center transition-all duration-200 sm:min-h-[84px] sm:px-3",
                       statusFilter === "Pass"
                         ? "border-[#00d9a5]/50 bg-[#00d9a5]/10 ring-1 ring-[#00d9a5]/20"
                         : "border-[#00d9a5]/25 bg-[#00d9a5]/5 hover:bg-[#00d9a5]/10 hover:border-[#00d9a5]/35"
                     )}
                   >
                     <span className="flex items-baseline justify-center gap-1.5">
-                      <span className="text-3xl font-black leading-none text-[#00d9a5]">{auditData.summary.passed}</span>
+                      <span className="text-2xl font-black leading-none text-[#00d9a5] sm:text-3xl">{auditData.summary.passed}</span>
                       {hasProjectedFixes && projectedFixScore && (
                         <span className="font-mono text-xs font-bold text-[#00d9a5]">→ {projectedFixScore.projectedPassed}</span>
                       )}
@@ -2216,14 +2217,14 @@ function AuditDetailPage() {
                     onClick={() => setStatusFilter(f => f === "Fail" ? "all" : "Fail")}
                     aria-pressed={statusFilter === "Fail"}
                     className={cn(
-                      "flex min-h-[84px] flex-col items-center justify-center rounded-[12px] border px-3 py-2.5 text-center transition-all duration-200",
+                      "flex min-h-[76px] flex-col items-center justify-center rounded-[12px] border px-2 py-2.5 text-center transition-all duration-200 sm:min-h-[84px] sm:px-3",
                       statusFilter === "Fail"
                         ? "bg-rose-500/15 border-rose-500/45 ring-1 ring-rose-500/25"
                         : "bg-rose-500/5 border-rose-500/25 hover:bg-rose-500/10 hover:border-rose-500/35"
                     )}
                   >
                     <span className="flex items-baseline justify-center gap-1.5">
-                      <span className="text-3xl font-black leading-none text-rose-400">{auditData.summary.failed}</span>
+                      <span className="text-2xl font-black leading-none text-rose-400 sm:text-3xl">{auditData.summary.failed}</span>
                       {hasProjectedFixes && projectedFixScore && (
                         <span className="font-mono text-xs font-bold text-rose-300/80">→ {projectedFixScore.projectedFailed}</span>
                       )}
@@ -2233,8 +2234,8 @@ function AuditDetailPage() {
                       <span className="mt-0.5 font-mono text-[10px] font-semibold text-rose-300/75">-{projectedFixScore.fixedCount} after fixes</span>
                     )}
                   </button>
-                  <div className="flex min-h-[84px] flex-col items-center justify-center rounded-[12px] border border-border bg-muted/20 px-3 py-2.5 text-center">
-                    <span className="block text-3xl font-black leading-none text-foreground/80">{auditData.summary.total}</span>
+                  <div className="flex min-h-[76px] flex-col items-center justify-center rounded-[12px] border border-border bg-muted/20 px-2 py-2.5 text-center sm:min-h-[84px] sm:px-3">
+                    <span className="block text-2xl font-black leading-none text-foreground/80 sm:text-3xl">{auditData.summary.total}</span>
                     <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Total</span>
                     <span className="mt-0.5 text-[10px] font-medium text-muted-foreground/60">audited</span>
                   </div>
@@ -2368,7 +2369,7 @@ function AuditDetailPage() {
                     if (!firstFixedRule) return;
                     focusFixedRule(firstFixedRule.rule.id);
                   }}
-                  className="shrink-0 border-[#2496ED]/25 text-[#2496ED] hover:text-[#2496ED]"
+                  className="w-full shrink-0 border-[#2496ED]/25 text-[#2496ED] hover:text-[#2496ED] md:w-auto"
                 >
                   Jump to fixed rules
                 </Button>
@@ -2408,7 +2409,7 @@ function AuditDetailPage() {
 
           {/* ── Fix All banner ───────────────────────────────── */}
           {autoFixableResults.length > 0 && (
-            <div className="flex items-center justify-between gap-4 rounded-xl border border-[#2496ED]/25 bg-[#2496ED]/5 px-5 py-4">
+            <div className="flex flex-col gap-3 rounded-xl border border-[#2496ED]/25 bg-[#2496ED]/5 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5">
               <div className="min-w-0">
                 <p className="text-sm font-bold text-[#2496ED]">
                   {autoFixableResults.length} rule{autoFixableResults.length > 1 ? "s" : ""} can be auto-fixed
@@ -2419,7 +2420,7 @@ function AuditDetailPage() {
               </div>
               <button
                 onClick={() => openFixAll(autoFixableResults)}
-                className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-[#2496ED] hover:bg-[#1e80cc] px-4 py-2.5 text-sm font-bold text-white shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] transition-all hover:shadow-[0_0_24px_-4px_rgba(36,150,237,0.7)] active:scale-[0.98]"
+                className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-[#2496ED] px-4 py-2.5 text-sm font-bold text-white shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] transition-all hover:bg-[#1e80cc] hover:shadow-[0_0_24px_-4px_rgba(36,150,237,0.7)] active:scale-[0.98] sm:w-auto"
               >
                 <Wrench className="h-4 w-4" />
                 Fix All ({autoFixableResults.length})
@@ -2521,11 +2522,11 @@ function AuditDetailPage() {
           {/* ── Search & Filters ────────────────────────────── */}
           <div ref={resultsAnchorRef} className="space-y-2">
             {/* Row 1: Search + view toggle + clear */}
-            <div className="flex items-center gap-2">
-              <div className="flex items-stretch overflow-hidden border border-border rounded-lg bg-muted/20 shrink-0">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="flex w-full shrink-0 items-stretch overflow-hidden rounded-lg border border-border bg-muted/20 sm:w-auto">
                 <button
                   onClick={() => setViewMode("pillar")}
-                  className={cn("flex items-center gap-1.5 text-xs px-3 py-2 font-bold transition-all",
+                  className={cn("flex flex-1 items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold transition-all sm:flex-none",
                     viewMode === "pillar" ? "bg-[#2496ED] text-white" : "hover:bg-muted/40 text-muted-foreground")}
                 >
                   <Layers className="h-3.5 w-3.5" />
@@ -2533,7 +2534,7 @@ function AuditDetailPage() {
                 </button>
                 <button
                   onClick={() => setViewMode("section")}
-                  className={cn("flex items-center gap-1.5 border-l border-border/60 text-xs px-3 py-2 font-bold transition-all",
+                  className={cn("flex flex-1 items-center justify-center gap-1.5 border-l border-border/60 px-3 py-2 text-xs font-bold transition-all sm:flex-none",
                     viewMode === "section" ? "bg-[#2496ED] text-white" : "hover:bg-muted/40 text-muted-foreground")}
                 >
                   <Terminal className="h-3.5 w-3.5" />
@@ -2548,13 +2549,13 @@ function AuditDetailPage() {
                     setPillarFilter("all");
                     setSearchQuery("");
                   }}
-                  className="shrink-0 text-xs px-2 py-1.5 text-muted-foreground hover:text-rose-400 font-bold transition-colors"
+                  className="order-last shrink-0 px-2 py-1.5 text-xs font-bold text-muted-foreground transition-colors hover:text-rose-400 sm:order-none"
                 >
                   Clear
                 </button>
               )}
 
-              <div className="relative flex-1">
+              <div className="relative w-full sm:flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/60" />
                 <Input
                   type="text"

@@ -168,14 +168,14 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
   };
 
   return (
-    <div className={`group rounded-[14px] border border-border bg-card p-4 shadow-sm transition-colors ${isConnecting ? "border-muted-foreground/20 shadow-muted-foreground/5" : ""}`}>
+    <div className={`group rounded-[14px] border border-border bg-card p-3 shadow-sm transition-colors sm:p-4 ${isConnecting ? "border-muted-foreground/20 shadow-muted-foreground/5" : ""}`}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex min-w-0 flex-1 gap-4">
-          <div className="flex w-14 items-center justify-center shrink-0 relative">
+        <div className="flex min-w-0 flex-1 gap-3 sm:gap-4">
+          <div className="relative flex w-12 shrink-0 items-center justify-center sm:w-14">
             <img
               src="/docker.svg"
               alt="Docker"
-              className={`w-14 h-14 transition-all duration-300 ${isConnecting ? "animate-pulse grayscale opacity-50" : ""}`}
+              className={`h-12 w-12 transition-all duration-300 sm:h-14 sm:w-14 ${isConnecting ? "animate-pulse grayscale opacity-50" : ""}`}
               style={
                 isConnecting
                   ? undefined
@@ -187,8 +187,8 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
           </div>
 
           <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap">
-              <span className="min-w-0 truncate text-base font-semibold tracking-tight text-foreground">{agent.name}</span>
+            <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden">
+              <span className="min-w-0 max-w-full truncate text-base font-semibold tracking-tight text-foreground">{agent.name}</span>
               <span
                 className={`inline-flex h-5 shrink-0 items-center justify-center gap-1.5 rounded border px-2 text-[11px] font-semibold uppercase leading-none ${
                   isConnecting
@@ -216,7 +216,7 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
                   Docker {info.docker_version}
                 </span>
               )}
-              <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-muted-foreground/70">
+              <span className="min-w-0 basis-full truncate font-mono text-[12px] text-muted-foreground/70 sm:basis-auto sm:flex-1">
                 {agent.url.replace(/^https?:\/\//, '')}
               </span>
             </div>
@@ -235,8 +235,8 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
               </div>
             ) : info && !isOffline ? (
               // Keep the last successful stats visible while the WS reconnects.
-              <div className="flex items-center mt-3 text-[12px] font-medium flex-wrap divide-x divide-border text-muted-foreground">
-                <div className="flex items-center gap-1.5 pr-3">
+              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-[12px] font-medium text-muted-foreground sm:gap-x-0 sm:divide-x sm:divide-border">
+                <div className="flex items-center gap-1.5 sm:pr-3">
                   <Container className="w-3.5 h-3.5" />
                   <span>{info.containers.total} containers</span>
                   <span className="ml-2 inline-flex items-center gap-1.5">
@@ -250,19 +250,19 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
                     </span>
                   </span>
                 </div>
-                <div className="flex items-center gap-1.5 px-3">
+                <div className="flex items-center gap-1.5 sm:px-3">
                   <HardDrive className="w-3.5 h-3.5" />
                   <span>{info.volumes} volumes</span>
                 </div>
-                <div className="flex items-center gap-1.5 px-3">
+                <div className="flex items-center gap-1.5 sm:px-3">
                   <Box className="w-3.5 h-3.5" />
                   <span>{info.images} images</span>
                 </div>
-                <div className="flex items-center gap-1.5 px-3">
+                <div className="flex items-center gap-1.5 sm:px-3">
                   <Cpu className="w-3.5 h-3.5" />
                   <span>{info.cpu_count} CPU</span>
                 </div>
-                <div className="flex items-center gap-1.5 pl-3">
+                <div className="flex items-center gap-1.5 sm:pl-3">
                   <Server className="w-3.5 h-3.5" />
                   <span>{(info.memory_total / 1024 / 1024 / 1024).toFixed(0)} GB RAM</span>
                 </div>
@@ -293,11 +293,11 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2 self-start lg:self-center" onClick={(e) => e.stopPropagation()}>
+        <div className="flex w-full shrink-0 items-center gap-2 self-start sm:w-auto lg:self-center" onClick={(e) => e.stopPropagation()}>
           <Button
             size="sm"
             variant={isOnline && !isConnecting ? "default" : "outline"}
-            className="h-9 rounded-[10px] px-3.5 text-sm font-semibold shadow-none"
+            className="h-9 flex-1 rounded-[10px] px-3.5 text-sm font-semibold shadow-none sm:flex-none"
             onClick={onClick}
           >
             {isConnecting ? (
@@ -308,7 +308,7 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
             Dashboard
           </Button>
 
-          <div className="flex items-center rounded-[10px] border bg-background/60 p-1 shadow-sm dark:bg-white/[0.025]">
+          <div className="flex shrink-0 items-center rounded-[10px] border bg-background/60 p-1 shadow-sm dark:bg-white/[0.025]">
             <button
               type="button"
               className="flex h-8 w-8 items-center justify-center rounded-[7px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
@@ -538,8 +538,8 @@ function AgentsList() {
   const pagedAgents = displayAgents.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   return (
-    <div className="max-w-7xl mx-auto w-full space-y-6">
-      <div className="flex items-end justify-between">
+    <div className="mx-auto w-full max-w-7xl space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Agents</h2>
           <p className="text-muted-foreground text-sm mt-1">
@@ -547,7 +547,7 @@ function AgentsList() {
             {hasFilters && " (filtered)"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
           <Button
             variant="outline"
             onClick={() => void refreshAgents()}
@@ -620,13 +620,13 @@ function AgentsList() {
       ) : (
         <div className="overflow-hidden rounded-[14px] border border-border bg-card shadow-sm">
           {/* Filter bar */}
-          <div className="border-b border-border bg-muted/20 p-4">
-            <div className="flex items-center gap-3 flex-wrap">
+          <div className="border-b border-border bg-muted/20 p-3 sm:p-4">
+            <div className="flex flex-wrap items-stretch gap-2 sm:items-center sm:gap-3">
 
               {/* Connection filter */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className={`px-3 py-1.5 border rounded text-sm flex items-center gap-2 transition-colors ${
+                  <button className={`flex h-9 flex-1 items-center justify-between gap-2 rounded border px-3 py-1.5 text-sm transition-colors sm:flex-none ${
                     connFilter !== "all"
                       ? "bg-primary/10 border-primary/40 text-primary"
                       : "bg-muted/50 border-border text-muted-foreground hover:bg-muted"
@@ -652,7 +652,7 @@ function AgentsList() {
               {/* Status filter */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className={`px-3 py-1.5 border rounded text-sm flex items-center gap-2 transition-colors ${
+                  <button className={`flex h-9 flex-1 items-center justify-between gap-2 rounded border px-3 py-1.5 text-sm transition-colors sm:flex-none ${
                     statusFilter !== "all"
                       ? "bg-primary/10 border-primary/40 text-primary"
                       : "bg-muted/50 border-border text-muted-foreground hover:bg-muted"
@@ -678,7 +678,7 @@ function AgentsList() {
               {/* Docker Version filter */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className={`px-3 py-1.5 border rounded text-sm flex items-center gap-2 transition-colors ${
+                  <button className={`flex h-9 flex-1 items-center justify-between gap-2 rounded border px-3 py-1.5 text-sm transition-colors sm:flex-none ${
                     versionFilter !== "all"
                       ? "bg-primary/10 border-primary/40 text-primary"
                       : "bg-muted/50 border-border text-muted-foreground hover:bg-muted"
@@ -723,7 +723,7 @@ function AgentsList() {
               )}
 
               {/* Search */}
-              <div className="flex-1 min-w-[260px] relative">
+              <div className="relative order-last min-w-0 basis-full sm:order-none sm:min-w-[260px] sm:flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
                 <input
                   type="text"
@@ -743,7 +743,7 @@ function AgentsList() {
               </div>
 
               {/* Sort */}
-              <div className="flex items-center gap-2 ml-auto">
+              <div className="ml-0 flex w-full items-center justify-end gap-2 sm:ml-auto sm:w-auto">
                 <span className="text-sm text-muted-foreground/70">Sort By</span>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

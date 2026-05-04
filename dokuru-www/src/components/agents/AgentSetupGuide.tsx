@@ -49,7 +49,7 @@ export function AgentSetupGuide({ className = "" }: AgentSetupGuideProps) {
 export function AgentSetupDialog({ open, onOpenChange, onStartAddAgent }: AgentSetupDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[720px]">
+            <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] overflow-y-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-[720px]">
                 <DialogHeader>
                     <DialogTitle>Install Docker Agent</DialogTitle>
                     <DialogDescription>
@@ -83,12 +83,12 @@ export function AgentSetupDialog({ open, onOpenChange, onStartAddAgent }: AgentS
                     </div>
                 </div>
 
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>
+                <DialogFooter className="flex-col-reverse sm:flex-row">
+                    <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
                         Close
                     </Button>
                     {onStartAddAgent && (
-                        <Button onClick={onStartAddAgent}>
+                        <Button onClick={onStartAddAgent} className="w-full sm:w-auto">
                             Open Add Agent
                         </Button>
                     )}

@@ -102,8 +102,8 @@ export function AddAgentModal({ open, onOpenChange, onOpenSetupGuide }: AddAgent
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-[940px]">
-                <DialogHeader className="border-b border-border px-6 py-5">
+            <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] gap-0 overflow-y-auto overflow-x-hidden p-0 sm:max-h-[calc(100dvh-2rem)] sm:max-w-[940px]">
+                <DialogHeader className="border-b border-border px-4 py-4 text-left sm:px-6 sm:py-5">
                     <DialogTitle className="text-xl">Add Docker Agent</DialogTitle>
                     <DialogDescription>
                         Pick how Dokuru reaches your host, then paste the agent URL and token shown on the host.
@@ -118,7 +118,7 @@ export function AddAgentModal({ open, onOpenChange, onOpenSetupGuide }: AddAgent
                     data-lpignore="true"
                     data-1p-ignore="true"
                 >
-                    <div className="border-b border-border bg-muted/25 p-5 md:border-b-0 md:border-r">
+                    <div className="border-b border-border bg-muted/25 p-4 sm:p-5 md:border-b-0 md:border-r">
                         <div className="mb-3">
                             <div className="text-sm font-semibold">Connection mode</div>
                             <p className="mt-1 text-xs leading-5 text-muted-foreground">
@@ -163,11 +163,11 @@ export function AddAgentModal({ open, onOpenChange, onOpenSetupGuide }: AddAgent
                         )}
                     </div>
 
-                    <div className="flex flex-col p-5">
-                        <div className="grid gap-3 md:grid-rows-[70px_90px_90px]">
+                    <div className="flex min-w-0 flex-col p-4 sm:p-5">
+                        <div className="grid gap-4 md:grid-rows-[70px_90px_90px]">
                             <div className="space-y-1.5">
                                 <Label htmlFor="name" className="text-sm font-medium">Agent Name</Label>
-                                <div className="flex gap-2">
+                                <div className="flex min-w-0 gap-2">
                                     <Input
                                         id="name"
                                         name="agent_display_name"
@@ -269,16 +269,17 @@ export function AddAgentModal({ open, onOpenChange, onOpenSetupGuide }: AddAgent
                             </div>
                         </div>
 
-                        <div className="mt-auto flex justify-end gap-3 pt-5">
+                        <div className="mt-auto flex flex-col-reverse gap-2 pt-5 sm:flex-row sm:justify-end sm:gap-3">
                             <Button
                                 type="button"
                                 variant="outline"
                                 onClick={() => onOpenChange(false)}
                                 disabled={isLoading}
+                                className="w-full sm:w-auto"
                             >
                                 Cancel
                             </Button>
-                            <Button type="submit" disabled={isLoading}>
+                            <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
                                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                 Add Agent
                             </Button>
