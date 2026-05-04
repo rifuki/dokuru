@@ -39,7 +39,6 @@ pub(crate) const NAV: &[NavItem] = &[
 pub enum SeverityKind {
     Fail,
     Pass,
-    Warn,
 }
 
 #[derive(Clone, Copy)]
@@ -50,13 +49,6 @@ pub enum RemediationKind {
     Ok,
 }
 
-pub(crate) struct AuditRule {
-    pub(crate) rule: &'static str,
-    pub(crate) sev: SeverityKind,
-    pub(crate) rem: RemediationKind,
-    pub(crate) detail: &'static str,
-}
-
 pub(crate) struct AuditSection {
     pub(crate) name: &'static str,
     pub(crate) icon: IconKind,
@@ -64,7 +56,6 @@ pub(crate) struct AuditSection {
     pub(crate) bar_color: &'static str,
     pub(crate) passed: usize,
     pub(crate) total: usize,
-    pub(crate) rules: &'static [AuditRule],
 }
 
 pub(crate) const AUDIT_SECTIONS: &[AuditSection] = &[
@@ -72,51 +63,41 @@ pub(crate) const AUDIT_SECTIONS: &[AuditSection] = &[
         name: "Namespace Isolation",
         icon: IconKind::Box,
         color: "text-zinc-300 border-white/10",
-        bar_color: "bg-zinc-500",
-        passed: 1,
-        total: 5,
-        rules: &[
-            AuditRule {
-                rule: "2.10 User namespace remapping",
-                sev: SeverityKind::Pass,
-                rem: RemediationKind::Ok,
-                detail: "userns-remap: default",
-            },
-            AuditRule {
-                rule: "5.10 Host network namespace",
-                sev: SeverityKind::Fail,
-                rem: RemediationKind::Auto,
-                detail: "1 container using --net=host",
-            },
-        ],
+        bar_color: "bg-rose-500",
+        passed: 2,
+        total: 6,
     },
     AuditSection {
         name: "Cgroup Controls",
         icon: IconKind::Gauge,
         color: "text-zinc-300 border-white/10",
-        bar_color: "bg-zinc-500",
-        passed: 2,
+        bar_color: "bg-emerald-400",
+        passed: 4,
         total: 5,
-        rules: &[AuditRule {
-            rule: "5.11 Memory limit",
-            sev: SeverityKind::Warn,
-            rem: RemediationKind::Auto,
-            detail: "3 containers without --memory",
-        }],
     },
     AuditSection {
         name: "Runtime Hardening",
         icon: IconKind::Shield,
         color: "text-zinc-300 border-white/10",
-        bar_color: "bg-zinc-500",
-        passed: 3,
-        total: 6,
-        rules: &[AuditRule {
-            rule: "5.5 Privileged containers",
-            sev: SeverityKind::Fail,
-            rem: RemediationKind::Auto,
-            detail: "2 containers with --privileged",
-        }],
+        bar_color: "bg-emerald-400",
+        passed: 1,
+        total: 1,
+    },
+    AuditSection {
+        name: "Host Configuration",
+        icon: IconKind::ServerCog,
+        color: "text-zinc-300 border-white/10",
+        bar_color: "bg-amber-400",
+        passed: 12,
+        total: 14,
+    },
+    AuditSection {
+        name: "Images & Daemon",
+        icon: IconKind::Boxes,
+        color: "text-zinc-300 border-white/10",
+        bar_color: "bg-amber-400",
+        passed: 9,
+        total: 10,
     },
 ];
 
@@ -158,42 +139,59 @@ pub struct CoverageGroup {
 
 pub(crate) const COVERAGE_GROUPS: &[CoverageGroup] = &[
     CoverageGroup {
-        icon: IconKind::Boxes,
-        label: "group.a",
-        title: "Namespace controls",
+        icon: IconKind::Box,
+        label: "6 rules",
+        title: "Namespace Isolation",
         intro: "Isolate containers from the host kernel view.",
         rules: &[
-            "User namespace support",
-            "Host network namespace isolation",
-            "Host PID namespace isolation",
-            "Host IPC namespace isolation",
-            "Host UTS namespace isolation",
-            "Host user namespace isolation",
+            "User namespace support (2.10)",
+            "Host network namespace (5.10)",
+            "Host PID namespace (5.16)",
+            "Host IPC namespace (5.17)",
+            "Host UTS namespace (5.21)",
+            "Host user namespace (5.31)",
         ],
     },
     CoverageGroup {
         icon: IconKind::Gauge,
-        label: "group.b",
-        title: "Cgroup controls",
+        label: "5 rules",
+        title: "Cgroup Controls",
         intro: "Bound resource usage per container.",
         rules: &[
-            "Memory limits",
-            "CPU shares / priority",
-            "PIDs limit",
-            "Cgroup usage confirmation",
+            "Memory limits (5.11)",
+            "CPU shares / priority (5.12)",
+            "PIDs limit (5.29)",
+            "Cgroup usage confirmation (5.25)",
+            "Base device size (2.11)",
         ],
     },
     CoverageGroup {
-        icon: IconKind::Lock,
-        label: "group.c",
-        title: "Critical runtime isolation",
+        icon: IconKind::Shield,
+        label: "1 rule",
+        title: "Runtime Hardening",
         intro: "Catch flags that silently pierce the sandbox.",
+        rules: &["Privileged container detection (5.5)"],
+    },
+    CoverageGroup {
+        icon: IconKind::ServerCog,
+        label: "14 rules",
+        title: "Host Configuration",
+        intro: "Verify host-level Docker prerequisites and audit trails.",
         rules: &[
-            "Privileged container detection",
-            "Sensitive host path mounts",
-            "Docker socket exposure",
-            "Host device exposure",
-            "Seccomp / no-new-privileges",
+            "Separate Docker root partition (1.1.1)",
+            "Docker group membership (1.1.2)",
+            "Audit rules for Docker paths (1.1.3\u{2013}1.1.18)",
+        ],
+    },
+    CoverageGroup {
+        icon: IconKind::Boxes,
+        label: "10 rules",
+        title: "Images & Daemon",
+        intro: "Daemon file permissions and container image hygiene.",
+        rules: &[
+            "Docker daemon file permissions (3.1\u{2013}3.8)",
+            "Container user override (4.1)",
+            "Healthcheck override (4.6)",
         ],
     },
 ];
@@ -234,19 +232,19 @@ pub(crate) const FOOTER_COLUMNS: &[FooterColumn] = &[
                 test_id: "footer-link-features",
             },
             FooterLink {
-                label: "Audit Coverage",
-                href: "#coverage",
-                test_id: "footer-link-audit-coverage",
-            },
-            FooterLink {
                 label: "How It Works",
                 href: "#how-it-works",
                 test_id: "footer-link-how-it-works",
             },
             FooterLink {
-                label: "Dashboard",
-                href: "#cta",
-                test_id: "footer-link-dashboard",
+                label: "Coverage",
+                href: "#coverage",
+                test_id: "footer-link-coverage",
+            },
+            FooterLink {
+                label: "Why Dokuru",
+                href: "#why-dokuru",
+                test_id: "footer-link-why-dokuru",
             },
         ],
     },
@@ -259,54 +257,9 @@ pub(crate) const FOOTER_COLUMNS: &[FooterColumn] = &[
                 test_id: "footer-link-github",
             },
             FooterLink {
-                label: "Documentation",
-                href: "#docs",
-                test_id: "footer-link-documentation",
-            },
-            FooterLink {
-                label: "API",
-                href: "#api",
-                test_id: "footer-link-api",
-            },
-            FooterLink {
-                label: "Changelog",
-                href: "#changelog",
-                test_id: "footer-link-changelog",
-            },
-        ],
-    },
-    FooterColumn {
-        title: "Project",
-        links: &[
-            FooterLink {
-                label: "About",
-                href: "#about",
-                test_id: "footer-link-about",
-            },
-            FooterLink {
-                label: "Contact",
-                href: "#contact",
-                test_id: "footer-link-contact",
-            },
-            FooterLink {
-                label: "Research Context",
-                href: "#research",
-                test_id: "footer-link-research-context",
-            },
-        ],
-    },
-    FooterColumn {
-        title: "Legal",
-        links: &[
-            FooterLink {
-                label: "Privacy Policy",
-                href: "#privacy",
-                test_id: "footer-link-privacy-policy",
-            },
-            FooterLink {
-                label: "Terms",
-                href: "#terms",
-                test_id: "footer-link-terms",
+                label: "CIS Benchmark",
+                href: "https://www.cisecurity.org/benchmark/docker",
+                test_id: "footer-link-cis-benchmark",
             },
         ],
     },

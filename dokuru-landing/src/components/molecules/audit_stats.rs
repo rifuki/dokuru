@@ -29,21 +29,24 @@ pub(crate) fn preview_count(
 }
 
 #[must_use]
-pub(crate) fn preview_pillar(
+pub(crate) fn preview_pillar_from_section(
     icon_kind: IconKind,
     label: &'static str,
     color: &'static str,
-    count: &'static str,
+    passed: usize,
+    total: usize,
     bar: &'static str,
-    width: &'static str,
 ) -> impl IntoView {
+    let count = format!("{passed}/{total}");
+    let width = format!("width: {}%", passed * 100 / total);
+
     view! {
         <div class="space-y-2">
             <div class="flex items-center justify-between">
                 <span class=format!("inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] px-2 py-1 rounded border {} bg-white/[0.02]", color)>{icon(icon_kind, 11, "", "2")}{label}</span>
                 <span class="font-mono text-[10px] text-zinc-600">{count}</span>
             </div>
-            <div class="h-1 bg-white/5 rounded-full overflow-hidden"><div class=format!("h-full {}", bar) style=format!("width: {}", width)/></div>
+            <div class="h-1 bg-white/5 rounded-full overflow-hidden"><div class=format!("h-full {}", bar) style=width/></div>
         </div>
     }
 }

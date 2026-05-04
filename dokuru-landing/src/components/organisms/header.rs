@@ -9,60 +9,7 @@ pub(crate) fn header() -> impl IntoView {
     let hidden = RwSignal::new(false);
     let initial_load = RwSignal::new(true);
 
-    #[cfg(target_arch = "wasm32")]
-    {
-        use wasm_bindgen::{closure::Closure, JsCast};
-
-        if let Some(window) = web_sys::window() {
-            let initial_y = window.scroll_y().unwrap_or_default();
-            let initial_scrolled = initial_y > 8.0;
-            scrolled.set(initial_scrolled);
-
-            let last_y = std::rc::Rc::new(std::cell::Cell::new(initial_y));
-            let listener_window = window.clone();
-
-            let on_scroll = Closure::wrap(Box::new(move || {
-                let current_y = listener_window.scroll_y().unwrap_or_default();
-                let next_scrolled = current_y > 8.0;
-
-                if initial_load.get_untracked() {
-                    initial_load.set(false);
-                }
-
-                if scrolled.get_untracked() != next_scrolled {
-                    scrolled.set(next_scrolled);
-                }
-
-                let last = last_y.get();
-                // Hide if scrolling down and past 100px threshold, show if scrolling up
-                if current_y > last && current_y > 100.0 {
-                    if !hidden.get_untracked() {
-                        hidden.set(true);
-                        // Optional: close mobile menu when hiding
-                        if open.get_untracked() {
-                            open.set(false);
-                        }
-                    }
-                } else if current_y < last {
-                    if hidden.get_untracked() {
-                        hidden.set(false);
-                    }
-                }
-
-                last_y.set(current_y);
-            }) as Box<dyn FnMut()>);
-
-            let options = web_sys::AddEventListenerOptions::new();
-            options.set_passive(true);
-
-            let _ = window.add_event_listener_with_callback_and_add_event_listener_options(
-                "scroll",
-                on_scroll.as_ref().unchecked_ref(),
-                &options,
-            );
-            on_scroll.forget();
-        }
-    }
+    setup_scroll_handler(open, scrolled, hidden, initial_load);
 
     view! {
         <header
@@ -135,4 +82,70 @@ pub(crate) fn header() -> impl IntoView {
             </div>
         </header>
     }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn setup_scroll_handler(
+    open: RwSignal<bool>,
+    scrolled: RwSignal<bool>,
+    hidden: RwSignal<bool>,
+    initial_load: RwSignal<bool>,
+) {
+    use wasm_bindgen::{closure::Closure, JsCast};
+
+    if let Some(window) = web_sys::window() {
+        let initial_y = window.scroll_y().unwrap_or_default();
+        let initial_scrolled = initial_y > 8.0;
+        scrolled.set(initial_scrolled);
+
+        let last_y = std::rc::Rc::new(std::cell::Cell::new(initial_y));
+        let listener_window = window.clone();
+
+        let on_scroll = Closure::wrap(Box::new(move || {
+            let current_y = listener_window.scroll_y().unwrap_or_default();
+            let next_scrolled = current_y > 8.0;
+
+            if initial_load.get_untracked() {
+                initial_load.set(false);
+            }
+
+            if scrolled.get_untracked() != next_scrolled {
+                scrolled.set(next_scrolled);
+            }
+
+            let last = last_y.get();
+            // Hide if scrolling down and past 100px threshold, show if scrolling up.
+            if current_y > last && current_y > 100.0 {
+                if !hidden.get_untracked() {
+                    hidden.set(true);
+                    if open.get_untracked() {
+                        open.set(false);
+                    }
+                }
+            } else if current_y < last && hidden.get_untracked() {
+                hidden.set(false);
+            }
+
+            last_y.set(current_y);
+        }) as Box<dyn FnMut()>);
+
+        let options = web_sys::AddEventListenerOptions::new();
+        options.set_passive(true);
+
+        let _ = window.add_event_listener_with_callback_and_add_event_listener_options(
+            "scroll",
+            on_scroll.as_ref().unchecked_ref(),
+            &options,
+        );
+        on_scroll.forget();
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+const fn setup_scroll_handler(
+    _: RwSignal<bool>,
+    _: RwSignal<bool>,
+    _: RwSignal<bool>,
+    _: RwSignal<bool>,
+) {
 }

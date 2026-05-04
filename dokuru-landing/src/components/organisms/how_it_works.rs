@@ -7,13 +7,13 @@ use leptos::{html, prelude::*};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum WorkflowMode {
-    Cloud,
-    Agent,
+    Hosted,
+    Direct,
 }
 
 #[must_use]
 pub(crate) fn how_it_works() -> impl IntoView {
-    let active_mode = RwSignal::new(WorkflowMode::Cloud);
+    let active_mode = RwSignal::new(WorkflowMode::Hosted);
     let active_step = RwSignal::new(0usize);
     let copied = RwSignal::new(false);
     let heading_ref = reveal_ref::<html::Div>();
@@ -37,7 +37,7 @@ pub(crate) fn how_it_works() -> impl IntoView {
                         "Three steps from install to audit."
                     </h2>
                     <p class="mt-5 text-zinc-400 text-base md:text-[17px] leading-relaxed max-w-2xl">
-                        "Pick the hosted dashboard for fleet view, or use the built-in agent dashboard for a self-contained host."
+                        "Use the hosted dashboard to manage agents through a server, or access the agent dashboard directly — no server required."
                     </p>
                     <div class="mt-10">
                         {mode_tabs(active_mode)}
@@ -56,10 +56,10 @@ pub(crate) fn how_it_works() -> impl IntoView {
                                 {terminal_install_panel(copied, handle_copy)}
                             </div>
                             <div class=move || panel_class(active_step.get(), 1, "#050505")>
-                                <div class=move || if active_mode.get() == WorkflowMode::Cloud { "workflow-panel" } else { "hidden" }>
+                                <div class=move || if active_mode.get() == WorkflowMode::Hosted { "workflow-panel" } else { "hidden" }>
                                     {cloud_dashboard_panel()}
                                 </div>
-                                <div class=move || if active_mode.get() == WorkflowMode::Agent { "workflow-panel" } else { "hidden" }>
+                                <div class=move || if active_mode.get() == WorkflowMode::Direct { "workflow-panel" } else { "hidden" }>
                                     {agent_dashboard_panel()}
                                 </div>
                             </div>
@@ -69,7 +69,7 @@ pub(crate) fn how_it_works() -> impl IntoView {
                         </div>
                         <div class="mt-4 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500 flex justify-between px-2">
                             <span>"// select a step to view details"</span>
-                            <span class="text-[#2496ED]">{move || if active_mode.get() == WorkflowMode::Cloud { "cloud mode active" } else { "agent mode active" }}</span>
+                            <span class="text-[#2496ED]">{move || if active_mode.get() == WorkflowMode::Hosted { "hosted mode active" } else { "direct mode active" }}</span>
                         </div>
                     </div>
                 </div>
@@ -81,8 +81,8 @@ pub(crate) fn how_it_works() -> impl IntoView {
 fn mode_tabs(active_mode: RwSignal<WorkflowMode>) -> impl IntoView {
     view! {
         <div class="inline-flex items-center rounded-full border border-white/10 bg-white/[0.02] p-1.5 backdrop-blur-sm shadow-xl">
-            {mode_tab(active_mode, WorkflowMode::Cloud, "Cloud", "fleet view")}
-            {mode_tab(active_mode, WorkflowMode::Agent, "Agent", "single host")}
+            {mode_tab(active_mode, WorkflowMode::Hosted, "Hosted", "via server")}
+            {mode_tab(active_mode, WorkflowMode::Direct, "Direct", "no server")}
         </div>
     }
 }
@@ -152,8 +152,8 @@ const fn step_num(index: usize) -> &'static str {
 const fn step_title(mode: WorkflowMode, index: usize) -> &'static str {
     match (mode, index) {
         (_, 0) => "Install the agent",
-        (WorkflowMode::Cloud, 1) => "Add to cloud dashboard",
-        (WorkflowMode::Agent, 1) => "Open agent dashboard",
+        (WorkflowMode::Hosted, 1) => "Add agent to dashboard",
+        (WorkflowMode::Direct, 1) => "Open agent dashboard",
         _ => "Run security audit",
     }
 }
@@ -161,8 +161,8 @@ const fn step_title(mode: WorkflowMode, index: usize) -> &'static str {
 const fn step_body(mode: WorkflowMode, index: usize) -> &'static str {
     match (mode, index) {
         (_, 0) => "Run one command to install the agent. It starts the service, opens a tunnel, and generates your credentials.",
-        (WorkflowMode::Cloud, 1) => "Copy the agent URL and token into app.dokuru.rifuki.dev when you want one dashboard for multiple hosts.",
-        (WorkflowMode::Agent, 1) => "Use the dashboard URL from the install output to audit this host directly from the agent itself.",
+        (WorkflowMode::Hosted, 1) => "Paste the agent URL and token into the hosted dashboard. Pick Cloudflare Tunnel for the fastest setup.",
+        (WorkflowMode::Direct, 1) => "Open the dashboard URL from the install output. Authenticate with the generated token \u{2014} no server needed.",
         _ => "Run the audit from whichever dashboard you chose, inspect evidence, then apply supported fixes.",
     }
 }

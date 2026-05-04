@@ -1,7 +1,8 @@
 use crate::components::{
     atoms::{icon::icon, IconKind},
-    molecules::{audit_stats, mock_field},
+    molecules::audit_stats,
 };
+use crate::content::AUDIT_SECTIONS;
 use leptos::prelude::*;
 
 #[must_use]
@@ -41,6 +42,8 @@ pub(crate) fn terminal_install_panel(
     }
 }
 
+// PLACEHOLDER_HOSTED_PANEL
+
 #[must_use]
 pub(crate) fn cloud_dashboard_panel() -> impl IntoView {
     view! {
@@ -49,22 +52,91 @@ pub(crate) fn cloud_dashboard_panel() -> impl IntoView {
                 <div class="flex gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-zinc-700"/><span class="w-2.5 h-2.5 rounded-full bg-zinc-700"/><span class="w-2.5 h-2.5 rounded-full bg-zinc-700"/></div>
                 <span class="font-mono text-[11px] text-zinc-500 ml-3">"app.dokuru.rifuki.dev"</span>
             </div>
-            <div class="p-6 space-y-5">
-                <div><h3 class="text-xl font-bold text-white mb-1">"Add Docker Agent"</h3><p class="text-sm text-zinc-400">"Paste the URL and token to manage this host from the cloud dashboard."</p></div>
-                <div class="space-y-4">
-                    {mock_field::mock_field("Name", "Production Server", "text-zinc-400")}
+            <div class="p-4 md:p-5 space-y-4">
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                        <label class="block text-sm font-medium text-zinc-300 mb-2">"Access Mode"</label>
-                        <div class="bg-[#0d0d0f] border border-[#2496ED]/30 rounded-lg px-3 py-2.5 text-zinc-300 text-sm flex items-center gap-2"><span class="text-[#2496ED]">"☁"</span> "Cloudflare Tunnel (Recommended)"</div>
+                        <h3 class="text-lg font-bold text-white">"Add Docker Agent"</h3>
+                        <p class="mt-1 max-w-2xl text-xs leading-5 text-zinc-400 md:text-sm">"Pick a connection mode, then paste the URL and token from the install output."</p>
                     </div>
-                    {mock_field::mock_field("Agent URL", "https://xxx.trycloudflare.com", "text-[#00E5FF] text-sm font-mono")}
-                    {mock_field::mock_field("Agent Token", "dok_••••••••••••••••", "text-amber-300 text-sm font-mono")}
-                    <button class="w-full bg-[#2496ED] hover:bg-[#2496ED]/90 text-white font-semibold py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center gap-2">"Add Agent"</button>
+                    <span class="hidden rounded-full border border-[#2496ED]/30 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-[#2496ED] sm:inline-flex">"hosted"</span>
+                </div>
+
+                <div class="space-y-2">
+                    <div class="text-[11px] font-mono uppercase tracking-[0.18em] text-zinc-500">"connection mode"</div>
+                    <div class="grid gap-2 sm:grid-cols-3">
+                        {connection_mode_card(IconKind::Cloud, "Cloudflare Tunnel", "Instant HTTPS tunnel", true)}
+                        {connection_mode_card(IconKind::Link2, "Relay Mode", "No inbound port", false)}
+                        {connection_mode_card(IconKind::Globe, "Direct HTTP", "Own reverse proxy", false)}
+                    </div>
+                </div>
+
+                <div class="grid gap-3 lg:grid-cols-[0.9fr_1.3fr_1fr_auto] lg:items-end">
+                    {form_field("Agent Name", "Production Server", "text-zinc-500")}
+                    {form_field("Agent URL", "https://xxx.trycloudflare.com", "text-[#00E5FF] font-mono")}
+                    {form_field("Agent Token", "dok_************", "text-amber-300 font-mono")}
+                    <button class="h-[38px] rounded-lg bg-[#2496ED] px-4 text-sm font-semibold text-white shadow-[0_0_24px_rgba(36,150,237,0.18)] transition-colors hover:bg-[#2496ED]/90 lg:whitespace-nowrap">"Add Agent"</button>
+                </div>
+
+                <div class="flex flex-col gap-2 border-t border-white/10 pt-3 text-[11px] leading-5 text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <span class="font-mono text-[#2496ED]">">_"</span>
+                        " Need to prepare the host first? "
+                        <span class="font-medium text-[#2496ED]">"Open setup guide"</span>
+                    </div>
+                    <div class="font-mono uppercase tracking-[0.18em] text-[#2496ED]">"cloudflare selected"</div>
                 </div>
             </div>
         </>
     }
 }
+
+fn connection_mode_card(
+    icon_kind: IconKind,
+    title: &'static str,
+    body: &'static str,
+    active: bool,
+) -> impl IntoView {
+    let card_class = if active {
+        "flex min-w-0 items-center gap-2.5 rounded-xl border border-[#2496ED]/80 bg-[#2496ED]/10 px-3 py-2.5 text-left shadow-[0_0_20px_rgba(36,150,237,0.12)]"
+    } else {
+        "flex min-w-0 items-center gap-2.5 rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-left"
+    };
+    let icon_class = if active {
+        "grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#2496ED] text-white"
+    } else {
+        "grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/10 text-[#2496ED]"
+    };
+    let title_class = if active {
+        "block truncate text-[13px] font-semibold text-zinc-100"
+    } else {
+        "block truncate text-[13px] font-semibold text-zinc-300"
+    };
+
+    view! {
+        <div class=card_class>
+            <span class=icon_class>{icon(icon_kind, 16, "", "2")}</span>
+            <span class="min-w-0 flex-1">
+                <span class=title_class>{title}</span>
+                <span class="mt-0.5 block truncate text-[11px] leading-4 text-zinc-500">{body}</span>
+            </span>
+        </div>
+    }
+}
+
+fn form_field(
+    label: &'static str,
+    value: &'static str,
+    value_class: &'static str,
+) -> impl IntoView {
+    view! {
+        <div class="min-w-0">
+            <label class="mb-1.5 block font-mono text-[10px] uppercase tracking-[0.16em] text-zinc-500">{label}</label>
+            <div class=format!("h-[38px] truncate rounded-lg border border-white/10 bg-[#0d0d0f] px-3 py-2 text-[12px] {}", value_class)>{value}</div>
+        </div>
+    }
+}
+
+// PLACEHOLDER_DIRECT_PANEL
 
 #[must_use]
 pub(crate) fn agent_dashboard_panel() -> impl IntoView {
@@ -72,37 +144,32 @@ pub(crate) fn agent_dashboard_panel() -> impl IntoView {
         <>
             <div class="flex items-center px-4 py-3 border-b border-white/10 bg-[#0d0d0f]">
                 <div class="flex gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-zinc-700"/><span class="w-2.5 h-2.5 rounded-full bg-zinc-700"/><span class="w-2.5 h-2.5 rounded-full bg-zinc-700"/></div>
-                <span class="font-mono text-[11px] text-zinc-500 ml-3">"https://xxx.trycloudflare.com"</span>
-                <span class="ml-auto inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-emerald-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"/>"agent ui"</span>
+                <span class="font-mono text-[11px] text-zinc-500 ml-3">"bash · docker-host-01"</span>
             </div>
-            <div class="p-6 space-y-5">
-                <div class="flex flex-wrap items-start justify-between gap-4">
-                    <div>
-                        <div class="font-mono text-[10px] uppercase tracking-[0.2em] text-[#2496ED] mb-2">"built-in dashboard"</div>
-                        <h3 class="text-xl font-bold text-white">"Audit this Docker host directly"</h3>
-                        <p class="mt-1 text-sm text-zinc-400 max-w-md">"No cloud registration needed. Open the dashboard URL from the install output and authenticate with the generated token."</p>
+            <div class="p-6 font-mono text-[12px] leading-7 space-y-3 overflow-x-auto">
+                <div class="text-zinc-500 text-[11px]">"# From the install output:"</div>
+                <div class="space-y-1.5 pl-2 border-l-2 border-[#2496ED]/30">
+                    <div class="text-zinc-300">"Dashboard: " <span class="text-[#00E5FF]">"https://xxx.trycloudflare.com"</span></div>
+                    <div class="text-zinc-300">"Token:     " <span class="text-amber-300">"dok_cbb8becb44ca7ace..."</span></div>
+                </div>
+                <div class="mt-4 pt-4 border-t border-white/5 space-y-2">
+                    <div class="flex items-start gap-3">
+                        <span class="text-[#2496ED]">"$"</span>
+                        <span class="text-zinc-100">"open " <span class="text-[#00E5FF]">"https://xxx.trycloudflare.com"</span></span>
                     </div>
-                    <button class="rounded-lg bg-[#2496ED] px-4 py-2 text-sm font-semibold text-white">"Run Audit"</button>
                 </div>
-
-                <div class="grid sm:grid-cols-3 gap-3">
-                    {small_stat("18", "containers")}
-                    {small_stat("42", "rules")}
-                    {small_stat("3", "fixes")}
-                </div>
-
-                <div class="rounded-xl border border-white/10 bg-black/40 p-4">
-                    <div class="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500 mb-3">"local agent session"</div>
-                    <div class="grid sm:grid-cols-[120px_1fr] gap-x-4 gap-y-2 font-mono text-[12px]">
-                        <span class="text-zinc-600">"host"</span><span class="text-zinc-300">"docker-host-01"</span>
-                        <span class="text-zinc-600">"dashboard"</span><span class="text-[#00E5FF]">"https://xxx.trycloudflare.com"</span>
-                        <span class="text-zinc-600">"auth"</span><span class="text-amber-300">"token-authenticated"</span>
+                <div class="mt-4 pt-3 border-t border-white/5">
+                    <div class="text-zinc-500 text-[11px] leading-relaxed">
+                        "Open the URL in your browser. Same dashboard UI —"<br/>
+                        "served directly from the agent. No server needed."
                     </div>
                 </div>
             </div>
         </>
     }
 }
+
+// PLACEHOLDER_AUDIT_PREVIEW
 
 #[must_use]
 pub(crate) fn audit_preview_panel() -> impl IntoView {
@@ -118,34 +185,24 @@ pub(crate) fn audit_preview_panel() -> impl IntoView {
                     <div>
                         <div class="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500 mb-1.5">"audit score"</div>
                         <div class="flex items-baseline gap-1 font-heading"><span class="text-5xl font-black text-amber-400 leading-none">"78"</span><span class="text-lg text-zinc-600 font-bold">"/ 100"</span></div>
-                        <div class="mt-2 text-xs text-zinc-500 font-mono">"CIS-aligned · 42 rules evaluated"</div>
+                        <div class="mt-2 text-xs text-zinc-500 font-mono">"CIS-aligned · 36 rules evaluated"</div>
                     </div>
                     <div class="flex flex-col items-end gap-1.5 text-right">
-                        {audit_stats::preview_count("bg-rose-500", "text-rose-400", "7", "failed")}
-                        {audit_stats::preview_count("bg-amber-400", "text-amber-400", "3", "warnings")}
-                        {audit_stats::preview_count("bg-emerald-400", "text-emerald-400", "32", "passed")}
+                        {audit_stats::preview_count("bg-rose-500", "text-rose-400", "8", "failed")}
+                        {audit_stats::preview_count("bg-emerald-400", "text-emerald-400", "28", "passed")}
                     </div>
                 </div>
                 <div class="space-y-3">
                     <div class="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">"security pillars"</div>
-                    {audit_stats::preview_pillar(IconKind::Box, "Namespace Isolation", "text-zinc-300 border-white/10", "1/5", "bg-zinc-500", "20%")}
-                    {audit_stats::preview_pillar(IconKind::Gauge, "Cgroup Controls", "text-zinc-300 border-white/10", "2/5", "bg-zinc-500", "40%")}
-                    {audit_stats::preview_pillar(IconKind::Shield, "Runtime Hardening", "text-zinc-300 border-white/10", "3/6", "bg-zinc-500", "50%")}
+                    {AUDIT_SECTIONS.iter().map(|section| {
+                        audit_stats::preview_pillar_from_section(section.icon, section.name, section.color, section.passed, section.total, section.bar_color)
+                    }).collect_view()}
                 </div>
                 <div class="flex items-center justify-between border-t border-white/5 pt-4">
                     <div class="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-600">"run · 2s ago"</div>
-                    <div class="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[#2496ED]">"apply auto-fixes (9)" <span>"→"</span></div>
+                    <div class="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[#2496ED]">"apply auto-fixes (8)" <span>"→"</span></div>
                 </div>
             </div>
         </>
-    }
-}
-
-fn small_stat(value: &'static str, label: &'static str) -> impl IntoView {
-    view! {
-        <div class="rounded-xl border border-white/10 bg-black/40 p-4">
-            <div class="font-heading text-2xl font-black text-white">{value}</div>
-            <div class="mt-1 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-500">{label}</div>
-        </div>
     }
 }

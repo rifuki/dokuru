@@ -1,7 +1,4 @@
-use crate::components::{
-    atoms::icon::icon,
-    molecules::{audit_stats, status_badges},
-};
+use crate::components::{atoms::icon::icon, molecules::audit_stats};
 use crate::content::AUDIT_SECTIONS;
 use leptos::prelude::*;
 
@@ -33,12 +30,11 @@ pub(crate) fn audit_panel() -> impl IntoView {
                             <span class="text-4xl font-black text-amber-400 leading-none" data-testid="audit-score-value">"78"</span>
                             <span class="text-base text-zinc-600 font-bold">"/ 100"</span>
                         </div>
-                        <div class="mt-1 text-[10px] text-zinc-500 font-mono">"CIS-aligned · 42 rules evaluated"</div>
+                        <div class="mt-1 text-[10px] text-zinc-500 font-mono">"CIS-aligned · 36 rules evaluated"</div>
                     </div>
                     <div class="flex flex-col items-end gap-1 text-right">
-                        {audit_stats::audit_count("bg-rose-500", "text-rose-400", "7", "failed")}
-                        {audit_stats::audit_count("bg-amber-400", "text-amber-400", "3", "warnings")}
-                        {audit_stats::audit_count("bg-emerald-400", "text-emerald-400", "32", "passed")}
+                        {audit_stats::audit_count("bg-rose-500", "text-rose-400", "8", "failed")}
+                        {audit_stats::audit_count("bg-emerald-400", "text-emerald-400", "28", "passed")}
                     </div>
                 </div>
 
@@ -48,31 +44,15 @@ pub(crate) fn audit_panel() -> impl IntoView {
                         view! {
                             <div class="flex flex-col gap-1.5">
                                 <div class="flex items-center justify-between">
-                                    <div class="flex items-center gap-1.5">
-                                        <span class=format!("inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.14em] px-1.5 py-0.5 rounded border {} bg-white/[0.02]", section.color)>
-                                            {icon(section.icon, 10, "", "2")}
-                                            {section.name}
-                                        </span>
-                                        <span class="font-mono text-[9px] text-zinc-600">{format!("{}/{}", section.passed, section.total)}</span>
-                                    </div>
+                                    <span class=format!("inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.14em] px-1.5 py-0.5 rounded border {} bg-white/[0.02]", section.color)>
+                                        {icon(section.icon, 10, "", "2")}
+                                        {section.name}
+                                    </span>
+                                    <span class="font-mono text-[9px] text-zinc-600">{format!("{}/{}", section.passed, section.total)}</span>
                                 </div>
                                 <div class="h-0.5 bg-white/5 rounded-full overflow-hidden">
                                     <div class=format!("h-full {}", section.bar_color) style=format!("width: {}%", section.passed * 100 / section.total)/>
                                 </div>
-                                {section.rules.iter().map(|rule| {
-                                    view! {
-                                        <div class="flex items-center justify-between gap-2 p-1.5 rounded bg-white/[0.02] border border-white/5">
-                                            <div class="flex items-center gap-1.5 min-w-0 flex-1">
-                                                {status_badges::severity_chip(rule.sev)}
-                                                <div class="min-w-0 flex-1">
-                                                    <div class="font-mono text-[10px] text-zinc-200 truncate">{rule.rule}</div>
-                                                    <div class="font-mono text-[9px] text-zinc-500 truncate">{rule.detail}</div>
-                                                </div>
-                                            </div>
-                                            {status_badges::remediation_pill(rule.rem)}
-                                        </div>
-                                    }
-                                }).collect_view()}
                             </div>
                         }
                     }).collect_view()}
@@ -80,7 +60,7 @@ pub(crate) fn audit_panel() -> impl IntoView {
 
                 <div class="flex items-center justify-between border-t border-white/5 pt-3 -mb-1">
                     <div class="font-mono text-[9px] uppercase tracking-[0.2em] text-zinc-600">"run · 2s ago"</div>
-                    <div class="inline-flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.2em] text-[#2496ED]">"apply auto-fixes (9)" <span>"→"</span></div>
+                    <div class="inline-flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.2em] text-[#2496ED]">"apply auto-fixes (8)" <span>"→"</span></div>
                 </div>
             </div>
         </div>

@@ -27,6 +27,9 @@ pub enum IconKind {
     Github,
     LifeBuoy,
     Clock,
+    Cloud,
+    Link2,
+    Globe,
 }
 
 const fn icon_markup(kind: IconKind) -> &'static str {
@@ -97,6 +100,13 @@ const fn icon_markup(kind: IconKind) -> &'static str {
         }
         IconKind::Clock => {
             r#"<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>"#
+        }
+        IconKind::Cloud => r#"<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>"#,
+        IconKind::Link2 => {
+            r#"<path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" x2="16" y1="12" y2="12"/>"#
+        }
+        IconKind::Globe => {
+            r#"<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>"#
         }
     }
 }
