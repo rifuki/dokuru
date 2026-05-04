@@ -87,6 +87,8 @@ export interface FixPreviewTarget {
   strategy: string;
   compose_project?: string;
   compose_service?: string;
+  dockerfile_path?: string;
+  dockerfile_context?: string;
 }
 
 export interface FixPreview {

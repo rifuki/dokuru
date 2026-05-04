@@ -174,6 +174,10 @@ pub struct FixPreviewTarget {
     pub compose_project: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compose_service: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub dockerfile_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub dockerfile_context: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

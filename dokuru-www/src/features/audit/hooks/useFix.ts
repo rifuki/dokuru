@@ -184,11 +184,11 @@ export type TargetConfig = {
     memoryMb: number;
     cpuShares: number;
     pidsLimit: number;
-    strategy: "docker_update" | "compose_update" | "dokuru_override" | "recreate";
+    strategy: "docker_update" | "compose_update" | "dokuru_override" | "dockerfile_update" | "recreate";
 };
 
 function normalizePreviewStrategy(ruleId: string, strategy: string, canCompose: boolean): TargetConfig["strategy"] {
-    if (strategy === "docker_update" || strategy === "compose_update" || strategy === "dokuru_override" || strategy === "recreate") {
+    if (strategy === "docker_update" || strategy === "compose_update" || strategy === "dokuru_override" || strategy === "dockerfile_update" || strategy === "recreate") {
         return strategy;
     }
     if (isImageConfigRecreateRule(ruleId) && !canCompose) return "recreate";

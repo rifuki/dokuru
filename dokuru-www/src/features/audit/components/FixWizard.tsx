@@ -33,10 +33,10 @@ const CGROUP_APPLY_MODE_OPTIONS: { value: ApplyStrategy; label: string; title: s
     { value: "docker_update", label: "Live", title: "Update current container only" },
 ];
 
-type ImageConfigMode = "dockerfile" | "dokuru_override" | "compose_update";
+type ImageConfigMode = Extract<ApplyStrategy, "dockerfile_update" | "dokuru_override" | "compose_update">;
 
 const IMAGE_CONFIG_MODE_OPTIONS: { value: ImageConfigMode; label: string; title: string }[] = [
-    { value: "dockerfile", label: "Dockerfile", title: "Strict source fix; rebuild required" },
+    { value: "dockerfile_update", label: "Dockerfile", title: "Strict source fix; rebuild required" },
     { value: "dokuru_override", label: "Override", title: "Write Compose override file" },
     { value: "compose_update", label: "Patch", title: "Patch source Compose YAML" },
 ];
@@ -53,6 +53,10 @@ const STRATEGY_META: Record<ApplyStrategy, { label: string; title: string }> = {
     docker_update: {
         label: "Live",
         title: "Docker live update",
+    },
+    dockerfile_update: {
+        label: "Dockerfile",
+        title: "Source patch",
     },
     recreate: {
         label: "Recreate",
@@ -137,7 +141,7 @@ function currentValueLabel(ruleId: string, target: FixPreview["targets"][number]
 
 function normalizeStrategy(ruleId: string, target: FixPreview["targets"][number], configured?: TargetConfig): ApplyStrategy {
     const raw = configured?.strategy ?? target.strategy;
-    if (raw === "docker_update" || raw === "compose_update" || raw === "dokuru_override" || raw === "recreate") {
+    if (raw === "docker_update" || raw === "compose_update" || raw === "dokuru_override" || raw === "dockerfile_update" || raw === "recreate") {
         return raw;
     }
     const canCompose = Boolean(target.compose_project && target.compose_service);
@@ -145,22 +149,12 @@ function normalizeStrategy(ruleId: string, target: FixPreview["targets"][number]
     return canCompose ? "dokuru_override" : "docker_update";
 }
 
-function healthcheckCommandForTarget(target?: FixPreview["targets"][number]) {
-    const label = `${target?.container_name ?? ""} ${target?.image ?? ""}`.toLowerCase();
-    if (label.includes("pgadmin")) return "curl -fsS http://localhost/misc/ping || exit 1";
-    if (label.includes("postgres") || label.includes("postgis")) return "pg_isready -U postgres || exit 1";
-    if (label.includes("mysql") || label.includes("mariadb")) return "mysqladmin ping -h 127.0.0.1 --silent || exit 1";
-    if (label.includes("redis")) return "redis-cli ping || exit 1";
-    if (label.includes("mongo")) return "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' || exit 1";
-    return "curl -fsS http://localhost/health || wget -qO- http://localhost/health >/dev/null || exit 1";
-}
-
 function dockerfileSnippet(ruleId: string, targets: FixPreview["targets"]) {
     if (ruleId === "4.1") {
         return `# Adjust for your base image and app-owned paths.\nRUN groupadd -r appuser && useradd -r -g appuser appuser\nUSER appuser`;
     }
     if (ruleId === "4.6") {
-        const command = targets.length === 1 ? healthcheckCommandForTarget(targets[0]) : healthcheckCommandForTarget();
+        const command = targets[0]?.container_name ?? "";
         return `# Replace this with the service's real readiness check.\nHEALTHCHECK --interval=30s --timeout=10s --retries=3 \\\n  CMD ${command}`;
     }
     return null;
@@ -215,19 +209,23 @@ function ApplyModePicker({
 function ImageConfigModePicker({
     value,
     dockerfileTitle,
+    dockerfilePath,
     onChange,
 }: {
     value: ApplyStrategy;
     dockerfileTitle: string;
+    dockerfilePath?: string | null;
     onChange: (strategy: ApplyStrategy) => void;
 }) {
-    const effectiveValue = value === "compose_update" ? "compose_update" : "dokuru_override";
+    const effectiveValue = value === "dockerfile_update"
+        ? "dockerfile_update"
+        : value === "compose_update" ? "compose_update" : "dokuru_override";
 
     return (
         <div className="audit-fix-mode-control grid h-9 grid-cols-3 rounded-md border p-0.5" role="radiogroup" aria-label="Image config apply mode">
             {IMAGE_CONFIG_MODE_OPTIONS.map((option) => {
-                const dockerfileDisabled = option.value === "dockerfile";
-                const active = !dockerfileDisabled && effectiveValue === option.value;
+                const dockerfileDisabled = option.value === "dockerfile_update" && !dockerfilePath;
+                const active = effectiveValue === option.value;
                 return (
                     <button
                         key={option.value}
@@ -235,9 +233,9 @@ function ImageConfigModePicker({
                         role="radio"
                         aria-checked={active}
                         aria-disabled={dockerfileDisabled}
-                        title={dockerfileDisabled ? dockerfileTitle : option.title}
+                        title={option.value === "dockerfile_update" ? dockerfileTitle : option.title}
                         onClick={() => {
-                            if (option.value !== "dockerfile") onChange(option.value);
+                            if (!dockerfileDisabled) onChange(option.value);
                         }}
                         className={cn(
                             "audit-fix-mode-button h-full min-w-0 rounded-[6px] px-2 text-[10px] font-semibold transition-colors whitespace-nowrap outline-none",
@@ -388,9 +386,11 @@ function ConfirmStep({
                             const strategy = normalizeStrategy(rule.id, target, config);
                             const meta = valueMeta(rule.id);
                             const value = config?.[meta.key] ?? 0;
-                            const dockerfileTitle = dockerfileSnippet(rule.id, [target])
-                                ? "Requires Dockerfile detection + rebuild"
-                                : IMAGE_CONFIG_MODE_OPTIONS[0].title;
+                            const dockerfileTitle = target.dockerfile_path
+                                ? `Patch ${target.dockerfile_path}; rebuild required`
+                                : dockerfileSnippet(rule.id, [target])
+                                  ? "Dockerfile not detected from Compose build"
+                                  : IMAGE_CONFIG_MODE_OPTIONS[0].title;
 
                             return (
                                 <div
@@ -433,6 +433,7 @@ function ConfirmStep({
                                             <ImageConfigModePicker
                                                 value={strategy}
                                                 dockerfileTitle={dockerfileTitle}
+                                                dockerfilePath={target.dockerfile_path}
                                                 onChange={(nextStrategy) => onTargetChange(target.container_id, { strategy: nextStrategy })}
                                             />
                                         ) : (
@@ -604,6 +605,7 @@ function ProgressEventsPanel({
 }
 
 function progressModeLabel(progressEvents: FixProgress[]) {
+    if (progressEvents.some(event => event.action.includes("dockerfile"))) return "Dockerfile";
     if (progressEvents.some(event => event.action.includes("dokuru_override") || event.action.includes("dokuru"))) return "Override";
     if (progressEvents.some(event => event.action.includes("update_compose_yaml") || event.action.includes("backup_compose_yaml"))) return "Patch";
     if (progressEvents.some(event => event.action.includes("docker_update"))) return "Live";

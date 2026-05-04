@@ -11,6 +11,7 @@ use bollard::{
     },
     models::{ContainerInspectResponse, ContainerSummary, HealthConfig, MountPointTypeEnum},
 };
+use serde_yaml::{Mapping as YamlMapping, Value as YamlValue};
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write as _;
 use std::os::unix::fs::MetadataExt;
@@ -124,6 +125,7 @@ const USERNS_REMAP_TOTAL_STEPS: u8 = 9;
 const STRATEGY_DOKURU_OVERRIDE: &str = "dokuru_override";
 const STRATEGY_COMPOSE_UPDATE: &str = "compose_update";
 const STRATEGY_DOCKER_UPDATE: &str = "docker_update";
+const STRATEGY_DOCKERFILE_UPDATE: &str = "dockerfile_update";
 const DEFAULT_COMPOSE_OVERRIDE_FILENAME: &str = "docker-compose.override.yml";
 const COMPOSE_BACKUP_DIR: &str = "compose-backups";
 const COMPOSE_FILENAMES: &[&str] = &[
@@ -209,8 +211,14 @@ fn is_compose_source_strategy(strategy: Option<&str>) -> bool {
     strategy == Some(STRATEGY_COMPOSE_UPDATE)
 }
 
+fn is_dockerfile_source_strategy(strategy: Option<&str>) -> bool {
+    strategy == Some(STRATEGY_DOCKERFILE_UPDATE)
+}
+
 fn compose_strategy_label(strategy: Option<&str>) -> &'static str {
-    if is_dokuru_override_strategy(strategy) {
+    if is_dockerfile_source_strategy(strategy) {
+        "dockerfile"
+    } else if is_dokuru_override_strategy(strategy) {
         "dokuru override"
     } else {
         "compose"
@@ -2650,7 +2658,15 @@ pub async fn preview_fix(docker: &Docker, rule_id: &str) -> eyre::Result<FixPrev
             continue;
         }
 
-        targets.push(preview_target_from_inspect(id, &inspect, rule_id));
+        let mut target = preview_target_from_inspect(id, &inspect, rule_id);
+        if supports_image_config_fix(rule_id)
+            && let Some(ctx) = compose_context_from_inspect(&inspect)
+            && let Some(source) = detect_dockerfile_source(&ctx).await
+        {
+            target.dockerfile_path = Some(source.path.to_string_lossy().to_string());
+            target.dockerfile_context = Some(source.context.to_string_lossy().to_string());
+        }
+        targets.push(target);
     }
 
     Ok(FixPreview {
@@ -2704,6 +2720,8 @@ fn preview_target_from_inspect(
         strategy: strategy.to_string(),
         compose_project: compose.as_ref().map(|ctx| ctx.project.clone()),
         compose_service: compose.as_ref().map(|ctx| ctx.service.clone()),
+        dockerfile_path: None,
+        dockerfile_context: None,
     }
 }
 
@@ -2852,6 +2870,46 @@ fn fix_outcome(
     }
 }
 
+fn image_config_fix_outcome(
+    rule_id: &str,
+    updated: &[String],
+    failed: &[String],
+    dockerfile_updates: usize,
+) -> FixOutcome {
+    if dockerfile_updates == 0 {
+        return fix_outcome(
+            rule_id,
+            updated,
+            failed,
+            image_config_noop_message(rule_id),
+            image_config_success_message(rule_id, updated.len()),
+        );
+    }
+
+    let mut message = format!(
+        "Updated Dockerfile source for {dockerfile_updates} target(s); rebuild and redeploy the image to complete rule {rule_id}"
+    );
+    if !updated.is_empty() {
+        let _ = write!(message, ": {}", updated.join(", "));
+    }
+    if !failed.is_empty() {
+        let _ = write!(message, ". Failed {}: {}", failed.len(), failed.join("; "));
+    }
+
+    FixOutcome {
+        rule_id: rule_id.to_string(),
+        status: if updated.is_empty() && !failed.is_empty() {
+            FixStatus::Blocked
+        } else {
+            FixStatus::Guided
+        },
+        message,
+        requires_restart: false,
+        restart_command: None,
+        requires_elevation: false,
+    }
+}
+
 pub async fn apply_image_config_fix(docker: &Docker, rule_id: &str) -> eyre::Result<FixOutcome> {
     Box::pin(apply_image_config_fix_with_progress(
         docker,
@@ -2894,9 +2952,11 @@ pub async fn apply_image_config_fix_with_progress(
 
     let mut updated = Vec::new();
     let mut failed = Vec::new();
+    let mut dockerfile_updates = 0usize;
     let mut compose_services = HashSet::<String>::new();
 
     for target in &targets {
+        let dockerfile_strategy = is_dockerfile_source_strategy(target.strategy.as_deref());
         match Box::pin(apply_image_config_target(
             docker,
             rule_id,
@@ -2906,18 +2966,22 @@ pub async fn apply_image_config_fix_with_progress(
         ))
         .await
         {
-            Ok(Some(label)) => updated.push(label),
+            Ok(Some(label)) => {
+                if dockerfile_strategy {
+                    dockerfile_updates += 1;
+                }
+                updated.push(label);
+            }
             Ok(None) => {}
             Err(error) => failed.push(error),
         }
     }
 
-    Ok(fix_outcome(
+    Ok(image_config_fix_outcome(
         rule_id,
         &updated,
         &failed,
-        image_config_noop_message(rule_id),
-        image_config_success_message(rule_id, updated.len()),
+        dockerfile_updates,
     ))
 }
 
@@ -2980,6 +3044,29 @@ async fn apply_image_config_target(
         Some(image_config_violation_detail(rule_id).to_string()),
     );
 
+    if is_dockerfile_source_strategy(target.strategy.as_deref()) {
+        let Some(ctx) = compose_context_from_inspect(&inspect) else {
+            return Err(format!(
+                "{container_label}: Dockerfile strategy requested but container has no Compose metadata"
+            ));
+        };
+        let dedupe_key = format!("dockerfile:{}", ctx.key());
+        if !compose_services.insert(dedupe_key) {
+            return Ok(None);
+        }
+        return apply_dockerfile_source_fix(rule_id, &ctx, progress)
+            .await
+            .map(|source| {
+                Some(format!(
+                    "{}:{} (dockerfile {})",
+                    ctx.project,
+                    ctx.service,
+                    source.path.display()
+                ))
+            })
+            .map_err(|error| format!("{container_label}: Dockerfile fix failed: {error}"));
+    }
+
     if is_dokuru_override_strategy(target.strategy.as_deref())
         || is_compose_source_strategy(target.strategy.as_deref())
     {
@@ -3020,6 +3107,190 @@ async fn apply_image_config_target(
     .await
     .map(|()| Some(container_label))
     .map_err(|error| format!("{}: {error}", target.container_id))
+}
+
+struct DockerfileUpdateResult {
+    path: PathBuf,
+}
+
+async fn apply_dockerfile_source_fix(
+    rule_id: &str,
+    ctx: &ComposeContext,
+    progress: Option<&ProgressSender>,
+) -> eyre::Result<DockerfileUpdateResult> {
+    let label = format!("{}:{}", ctx.project, ctx.service);
+    emit_progress(
+        progress,
+        rule_id,
+        &label,
+        ProgressStep::new(2, 6),
+        "resolve_dockerfile",
+        "in_progress",
+        Some("Resolving Dockerfile from Compose build config".to_string()),
+    );
+    let source = resolve_dockerfile_source(ctx).await?.ok_or_else(|| {
+        eyre::eyre!(
+            "could not detect a Dockerfile for compose service {}:{}",
+            ctx.project,
+            ctx.service
+        )
+    })?;
+    emit_progress(
+        progress,
+        rule_id,
+        &label,
+        ProgressStep::new(2, 6),
+        "resolve_dockerfile",
+        "done",
+        Some(format!(
+            "Using {} from {}",
+            source.path.display(),
+            source.compose_path.display()
+        )),
+    );
+
+    let content = tokio::fs::read_to_string(&source.path).await?;
+    let Some(updated_content) = update_dockerfile_content(&content, rule_id)? else {
+        emit_progress(
+            progress,
+            rule_id,
+            &label,
+            ProgressStep::new(3, 6),
+            "update_dockerfile",
+            "done",
+            Some("Dockerfile already contains the requested source setting".to_string()),
+        );
+        emit_dockerfile_rebuild_required(rule_id, &label, &source, progress);
+        return Ok(DockerfileUpdateResult { path: source.path });
+    };
+
+    let backup_path = compose_artifact_path(&source.path, "dockerfile");
+    emit_progress(
+        progress,
+        rule_id,
+        &label,
+        ProgressStep::new(3, 6),
+        "backup_dockerfile",
+        "in_progress",
+        Some(format!("Creating backup {}", backup_path.display())),
+    );
+    copy_compose_backup(&source.path, &backup_path).await?;
+    emit_progress(
+        progress,
+        rule_id,
+        &label,
+        ProgressStep::new(3, 6),
+        "backup_dockerfile",
+        "done",
+        Some(format!("Backed up Dockerfile to {}", backup_path.display())),
+    );
+
+    tokio::fs::write(&source.path, updated_content).await?;
+    emit_progress(
+        progress,
+        rule_id,
+        &label,
+        ProgressStep::new(4, 6),
+        "update_dockerfile",
+        "done",
+        Some(format!("Updated {}", source.path.display())),
+    );
+    emit_dockerfile_rebuild_required(rule_id, &label, &source, progress);
+
+    Ok(DockerfileUpdateResult { path: source.path })
+}
+
+fn emit_dockerfile_rebuild_required(
+    rule_id: &str,
+    label: &str,
+    source: &DockerfileSource,
+    progress: Option<&ProgressSender>,
+) {
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        ProgressStep::new(5, 6),
+        "manual_rebuild_required",
+        "done",
+        Some(format!(
+            "Rebuild image from {} and redeploy the service",
+            source.context.display()
+        )),
+    );
+}
+
+fn update_dockerfile_content(content: &str, rule_id: &str) -> eyre::Result<Option<String>> {
+    match rule_id {
+        "4.1" => Ok(update_dockerfile_user(content)),
+        "4.6" => Ok(update_dockerfile_healthcheck(content)),
+        _ => Err(eyre::eyre!("unsupported Dockerfile source rule {rule_id}")),
+    }
+}
+
+fn update_dockerfile_user(content: &str) -> Option<String> {
+    let mut lines = split_yaml_lines(content);
+    let user_line = lines.iter().enumerate().rev().find_map(|(index, line)| {
+        dockerfile_instruction(line)
+            .filter(|(instruction, _)| instruction.eq_ignore_ascii_case("USER"))
+            .map(|(_, rest)| (index, rest.to_string()))
+    });
+
+    if let Some((index, current_user)) = user_line {
+        if current_user == DEFAULT_NON_ROOT_USER {
+            return None;
+        }
+        lines[index] = format!("USER {DEFAULT_NON_ROOT_USER}");
+        return Some(render_yaml_lines(&lines, content.ends_with('\n')));
+    }
+
+    Some(append_dockerfile_instruction(
+        content,
+        &format!("USER {DEFAULT_NON_ROOT_USER}"),
+    ))
+}
+
+fn update_dockerfile_healthcheck(content: &str) -> Option<String> {
+    let mut lines = split_yaml_lines(content);
+    let healthcheck_line = lines.iter().enumerate().find_map(|(index, line)| {
+        dockerfile_instruction(line)
+            .filter(|(instruction, _)| instruction.eq_ignore_ascii_case("HEALTHCHECK"))
+            .map(|(_, rest)| (index, rest.to_string()))
+    });
+    let healthcheck = format!(
+        "HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 CMD {DEFAULT_HEALTHCHECK_TEST}"
+    );
+
+    if let Some((index, current_healthcheck)) = healthcheck_line {
+        if current_healthcheck.eq_ignore_ascii_case("none") {
+            lines[index] = healthcheck;
+            return Some(render_yaml_lines(&lines, content.ends_with('\n')));
+        }
+        return None;
+    }
+
+    Some(append_dockerfile_instruction(content, &healthcheck))
+}
+
+fn dockerfile_instruction(line: &str) -> Option<(&str, &str)> {
+    let trimmed = line.trim_start();
+    if trimmed.is_empty() || trimmed.starts_with('#') {
+        return None;
+    }
+    let mut parts = trimmed.splitn(2, char::is_whitespace);
+    let instruction = parts.next()?;
+    let rest = parts.next().unwrap_or_default().trim();
+    Some((instruction, rest))
+}
+
+fn append_dockerfile_instruction(content: &str, instruction: &str) -> String {
+    let mut updated = content.to_string();
+    if !updated.is_empty() && !updated.ends_with('\n') {
+        updated.push('\n');
+    }
+    updated.push_str(instruction);
+    updated.push('\n');
+    updated
 }
 
 async fn recreate_with_image_config(
@@ -4309,6 +4580,13 @@ impl ComposeContext {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct DockerfileSource {
+    path: PathBuf,
+    context: PathBuf,
+    compose_path: PathBuf,
+}
+
 fn compose_context_from_inspect(inspect: &ContainerInspectResponse) -> Option<ComposeContext> {
     let labels = inspect.config.as_ref()?.labels.as_ref()?;
     Some(ComposeContext {
@@ -4320,6 +4598,126 @@ fn compose_context_from_inspect(inspect: &ContainerInspectResponse) -> Option<Co
         config_files: labels
             .get("com.docker.compose.project.config_files")
             .cloned(),
+    })
+}
+
+async fn detect_dockerfile_source(ctx: &ComposeContext) -> Option<DockerfileSource> {
+    match resolve_dockerfile_source(ctx).await {
+        Ok(source) => source,
+        Err(error) => {
+            tracing::debug!(%error, service = %ctx.service, project = %ctx.project, "Dockerfile detection failed");
+            None
+        }
+    }
+}
+
+async fn resolve_dockerfile_source(ctx: &ComposeContext) -> eyre::Result<Option<DockerfileSource>> {
+    let compose_paths = resolve_compose_files(ctx).await?;
+    let mut skipped = Vec::new();
+
+    for compose_path in compose_paths {
+        let content = tokio::fs::read_to_string(&compose_path).await?;
+        let Some(source) =
+            dockerfile_source_from_compose_content(&content, &ctx.service, &compose_path)?
+        else {
+            skipped.push(format!("{}: no build Dockerfile", compose_path.display()));
+            continue;
+        };
+
+        match tokio::fs::metadata(&source.path).await {
+            Ok(metadata) if metadata.is_file() => return Ok(Some(source)),
+            Ok(_) => skipped.push(format!("{} is not a file", source.path.display())),
+            Err(error) => skipped.push(format!("{}: {error}", source.path.display())),
+        }
+    }
+
+    if skipped.is_empty() {
+        return Ok(None);
+    }
+    tracing::debug!(service = %ctx.service, skipped = %skipped.join("; "), "No Dockerfile source found");
+    Ok(None)
+}
+
+fn dockerfile_source_from_compose_content(
+    compose_content: &str,
+    service: &str,
+    compose_path: &Path,
+) -> eyre::Result<Option<DockerfileSource>> {
+    let yaml: YamlValue = serde_yaml::from_str(compose_content)
+        .map_err(|error| eyre::eyre!("compose YAML parse failed: {error}"))?;
+    let Some(root) = yaml.as_mapping() else {
+        return Ok(None);
+    };
+    let Some(services) = yaml_mapping_get(root, "services").and_then(YamlValue::as_mapping) else {
+        return Ok(None);
+    };
+    let Some(service) = yaml_mapping_get(services, service).and_then(YamlValue::as_mapping) else {
+        return Ok(None);
+    };
+    let Some(build) = yaml_mapping_get(service, "build") else {
+        return Ok(None);
+    };
+
+    let (build_context_raw, dockerfile_raw) = match build {
+        YamlValue::String(build_context) => (build_context.as_str(), "Dockerfile"),
+        YamlValue::Mapping(build) => {
+            if yaml_mapping_get(build, "dockerfile_inline").is_some() {
+                return Ok(None);
+            }
+            let build_context = yaml_mapping_get(build, "context")
+                .and_then(YamlValue::as_str)
+                .unwrap_or(".");
+            let dockerfile = yaml_mapping_get(build, "dockerfile")
+                .and_then(YamlValue::as_str)
+                .unwrap_or("Dockerfile");
+            (build_context, dockerfile)
+        }
+        _ => return Ok(None),
+    };
+
+    let compose_dir = compose_path.parent().unwrap_or_else(|| Path::new("."));
+    let Some(build_context) = resolve_compose_relative_path(compose_dir, build_context_raw) else {
+        return Ok(None);
+    };
+    let Some(path) = resolve_dockerfile_path(&build_context, dockerfile_raw) else {
+        return Ok(None);
+    };
+
+    Ok(Some(DockerfileSource {
+        path,
+        context: build_context,
+        compose_path: compose_path.to_path_buf(),
+    }))
+}
+
+fn yaml_mapping_get<'a>(mapping: &'a YamlMapping, key: &str) -> Option<&'a YamlValue> {
+    let key = YamlValue::String(key.to_string());
+    mapping.get(&key)
+}
+
+fn resolve_compose_relative_path(base: &Path, raw: &str) -> Option<PathBuf> {
+    let raw = raw.trim();
+    if raw.is_empty() || raw.contains("://") || raw.starts_with("git@") {
+        return None;
+    }
+    let path = PathBuf::from(raw);
+    Some(if path.is_absolute() {
+        path
+    } else {
+        base.join(path)
+    })
+}
+
+fn resolve_dockerfile_path(context: &Path, raw: &str) -> Option<PathBuf> {
+    let raw = raw.trim();
+    if raw.is_empty() || raw.contains("://") {
+        return None;
+    }
+    let path = PathBuf::from(raw);
+    Some(if path.is_absolute() {
+        path
+    } else {
+        context.join(path)
     })
 }
 
@@ -5566,6 +5964,8 @@ async fn cgroup_rollback_plan(docker: &Docker, request: &FixRequest) -> eyre::Re
             if compose_services.insert(ctx.key()) {
                 if is_dokuru_override_strategy(target.strategy.as_deref()) {
                     compose_targets.push(compose_rollback_target_for_override(&ctx).await?);
+                } else if is_dockerfile_source_strategy(target.strategy.as_deref()) {
+                    // Dockerfile source fixes write their own backup path in progress output.
                 } else if let Ok(compose_path) =
                     find_compose_update_path(&ctx, &request.rule_id, Some(&target)).await
                 {
@@ -6118,6 +6518,69 @@ volumes:
         let updated = update_compose_content(input, "api", "4.6", None)
             .unwrap()
             .unwrap();
+
+        assert_eq!(updated, expected);
+    }
+
+    #[test]
+    fn dockerfile_source_detects_compose_build_mapping() {
+        let input = r#"services:
+  api:
+    build:
+      context: ./app
+      dockerfile: Dockerfile.prod
+"#;
+
+        let source = dockerfile_source_from_compose_content(
+            input,
+            "api",
+            Path::new("/srv/project/compose.yml"),
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(source.context, PathBuf::from("/srv/project/app"));
+        assert_eq!(
+            source.path,
+            PathBuf::from("/srv/project/app/Dockerfile.prod")
+        );
+    }
+
+    #[test]
+    fn dockerfile_source_detects_compose_build_string() {
+        let input = r#"services:
+  web:
+    build: ./web
+"#;
+
+        let source = dockerfile_source_from_compose_content(
+            input,
+            "web",
+            Path::new("/srv/project/docker-compose.yml"),
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(source.context, PathBuf::from("/srv/project/web"));
+        assert_eq!(source.path, PathBuf::from("/srv/project/web/Dockerfile"));
+    }
+
+    #[test]
+    fn dockerfile_update_sets_non_root_user() {
+        let input = "FROM alpine\nRUN adduser -D app\nUSER root\n";
+        let expected = "FROM alpine\nRUN adduser -D app\nUSER 1000:1000\n";
+
+        let updated = update_dockerfile_content(input, "4.1").unwrap().unwrap();
+
+        assert_eq!(updated, expected);
+    }
+
+    #[test]
+    fn dockerfile_update_adds_healthcheck() {
+        let input = "FROM alpine\nCMD [\"sleep\", \"infinity\"]\n";
+        let expected = "FROM alpine\nCMD [\"sleep\", \"infinity\"]\nHEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 CMD test -e /proc/1/stat || exit 1\n";
+
+        let updated = update_dockerfile_content(input, "4.6").unwrap().unwrap();
 
         assert_eq!(updated, expected);
     }
