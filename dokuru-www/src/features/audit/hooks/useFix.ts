@@ -325,13 +325,11 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
             setStepIndex(steps.length);
             setOutcome(fixOutcome);
             setStep("result");
+            await queryClient.invalidateQueries({ queryKey: ["fix-history"] });
 
             if (fixOutcome.status === "Applied") {
                 toast.success(`Fix applied — rule ${rule.id}`);
-                await Promise.all([
-                    queryClient.invalidateQueries({ queryKey: ["agent-audit"] }),
-                    queryClient.invalidateQueries({ queryKey: ["fix-history"] }),
-                ]);
+                await queryClient.invalidateQueries({ queryKey: ["agent-audit"] });
             } else if (fixOutcome.status === "Blocked") {
                 toast.error(`${rule.id}: ${fixOutcome.message.slice(0, 80)}`);
             }

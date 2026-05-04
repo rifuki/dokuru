@@ -5348,7 +5348,7 @@ fn apply_dokuru_override_service_lines(
         "5.10" => set_service_value_text(lines, block, "network_mode", "bridge"),
         "5.16" => set_service_value_text(lines, block, "pid", "!reset null"),
         "5.17" => set_service_value_text(lines, block, "ipc", "private"),
-        "5.21" => set_service_value_text(lines, block, "uts", "private"),
+        "5.21" => set_service_value_text(lines, block, "uts", "!reset null"),
         "5.31" => {
             set_service_value_text(lines, block, "userns_mode", "!reset null")
                 | set_service_value_text(lines, block, "userns", "!reset null")
@@ -6784,16 +6784,17 @@ services:
 
     #[test]
     fn dokuru_override_mode_can_reset_namespace_values() {
-        let expected = r#"# Managed by Dokuru. Keep this file after the base compose files.
+        let cases = [("5.16", "pid"), ("5.21", "uts")];
 
-services:
-  web:
-    pid: !reset null
-"#;
+        for (rule_id, key) in cases {
+            let expected = format!(
+                "# Managed by Dokuru. Keep this file after the base compose files.\n\nservices:\n  web:\n    {key}: !reset null\n"
+            );
 
-        let rendered = upsert_dokuru_override_content(None, "web", "5.16", None).unwrap();
+            let rendered = upsert_dokuru_override_content(None, "web", rule_id, None).unwrap();
 
-        assert_eq!(rendered, expected);
+            assert_eq!(rendered, expected, "rule {rule_id} should reset {key}");
+        }
     }
 
     #[test]

@@ -291,12 +291,13 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
         const applied = selected.filter(r => r.outcome?.status === "Applied").length;
         const blocked = selected.filter(r => r.outcome?.status === "Blocked").length;
 
+        if (selected.length > 0) {
+            await queryClient.invalidateQueries({ queryKey: ["fix-history"] });
+        }
+
         if (applied > 0) {
             toast.success(`Applied ${applied} fix${applied > 1 ? "es" : ""}${blocked > 0 ? `, ${blocked} blocked` : ""}`);
-            await Promise.all([
-                queryClient.invalidateQueries({ queryKey: ["agent-audit"] }),
-                queryClient.invalidateQueries({ queryKey: ["fix-history"] }),
-            ]);
+            await queryClient.invalidateQueries({ queryKey: ["agent-audit"] });
         } else {
             toast.error("No fixes could be applied");
         }
