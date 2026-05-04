@@ -22,7 +22,7 @@ import {
   Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
   Terminal, Wrench, AlertTriangle, Server,
   ArrowLeft, Clock, Cpu, Container, BookOpen,
-  Search, X, Layers, ArrowLeftRight, Link, FileText, Download, Printer,
+  Search, X, Layers, ArrowLeftRight, Link, FileText, Download, Printer, RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -216,6 +216,10 @@ function sortAuditResults(results: AuditResult[]) {
     if (a.status !== b.status) return a.status === "Fail" ? -1 : 1;
     return a.rule.id.localeCompare(b.rule.id, undefined, { numeric: true });
   });
+}
+
+function sortAuditHistory(history: AuditResponse[]) {
+  return [...history].sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
 }
 
 function groupSummariesFromResults(results: AuditResult[], keyForResult: (result: AuditResult) => string, labelForKey: (key: string) => string): AuditGroupSummary[] {
@@ -1686,8 +1690,11 @@ function AuditDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const markAuditResultViewed = useAuditStore((state) => state.markAuditResultViewed);
+  const setAuditHistory = useAuditStore((state) => state.setAuditHistory);
+  const startAudit = useAuditStore((state) => state.startAudit);
   const hydrateFixJobFromHistory = useAuditStore((state) => state.hydrateFixJobFromHistory);
   const storedAuditHistory = useAuditStore((state) => state.auditHistories[id]);
+  const auditStream = useAuditStore((state) => state.auditStreams[id]);
   const auditUiMemoryKey = auditDetailUiStorageKey(id, auditId);
   const shouldUseInitialAuditUiMemory = isSidebarNavigationForPath();
   const shouldUseAuditUiMemoryRef = useRef(shouldUseInitialAuditUiMemory);
@@ -1701,6 +1708,8 @@ function AuditDetailPage() {
   const [activeRuleTabs, setActiveRuleTabs] = useState<Record<string, RuleCardTab>>(initialAuditUiState.activeRuleTabs);
   const [documentExporting, setDocumentExporting] = useState<"html" | "pdf" | null>(null);
   const fixJobs = useAuditStore((state) => state.fixJobs);
+  const auditStreamStatus = auditStream?.status ?? "idle";
+  const auditRunning = auditStreamStatus === "running" || auditStreamStatus === "saving";
   const auditUiMemoryKeyRef = useRef(auditUiMemoryKey);
   const skipNextAuditUiWriteRef = useRef(false);
   const resultsAnchorRef = useRef<HTMLDivElement>(null);
@@ -2064,6 +2073,34 @@ function AuditDetailPage() {
     navigate({ to: "/agents/$id/audits", params: { id } });
   };
 
+  const handleRerunAudit = () => {
+    if (!agent || auditRunning) return;
+    if (agent.access_mode !== "relay" && !token && agent.id !== LOCAL_AGENT_ID) {
+      toast.error("Agent token not found. Edit this agent and paste the token once to sync it across devices.");
+      return;
+    }
+
+    const auditRun = startAudit(agent, token);
+    toast.success("Audit re-run started", { description: "Opening live audit progress." });
+    void navigate({ to: "/agents/$id/audit", params: { id } });
+
+    void auditRun.then(async (savedAudit) => {
+      const currentHistory = queryClient.getQueryData<AuditResponse[]>(["audits", id])
+        ?? useAuditStore.getState().auditHistories[id]
+        ?? auditHistory;
+      const nextHistory = sortAuditHistory([
+        savedAudit,
+        ...currentHistory.filter((item) => item.id !== savedAudit.id),
+      ]);
+      setAuditHistory(id, nextHistory);
+      queryClient.setQueryData(["audits", id], nextHistory);
+      if (savedAudit.id) queryClient.setQueryData(["audit", id, savedAudit.id], savedAudit);
+      await queryClient.invalidateQueries({ queryKey: ["audits", id] });
+    }).catch((error) => {
+      toast.error(error instanceof Error ? error.message : "Audit failed");
+    });
+  };
+
   const buildCurrentAuditDocumentHtml = () => {
     if (!auditData) return null;
     return buildAuditDocumentHtml({
@@ -2121,7 +2158,25 @@ function AuditDetailPage() {
           <h2 className="text-2xl font-bold tracking-tight">Security Audit</h2>
           <p className="text-muted-foreground text-sm mt-0.5">CIS Docker Benchmark v1.8.0</p>
         </div>
-        <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] gap-2 sm:flex sm:w-auto sm:shrink-0 sm:items-center">
+        <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:shrink-0 sm:items-center">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleBack}
+            className="shrink-0"
+          >
+            <ArrowLeft className="h-4 w-4" /> Back
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleRerunAudit}
+            disabled={!agent || auditRunning}
+            className="shrink-0"
+          >
+            {auditRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            {auditRunning ? "Audit Running" : "Re-run Audit"}
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -2138,7 +2193,7 @@ function AuditDetailPage() {
                 ) : (
                   <>
                     <Download className="h-4 w-4" />
-                    Export Report
+                    Export Audit
                     <ChevronDown className="h-3.5 w-3.5 opacity-70" />
                   </>
                 )}
@@ -2157,14 +2212,6 @@ function AuditDetailPage() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleBack}
-            className="shrink-0"
-          >
-            <ArrowLeft className="h-4 w-4" /> Back
-          </Button>
         </div>
       </div>
 
