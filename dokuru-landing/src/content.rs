@@ -167,31 +167,14 @@ pub(crate) const COVERAGE_GROUPS: &[CoverageGroup] = &[
     },
     CoverageGroup {
         icon: IconKind::Shield,
-        label: "1 rule",
-        title: "Runtime Hardening",
-        intro: "Catch flags that silently pierce the sandbox.",
-        rules: &["Privileged container detection (5.5)"],
-    },
-    CoverageGroup {
-        icon: IconKind::ServerCog,
-        label: "14 rules",
-        title: "Host Configuration",
-        intro: "Verify host-level Docker prerequisites and audit trails.",
+        label: "25 rules",
+        title: "Runtime Baseline",
+        intro: "Supporting CIS checks for the host, daemon, images, and unsafe runtime flags.",
         rules: &[
-            "Separate Docker root partition (1.1.1)",
-            "Docker group membership (1.1.2)",
-            "Audit rules for Docker paths (1.1.3\u{2013}1.1.18)",
-        ],
-    },
-    CoverageGroup {
-        icon: IconKind::Boxes,
-        label: "10 rules",
-        title: "Images & Daemon",
-        intro: "Daemon file permissions and container image hygiene.",
-        rules: &[
-            "Docker daemon file permissions (3.1\u{2013}3.8)",
-            "Container user override (4.1)",
-            "Healthcheck override (4.6)",
+            "Privileged container detection (5.5)",
+            "Host prerequisites and audit trails (1.1.1-1.1.18)",
+            "Docker daemon file permissions (3.1-3.8)",
+            "Image hygiene: user and healthcheck overrides (4.1, 4.6)",
         ],
     },
 ];
