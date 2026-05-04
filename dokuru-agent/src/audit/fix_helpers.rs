@@ -3067,6 +3067,14 @@ async fn apply_image_config_target(
             .map_err(|error| format!("{container_label}: Dockerfile fix failed: {error}"));
     }
 
+    if rule_id == "4.1" {
+        prepare_non_root_mount_permissions(rule_id, &container_label, &inspect, progress)
+            .await
+            .map_err(|error| {
+                format!("{container_label}: mount ownership migration failed: {error}")
+            })?;
+    }
+
     if is_dokuru_override_strategy(target.strategy.as_deref())
         || is_compose_source_strategy(target.strategy.as_deref())
     {
@@ -3291,6 +3299,219 @@ fn append_dockerfile_instruction(content: &str, instruction: &str) -> String {
     updated.push_str(instruction);
     updated.push('\n');
     updated
+}
+
+#[derive(Clone, Copy)]
+enum NonRootMountKind {
+    Bind,
+    Volume,
+}
+
+struct NonRootMountAction {
+    path: String,
+    kind: NonRootMountKind,
+}
+
+async fn prepare_non_root_mount_permissions(
+    rule_id: &str,
+    label: &str,
+    inspect: &ContainerInspectResponse,
+    progress: Option<&ProgressSender>,
+) -> eyre::Result<()> {
+    let (uid, gid) = parse_uid_gid(DEFAULT_NON_ROOT_USER)
+        .ok_or_else(|| eyre::eyre!("invalid non-root user {DEFAULT_NON_ROOT_USER}"))?;
+    let actions = non_root_mount_actions(inspect);
+
+    emit_non_root_mount_progress(
+        rule_id,
+        label,
+        progress,
+        "in_progress",
+        format!("Preparing writable mounts for UID/GID {DEFAULT_NON_ROOT_USER}"),
+    );
+
+    if actions.is_empty() {
+        emit_non_root_mount_progress(
+            rule_id,
+            label,
+            progress,
+            "done",
+            "No writable Docker volume or safe bind mount to migrate".to_string(),
+        );
+        return Ok(());
+    }
+
+    ensure_non_root_mount_tools(rule_id, label, progress, &actions).await?;
+    let result = migrate_non_root_mount_actions(&actions, uid, gid).await;
+    finish_non_root_mount_migration(rule_id, label, progress, &result)
+}
+
+fn emit_non_root_mount_progress(
+    rule_id: &str,
+    label: &str,
+    progress: Option<&ProgressSender>,
+    status: &str,
+    detail: String,
+) {
+    emit_progress(
+        progress,
+        rule_id,
+        label,
+        ProgressStep::new(2, 6),
+        "migrate_non_root_mounts",
+        status,
+        Some(detail),
+    );
+}
+
+async fn ensure_non_root_mount_tools(
+    rule_id: &str,
+    label: &str,
+    progress: Option<&ProgressSender>,
+    actions: &[NonRootMountAction],
+) -> eyre::Result<()> {
+    if actions
+        .iter()
+        .any(|action| matches!(action.kind, NonRootMountKind::Bind))
+        && let Some(error) = ensure_setfacl_available().await
+    {
+        emit_non_root_mount_progress(
+            rule_id,
+            label,
+            progress,
+            "error",
+            format!("setfacl is required for safe bind mount migration: {error}"),
+        );
+        return Err(eyre::eyre!(
+            "setfacl is required for safe bind mount migration: {error}"
+        ));
+    }
+
+    Ok(())
+}
+
+async fn migrate_non_root_mount_actions(
+    actions: &[NonRootMountAction],
+    uid: u32,
+    gid: u32,
+) -> UsernsRecoveryResult {
+    let owner = format!("{uid}:{gid}");
+    let mut summary = UsernsRecoveryResult::default();
+
+    for action in actions {
+        let Ok(metadata) = tokio::fs::metadata(&action.path).await else {
+            summary.skipped += 1;
+            continue;
+        };
+
+        let action_result = match action.kind {
+            NonRootMountKind::Volume => chown_path(&action.path, &metadata, &owner).await,
+            NonRootMountKind::Bind => {
+                recover_bind_mount_access(&action.path, &metadata, uid, gid).await
+            }
+        };
+
+        match action_result {
+            Ok((_, _, true)) => summary.completed += 1,
+            Ok((_, stderr, false)) => {
+                summary
+                    .failed
+                    .push(format!("{}: {}", action.path, stderr.trim()));
+            }
+            Err(error) => summary.failed.push(format!("{}: {error}", action.path)),
+        }
+    }
+
+    summary
+}
+
+fn finish_non_root_mount_migration(
+    rule_id: &str,
+    label: &str,
+    progress: Option<&ProgressSender>,
+    summary: &UsernsRecoveryResult,
+) -> eyre::Result<()> {
+    if !summary.failed.is_empty() {
+        let detail = format!(
+            "Migrated {} mount(s), skipped {}, failed {}: {}",
+            summary.completed,
+            summary.skipped,
+            summary.failed.len(),
+            summary
+                .failed
+                .iter()
+                .take(3)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("; ")
+        );
+        emit_non_root_mount_progress(rule_id, label, progress, "error", detail.clone());
+        return Err(eyre::eyre!(detail));
+    }
+
+    emit_non_root_mount_progress(
+        rule_id,
+        label,
+        progress,
+        "done",
+        format!(
+            "Prepared {} mount(s) for UID/GID {DEFAULT_NON_ROOT_USER}; skipped {} unsafe/missing path(s)",
+            summary.completed, summary.skipped
+        ),
+    );
+    Ok(())
+}
+
+fn parse_uid_gid(value: &str) -> Option<(u32, u32)> {
+    let (uid, gid) = value.split_once(':')?;
+    Some((uid.parse().ok()?, gid.parse().ok()?))
+}
+
+fn non_root_mount_actions(inspect: &ContainerInspectResponse) -> Vec<NonRootMountAction> {
+    let mut actions = Vec::new();
+    let Some(mounts) = &inspect.mounts else {
+        return actions;
+    };
+
+    for mount in mounts {
+        if mount.rw == Some(false) {
+            continue;
+        }
+        let Some(source) = mount.source.as_deref().filter(|source| !source.is_empty()) else {
+            continue;
+        };
+        if !Path::new(source).is_absolute() {
+            continue;
+        }
+
+        match mount.typ {
+            Some(MountPointTypeEnum::VOLUME) => actions.push(NonRootMountAction {
+                path: source.to_string(),
+                kind: NonRootMountKind::Volume,
+            }),
+            Some(MountPointTypeEnum::BIND) if is_safe_userns_bind_path(source) => {
+                actions.push(NonRootMountAction {
+                    path: source.to_string(),
+                    kind: NonRootMountKind::Bind,
+                });
+            }
+            _ => {}
+        }
+    }
+
+    actions
+}
+
+async fn chown_path(
+    path: &str,
+    metadata: &std::fs::Metadata,
+    owner: &str,
+) -> std::io::Result<(String, String, bool)> {
+    if metadata.is_dir() {
+        run_cmd("chown", &["-R", owner, path]).await
+    } else {
+        run_cmd("chown", &[owner, path]).await
+    }
 }
 
 async fn recreate_with_image_config(

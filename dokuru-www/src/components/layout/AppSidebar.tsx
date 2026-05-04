@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   PanelLeft,
   User,
@@ -141,6 +142,7 @@ export function AppSidebar() {
   const isIconMode = sidebarState === "collapsed";
   const [openAgents, setOpenAgents] = useState<Record<string, boolean>>({});
   const [lastDetailHrefByDefaultHref, setLastDetailHrefByDefaultHref] = useState<Record<string, string>>({});
+  const notifiedAuditIdsRef = useRef<Set<string>>(new Set());
 
   // Backend WS: relay agents + server-level events (agent:connected / agent:disconnected)
   useRealtimeAgents();
@@ -208,6 +210,35 @@ export function AppSidebar() {
       cancelled = true;
     };
   }, [location.pathname]);
+
+  useEffect(() => {
+    for (const [agentId, stream] of Object.entries(auditStreams)) {
+      const savedAudit = stream.savedAudit;
+      if (stream.status !== "complete" || !savedAudit?.id) continue;
+      if (notifiedAuditIdsRef.current.has(savedAudit.id)) continue;
+
+      notifiedAuditIdsRef.current.add(savedAudit.id);
+      if (location.pathname.startsWith(`/agents/${agentId}/audit`)) continue;
+
+      const toastId = `audit-complete-${agentId}-${savedAudit.id}`;
+      toast.success(`Audit complete - ${savedAudit.summary.score}/100`, {
+        id: toastId,
+        description: "Open the saved audit result.",
+        duration: 12_000,
+        action: {
+          label: "Open result",
+          onClick: () => {
+            toast.dismiss(toastId);
+            void navigate({
+              to: "/agents/$id/audits/$auditId",
+              params: { id: agentId, auditId: savedAudit.id! },
+              search: { from: "latest" },
+            });
+          },
+        },
+      });
+    }
+  }, [auditStreams, location.pathname, navigate]);
 
   // Seed relay agents as offline on load (their status comes from backend WS events only).
   useEffect(() => {

@@ -21,7 +21,7 @@ export function getFixSteps(ruleId: string): string[] {
     ];
     if (ruleId === "4.1") return [
         "Finding containers running as root…",
-        "Saving container or Compose configuration…",
+        "Migrating writable mount permissions…",
         "Stopping affected container(s)…",
         "Recreating with user 1000:1000…",
         "Starting container(s)…",
