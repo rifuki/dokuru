@@ -263,4 +263,39 @@ pub(crate) const FOOTER_COLUMNS: &[FooterColumn] = &[
             },
         ],
     },
+    FooterColumn {
+        title: "Project",
+        links: &[
+            FooterLink {
+                label: "About",
+                href: "#about",
+                test_id: "footer-link-about",
+            },
+            FooterLink {
+                label: "Contact",
+                href: "#contact",
+                test_id: "footer-link-contact",
+            },
+            FooterLink {
+                label: "Research Context",
+                href: "#research",
+                test_id: "footer-link-research-context",
+            },
+        ],
+    },
+    FooterColumn {
+        title: "Legal",
+        links: &[
+            FooterLink {
+                label: "Privacy Policy",
+                href: "#privacy",
+                test_id: "footer-link-privacy-policy",
+            },
+            FooterLink {
+                label: "Terms",
+                href: "#terms",
+                test_id: "footer-link-terms",
+            },
+        ],
+    },
 ];
