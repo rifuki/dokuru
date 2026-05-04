@@ -1688,6 +1688,15 @@ function AuditDetailPage() {
   const resultsAnchorRef = useRef<HTMLDivElement>(null);
 
   const handleRuleOpenChange = (ruleId: string, nextOpen: boolean) => {
+    if (!nextOpen && focusedRuleId === ruleId) {
+      void navigate({
+        to: "/agents/$id/audits/$auditId",
+        params: { id, auditId },
+        search: { from: detailSource },
+        replace: true,
+      });
+    }
+
     setOpenRuleIds((prev) => {
       if (nextOpen && prev.has(ruleId)) return prev;
       if (!nextOpen && !prev.has(ruleId)) return prev;
