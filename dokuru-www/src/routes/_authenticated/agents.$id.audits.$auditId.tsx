@@ -1942,6 +1942,14 @@ function AuditDetailPage() {
 
   const report = auditReport?.report;
   const baseResults = sortAuditResults(report?.sorted_results?.length ? report.sorted_results : auditData?.results ?? []);
+  const scoredRuleTotal = auditData
+    ? auditData.summary.total || auditData.summary.passed + auditData.summary.failed
+    : baseResults.filter(result => result.status === "Pass" || result.status === "Fail").length;
+  const checkRuleTotal = baseResults.length || scoredRuleTotal;
+  const hasUnscoredChecks = checkRuleTotal > scoredRuleTotal || baseResults.some(result => result.status === "Error");
+  const ruleCountSummary = hasUnscoredChecks
+    ? `${checkRuleTotal} checks · ${scoredRuleTotal} scored`
+    : `${scoredRuleTotal} rules`;
   const appliedHistoryByRule = latestAppliedFixesAfterAudit(fixHistoryQuery.data ?? [], auditData);
   const fixedRuleIds = new Set<string>(appliedHistoryByRule.keys());
   for (const result of baseResults) {
@@ -2224,7 +2232,7 @@ function AuditDetailPage() {
                       />
                     )}
                   </div>
-                  <p className="mt-2 text-xs text-muted-foreground">CIS Docker Benchmark v1.8.0 · {auditData.summary.total} rules</p>
+                  <p className="mt-2 text-xs text-muted-foreground">CIS Docker Benchmark v1.8.0 · {ruleCountSummary}</p>
                 </div>
 
                 <div className="mt-5 grid grid-cols-3 gap-2">
@@ -2273,9 +2281,13 @@ function AuditDetailPage() {
                     )}
                   </button>
                   <div className="flex min-h-[76px] flex-col items-center justify-center rounded-[12px] border border-border bg-muted/20 px-2 py-2.5 text-center sm:min-h-[84px] sm:px-3">
-                    <span className="block text-2xl font-black leading-none text-foreground/80 sm:text-3xl">{auditData.summary.total}</span>
-                    <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Total</span>
-                    <span className="mt-0.5 text-[10px] font-medium text-muted-foreground/60">audited</span>
+                    <span className="block text-2xl font-black leading-none text-foreground/80 sm:text-3xl">{scoredRuleTotal}</span>
+                    <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      {hasUnscoredChecks ? "Scored" : "Total"}
+                    </span>
+                    <span className="mt-0.5 text-[10px] font-medium text-muted-foreground/60">
+                      {hasUnscoredChecks ? `of ${checkRuleTotal} checks` : "audited"}
+                    </span>
                   </div>
                 </div>
 
