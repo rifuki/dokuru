@@ -17,6 +17,17 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -82,7 +93,7 @@ function ContainerRow({
   onStart,
   onStop,
   onRestart,
-  onRemove,
+  onRequestRemove,
   expanded,
   onExpandedChange,
   activeTab,
@@ -100,7 +111,7 @@ function ContainerRow({
   onStart: (id: string) => void;
   onStop: (id: string) => void;
   onRestart: (id: string) => void;
-  onRemove: (id: string) => void;
+  onRequestRemove: (container: Container) => void;
   expanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
   activeTab: ContainerTab;
@@ -223,7 +234,7 @@ function ContainerRow({
                   size="sm"
                   variant="ghost"
                   className="h-9 w-9 p-0 hover:!bg-transparent hover:text-destructive"
-                  onClick={() => { if (confirm(`Remove container "${name}"?`)) onRemove(container.id); }}
+                  onClick={() => onRequestRemove(container)}
                   disabled={isThisPending}
                 >
                   {isRemoving
@@ -265,6 +276,7 @@ function ContainersPage() {
   const setSearch = useContainerUiStore((state) => state.setSearch);
   const setContainerExpanded = useContainerUiStore((state) => state.setContainerExpanded);
   const setContainerTab = useContainerUiStore((state) => state.setContainerTab);
+  const hasExpandedContainerToRestore = Object.values(expandedContainers).some(Boolean);
 
   const { data: agent } = useQuery({
     queryKey: ["agent", id],
@@ -282,10 +294,12 @@ function ContainersPage() {
     enabled: canUseDockerAgent(agent),
     refetchInterval: 5000,
   });
-  const scrollMemory = useWindowScrollMemory(`agent:${id}:containers`, !isLoading && !!containers);
+  const scrollMemory = useWindowScrollMemory(`agent:${id}:containers`, !isLoading && !!containers && hasExpandedContainerToRestore);
   const [localExpandedContainers, setLocalExpandedContainers] = useState<Record<string, boolean>>({});
   const [localActiveTabs, setLocalActiveTabs] = useState<Record<string, ContainerTab>>({});
+  const [containerToRemove, setContainerToRemove] = useState<Container | null>(null);
   const shouldRestoreContainerUi = scrollMemory.restoreFromSidebar;
+  const shouldHideForScrollRestore = scrollMemory.isRestoring && hasExpandedContainerToRestore;
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["containers", id] });
 
@@ -341,6 +355,8 @@ function ContainersPage() {
     onError:   () => toast.error("Failed to remove container"),
   });
 
+  const removeTargetName = containerToRemove?.names[0]?.replace("/", "") || containerToRemove?.id.slice(0, 12) || "container";
+
   const startPendingId   = startMutation.isPending   ? startMutation.variables   : undefined;
   const stopPendingId    = stopMutation.isPending    ? stopMutation.variables    : undefined;
   const restartPendingId = restartMutation.isPending ? restartMutation.variables : undefined;
@@ -357,7 +373,7 @@ function ContainersPage() {
   const running = filtered.filter((c) => c.state.toLowerCase() === "running").length;
 
   return (
-    <div className={`mx-auto w-full max-w-7xl ${scrollMemory.isRestoring ? "invisible" : ""}`}>
+    <div className={`mx-auto w-full max-w-7xl ${shouldHideForScrollRestore ? "invisible" : ""}`}>
       <PageHeader
         icon={ContainerIcon}
         title="Containers"
@@ -420,7 +436,7 @@ function ContainersPage() {
               onStart={(cid) => startMutation.mutate(cid)}
               onStop={(cid) => stopMutation.mutate(cid)}
               onRestart={(cid) => restartMutation.mutate(cid)}
-              onRemove={(cid) => removeMutation.mutate(cid)}
+              onRequestRemove={(container) => setContainerToRemove(container)}
               startPendingId={startPendingId}
               stopPendingId={stopPendingId}
               restartPendingId={restartPendingId}
@@ -431,6 +447,41 @@ function ContainersPage() {
         </div>
       )}
       </div>
+
+      <AlertDialog
+        open={!!containerToRemove}
+        onOpenChange={(open) => {
+          if (!open && !removeMutation.isPending) setContainerToRemove(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia className="bg-destructive/10 text-destructive">
+              <Trash2 className="h-7 w-7" />
+            </AlertDialogMedia>
+            <AlertDialogTitle>Remove Container</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove container "{removeTargetName}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removeMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={removeMutation.isPending || !containerToRemove}
+              onClick={(event) => {
+                event.preventDefault();
+                if (!containerToRemove) return;
+                removeMutation.mutate(containerToRemove.id, {
+                  onSuccess: () => setContainerToRemove(null),
+                });
+              }}
+            >
+              {removeMutation.isPending ? "Removing..." : "Remove"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

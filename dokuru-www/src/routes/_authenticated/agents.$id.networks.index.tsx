@@ -1,11 +1,23 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
+import { useState } from "react";
 import { Network as NetworkIcon, Trash2, ExternalLink, Globe } from "lucide-react";
 import { canUseDockerAgent, dockerApi, dockerCredential, type Network } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -29,9 +41,16 @@ function driverColor(driver: string) {
   }
 }
 
+type NetworkRemoveRequest = {
+  ids: string[];
+  title: string;
+  description: string;
+};
+
 function NetworksPage() {
   const { id } = Route.useParams();
   const queryClient = useQueryClient();
+  const [networkRemoveRequest, setNetworkRemoveRequest] = useState<NetworkRemoveRequest | null>(null);
 
   const { data: agent } = useQuery({
     queryKey: ["agent", id],
@@ -63,12 +82,30 @@ function NetworksPage() {
     onError: () => toast.error("Failed to remove network"),
   });
 
-  const handleDeleteSelected = async (ids: string[]) => {
-    for (const nid of ids) {
+  const requestRemoveNetwork = (network: Network) => {
+    setNetworkRemoveRequest({
+      ids: [network.id],
+      title: "Remove Network",
+      description: `Remove network "${network.name}"? Docker may block this if containers are still connected.`,
+    });
+  };
+
+  const requestRemoveNetworks = (ids: string[]) => {
+    setNetworkRemoveRequest({
+      ids,
+      title: ids.length === 1 ? "Remove Network" : "Remove Networks",
+      description: `Remove ${ids.length} selected network${ids.length !== 1 ? "s" : ""}? Docker may block networks that still have connected containers.`,
+    });
+  };
+
+  const confirmRemoveNetworks = async () => {
+    if (!networkRemoveRequest) return;
+    for (const nid of networkRemoveRequest.ids) {
       await removeMutation.mutateAsync(nid).catch(() => {});
     }
     queryClient.invalidateQueries({ queryKey: ["networks", id] });
-    toast.success(`Removed ${ids.length} network(s)`);
+    toast.success(`Removed ${networkRemoveRequest.ids.length} network(s)`);
+    setNetworkRemoveRequest(null);
   };
 
   const columns: ColumnDef<Network>[] = [
@@ -139,7 +176,7 @@ function NetworksPage() {
                 <Button
                   size="sm" variant="ghost"
                   className="h-8 w-8 p-0 text-muted-foreground hover:!bg-transparent hover:text-destructive"
-                  onClick={() => { if (confirm("Remove this network?")) removeMutation.mutate(row.original.id); }}
+                  onClick={() => requestRemoveNetwork(row.original)}
                   disabled={removeMutation.isPending}
                 >
                   <Trash2 className="h-4 w-4" />
@@ -188,12 +225,42 @@ function NetworksPage() {
           columns={columns}
           rowId="id"
           searchPlaceholder="Search by name or driver…"
-          onDeleteSelected={handleDeleteSelected}
+          onDeleteSelected={requestRemoveNetworks}
           deleteLabel="Remove networks"
           isDeleting={removeMutation.isPending}
         />
       )}
       </div>
+
+      <AlertDialog
+        open={!!networkRemoveRequest}
+        onOpenChange={(open) => {
+          if (!open && !removeMutation.isPending) setNetworkRemoveRequest(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia className="bg-destructive/10 text-destructive">
+              <Trash2 className="h-7 w-7" />
+            </AlertDialogMedia>
+            <AlertDialogTitle>{networkRemoveRequest?.title ?? "Remove Network"}</AlertDialogTitle>
+            <AlertDialogDescription>{networkRemoveRequest?.description}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removeMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={removeMutation.isPending || !networkRemoveRequest}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmRemoveNetworks();
+              }}
+            >
+              {removeMutation.isPending ? "Removing..." : "Remove"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

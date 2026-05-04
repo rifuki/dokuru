@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
+import { useState } from "react";
 import {
   Layers,
   Trash2,
@@ -13,6 +14,17 @@ import { canUseDockerAgent, dockerApi, dockerCredential, type Image } from "@/se
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Tooltip,
   TooltipContent,
@@ -47,9 +59,17 @@ function parseTag(repoTag: string) {
   return { repo: repoTag.slice(0, idx), tag: repoTag.slice(idx + 1) };
 }
 
+type ImageRemoveRequest = {
+  ids: string[];
+  title: string;
+  description: string;
+};
+
 function ImagesPage() {
   const { id } = Route.useParams();
   const queryClient = useQueryClient();
+  const [imageRemoveRequest, setImageRemoveRequest] = useState<ImageRemoveRequest | null>(null);
+  const [pruneDialogOpen, setPruneDialogOpen] = useState(false);
 
   const { data: agent } = useQuery({
     queryKey: ["agent", id],
@@ -95,12 +115,31 @@ function ImagesPage() {
     onError: () => toast.error("Failed to prune images"),
   });
 
-  const handleDeleteSelected = async (ids: string[]) => {
-    for (const imgId of ids) {
+  const requestRemoveImage = (image: Image) => {
+    const primaryTag = image.repo_tags?.[0] ?? image.id.replace("sha256:", "").slice(0, 12);
+    setImageRemoveRequest({
+      ids: [image.id],
+      title: "Remove Image",
+      description: `Remove image "${primaryTag}"? Containers that depend on it may need to pull it again.`,
+    });
+  };
+
+  const requestRemoveImages = (ids: string[]) => {
+    setImageRemoveRequest({
+      ids,
+      title: ids.length === 1 ? "Remove Image" : "Remove Images",
+      description: `Remove ${ids.length} selected image${ids.length !== 1 ? "s" : ""}? Containers that depend on them may need to pull them again.`,
+    });
+  };
+
+  const confirmRemoveImages = async () => {
+    if (!imageRemoveRequest) return;
+    for (const imgId of imageRemoveRequest.ids) {
       await removeMutation.mutateAsync(imgId).catch(() => {});
     }
     queryClient.invalidateQueries({ queryKey: ["images", id] });
-    toast.success(`Removed ${ids.length} image(s)`);
+    toast.success(`Removed ${imageRemoveRequest.ids.length} image(s)`);
+    setImageRemoveRequest(null);
   };
 
   const columns: ColumnDef<Image>[] = [
@@ -211,7 +250,7 @@ function ImagesPage() {
                   variant="ghost"
                   className="h-8 w-8 p-0 text-muted-foreground hover:!bg-transparent hover:text-destructive"
                   onClick={() => {
-                    if (confirm("Remove this image?")) removeMutation.mutate(row.original.id);
+                    requestRemoveImage(row.original);
                   }}
                   disabled={removeMutation.isPending}
                 >
@@ -245,7 +284,7 @@ function ImagesPage() {
           variant="outline"
           size="sm"
           className="h-9 px-3 gap-2"
-          onClick={() => { if (confirm("Remove all unused images?")) pruneMutation.mutate(); }}
+          onClick={() => setPruneDialogOpen(true)}
           disabled={pruneMutation.isPending}
         >
           <Scissors className="h-3.5 w-3.5" />
@@ -279,12 +318,71 @@ function ImagesPage() {
           columns={columns}
           rowId="id"
           searchPlaceholder="Search by tag or ID…"
-          onDeleteSelected={handleDeleteSelected}
+          onDeleteSelected={requestRemoveImages}
           deleteLabel="Remove images"
           isDeleting={removeMutation.isPending}
         />
       )}
       </div>
+
+      <AlertDialog
+        open={!!imageRemoveRequest}
+        onOpenChange={(open) => {
+          if (!open && !removeMutation.isPending) setImageRemoveRequest(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia className="bg-destructive/10 text-destructive">
+              <Trash2 className="h-7 w-7" />
+            </AlertDialogMedia>
+            <AlertDialogTitle>{imageRemoveRequest?.title ?? "Remove Image"}</AlertDialogTitle>
+            <AlertDialogDescription>{imageRemoveRequest?.description}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removeMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={removeMutation.isPending || !imageRemoveRequest}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmRemoveImages();
+              }}
+            >
+              {removeMutation.isPending ? "Removing..." : "Remove"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={pruneDialogOpen} onOpenChange={setPruneDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia className="bg-destructive/10 text-destructive">
+              <Scissors className="h-7 w-7" />
+            </AlertDialogMedia>
+            <AlertDialogTitle>Prune Unused Images</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove all unused Docker images on this agent? Containers may need to pull them again later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pruneMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={pruneMutation.isPending}
+              onClick={(event) => {
+                event.preventDefault();
+                pruneMutation.mutate(undefined, {
+                  onSuccess: () => setPruneDialogOpen(false),
+                });
+              }}
+            >
+              {pruneMutation.isPending ? "Pruning..." : "Prune"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
