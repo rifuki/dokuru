@@ -68,6 +68,7 @@ export interface FixTarget {
   cpu_shares?: number;
   pids_limit?: number;
   strategy?: string;
+  user?: string;
 }
 
 export interface ResourceSuggestion {

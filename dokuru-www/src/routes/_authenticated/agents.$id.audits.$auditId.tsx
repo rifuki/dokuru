@@ -579,8 +579,9 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
   const hasFix = status === "Fail" && !!(rule.remediation || remediation_guide || affected.length > 0 || remediation_kind === "auto");
   const hasDebug = !!(audit_command || raw_output !== undefined || command_stderr || typeof command_exit_code === "number" || (references && references.length > 0));
   const isCurrentFixJob = isFixJobAfterAudit(fixJob, auditTimestamp ? { timestamp: auditTimestamp } : null);
-  const isFixing = isCurrentFixJob && fixJob?.status === "running";
-  const isFixed = (isCurrentFixJob && fixJob?.status === "applied") || appliedFixEntry?.outcome.status === "Applied";
+  const hasAppliedOutcome = storedOutcome?.status === "Applied" || appliedFixEntry?.outcome.status === "Applied";
+  const isFixing = !hasAppliedOutcome && isCurrentFixJob && fixJob?.status === "running";
+  const isFixed = hasAppliedOutcome || (isCurrentFixJob && fixJob?.status === "applied");
   const isFixBlocked = isCurrentFixJob && (fixJob?.status === "blocked" || fixJob?.status === "failed" || storedOutcome?.status === "Blocked");
   const tabs = [
     { id: "overview" as const, label: "Overview", show: true },

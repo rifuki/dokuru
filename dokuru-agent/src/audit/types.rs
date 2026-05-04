@@ -150,6 +150,8 @@ pub struct FixTarget {
     pub pids_limit: Option<i64>,
     #[serde(default)]
     pub strategy: Option<String>,
+    #[serde(default)]
+    pub user: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

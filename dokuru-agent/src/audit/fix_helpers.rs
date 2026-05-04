@@ -273,7 +273,7 @@ pub fn fix_steps(rule_id: &str) -> Vec<String> {
                 "Inspect containers running as root".to_string(),
                 "Save rollback metadata".to_string(),
                 "Stop or update compose service".to_string(),
-                format!("Recreate container with user {DEFAULT_NON_ROOT_USER}"),
+                "Recreate container with selected non-root user".to_string(),
                 "Start container".to_string(),
                 "Verify non-root user config".to_string(),
             ],
@@ -1578,12 +1578,20 @@ pub fn supports_userns_remap_fix(rule_id: &str) -> bool {
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
+struct VolumeMountSnapshot {
+    name: String,
+    target_uid: u32,
+    target_gid: u32,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
 struct ContainerSnapshot {
     id: String,
     name: String,
     was_running: bool,
     bind_mount_paths: Vec<String>,
     named_volume_names: Vec<String>,
+    named_volume_mounts: Vec<VolumeMountSnapshot>,
     compose_working_dir: Option<String>,
     compose_config_files: Option<String>,
     compose_project: Option<String>,
@@ -1612,7 +1620,7 @@ struct UsernsRecoveryResult {
 struct UsernsSnapshotState {
     snapshots: Vec<ContainerSnapshot>,
     bind_paths: Vec<String>,
-    volume_names: Vec<String>,
+    volume_mounts: Vec<VolumeMountSnapshot>,
 }
 
 struct UsernsRecoverySummary {
@@ -1641,6 +1649,109 @@ fn userns_progress_event(
         stdout: None,
         stderr: None,
     }
+}
+
+fn parse_user_id(value: &str) -> Option<u32> {
+    let trimmed = value.trim();
+    if trimmed.eq_ignore_ascii_case("root") {
+        return Some(0);
+    }
+    trimmed.parse().ok()
+}
+
+fn parse_user_spec_uid_gid(value: &str) -> Option<(u32, u32)> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let (uid_raw, gid_raw) = trimmed.split_once(':').unwrap_or((trimmed, ""));
+    let uid = parse_user_id(uid_raw)?;
+    let gid = if gid_raw.trim().is_empty() {
+        uid
+    } else {
+        parse_user_id(gid_raw)?
+    };
+
+    Some((uid, gid))
+}
+
+fn user_spec_is_root(value: &str) -> bool {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return true;
+    }
+
+    let (uid_raw, _) = trimmed.split_once(':').unwrap_or((trimmed, ""));
+    uid_raw.trim().eq_ignore_ascii_case("root") || uid_raw.trim() == "0"
+}
+
+fn configured_container_uid_gid(inspect: &ContainerInspectResponse) -> Option<(u32, u32)> {
+    inspect
+        .config
+        .as_ref()
+        .and_then(|config| config.user.as_deref())
+        .and_then(parse_user_spec_uid_gid)
+}
+
+fn container_runtime_uid_gid(inspect: &ContainerInspectResponse) -> (u32, u32) {
+    configured_container_uid_gid(inspect).unwrap_or((0, 0))
+}
+
+fn inspect_image_name(inspect: &ContainerInspectResponse) -> String {
+    inspect
+        .config
+        .as_ref()
+        .and_then(|config| config.image.clone())
+        .unwrap_or_default()
+        .to_lowercase()
+}
+
+fn known_image_non_root_user(inspect: &ContainerInspectResponse) -> Option<&'static str> {
+    let image = inspect_image_name(inspect);
+    if image.contains("postgres") {
+        return Some(if image.contains("alpine") {
+            "70:70"
+        } else {
+            "999:999"
+        });
+    }
+
+    None
+}
+
+fn has_docker_socket_mount(inspect: &ContainerInspectResponse) -> bool {
+    inspect.mounts.as_ref().is_some_and(|mounts| {
+        mounts.iter().any(|mount| {
+            [mount.source.as_deref(), mount.destination.as_deref()]
+                .into_iter()
+                .flatten()
+                .any(|path| path == "/var/run/docker.sock" || path == "/run/docker.sock")
+        })
+    })
+}
+
+fn selected_non_root_user(inspect: &ContainerInspectResponse) -> String {
+    if let Some(user) = inspect
+        .config
+        .as_ref()
+        .and_then(|config| config.user.as_deref())
+        .filter(|user| !user_spec_is_root(user))
+    {
+        return user.to_string();
+    }
+
+    known_image_non_root_user(inspect)
+        .unwrap_or(DEFAULT_NON_ROOT_USER)
+        .to_string()
+}
+
+fn target_user_or_default(target: Option<&FixTarget>) -> String {
+    target
+        .and_then(|target| target.user.as_deref())
+        .filter(|user| !user_spec_is_root(user))
+        .unwrap_or(DEFAULT_NON_ROOT_USER)
+        .to_string()
 }
 
 async fn snapshot_all_containers(docker: &Docker) -> Vec<ContainerSnapshot> {
@@ -1678,6 +1789,8 @@ async fn snapshot_all_containers(docker: &Docker) -> Vec<ContainerSnapshot> {
 
         let mut bind_mount_paths = Vec::new();
         let mut named_volume_names = Vec::new();
+        let mut named_volume_mounts = Vec::new();
+        let runtime_owner = container_runtime_uid_gid(&inspect);
         if let Some(mounts) = &inspect.mounts {
             for mount in mounts {
                 match mount.typ {
@@ -1691,6 +1804,11 @@ async fn snapshot_all_containers(docker: &Docker) -> Vec<ContainerSnapshot> {
                     Some(MountPointTypeEnum::VOLUME) => {
                         if let Some(name) = mount.name.as_ref().filter(|name| !name.is_empty()) {
                             named_volume_names.push(name.clone());
+                            named_volume_mounts.push(VolumeMountSnapshot {
+                                name: name.clone(),
+                                target_uid: runtime_owner.0,
+                                target_gid: runtime_owner.1,
+                            });
                         }
                     }
                     _ => {}
@@ -1705,6 +1823,7 @@ async fn snapshot_all_containers(docker: &Docker) -> Vec<ContainerSnapshot> {
             was_running,
             bind_mount_paths,
             named_volume_names,
+            named_volume_mounts,
             compose_working_dir: compose_ctx
                 .as_ref()
                 .and_then(|ctx| ctx.working_dir.as_ref())
@@ -1740,6 +1859,32 @@ fn unique_snapshot_values(
     values.sort();
     values.dedup();
     values
+}
+
+fn unique_volume_mounts(snapshots: &[ContainerSnapshot]) -> Vec<VolumeMountSnapshot> {
+    let mut mounts = BTreeMap::<String, (u32, u32)>::new();
+    for mount in snapshots
+        .iter()
+        .flat_map(|snapshot| snapshot.named_volume_mounts.iter())
+    {
+        mounts
+            .entry(mount.name.clone())
+            .and_modify(|current| {
+                if current.0 == 0 && mount.target_uid != 0 {
+                    *current = (mount.target_uid, mount.target_gid);
+                }
+            })
+            .or_insert((mount.target_uid, mount.target_gid));
+    }
+
+    mounts
+        .into_iter()
+        .map(|(name, (target_uid, target_gid))| VolumeMountSnapshot {
+            name,
+            target_uid,
+            target_gid,
+        })
+        .collect()
 }
 
 fn subid_start(path: &str, user: &str) -> Option<u32> {
@@ -1787,13 +1932,12 @@ fn is_safe_userns_bind_path(path: &str) -> bool {
 }
 
 async fn migrate_named_volumes(
-    volume_names: &[String],
-    uid: u32,
-    gid: u32,
+    volume_mounts: &[VolumeMountSnapshot],
+    remap_owner: (u32, u32),
     progress: Option<&ProgressSender>,
 ) -> UsernsRecoveryResult {
     let mut result = UsernsRecoveryResult::default();
-    if volume_names.is_empty() {
+    if volume_mounts.is_empty() {
         send_progress(
             progress,
             userns_progress_event(
@@ -1808,14 +1952,28 @@ async fn migrate_named_volumes(
     }
 
     let old_root = "/var/lib/docker/volumes";
-    let new_root = format!("/var/lib/docker/{uid}.{gid}/volumes");
-    let owner = format!("{uid}:{gid}");
+    let new_root = format!(
+        "/var/lib/docker/{}.{}/volumes",
+        remap_owner.0, remap_owner.1
+    );
     let timestamp = chrono::Utc::now().format("%Y%m%d%H%M%S");
 
-    for name in volume_names {
+    for mount in volume_mounts {
+        let name = &mount.name;
         let old_path = format!("{old_root}/{name}/_data");
         let new_dir = format!("{new_root}/{name}");
         let new_path = format!("{new_dir}/_data");
+        let host_owner = (
+            remap_owner
+                .0
+                .checked_add(mount.target_uid)
+                .unwrap_or(remap_owner.0),
+            remap_owner
+                .1
+                .checked_add(mount.target_gid)
+                .unwrap_or(remap_owner.1),
+        );
+        let owner = format!("{}:{}", host_owner.0, host_owner.1);
 
         if !Path::new(&old_path).exists() {
             result.skipped += 1;
@@ -2275,6 +2433,7 @@ async fn snapshot_userns_recovery_state(
     persist_userns_snapshot(&snapshots).await;
     let bind_paths = unique_snapshot_values(&snapshots, |snapshot| &snapshot.bind_mount_paths);
     let volume_names = unique_snapshot_values(&snapshots, |snapshot| &snapshot.named_volume_names);
+    let volume_mounts = unique_volume_mounts(&snapshots);
     let host_userns_count = snapshots
         .iter()
         .filter(|snapshot| snapshot.uses_host_userns)
@@ -2300,7 +2459,7 @@ async fn snapshot_userns_recovery_state(
     UsernsSnapshotState {
         snapshots,
         bind_paths,
-        volume_names,
+        volume_mounts,
     }
 }
 
@@ -2529,12 +2688,12 @@ async fn recover_userns_state(
             "in_progress",
             Some(format!(
                 "Migrating {} named volume(s) to /var/lib/docker/{uid}.{gid}",
-                state.volume_names.len()
+                state.volume_mounts.len()
             )),
             Some("cp -a /var/lib/docker/volumes/<name>/_data /var/lib/docker/<uid>.<gid>/volumes/<name>/_data".to_string()),
         ),
     );
-    let volume_result = migrate_named_volumes(&state.volume_names, uid, gid, progress).await;
+    let volume_result = migrate_named_volumes(&state.volume_mounts, (uid, gid), progress).await;
 
     send_progress(
         progress,
@@ -2830,6 +2989,7 @@ async fn default_target_for_rule(
         pids_limit: (matches!(effective_rule_id, "5.29" | "cgroup_all") && pids_limit <= 0)
             .then_some(DEFAULT_PIDS_LIMIT),
         strategy: Some(strategy.to_string()),
+        user: None,
     })
 }
 
@@ -3013,6 +3173,7 @@ async fn default_image_config_targets(
             cpu_shares: None,
             pids_limit: None,
             strategy: Some(strategy.to_string()),
+            user: None,
         });
     }
 
@@ -3069,8 +3230,16 @@ async fn apply_image_config_target(
             .map_err(|error| format!("{container_label}: Dockerfile fix failed: {error}"));
     }
 
-    if rule_id == "4.1" {
-        prepare_non_root_mount_permissions(rule_id, &container_label, &inspect, progress)
+    if rule_id == "4.1" && has_docker_socket_mount(&inspect) {
+        return Err(format!(
+            "{container_label}: container mounts the Docker socket; choose a purpose-built non-root user/group manually before applying rule 4.1"
+        ));
+    }
+
+    let non_root_user = (rule_id == "4.1").then(|| selected_non_root_user(&inspect));
+
+    if let Some(user) = non_root_user.as_deref() {
+        prepare_non_root_mount_permissions(rule_id, &container_label, &inspect, user, progress)
             .await
             .map_err(|error| {
                 format!("{container_label}: mount ownership migration failed: {error}")
@@ -3088,10 +3257,16 @@ async fn apply_image_config_target(
         if !compose_services.insert(ctx.key()) {
             return Ok(None);
         }
+        let mut compose_target = target.clone();
+        if let Some(user) = non_root_user.as_ref() {
+            compose_target.user = Some(user.clone());
+        }
+        let compose_target = non_root_user.as_ref().map(|_| &compose_target);
         let result = if is_dokuru_override_strategy(target.strategy.as_deref()) {
-            apply_compose_service_override_fix(docker, rule_id, &ctx, None, progress).await
+            apply_compose_service_override_fix(docker, rule_id, &ctx, compose_target, progress)
+                .await
         } else {
-            apply_compose_service_fix(docker, rule_id, &ctx, progress).await
+            apply_compose_service_fix(docker, rule_id, &ctx, compose_target, progress).await
         };
 
         return result
@@ -3111,6 +3286,7 @@ async fn apply_image_config_target(
         &target.container_id,
         inspect,
         rule_id,
+        non_root_user.as_deref(),
         progress,
         &container_label,
     ))
@@ -3318,10 +3494,11 @@ async fn prepare_non_root_mount_permissions(
     rule_id: &str,
     label: &str,
     inspect: &ContainerInspectResponse,
+    user: &str,
     progress: Option<&ProgressSender>,
 ) -> eyre::Result<()> {
-    let (uid, gid) = parse_uid_gid(DEFAULT_NON_ROOT_USER)
-        .ok_or_else(|| eyre::eyre!("invalid non-root user {DEFAULT_NON_ROOT_USER}"))?;
+    let (uid, gid) =
+        parse_uid_gid(user).ok_or_else(|| eyre::eyre!("invalid non-root user {user}"))?;
     let actions = non_root_mount_actions(inspect);
 
     emit_non_root_mount_progress(
@@ -3329,7 +3506,7 @@ async fn prepare_non_root_mount_permissions(
         label,
         progress,
         "in_progress",
-        format!("Preparing writable mounts for UID/GID {DEFAULT_NON_ROOT_USER}"),
+        format!("Preparing writable mounts for UID/GID {user}"),
     );
 
     if actions.is_empty() {
@@ -3345,7 +3522,7 @@ async fn prepare_non_root_mount_permissions(
 
     ensure_non_root_mount_tools(rule_id, label, progress, &actions).await?;
     let result = migrate_non_root_mount_actions(&actions, uid, gid).await;
-    finish_non_root_mount_migration(rule_id, label, progress, &result)
+    finish_non_root_mount_migration(rule_id, label, progress, &result, user)
 }
 
 fn emit_non_root_mount_progress(
@@ -3432,6 +3609,7 @@ fn finish_non_root_mount_migration(
     label: &str,
     progress: Option<&ProgressSender>,
     summary: &UsernsRecoveryResult,
+    user: &str,
 ) -> eyre::Result<()> {
     if !summary.failed.is_empty() {
         let detail = format!(
@@ -3457,8 +3635,8 @@ fn finish_non_root_mount_migration(
         progress,
         "done",
         format!(
-            "Prepared {} mount(s) for UID/GID {DEFAULT_NON_ROOT_USER}; skipped {} unsafe/missing path(s)",
-            summary.completed, summary.skipped
+            "Prepared {} mount(s) for UID/GID {}; skipped {} unsafe/missing path(s)",
+            summary.completed, user, summary.skipped
         ),
     );
     Ok(())
@@ -3521,6 +3699,7 @@ async fn recreate_with_image_config(
     id: &str,
     inspect: ContainerInspectResponse,
     rule_id: &str,
+    non_root_user: Option<&str>,
     progress: Option<&ProgressSender>,
     label: &str,
 ) -> eyre::Result<()> {
@@ -3537,7 +3716,9 @@ async fn recreate_with_image_config(
     let mut create_config: Config<String> = container_config.into();
 
     match rule_id {
-        "4.1" => create_config.user = Some(DEFAULT_NON_ROOT_USER.to_string()),
+        "4.1" => {
+            create_config.user = Some(non_root_user.unwrap_or(DEFAULT_NON_ROOT_USER).to_string());
+        }
         "4.6" => create_config.healthcheck = Some(default_healthcheck_config()),
         _ => return Err(eyre::eyre!("unsupported image config rule {rule_id}")),
     }
@@ -4692,6 +4873,7 @@ async fn default_namespace_targets(docker: &Docker, rule_id: &str) -> eyre::Resu
             cpu_shares: None,
             pids_limit: None,
             strategy: Some(strategy.to_string()),
+            user: None,
         });
     }
 
@@ -4767,7 +4949,7 @@ async fn apply_namespace_target(
         let result = if is_dokuru_override_strategy(target.strategy.as_deref()) {
             apply_compose_service_override_fix(docker, rule_id, &ctx, None, progress).await
         } else {
-            apply_compose_service_fix(docker, rule_id, &ctx, progress).await
+            apply_compose_service_fix(docker, rule_id, &ctx, None, progress).await
         };
 
         return result
@@ -5015,10 +5197,11 @@ async fn apply_compose_service_fix(
     docker: &Docker,
     rule_id: &str,
     ctx: &ComposeContext,
+    target: Option<&FixTarget>,
     progress: Option<&ProgressSender>,
 ) -> eyre::Result<()> {
     let label = format!("{}:{}", ctx.project, ctx.service);
-    let edit = prepare_compose_service_edit(rule_id, ctx, &label, progress).await?;
+    let edit = prepare_compose_service_edit(rule_id, ctx, target, &label, progress).await?;
     let backup_path = write_compose_service_edit(rule_id, &label, &edit, progress).await?;
     run_compose_service_edit(docker, rule_id, ctx, &label, &edit, &backup_path, progress).await
 }
@@ -5075,6 +5258,7 @@ struct ComposeServiceEdit {
 async fn prepare_compose_service_edit(
     rule_id: &str,
     ctx: &ComposeContext,
+    target: Option<&FixTarget>,
     label: &str,
     progress: Option<&ProgressSender>,
 ) -> eyre::Result<ComposeServiceEdit> {
@@ -5112,7 +5296,7 @@ async fn prepare_compose_service_edit(
     for compose_path in &compose_paths {
         let content = tokio::fs::read_to_string(compose_path).await?;
 
-        match update_compose_content(&content, &ctx.service, rule_id, None) {
+        match update_compose_content(&content, &ctx.service, rule_id, target) {
             Ok(Some(updated_content)) => {
                 update = Some((compose_path.clone(), updated_content));
                 break;
@@ -5631,7 +5815,7 @@ fn apply_dokuru_override_service_lines(
             lines,
             block,
             "user",
-            &yaml_quoted_scalar(DEFAULT_NON_ROOT_USER),
+            &yaml_quoted_scalar(&target_user_or_default(target)),
         ),
         "4.6" => set_healthcheck_text(lines, block),
         "5.5" => set_service_value_text(lines, block, "privileged", "false"),
@@ -5749,7 +5933,7 @@ fn update_compose_service_lines(
             lines,
             block,
             "user",
-            &format!("\"{DEFAULT_NON_ROOT_USER}\""),
+            &yaml_quoted_scalar(&target_user_or_default(target)),
         ),
         "4.6" => set_healthcheck_text(lines, block),
         "5.5" => set_existing_service_value(lines, block, "privileged", "false"),
@@ -6187,7 +6371,7 @@ fn container_violates_rule(inspect: &ContainerInspectResponse, rule_id: &str) ->
             .config
             .as_ref()
             .and_then(|config| config.user.as_deref())
-            .is_none_or(|user| user.is_empty() || user == "root" || user == "0"),
+            .is_none_or(user_spec_is_root),
         "4.6" => inspect
             .config
             .as_ref()
@@ -6321,6 +6505,7 @@ async fn cgroup_rollback_plan(docker: &Docker, request: &FixRequest) -> eyre::Re
             cpu_shares: host_config.cpu_shares,
             pids_limit: host_config.pids_limit,
             strategy: Some("cgroup_rollback".to_string()),
+            user: None,
         });
     }
 
@@ -6834,6 +7019,106 @@ volumes:
     }
 
     #[test]
+    fn update_compose_content_uses_selected_non_root_user() {
+        let input = r#"services:
+  db:
+    image: postgres:16-alpine
+    user: root
+"#;
+        let expected = r#"services:
+  db:
+    image: postgres:16-alpine
+    user: "70:70"
+"#;
+        let target = FixTarget {
+            container_id: "abc".to_string(),
+            memory: None,
+            cpu_shares: None,
+            pids_limit: None,
+            strategy: Some(STRATEGY_COMPOSE_UPDATE.to_string()),
+            user: Some("70:70".to_string()),
+        };
+
+        let updated = update_compose_content(input, "db", "4.1", Some(&target))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(updated, expected);
+    }
+
+    #[test]
+    fn dokuru_override_mode_uses_selected_non_root_user() {
+        let target = FixTarget {
+            container_id: "abc".to_string(),
+            memory: None,
+            cpu_shares: None,
+            pids_limit: None,
+            strategy: Some(STRATEGY_DOKURU_OVERRIDE.to_string()),
+            user: Some("70:70".to_string()),
+        };
+        let expected = r#"# Managed by Dokuru. Keep this file after the base compose files.
+
+services:
+  db:
+    user: "70:70"
+"#;
+
+        let rendered = upsert_dokuru_override_content(None, "db", "4.1", Some(&target)).unwrap();
+
+        assert_eq!(rendered, expected);
+    }
+
+    #[test]
+    fn userns_volume_targets_prefer_non_root_runtime_owner() {
+        let snapshots = vec![
+            ContainerSnapshot {
+                id: "root".to_string(),
+                name: "root".to_string(),
+                was_running: true,
+                bind_mount_paths: Vec::new(),
+                named_volume_names: vec!["shared".to_string()],
+                named_volume_mounts: vec![VolumeMountSnapshot {
+                    name: "shared".to_string(),
+                    target_uid: 0,
+                    target_gid: 0,
+                }],
+                compose_working_dir: None,
+                compose_config_files: None,
+                compose_project: None,
+                compose_service: None,
+                is_compose_managed: false,
+                uses_host_userns: false,
+                inspect: None,
+            },
+            ContainerSnapshot {
+                id: "postgres".to_string(),
+                name: "postgres".to_string(),
+                was_running: true,
+                bind_mount_paths: Vec::new(),
+                named_volume_names: vec!["shared".to_string()],
+                named_volume_mounts: vec![VolumeMountSnapshot {
+                    name: "shared".to_string(),
+                    target_uid: 70,
+                    target_gid: 70,
+                }],
+                compose_working_dir: None,
+                compose_config_files: None,
+                compose_project: None,
+                compose_service: None,
+                is_compose_managed: false,
+                uses_host_userns: false,
+                inspect: None,
+            },
+        ];
+
+        let mounts = unique_volume_mounts(&snapshots);
+
+        assert_eq!(mounts.len(), 1);
+        assert_eq!(mounts[0].target_uid, 70);
+        assert_eq!(mounts[0].target_gid, 70);
+    }
+
+    #[test]
     fn update_compose_content_adds_healthcheck_block() {
         let input = r#"services:
   api:
@@ -6953,6 +7238,7 @@ volumes:
             cpu_shares: Some(1024),
             pids_limit: Some(200),
             strategy: Some("compose_update".to_string()),
+            user: None,
         };
 
         let updated = update_compose_content(input, "web", "cgroup_all", Some(&target))
@@ -6975,6 +7261,7 @@ volumes:
             cpu_shares: None,
             pids_limit: None,
             strategy: Some("compose_update".to_string()),
+            user: None,
         };
 
         let updated = update_compose_content(input, "web", "5.11", Some(&target)).unwrap();
@@ -7042,6 +7329,7 @@ volumes:
             cpu_shares: Some(1024),
             pids_limit: Some(200),
             strategy: Some("compose_update".to_string()),
+            user: None,
         };
 
         for (rule_id, key, value) in cases {
@@ -7088,6 +7376,7 @@ volumes:
             cpu_shares: Some(1024),
             pids_limit: Some(200),
             strategy: Some("compose_update".to_string()),
+            user: None,
         };
 
         let updated = update_compose_content(input, "web", "cgroup_all", Some(&target))
@@ -7105,6 +7394,7 @@ volumes:
             cpu_shares: Some(1024),
             pids_limit: Some(200),
             strategy: Some(STRATEGY_DOKURU_OVERRIDE.to_string()),
+            user: None,
         };
         let expected = r#"# Managed by Dokuru. Keep this file after the base compose files.
 
@@ -7158,6 +7448,7 @@ services:
             cpu_shares: None,
             pids_limit: None,
             strategy: Some(STRATEGY_COMPOSE_UPDATE.to_string()),
+            user: None,
         };
 
         let updated = update_compose_content(input, "web", "5.11", Some(&target))
@@ -7175,6 +7466,7 @@ services:
             cpu_shares: Some(1024),
             pids_limit: Some(200),
             strategy: Some(STRATEGY_DOCKER_UPDATE.to_string()),
+            user: None,
         };
 
         let command = docker_update_command("5.25", &target, "web-1");
