@@ -9,8 +9,8 @@ pub(crate) fn hero() -> impl IntoView {
         <section id="top" data-testid="hero-section" class="relative min-h-[100svh] flex flex-col justify-center pt-24 pb-20 md:pb-28 overflow-hidden">
             <div class="absolute inset-0 bg-grid-fine mask-fade-b pointer-events-none animate-fade-in"/>
 
-            <div class="relative mx-auto w-full max-w-[1500px] px-6 md:px-10">
-                <div class="grid items-center gap-12 lg:grid-cols-2 xl:gap-16">
+            <div class="relative mx-auto w-full max-w-[1440px] px-6 md:px-10">
+                <div class="grid items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(520px,760px)] xl:gap-14">
                     <div class="min-w-0">
                         <h1 data-testid="hero-headline" class="animate-enter-up font-heading text-5xl sm:text-6xl lg:text-[64px] xl:text-[72px] font-bold tracking-tight leading-[1.05] text-white" style="--motion-delay: 300ms; --motion-duration: 800ms">
                             "Docker security"
@@ -47,7 +47,7 @@ pub(crate) fn hero() -> impl IntoView {
                         </div>
                     </div>
 
-                    <div class="animate-enter-right relative min-w-0 xl:-mr-6" style="--motion-delay: 600ms">
+                    <div class="animate-enter-right relative w-full max-w-[760px] justify-self-center lg:justify-self-start" style="--motion-delay: 600ms">
                         <div class="absolute inset-0 scale-95 rounded-full bg-[#2496ED]/10 blur-[120px]"/>
                         <div class="relative overflow-hidden rounded-2xl border border-white/10 bg-[#050505] shadow-[0_0_70px_rgba(0,0,0,0.82)]">
                             {audit_panel()}
