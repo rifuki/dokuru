@@ -24,6 +24,7 @@ import {
   Settings,
   FileText,
   Terminal,
+  Loader2,
 } from "lucide-react";
 
 import {
@@ -45,7 +46,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useAuthUser } from "@/stores/use-auth-store";
-import { useAuditStore, type AuditStreamState } from "@/stores/use-audit-store";
+import { useAuditStore, type AuditStreamState, type FixJobState } from "@/stores/use-audit-store";
 import { useAgentStore } from "@/stores/use-agent-store";
 import { useRealtimeAgents } from "@/hooks/useRealtimeAgents";
 import { useAgentConnections } from "@/hooks/useAgentConnections";
@@ -90,6 +91,36 @@ function auditSidebarStatus(stream?: AuditStreamState) {
   }
 
   return null;
+}
+
+function fixSidebarStatus(agentId: string, fixJobs: Record<string, FixJobState>) {
+  let runningCount = 0;
+  let latestJob: FixJobState | null = null;
+
+  for (const job of Object.values(fixJobs)) {
+    if (job.agentId !== agentId || job.status !== "running") continue;
+    runningCount += 1;
+
+    if (!latestJob || Date.parse(job.startedAt) >= Date.parse(latestJob.startedAt)) {
+      latestJob = job;
+    }
+  }
+
+  if (!latestJob) return null;
+
+  const latestEvent = latestJob.progressEvents.at(-1);
+  const totalSteps = latestEvent?.total_steps ?? 0;
+  const currentStep = latestEvent?.step ?? latestJob.stepIndex + 1;
+  const pct = totalSteps > 0 ? Math.min(99, Math.max(1, Math.round((currentStep / totalSteps) * 100))) : null;
+  const currentAction = latestEvent?.detail || latestEvent?.action;
+
+  return {
+    label: runningCount > 1 ? `${runningCount} fixes` : "Fixing",
+    title: currentAction
+      ? `Fixing rule ${latestJob.ruleId}${pct ? ` (${pct}%)` : ""}: ${currentAction}`
+      : `Fixing rule ${latestJob.ruleId}`,
+    className: "border-[#2496ED]/35 bg-[#2496ED]/10 text-[#2496ED]",
+  };
 }
 
 const agentNavItems = (agentId: string) => {
@@ -138,6 +169,7 @@ export function AppSidebar() {
   const { agents, fetchAgents, agentOnlineStatus, agentConnectingStatus, setAgentOnline } = useAgentStore();
   const auditStreams = useAuditStore((state) => state.auditStreams);
   const viewedAuditResults = useAuditStore((state) => state.viewedAuditResults);
+  const fixJobs = useAuditStore((state) => state.fixJobs);
   const { state: sidebarState } = useSidebar();
   const isIconMode = sidebarState === "collapsed";
   const [openAgents, setOpenAgents] = useState<Record<string, boolean>>({});
@@ -397,6 +429,7 @@ export function AppSidebar() {
                 const isConnecting = !!agentConnectingStatus[agent.id];
                 const isOnline = agentOnlineStatus[agent.id] === true;
                 const isOffline = !isConnecting && agentOnlineStatus[agent.id] === false;
+                const agentFixStatus = fixSidebarStatus(agent.id, fixJobs);
                 const AgentIcon = isOnline || isConnecting ? Bot : BotOff;
                 const iconColor = isConnecting
                   ? "animate-pulse text-muted-foreground/45"
@@ -426,8 +459,15 @@ export function AppSidebar() {
                       >
                         <CollapsibleTrigger asChild>
                           {isIconMode ? (
-                            <SidebarMenuButton tooltip={agent.name} isActive={isAgentActive}>
+                            <SidebarMenuButton
+                              tooltip={agentFixStatus ? `${agent.name} - ${agentFixStatus.title}` : agent.name}
+                              isActive={isAgentActive}
+                              className="relative"
+                            >
                               <AgentIcon className={`size-5 ${iconColor}`} />
+                              {agentFixStatus && (
+                                <span className="absolute right-1 top-1 size-1.5 rounded-full bg-[#2496ED] ring-2 ring-sidebar animate-pulse" />
+                              )}
                             </SidebarMenuButton>
                           ) : (
                             <button
@@ -458,6 +498,8 @@ export function AppSidebar() {
                                 const completedAuditId = auditStream?.status === "complete" ? auditStream.savedAudit?.id : undefined;
                                 const completedAuditViewed = !!completedAuditId && viewedAuditResults[agent.id] === completedAuditId;
                                 const auditStatus = isCurrentAuditPage || completedAuditViewed ? null : auditSidebarStatus(auditStream);
+                                const fixStatus = item.title === "Audit" ? agentFixStatus : null;
+                                const navStatus = fixStatus ?? auditStatus;
                                 const active = isActive(item.href);
                                 const disabled = item.requiresOnline && !isOnline;
                                 const targetHref = getAgentNavTarget(item.href, active);
@@ -474,7 +516,7 @@ export function AppSidebar() {
                                   <Link
                                      key={item.href}
                                       to={targetHref}
-                                     title={auditStatus?.title}
+                                     title={navStatus?.title}
                                      onClick={(event) => {
                                        markSidebarNavigation(targetHref);
                                        if (targetHref === item.href) {
@@ -495,9 +537,10 @@ export function AppSidebar() {
                                     >
                                       <item.icon className="size-4 shrink-0" />
                                     <span className="min-w-0 flex-1 truncate">{item.title}</span>
-                                    {auditStatus && (
-                                      <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold leading-none ${auditStatus.className}`}>
-                                        {auditStatus.label}
+                                    {navStatus && (
+                                      <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold leading-none ${navStatus.className}`}>
+                                        {fixStatus && <Loader2 className="size-3 animate-spin" />}
+                                        {navStatus.label}
                                       </span>
                                     )}
                                   </Link>

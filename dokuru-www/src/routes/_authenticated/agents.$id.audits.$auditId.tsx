@@ -150,10 +150,14 @@ function normalizeAuditDetailSource(value: unknown): AuditDetailSource | undefin
   return value === "latest" || value === "history" ? value : undefined;
 }
 
+function findAuditRuleCard(ruleId: string) {
+  return [...document.querySelectorAll<HTMLElement>("[data-audit-rule-id]")]
+    .find(element => element.dataset.auditRuleId === ruleId) ?? null;
+}
+
 function scrollToAuditRuleCard(ruleId: string) {
   window.setTimeout(() => {
-    const target = [...document.querySelectorAll<HTMLElement>("[data-audit-rule-id]")]
-      .find(element => element.dataset.auditRuleId === ruleId);
+    const target = findAuditRuleCard(ruleId);
     target?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, 120);
 }
@@ -1686,9 +1690,17 @@ function AuditDetailPage() {
   const auditUiMemoryKeyRef = useRef(auditUiMemoryKey);
   const skipNextAuditUiWriteRef = useRef(false);
   const resultsAnchorRef = useRef<HTMLDivElement>(null);
+  const ruleCloseScrollRef = useRef<{ ruleId: string; top: number; scrollY: number } | null>(null);
 
   const handleRuleOpenChange = (ruleId: string, nextOpen: boolean) => {
     if (!nextOpen && focusedRuleId === ruleId) {
+      const target = findAuditRuleCard(ruleId);
+      ruleCloseScrollRef.current = {
+        ruleId,
+        top: target?.getBoundingClientRect().top ?? 0,
+        scrollY: window.scrollY,
+      };
+
       void navigate({
         to: "/agents/$id/audits/$auditId",
         params: { id, auditId },
@@ -1787,6 +1799,23 @@ function AuditDetailPage() {
   });
   const containers = containersQuery.data ?? [];
   const scrollMemory = useWindowScrollMemory(`agent:${id}:audit-detail:${auditId}`, !!auditData && !focusedRuleId);
+
+  useLayoutEffect(() => {
+    const restore = ruleCloseScrollRef.current;
+    if (!restore || focusedRuleId === restore.ruleId) return;
+
+    ruleCloseScrollRef.current = null;
+    const target = findAuditRuleCard(restore.ruleId);
+    if (!target) {
+      window.scrollTo({ top: restore.scrollY, left: 0, behavior: "instant" });
+      return;
+    }
+
+    const delta = target.getBoundingClientRect().top - restore.top;
+    if (Math.abs(delta) > 1) {
+      window.scrollTo({ top: Math.max(0, window.scrollY + delta), left: 0, behavior: "instant" });
+    }
+  }, [focusedRuleId, openRuleIds]);
 
   const {
     open: wizardOpen,
