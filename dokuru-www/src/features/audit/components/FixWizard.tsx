@@ -13,7 +13,7 @@ import type { AuditResult, FixOutcome, FixPreview, FixProgress } from "@/lib/api
 import type { Container as DockerContainer } from "@/services/docker-api";
 import {
     getFixSteps, isContainerRecreateRule, isCgroupRule, isImageConfigRecreateRule,
-    isNamespaceIsolationRule,
+    isNamespaceIsolationRule, isRuntimeIsolationRule,
     type TargetConfig, type WizardStep,
 } from "@/features/audit/hooks/useFix";
 import { ResizableSheetContent } from "@/features/audit/components/ResizableSheetContent";
@@ -140,8 +140,12 @@ function formatBytesAsMb(bytes?: number | null) {
 function currentValueLabel(ruleId: string, target: FixPreview["targets"][number]) {
     if (ruleId === "4.1") return "root or no explicit user";
     if (ruleId === "4.6") return "no healthcheck";
+    if (ruleId === "5.4") return "NET_RAW allowed";
+    if (ruleId === "5.6") return "sensitive host mount";
     if (ruleId === "5.11") return formatBytesAsMb(target.current_memory);
     if (ruleId === "5.12") return target.current_cpu_shares ? `${target.current_cpu_shares} shares` : "no CPU shares";
+    if (ruleId === "5.18") return "host device mapped";
+    if (ruleId === "5.22") return "seccomp disabled";
     if (ruleId === "5.29") return target.current_pids_limit && target.current_pids_limit > 0 ? `${target.current_pids_limit} PIDs` : "no PID limit";
     return "current";
 }
@@ -334,9 +338,9 @@ function ConfirmStep({
     const isCgroup = isCgroupRule(rule.id);
     const isImageConfig = isImageConfigRecreateRule(rule.id);
     const isNamespace = isNamespaceIsolationRule(rule.id);
-    const isHostPartition = rule.id === "1.1.1";
+    const isRuntimeIsolation = isRuntimeIsolationRule(rule.id);
     const targets = preview?.targets ?? [];
-    const showStructuredTargets = isCgroup || isImageConfig || isNamespace;
+    const showStructuredTargets = isCgroup || isImageConfig || isNamespace || isRuntimeIsolation;
 
     const meta = valueMeta(rule.id);
     const hasInvalidValues = isCgroup && targets.some(target => {
@@ -345,7 +349,7 @@ function ConfirmStep({
         const value = config[meta.key] ?? 0;
         return value < meta.min;
     });
-    const applyDisabled = previewLoading || hasInvalidValues || isHostPartition;
+    const applyDisabled = previewLoading || hasInvalidValues;
 
     return (
         <div className="flex flex-col gap-5">
@@ -364,20 +368,6 @@ function ConfirmStep({
                 </div>
             )}
 
-            {isHostPartition && (
-                <div className="flex items-start gap-3 rounded-lg border border-red-500/40 bg-red-500/8 px-4 py-3">
-                    <AlertTriangle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
-                    <div className="space-y-1">
-                        <p className="text-xs font-semibold text-red-400">
-                            Manual host storage provisioning
-                        </p>
-                        <p className="text-xs text-red-400/70 leading-relaxed">
-                            Dokuru does not auto-migrate DockerRootDir. Use this as a planned storage change with separate backing storage, Docker downtime, and a post-change audit rerun.
-                        </p>
-                    </div>
-                </div>
-            )}
-
             {/* Restart warning */}
             {isRecreate && (
                 <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3.5 py-3">
@@ -387,13 +377,15 @@ function ConfirmStep({
                         </span>
                         <div className="min-w-0">
                             <p className="text-xs font-semibold text-amber-300">
-                                {isImageConfig ? "Recreate required" : isNamespace ? "Namespace recreate required" : "Restart/recreate required"}
+                                {isImageConfig ? "Recreate required" : isNamespace ? "Namespace recreate required" : isRuntimeIsolation ? "Runtime isolation recreate required" : "Restart/recreate required"}
                             </p>
                             <p className="mt-0.5 text-[11px] leading-snug text-amber-200/55">
                                 {isImageConfig
                                     ? "No live USER/HEALTHCHECK update."
                                     : isNamespace
                                     ? "Override/Patch persist Compose changes; Live recreates the current container only."
+                                    : isRuntimeIsolation
+                                    ? "Dokuru removes only the risky runtime access, but workloads that need it can still break."
                                     : "Dokuru handles it during apply; Compose targets persist the change in YAML."}
                             </p>
                         </div>
@@ -414,7 +406,7 @@ function ConfirmStep({
                         <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/40">
                             Agent preview ({targets.length})
                         </p>
-                        {(isCgroup || isNamespace) && (
+                        {(isCgroup || isNamespace || isRuntimeIsolation) && (
                             <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-[#2496ED]/60">
                                 {isCgroup ? "editable values" : "apply mode"}
                             </p>
@@ -443,6 +435,17 @@ function ConfirmStep({
                         </div>
                     )}
 
+                    {isRuntimeIsolation && targets.some(target => target.compose_project) && (
+                        <div className="rounded-md border border-white/8 bg-white/[0.018] px-3 py-2.5 text-xs text-white/48">
+                            <div className="flex items-start gap-2.5">
+                                <FileCode2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#2496ED]/70" />
+                                <p className="leading-relaxed">
+                                    Override/Patch persist removable runtime settings when Compose can express them. Sensitive host mounts use Recreate because subtracting Compose volume arrays safely is not portable.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="audit-fix-target-list overflow-hidden rounded-md border border-white/8 bg-white/[0.012]">
                         {targets.map((target, i) => {
                             const config = targetConfig[target.container_id];
@@ -463,7 +466,7 @@ function ConfirmStep({
                                         "text-xs font-mono",
                                         showStructuredTargets ? "audit-fix-target-row" : "grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center",
                                         isImageConfig && "audit-fix-target-row-image",
-                                        isNamespace && "audit-fix-target-row-namespace",
+                                        (isNamespace || isRuntimeIsolation) && "audit-fix-target-row-namespace",
                                         i < targets.length - 1 && "border-b border-white/6"
                                     )}
                                 >
@@ -495,6 +498,18 @@ function ConfirmStep({
 
                                     {isNamespace && config && (
                                         canCompose ? (
+                                            <NamespaceModePicker
+                                                value={strategy}
+                                                canCompose={canCompose}
+                                                onChange={(nextStrategy) => onTargetChange(target.container_id, { strategy: nextStrategy })}
+                                            />
+                                        ) : (
+                                            <StaticModePanel strategy="recreate" />
+                                        )
+                                    )}
+
+                                    {isRuntimeIsolation && config && (
+                                        rule.id !== "5.6" && canCompose ? (
                                             <NamespaceModePicker
                                                 value={strategy}
                                                 canCompose={canCompose}
@@ -563,13 +578,7 @@ function ConfirmStep({
                 </div>
             ) : null}
 
-            {preview && targets.length === 0 && isHostPartition && (
-                <div className="rounded-lg border border-[#2496ED]/20 bg-[#2496ED]/8 px-4 py-3 text-xs text-[#2496ED]/80">
-                    This is a host-level storage fix, so there are no per-container targets to list.
-                </div>
-            )}
-
-            {preview && targets.length === 0 && !isHostPartition && (
+            {preview && targets.length === 0 && (
                 <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/8 px-4 py-3 text-xs text-emerald-400/80">
                     Agent preview says no containers currently need this fix.
                 </div>
@@ -578,7 +587,7 @@ function ConfirmStep({
             {/* Steps preview */}
             <div>
                 <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/40 mb-2">
-                    {isHostPartition ? "Guided remediation" : "Fix will execute"}
+                    Fix will execute
                 </p>
                 <div className="space-y-1.5">
                     {steps.map((s, i) => (
@@ -603,7 +612,7 @@ function ConfirmStep({
                     )}
                 >
                     <Wrench className="h-3.5 w-3.5" />
-                    {isHostPartition ? "Guided Only" : "Apply Fix"}
+                    Apply Fix
                 </button>
             </div>
         </div>

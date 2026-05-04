@@ -105,24 +105,10 @@ const KNOWN_AUTO_FIX_RULE_IDS = new Set([
     "2.10",
     "3.1", "3.2", "3.3", "3.4", "3.5", "3.6", "3.17", "3.18",
     "4.1", "4.6",
-    "5.5", "5.10", "5.11", "5.12", "5.16", "5.17", "5.21", "5.25", "5.29", "5.31",
+    "5.4", "5.5", "5.6", "5.10", "5.11", "5.12", "5.16", "5.17", "5.18", "5.21", "5.22", "5.25", "5.29", "5.31",
 ]);
 
-const GUIDED_ONLY_RULE_IDS = new Set(["1.1.1"]);
-
-const DOCKER_ROOT_PARTITION_GUIDE = `Dokuru does not auto-migrate DockerRootDir.
-
-Use this only as planned host provisioning:
-1. Attach or allocate separate storage.
-2. Stop Docker during a maintenance window.
-3. Copy DockerRootDir with ownership, xattrs, and hard links preserved.
-4. Mount the new filesystem at DockerRootDir and persist it in /etc/fstab.
-5. Start Docker and rerun the audit.
-
-For small single-disk VMs, document or accept this low-severity exception instead of creating loopback storage on the same root filesystem.`;
-
 function remediationKindForResult(result: AuditResult) {
-    if (GUIDED_ONLY_RULE_IDS.has(result.rule.id)) return "guided";
     return result.remediation_kind ?? (KNOWN_AUTO_FIX_RULE_IDS.has(result.rule.id) ? "auto" : "manual");
 }
 
@@ -288,7 +274,7 @@ function RuleCard({ result, agentId, agentUrl, agentAccessMode, token, container
 
     const { rule, status, message, affected, audit_command, raw_output, command_stderr, command_exit_code, references, rationale, impact } = result;
     const remediation_kind = remediationKindForResult(result);
-    const manualRemediation = rule.id === "1.1.1" ? DOCKER_ROOT_PARTITION_GUIDE : rule.remediation;
+    const manualRemediation = result.remediation_guide ?? rule.remediation;
     const meta = sectionMeta(rule.section);
     const steps = getFixSteps(rule.id);
     const needsRestart = requiresDockerRestart(rule.id);

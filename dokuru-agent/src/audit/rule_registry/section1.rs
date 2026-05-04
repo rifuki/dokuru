@@ -13,7 +13,6 @@ pub struct Section1;
 impl Section1 {
     pub fn rules() -> Vec<RuleDefinition> {
         vec![
-            Self::rule_1_1_1(),
             Self::rule_1_1_2(),
             Self::rule_1_1_3(),
             Self::rule_1_1_4(),
@@ -109,73 +108,6 @@ impl Section1 {
 
         let _ = fix_helpers::run_cmd("service", &["auditd", "reload"]).await;
         Ok(fix_helpers::applied(rule_id, applied_message, false))
-    }
-
-    // ── 1.1.1 — Separate partition ────────────────────────────────────────────
-
-    fn rule_1_1_1() -> RuleDefinition {
-        RuleDefinition {
-            id: "1.1.1".into(),
-            section: 1,
-            title: "Ensure a separate partition for containers has been created".into(),
-            description: "Docker uses /var/lib/docker as default data directory. It should be on a separate partition to prevent container data from filling the root filesystem.".into(),
-            category: RuleCategory::Runtime,
-            severity: Severity::Low,
-            scored: true,
-            audit_command: Some("mountpoint -- \"$(docker info -f '{{ .DockerRootDir }}')\"".into()),
-            check_fn: |docker, _containers| {
-                let docker = docker.clone();
-                Box::pin(async move {
-                    let docker_root = docker
-                        .info()
-                        .await
-                        .ok()
-                        .and_then(|info| info.docker_root_dir)
-                        .filter(|path| !path.trim().is_empty())
-                        .unwrap_or_else(|| "/var/lib/docker".to_string());
-                    let mounts = std::fs::read_to_string("/proc/mounts").unwrap_or_default();
-                    let matching: Vec<String> = fix_helpers::mount_entry_for_path(&mounts, &docker_root)
-                        .into_iter()
-                        .collect();
-                    let found = !matching.is_empty();
-                    Ok(CheckResult {
-                        rule: CisRule {
-                            id: "1.1.1".into(),
-                            title: "Ensure a separate partition for containers has been created".into(),
-                            category: RuleCategory::Runtime,
-                            severity: Severity::Low,
-                            section: "Host Configuration".into(),
-                            description: "Separate partition for DockerRootDir".into(),
-                            remediation: "Mount a dedicated partition or LVM logical volume at DockerRootDir".into(),
-                        },
-                        status: if found { CheckStatus::Pass } else { CheckStatus::Fail },
-                        message: if found {
-                            format!("{docker_root} is on a separate partition")
-                        } else {
-                            format!("{docker_root} is NOT on a separate partition")
-                        },
-                        affected: if found { vec![] } else { vec![docker_root] },
-                        remediation_kind: RemediationKind::Guided,
-                        audit_command: Some("mountpoint -- \"$(docker info -f '{{ .DockerRootDir }}')\"".into()),
-                        raw_output: Some(if matching.is_empty() { "(no mount entry)".into() } else { matching.join("\n") }),
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                ..Default::default()
-                    })
-                })
-            },
-            remediation_kind: RemediationKind::Guided,
-            fix_fn: None,
-            remediation_guide: "Dokuru does not auto-migrate DockerRootDir. Treat this as planned host provisioning:\n  1. Attach or allocate separate storage for DockerRootDir\n  2. Stop Docker during a maintenance window\n  3. Copy DockerRootDir data while preserving ownership, xattrs, and hard links\n  4. Mount the new filesystem at DockerRootDir and persist it in /etc/fstab\n  5. Start Docker and rerun the audit\n\nFor small single-disk VMs, document or accept this low-severity exception instead of creating loopback storage on the same root filesystem.".into(),
-            requires_restart: true,
-            requires_elevation: true,
-            references: vec!["CIS Docker Benchmark v1.8.0, Section 1.1.1".into()],
-            rationale: "Without a separate partition, Docker data can fill the root filesystem.".into(),
-            impact: "Requires planned downtime and host storage migration; small single-disk VMs may reasonably document an exception.".into(),
-            tags: vec!["host".into(), "partition".into(), "filesystem".into()],
-        }
     }
 
     // ── 1.1.2 — Docker group ─────────────────────────────────────────────────

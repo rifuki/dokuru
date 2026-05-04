@@ -256,29 +256,14 @@ const KNOWN_AUTO_FIX_RULE_IDS = new Set([
   "2.10",
   "3.1", "3.2", "3.3", "3.4", "3.5", "3.6", "3.17", "3.18",
   "4.1", "4.6",
-  "5.5", "5.10", "5.11", "5.12", "5.16", "5.17", "5.21", "5.25", "5.29", "5.31",
+  "5.4", "5.5", "5.6", "5.10", "5.11", "5.12", "5.16", "5.17", "5.18", "5.21", "5.22", "5.25", "5.29", "5.31",
 ]);
 
-const GUIDED_ONLY_RULE_IDS = new Set(["1.1.1"]);
-
-const DOCKER_ROOT_PARTITION_GUIDE = `Dokuru does not auto-migrate DockerRootDir.
-
-Use this only as planned host provisioning:
-1. Attach or allocate separate storage.
-2. Stop Docker during a maintenance window.
-3. Copy DockerRootDir with ownership, xattrs, and hard links preserved.
-4. Mount the new filesystem at DockerRootDir and persist it in /etc/fstab.
-5. Start Docker and rerun the audit.
-
-For small single-disk VMs, document or accept this low-severity exception instead of creating loopback storage on the same root filesystem.`;
-
 function remediationKindForResult(result: AuditResult): AuditResult["remediation_kind"] {
-  if (GUIDED_ONLY_RULE_IDS.has(result.rule.id)) return "guided";
   return result.remediation_kind ?? (KNOWN_AUTO_FIX_RULE_IDS.has(result.rule.id) ? "auto" : "manual");
 }
 
 function remediationGuideForResult(result: AuditResult) {
-  if (result.rule.id === "1.1.1") return DOCKER_ROOT_PARTITION_GUIDE;
   return result.remediation_guide;
 }
 
@@ -1971,14 +1956,15 @@ function AuditDetailPage() {
 
   const report = auditReport?.report;
   const baseResults = sortAuditResults(report?.sorted_results?.length ? report.sorted_results : auditData?.results ?? []);
+  const resultPassedTotal = baseResults.filter(result => result.status === "Pass").length;
+  const resultFailedTotal = baseResults.filter(result => result.status === "Fail").length;
   const scoredRuleTotal = auditData
     ? auditData.summary.total || auditData.summary.passed + auditData.summary.failed
     : baseResults.filter(result => result.status === "Pass" || result.status === "Fail").length;
   const checkRuleTotal = baseResults.length || scoredRuleTotal;
-  const hasUnscoredChecks = checkRuleTotal > scoredRuleTotal || baseResults.some(result => result.status === "Error");
-  const ruleCountSummary = hasUnscoredChecks
-    ? `${checkRuleTotal} checks total · ${scoredRuleTotal} scored`
-    : `${scoredRuleTotal} rules`;
+  const displayPassedTotal = resultPassedTotal || auditData?.summary.passed || 0;
+  const displayFailedTotal = resultFailedTotal || auditData?.summary.failed || 0;
+  const ruleCountSummary = `${checkRuleTotal} checks`;
   const appliedHistoryByRule = latestAppliedFixesAfterAudit(fixHistoryQuery.data ?? [], auditData);
   const fixedRuleIds = new Set<string>(appliedHistoryByRule.keys());
   for (const result of baseResults) {
@@ -2277,9 +2263,9 @@ function AuditDetailPage() {
                     )}
                   >
                     <span className="flex items-baseline justify-center gap-1.5">
-                      <span className="text-2xl font-black leading-none text-[#00d9a5] sm:text-3xl">{auditData.summary.passed}</span>
+                      <span className="text-2xl font-black leading-none text-[#00d9a5] sm:text-3xl">{displayPassedTotal}</span>
                       {hasProjectedFixes && projectedFixScore && (
-                        <span className="font-mono text-xs font-bold text-[#00d9a5]">→ {projectedFixScore.projectedPassed}</span>
+                        <span className="font-mono text-xs font-bold text-[#00d9a5]">→ {Math.min(checkRuleTotal, displayPassedTotal + projectedFixScore.fixedCount)}</span>
                       )}
                     </span>
                     <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pass</span>
@@ -2299,9 +2285,9 @@ function AuditDetailPage() {
                     )}
                   >
                     <span className="flex items-baseline justify-center gap-1.5">
-                      <span className="text-2xl font-black leading-none text-rose-400 sm:text-3xl">{auditData.summary.failed}</span>
+                      <span className="text-2xl font-black leading-none text-rose-400 sm:text-3xl">{displayFailedTotal}</span>
                       {hasProjectedFixes && projectedFixScore && (
-                        <span className="font-mono text-xs font-bold text-rose-300/80">→ {projectedFixScore.projectedFailed}</span>
+                        <span className="font-mono text-xs font-bold text-rose-300/80">→ {Math.max(0, displayFailedTotal - projectedFixScore.fixedCount)}</span>
                       )}
                     </span>
                     <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Fail</span>
@@ -2310,12 +2296,12 @@ function AuditDetailPage() {
                     )}
                   </button>
                   <div className="flex min-h-[76px] flex-col items-center justify-center rounded-[12px] border border-border bg-muted/20 px-2 py-2.5 text-center sm:min-h-[84px] sm:px-3">
-                    <span className="block text-2xl font-black leading-none text-foreground/80 sm:text-3xl">{hasUnscoredChecks ? checkRuleTotal : scoredRuleTotal}</span>
+                    <span className="block text-2xl font-black leading-none text-foreground/80 sm:text-3xl">{checkRuleTotal}</span>
                     <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                      {hasUnscoredChecks ? "Checks" : "Total"}
+                      Checks
                     </span>
                     <span className="mt-0.5 text-[10px] font-medium text-muted-foreground/60">
-                      {hasUnscoredChecks ? `${scoredRuleTotal} scored` : "audited"}
+                      audited
                     </span>
                   </div>
                 </div>

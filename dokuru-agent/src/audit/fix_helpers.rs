@@ -149,6 +149,9 @@ const RUNTIME_BIND_COMPONENTS: &[&str] = &[
     "tmp",
     "uploads",
 ];
+const SENSITIVE_HOST_MOUNT_PATHS: &[&str] = &[
+    "/", "/boot", "/dev", "/etc", "/lib", "/lib64", "/proc", "/sys", "/usr",
+];
 
 /// Run a shell command and return (stdout, stderr, success)
 pub async fn run_cmd(cmd: &str, args: &[&str]) -> std::io::Result<(String, String, bool)> {
@@ -201,6 +204,10 @@ fn cgroup_effective_rule_id(rule_id: &str) -> &str {
 
 pub fn supports_image_config_fix(rule_id: &str) -> bool {
     matches!(rule_id, "4.1" | "4.6")
+}
+
+pub fn supports_runtime_isolation_fix(rule_id: &str) -> bool {
+    matches!(rule_id, "5.4" | "5.6" | "5.18" | "5.22")
 }
 
 fn is_dokuru_override_strategy(strategy: Option<&str>) -> bool {
@@ -296,6 +303,16 @@ pub fn fix_steps(rule_id: &str) -> Vec<String> {
             "Recreate container with hardened isolation".to_string(),
             "Start container".to_string(),
             "Verify isolation".to_string(),
+        ];
+    }
+    if supports_runtime_isolation_fix(rule_id) {
+        return vec![
+            "Inspect risky runtime configuration".to_string(),
+            "Save rollback metadata".to_string(),
+            "Stop or update compose service".to_string(),
+            "Recreate container with hardened runtime options".to_string(),
+            "Start container".to_string(),
+            "Verify runtime isolation".to_string(),
         ];
     }
     if supports_docker_root_partition_fix(rule_id) {
@@ -2838,6 +2855,7 @@ pub async fn preview_fix(docker: &Docker, rule_id: &str) -> eyre::Result<FixPrev
         requires_restart: supports_namespace_fix(rule_id)
             || supports_privileged_fix(rule_id)
             || supports_image_config_fix(rule_id)
+            || supports_runtime_isolation_fix(rule_id)
             || supports_userns_remap_fix(rule_id)
             || supports_docker_root_partition_fix(rule_id),
         requires_elevation: supports_audit_rule_fix(rule_id)
@@ -2866,6 +2884,13 @@ fn preview_target_from_inspect(
         STRATEGY_DOKURU_OVERRIDE
     } else if supports_cgroup_resource_fix(rule_id) {
         STRATEGY_DOCKER_UPDATE
+    } else if supports_runtime_isolation_fix(rule_id)
+        && matches!(rule_id, "5.4" | "5.18" | "5.22")
+        && compose.is_some()
+    {
+        STRATEGY_DOKURU_OVERRIDE
+    } else if supports_runtime_isolation_fix(rule_id) {
+        "recreate"
     } else if compose.is_some() {
         STRATEGY_DOKURU_OVERRIDE
     } else {
@@ -5040,6 +5065,401 @@ fn namespace_fix_detail(rule_id: &str) -> &'static str {
     }
 }
 
+pub async fn apply_runtime_isolation_fix(
+    docker: &Docker,
+    rule_id: &str,
+) -> eyre::Result<FixOutcome> {
+    Box::pin(apply_runtime_isolation_fix_with_progress(
+        docker,
+        rule_id,
+        &[],
+        None,
+    ))
+    .await
+}
+
+pub async fn apply_runtime_isolation_fix_with_progress(
+    docker: &Docker,
+    rule_id: &str,
+    targets: &[FixTarget],
+    progress: Option<&ProgressSender>,
+) -> eyre::Result<FixOutcome> {
+    if !supports_runtime_isolation_fix(rule_id) {
+        return Ok(blocked(
+            rule_id,
+            "Runtime isolation fix only supports rules 5.4, 5.6, 5.18, 5.22",
+        ));
+    }
+
+    let targets = if targets.is_empty() {
+        default_runtime_isolation_targets(docker, rule_id).await?
+    } else {
+        targets.to_vec()
+    };
+
+    if targets.is_empty() {
+        return Ok(FixOutcome {
+            rule_id: rule_id.to_string(),
+            status: FixStatus::Applied,
+            message: "No containers needed runtime isolation fix".to_string(),
+            requires_restart: false,
+            restart_command: None,
+            requires_elevation: false,
+        });
+    }
+
+    let (updated, failed) =
+        apply_runtime_isolation_targets(docker, rule_id, &targets, progress).await;
+
+    Ok(fix_outcome(
+        rule_id,
+        &updated,
+        &failed,
+        "No containers needed runtime isolation fix",
+        format!(
+            "Recreated {} container(s) with hardened runtime isolation",
+            updated.len()
+        ),
+    ))
+}
+
+async fn default_runtime_isolation_targets(
+    docker: &Docker,
+    rule_id: &str,
+) -> eyre::Result<Vec<FixTarget>> {
+    let containers = docker.list_containers::<String>(None).await?;
+    let mut targets = Vec::new();
+
+    for container in &containers {
+        let Some(id) = container.id.as_deref() else {
+            continue;
+        };
+        let inspect = docker.inspect_container(id, None).await?;
+        if !container_violates_rule(&inspect, rule_id) {
+            continue;
+        }
+
+        let strategy = if compose_context_from_inspect(&inspect).is_some()
+            && matches!(rule_id, "5.4" | "5.18" | "5.22")
+        {
+            STRATEGY_DOKURU_OVERRIDE
+        } else {
+            "recreate"
+        };
+
+        targets.push(FixTarget {
+            container_id: id.to_string(),
+            memory: None,
+            cpu_shares: None,
+            pids_limit: None,
+            strategy: Some(strategy.to_string()),
+            user: None,
+        });
+    }
+
+    Ok(targets)
+}
+
+async fn apply_runtime_isolation_targets(
+    docker: &Docker,
+    rule_id: &str,
+    targets: &[FixTarget],
+    progress: Option<&ProgressSender>,
+) -> (Vec<String>, Vec<String>) {
+    let mut updated = Vec::new();
+    let mut failed = Vec::new();
+    let mut compose_services = HashSet::<String>::new();
+
+    for target in targets {
+        match apply_runtime_isolation_target(
+            docker,
+            rule_id,
+            target,
+            progress,
+            &mut compose_services,
+        )
+        .await
+        {
+            Ok(Some(label)) => updated.push(label),
+            Ok(None) => {}
+            Err(error) => failed.push(error),
+        }
+    }
+
+    (updated, failed)
+}
+
+async fn apply_runtime_isolation_target(
+    docker: &Docker,
+    rule_id: &str,
+    target: &FixTarget,
+    progress: Option<&ProgressSender>,
+    compose_services: &mut HashSet<String>,
+) -> Result<Option<String>, String> {
+    let container_label = container_label(docker, &target.container_id).await;
+    let inspect = match docker.inspect_container(&target.container_id, None).await {
+        Ok(inspect) => inspect,
+        Err(error) => return Err(format!("{container_label}: inspect failed: {error}")),
+    };
+
+    if !container_violates_rule(&inspect, rule_id) {
+        return Ok(None);
+    }
+
+    emit_progress(
+        progress,
+        rule_id,
+        &container_label,
+        ProgressStep::new(1, 6),
+        "inspect_container",
+        "done",
+        Some("Container violates runtime isolation rule".to_string()),
+    );
+
+    if is_dokuru_override_strategy(target.strategy.as_deref())
+        || is_compose_source_strategy(target.strategy.as_deref())
+    {
+        let Some(ctx) = compose_context_from_inspect(&inspect) else {
+            return Err(format!(
+                "{container_label}: compose strategy requested but container has no Compose metadata"
+            ));
+        };
+        let key = format!(
+            "{}:{}",
+            target.strategy.as_deref().unwrap_or_default(),
+            ctx.key()
+        );
+        if !compose_services.insert(key) {
+            return Ok(None);
+        }
+
+        let result = if is_dokuru_override_strategy(target.strategy.as_deref()) {
+            apply_compose_service_override_fix(docker, rule_id, &ctx, None, progress).await
+        } else {
+            apply_compose_service_fix(docker, rule_id, &ctx, None, progress).await
+        };
+
+        return result
+            .map(|()| {
+                Some(format!(
+                    "{}:{} ({})",
+                    ctx.project,
+                    ctx.service,
+                    compose_strategy_label(target.strategy.as_deref())
+                ))
+            })
+            .map_err(|error| format!("{container_label}: compose fix failed: {error}"));
+    }
+
+    Box::pin(recreate_with_runtime_isolation(
+        docker,
+        &target.container_id,
+        inspect,
+        rule_id,
+        progress,
+        &container_label,
+    ))
+    .await
+    .map(|()| Some(container_label.clone()))
+    .map_err(|error| format!("{container_label}: {error}"))
+}
+
+async fn recreate_with_runtime_isolation(
+    docker: &Docker,
+    id: &str,
+    inspect: ContainerInspectResponse,
+    rule_id: &str,
+    progress: Option<&ProgressSender>,
+    label: &str,
+) -> eyre::Result<()> {
+    let name = inspect
+        .name
+        .as_deref()
+        .unwrap_or("")
+        .trim_start_matches('/')
+        .to_string();
+
+    let container_config = inspect
+        .config
+        .ok_or_else(|| eyre::eyre!("missing container config"))?;
+
+    let mut host_config = inspect.host_config.unwrap_or_default();
+    harden_runtime_host_config(rule_id, &mut host_config)?;
+
+    let mut create_config: Config<String> = container_config.into();
+    create_config.host_config = Some(host_config);
+    recreate_container(
+        docker,
+        rule_id,
+        progress,
+        RecreateContainerRequest {
+            id: id.to_string(),
+            name,
+            label: label.to_string(),
+            create_config,
+            save_detail: "Saved container config before runtime hardening".to_string(),
+            recreate_detail: Some(runtime_fix_detail(rule_id).to_string()),
+            done_detail: "Container restarted with hardened runtime isolation".to_string(),
+        },
+    )
+    .await
+}
+
+fn harden_runtime_host_config(
+    rule_id: &str,
+    host_config: &mut bollard::models::HostConfig,
+) -> eyre::Result<()> {
+    match rule_id {
+        "5.4" => restrict_linux_capabilities(host_config),
+        "5.6" => remove_sensitive_bind_mounts(host_config),
+        "5.18" => host_config.devices = Some(Vec::new()),
+        "5.22" => remove_seccomp_unconfined(host_config),
+        _ => return Err(eyre::eyre!("unsupported runtime isolation rule {rule_id}")),
+    }
+    Ok(())
+}
+
+fn runtime_fix_detail(rule_id: &str) -> &'static str {
+    match rule_id {
+        "5.4" => "Drop NET_RAW and remove broad capability additions",
+        "5.6" => "Remove sensitive host bind mounts",
+        "5.18" => "Remove direct host device mappings",
+        "5.22" => "Remove seccomp=unconfined security option",
+        _ => "Apply runtime isolation fix",
+    }
+}
+
+fn restrict_linux_capabilities(host_config: &mut bollard::models::HostConfig) {
+    let mut cap_drop = host_config.cap_drop.take().unwrap_or_default();
+    if !cap_drop
+        .iter()
+        .any(|capability| capability_matches(capability, "NET_RAW"))
+    {
+        cap_drop.push("NET_RAW".to_string());
+    }
+    host_config.cap_drop = Some(cap_drop);
+
+    if let Some(cap_add) = host_config.cap_add.as_mut() {
+        cap_add.retain(|capability| !capability_matches(capability, "NET_RAW"));
+    }
+}
+
+fn remove_sensitive_bind_mounts(host_config: &mut bollard::models::HostConfig) {
+    if let Some(binds) = host_config.binds.as_mut() {
+        binds.retain(|bind| {
+            bind_mount_source(bind).is_none_or(|source| !is_sensitive_host_mount_path(source))
+        });
+    }
+
+    if let Some(mounts) = host_config.mounts.as_mut() {
+        mounts.retain(|mount| {
+            !matches!(mount.typ, Some(bollard::models::MountTypeEnum::BIND))
+                || mount
+                    .source
+                    .as_deref()
+                    .is_none_or(|source| !is_sensitive_host_mount_path(source))
+        });
+    }
+}
+
+fn remove_seccomp_unconfined(host_config: &mut bollard::models::HostConfig) {
+    if let Some(security_opt) = host_config.security_opt.as_mut() {
+        security_opt.retain(|option| !security_opt_disables_seccomp(option));
+    }
+}
+
+fn capability_matches(value: &str, capability: &str) -> bool {
+    let normalized = value
+        .trim()
+        .trim_start_matches("CAP_")
+        .replace('-', "_")
+        .to_ascii_uppercase();
+    normalized == capability || normalized == "ALL"
+}
+
+fn bind_mount_source(bind: &str) -> Option<&str> {
+    let bind = bind.trim();
+    if bind.is_empty() {
+        return None;
+    }
+    bind.split_once(':')
+        .map(|(source, _)| source)
+        .filter(|source| !source.is_empty())
+}
+
+fn is_sensitive_host_mount_path(source: &str) -> bool {
+    let trimmed = source.trim_end_matches('/');
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    for sensitive in SENSITIVE_HOST_MOUNT_PATHS {
+        if *sensitive == "/" {
+            if trimmed == "/" {
+                return true;
+            }
+            continue;
+        }
+
+        if trimmed == *sensitive
+            || trimmed
+                .strip_prefix(*sensitive)
+                .is_some_and(|rest| rest.starts_with('/'))
+        {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn security_opt_disables_seccomp(option: &str) -> bool {
+    let normalized = option.trim().to_ascii_lowercase();
+    normalized == "seccomp=unconfined" || normalized == "seccomp:unconfined"
+}
+
+fn container_restricts_net_raw(host_config: Option<&bollard::models::HostConfig>) -> bool {
+    let cap_drop = host_config.and_then(|config| config.cap_drop.as_ref());
+    let cap_add = host_config.and_then(|config| config.cap_add.as_ref());
+    cap_drop.is_some_and(|values| {
+        values
+            .iter()
+            .any(|value| capability_matches(value, "NET_RAW"))
+    }) && !cap_add.is_some_and(|values| {
+        values
+            .iter()
+            .any(|value| capability_matches(value, "NET_RAW"))
+    })
+}
+
+fn container_has_sensitive_host_mount(inspect: &ContainerInspectResponse) -> bool {
+    inspect.mounts.as_ref().is_some_and(|mounts| {
+        mounts.iter().any(|mount| {
+            matches!(mount.typ, Some(MountPointTypeEnum::BIND))
+                && mount
+                    .source
+                    .as_deref()
+                    .is_some_and(is_sensitive_host_mount_path)
+        })
+    })
+}
+
+fn container_exposes_host_devices(host_config: Option<&bollard::models::HostConfig>) -> bool {
+    host_config
+        .and_then(|config| config.devices.as_ref())
+        .is_some_and(|devices| !devices.is_empty())
+}
+
+fn container_disables_seccomp(host_config: Option<&bollard::models::HostConfig>) -> bool {
+    host_config
+        .and_then(|config| config.security_opt.as_ref())
+        .is_some_and(|options| {
+            options
+                .iter()
+                .any(|option| security_opt_disables_seccomp(option))
+        })
+}
+
 #[derive(Clone, Debug)]
 struct ComposeContext {
     project: String,
@@ -5820,7 +6240,13 @@ fn apply_dokuru_override_service_lines(
             &yaml_quoted_scalar(&target_user_or_default(target)),
         ),
         "4.6" => set_healthcheck_text(lines, block),
+        "5.4" => {
+            set_service_value_text(lines, block, "cap_add", "!reset []")
+                | set_service_value_text(lines, block, "cap_drop", "[NET_RAW]")
+        }
         "5.5" => set_service_value_text(lines, block, "privileged", "false"),
+        "5.18" => set_service_value_text(lines, block, "devices", "!reset []"),
+        "5.22" => set_service_value_text(lines, block, "security_opt", "!reset []"),
         "5.10" => set_service_value_text(lines, block, "network_mode", "bridge"),
         "5.16" => set_service_value_text(lines, block, "pid", "!reset null"),
         "5.17" => set_service_value_text(lines, block, "ipc", "private"),
@@ -5938,7 +6364,13 @@ fn update_compose_service_lines(
             &yaml_quoted_scalar(&target_user_or_default(target)),
         ),
         "4.6" => set_healthcheck_text(lines, block),
+        "5.4" => {
+            remove_service_keys_text(lines, block, &["cap_add"])
+                | set_service_value_text(lines, block, "cap_drop", "[NET_RAW]")
+        }
         "5.5" => set_existing_service_value(lines, block, "privileged", "false"),
+        "5.18" => remove_service_keys_text(lines, block, &["devices"]),
+        "5.22" => remove_service_keys_text(lines, block, &["security_opt"]),
         "5.10" => remove_service_keys_text(lines, block, &["network_mode"]),
         "5.16" => remove_service_keys_text(lines, block, &["pid"]),
         "5.17" => remove_service_keys_text(lines, block, &["ipc"]),
@@ -6379,11 +6811,15 @@ fn container_violates_rule(inspect: &ContainerInspectResponse, rule_id: &str) ->
             .as_ref()
             .and_then(|config| config.healthcheck.as_ref())
             .is_none(),
+        "5.4" => !container_restricts_net_raw(host_config),
         "5.5" => host_config.and_then(|h| h.privileged).unwrap_or(false),
+        "5.6" => container_has_sensitive_host_mount(inspect),
         "5.10" => host_config.and_then(|h| h.network_mode.as_deref()) == Some("host"),
         "5.16" => host_config.and_then(|h| h.pid_mode.as_deref()) == Some("host"),
         "5.17" => host_config.and_then(|h| h.ipc_mode.as_deref()) == Some("host"),
+        "5.18" => container_exposes_host_devices(host_config),
         "5.21" => host_config.and_then(|h| h.uts_mode.as_deref()) == Some("host"),
+        "5.22" => container_disables_seccomp(host_config),
         "5.31" => host_config.and_then(|h| h.userns_mode.as_deref()) == Some("host"),
         _ => false,
     }
@@ -6400,6 +6836,14 @@ pub async fn rollback_plan_for_request(
 
         if supports_privileged_fix(&request.rule_id) || supports_image_config_fix(&request.rule_id)
         {
+            return Ok(RollbackPlan {
+                cgroup_targets: Vec::new(),
+                compose_targets: compose_rollback_targets_for_rule(docker, &request.rule_id)
+                    .await?,
+            });
+        }
+
+        if supports_runtime_isolation_fix(&request.rule_id) {
             return Ok(RollbackPlan {
                 cgroup_targets: Vec::new(),
                 compose_targets: compose_rollback_targets_for_rule(docker, &request.rule_id)
@@ -7295,6 +7739,41 @@ services:
     }
 
     #[test]
+    fn update_compose_content_covers_runtime_isolation_rules() {
+        let input = r#"services:
+  web:
+    image: nginx
+    cap_add:
+      - NET_RAW
+      - SYS_ADMIN
+    devices:
+      - "/dev/kmsg:/dev/kmsg"
+    security_opt:
+      - seccomp=unconfined
+    ports:
+      - "8080:80"
+"#;
+
+        let cap_updated = update_compose_content(input, "web", "5.4", None)
+            .unwrap()
+            .unwrap();
+        assert!(!cap_updated.contains("cap_add:"));
+        assert!(cap_updated.contains("cap_drop: [NET_RAW]"));
+
+        let devices_updated = update_compose_content(input, "web", "5.18", None)
+            .unwrap()
+            .unwrap();
+        assert!(!devices_updated.contains("devices:"));
+        assert!(devices_updated.contains("security_opt:"));
+
+        let seccomp_updated = update_compose_content(input, "web", "5.22", None)
+            .unwrap()
+            .unwrap();
+        assert!(!seccomp_updated.contains("security_opt:"));
+        assert!(seccomp_updated.contains("devices:"));
+    }
+
+    #[test]
     fn update_compose_content_removes_both_userns_keys_for_rule_531() {
         let input = r#"services:
   web:
@@ -7426,6 +7905,37 @@ services:
 
             assert_eq!(rendered, expected, "rule {rule_id} should reset {key}");
         }
+    }
+
+    #[test]
+    fn dokuru_override_mode_can_reset_runtime_isolation_values() {
+        let cases = [
+            ("5.4", "cap_add: !reset []\n    cap_drop: [NET_RAW]"),
+            ("5.18", "devices: !reset []"),
+            ("5.22", "security_opt: !reset []"),
+        ];
+
+        for (rule_id, expected_fragment) in cases {
+            let rendered = upsert_dokuru_override_content(None, "web", rule_id, None).unwrap();
+
+            assert!(
+                rendered.contains(expected_fragment),
+                "rule {rule_id} should render {expected_fragment}; got {rendered}"
+            );
+        }
+    }
+
+    #[test]
+    fn runtime_isolation_helpers_match_boundaries() {
+        assert!(capability_matches("CAP_NET_RAW", "NET_RAW"));
+        assert!(capability_matches("net-raw", "NET_RAW"));
+        assert!(capability_matches("ALL", "NET_RAW"));
+
+        assert!(is_sensitive_host_mount_path("/etc"));
+        assert!(is_sensitive_host_mount_path("/etc/passwd"));
+        assert!(is_sensitive_host_mount_path("/sys/kernel"));
+        assert!(!is_sensitive_host_mount_path("/etc-app/config"));
+        assert!(!is_sensitive_host_mount_path("/var/lib/app"));
     }
 
     #[test]

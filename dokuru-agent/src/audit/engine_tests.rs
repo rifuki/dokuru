@@ -8,7 +8,7 @@ mod tests {
     #[test]
     fn test_check_result_creation() {
         let rule = CisRule {
-            id: "1.1.1".to_string(),
+            id: "5.4".to_string(),
             title: "Test Rule".to_string(),
             category: RuleCategory::Files,
             severity: Severity::High,
@@ -34,7 +34,7 @@ mod tests {
             remediation_guide: None,
         };
 
-        assert_eq!(result.rule.id, "1.1.1");
+        assert_eq!(result.rule.id, "5.4");
         assert_eq!(result.status, CheckStatus::Pass);
         assert_eq!(result.rule.severity, Severity::High);
     }
@@ -54,5 +54,19 @@ mod tests {
     async fn test_rule_registry_initialization() {
         let registry = RuleRegistry::new();
         assert!(!registry.all().is_empty());
+    }
+
+    #[test]
+    fn test_registry_scope_has_39_scored_rules() {
+        let registry = RuleRegistry::new();
+        let rules = registry.all();
+
+        assert_eq!(rules.len(), 39);
+        assert!(rules.iter().all(|rule| rule.scored));
+        assert!(rules.iter().all(|rule| rule.id != "1.1.1"));
+
+        for rule_id in ["5.4", "5.6", "5.18", "5.22"] {
+            assert!(rules.iter().any(|rule| rule.id == rule_id));
+        }
     }
 }

@@ -8,13 +8,6 @@ import { fixJobKey, useAuditStore } from "@/stores/use-audit-store";
 export type WizardStep = "confirm" | "applying" | "result";
 
 export function getFixSteps(ruleId: string): string[] {
-    if (ruleId === "1.1.1") return [
-        "Review DockerRootDir storage layout…",
-        "Plan separate storage outside the root filesystem…",
-        "Schedule Docker downtime for data migration…",
-        "Mount the dedicated filesystem and persist it…",
-        "Rerun the audit after manual provisioning…",
-    ];
     if (ruleId === "4.1") return [
         "Finding containers running as root…",
         "Migrating writable mount permissions…",
@@ -31,6 +24,14 @@ export function getFixSteps(ruleId: string): string[] {
         "Starting container(s)…",
         "Verifying healthcheck config…",
     ];
+    if (ruleId === "5.4") return [
+        "Inspecting container capabilities…",
+        "Saving container or Compose configuration…",
+        "Stopping affected container(s)…",
+        "Recreating with NET_RAW dropped…",
+        "Starting container(s)…",
+        "Verifying capability restrictions…",
+    ];
     if (ruleId === "5.5") return [
         "Inspecting containers running with --privileged…",
         "Saving container configuration…",
@@ -38,6 +39,14 @@ export function getFixSteps(ruleId: string): string[] {
         "Removing old container(s)…",
         "Recreating without --privileged flag…",
         "Verifying privilege isolation…",
+    ];
+    if (ruleId === "5.6") return [
+        "Inspecting sensitive host bind mounts…",
+        "Saving container configuration…",
+        "Stopping affected container(s)…",
+        "Recreating without sensitive mounts…",
+        "Starting container(s)…",
+        "Verifying mount isolation…",
     ];
     if (ruleId === "5.10") return [
         "Inspecting containers with --network=host…",
@@ -63,6 +72,14 @@ export function getFixSteps(ruleId: string): string[] {
         "Recreating with private IPC namespace…",
         "Verifying IPC namespace isolation…",
     ];
+    if (ruleId === "5.18") return [
+        "Inspecting direct host device mappings…",
+        "Saving container or Compose configuration…",
+        "Stopping affected container(s)…",
+        "Recreating without direct host devices…",
+        "Starting container(s)…",
+        "Verifying device isolation…",
+    ];
     if (ruleId === "5.21") return [
         "Inspecting containers with --uts=host…",
         "Saving container configuration…",
@@ -70,6 +87,14 @@ export function getFixSteps(ruleId: string): string[] {
         "Removing old container(s)…",
         "Recreating with isolated UTS namespace…",
         "Verifying UTS namespace isolation…",
+    ];
+    if (ruleId === "5.22") return [
+        "Inspecting seccomp security options…",
+        "Saving container or Compose configuration…",
+        "Stopping affected container(s)…",
+        "Recreating with seccomp enabled…",
+        "Starting container(s)…",
+        "Verifying seccomp profile…",
     ];
     if (ruleId === "5.31") return [
         "Inspecting containers with --userns=host…",
@@ -126,11 +151,15 @@ export function getFixSteps(ruleId: string): string[] {
 }
 
 export function isNamespaceRecreateRule(ruleId: string): boolean {
-    return ["5.5", "5.10", "5.16", "5.17", "5.21", "5.31"].includes(ruleId);
+    return ["5.4", "5.5", "5.6", "5.10", "5.16", "5.17", "5.18", "5.21", "5.22", "5.31"].includes(ruleId);
 }
 
 export function isNamespaceIsolationRule(ruleId: string): boolean {
     return ["5.10", "5.16", "5.17", "5.21", "5.31"].includes(ruleId);
+}
+
+export function isRuntimeIsolationRule(ruleId: string): boolean {
+    return ["5.4", "5.6", "5.18", "5.22"].includes(ruleId);
 }
 
 export function isImageConfigRecreateRule(ruleId: string): boolean {
@@ -192,7 +221,7 @@ function normalizePreviewStrategy(ruleId: string, strategy: string, canCompose: 
         return strategy;
     }
     if (isImageConfigRecreateRule(ruleId) && !canCompose) return "recreate";
-    if (isNamespaceIsolationRule(ruleId) && !canCompose) return "recreate";
+    if ((isNamespaceIsolationRule(ruleId) || isRuntimeIsolationRule(ruleId)) && !canCompose) return "recreate";
     return canCompose ? "dokuru_override" : "docker_update";
 }
 

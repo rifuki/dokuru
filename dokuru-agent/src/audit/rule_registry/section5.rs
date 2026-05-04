@@ -5,6 +5,27 @@ use crate::audit::{
     fix_helpers,
     types::{CheckResult, CheckStatus, CisRule, RemediationKind, RuleCategory, Severity},
 };
+use bollard::models::MountPointTypeEnum;
+
+const SENSITIVE_HOST_PATHS: &[&str] = &[
+    "/", "/boot", "/dev", "/etc", "/lib", "/lib64", "/proc", "/sys", "/usr",
+];
+
+const RULE_5_4_GUIDE: &str = r"Drop unnecessary Linux capabilities from every container.
+
+At minimum, drop NET_RAW unless the workload explicitly requires raw packet access.
+
+Example:
+  docker run --cap-drop=NET_RAW nginx
+
+Stronger pattern:
+  docker run --cap-drop=ALL --cap-add=NET_BIND_SERVICE nginx
+
+For Compose:
+  services:
+    web:
+      cap_drop:
+        - NET_RAW";
 
 const RULE_5_5_GUIDE: &str = r"Recreate the container without --privileged.
 
@@ -15,6 +36,16 @@ Example (correct):
   docker run nginx
 
 If specific kernel capabilities are required, grant only the minimum capability with --cap-add instead of enabling full privileged mode.";
+
+const RULE_5_6_GUIDE: &str = r"Do not bind-mount sensitive host directories into containers.
+
+Avoid mounting host paths such as /, /boot, /dev, /etc, /lib, /lib64, /proc, /sys, and /usr.
+
+Use named volumes or application-specific directories instead:
+  docker volume create app-data
+  docker run -v app-data:/var/lib/app nginx
+
+If a host bind mount is unavoidable, make it narrow and read-only where possible.";
 
 const RULE_5_10_GUIDE: &str = r"Do not pass --network=host when starting containers.
 Use the default bridge network or a custom user-defined network instead.
@@ -76,6 +107,14 @@ Example (acceptable for inter-container sharing):
   docker run --ipc=shareable app1
   docker run --ipc=container:app1 app2";
 
+const RULE_5_18_GUIDE: &str = r"Do not expose host devices directly to containers unless there is a documented requirement.
+
+Avoid broad device mappings such as:
+  docker run --device=/dev/sda:/dev/sda:rwm image
+
+If a device is required, grant only the minimum permissions:
+  docker run --device=/dev/tty0:/dev/tty0:r image";
+
 const RULE_5_21_GUIDE: &str = r"Do not pass --uts=host when starting containers.
 Dokuru will stop, recreate and restart the container without --uts=host.
 
@@ -83,6 +122,13 @@ Example (incorrect — avoid):
   docker run --uts=host nginx
 
 By default, each container gets its own UTS namespace with an isolated hostname.";
+
+const RULE_5_22_GUIDE: &str = r"Do not disable Docker's default seccomp profile.
+
+Avoid this runtime option:
+  docker run --security-opt seccomp=unconfined image
+
+Use Docker's default seccomp profile, or provide a reviewed custom seccomp profile only when the workload requires it.";
 
 const RULE_5_25_GUIDE: &str = r"Ensure containers run with at least one cgroup resource limit.
 Setting memory, CPU, or PIDs limits activates proper cgroup confinement.
@@ -125,13 +171,17 @@ pub struct Section5;
 impl Section5 {
     pub fn rules() -> Vec<RuleDefinition> {
         vec![
+            Self::rule_5_4(),
             Self::rule_5_5(),
+            Self::rule_5_6(),
             Self::rule_5_10(),
             Self::rule_5_11(),
             Self::rule_5_12(),
             Self::rule_5_16(),
             Self::rule_5_17(),
+            Self::rule_5_18(),
             Self::rule_5_21(),
+            Self::rule_5_22(),
             Self::rule_5_25(),
             Self::rule_5_29(),
             Self::rule_5_31(),
@@ -183,6 +233,168 @@ impl Section5 {
             impact: None,
             tags: None,
             ..Default::default()
+        }
+    }
+
+    fn capability_matches(value: &str, capability: &str) -> bool {
+        let normalized = value
+            .trim()
+            .trim_start_matches("CAP_")
+            .replace('-', "_")
+            .to_ascii_uppercase();
+        normalized == capability || normalized == "ALL"
+    }
+
+    fn has_capability(values: Option<&Vec<String>>, capability: &str) -> bool {
+        values.is_some_and(|values| {
+            values
+                .iter()
+                .any(|value| Self::capability_matches(value, capability))
+        })
+    }
+
+    fn list_or_empty(values: Option<&Vec<String>>) -> String {
+        values.filter(|values| !values.is_empty()).map_or_else(
+            || "[]".to_string(),
+            |values| format!("[{}]", values.join(", ")),
+        )
+    }
+
+    fn is_sensitive_host_path(source: &str) -> bool {
+        let trimmed = source.trim_end_matches('/');
+        if trimmed.is_empty() {
+            return false;
+        }
+
+        for sensitive in SENSITIVE_HOST_PATHS {
+            if *sensitive == "/" {
+                if trimmed == "/" {
+                    return true;
+                }
+                continue;
+            }
+
+            if trimmed == *sensitive
+                || trimmed
+                    .strip_prefix(*sensitive)
+                    .is_some_and(|rest| rest.starts_with('/'))
+            {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn rw_label(read_write: Option<bool>) -> &'static str {
+        if read_write.unwrap_or(false) {
+            "rw"
+        } else {
+            "ro"
+        }
+    }
+
+    // ── 5.4 — Linux Kernel Capabilities ───────────────────────────────────────
+
+    /// 5.4 - Ensure that Linux kernel capabilities are restricted within containers
+    fn rule_5_4() -> RuleDefinition {
+        RuleDefinition {
+            id: "5.4".into(),
+            section: 5,
+            title: "Ensure that Linux kernel capabilities are restricted within containers".into(),
+            description: "Containers should drop Linux capabilities that are not required by the workload. NET_RAW should be removed unless explicitly needed because it enables raw packet creation.".into(),
+
+            category: RuleCategory::Runtime,
+            severity: Severity::High,
+            scored: true,
+
+            audit_command: Some("docker ps --quiet --all | xargs docker inspect --format '{{ .Id }}: CapAdd={{ .HostConfig.CapAdd }} CapDrop={{ .HostConfig.CapDrop }}'".into()),
+            check_fn: |docker, containers| {
+                let docker = docker.clone();
+                let containers = containers.to_vec();
+                Box::pin(async move {
+                    if containers.is_empty() {
+                        return Ok(Self::no_running_containers_result(
+                            "5.4",
+                            "Ensure that Linux kernel capabilities are restricted within containers",
+                            RuleCategory::Runtime,
+                            Severity::High,
+                            "Container Linux capabilities",
+                            "Drop NET_RAW and any other unnecessary capabilities",
+                            RemediationKind::Auto,
+                        ));
+                    }
+
+                    let mut failing = Vec::new();
+                    let mut raw_lines = Vec::new();
+
+                    for c in &containers {
+                        let id = c.id.as_deref().unwrap_or("");
+                        if let Ok(inspect) = docker.inspect_container(id, None).await {
+                            let host_config = inspect.host_config.as_ref();
+                            let cap_add = host_config.and_then(|h| h.cap_add.as_ref());
+                            let cap_drop = host_config.and_then(|h| h.cap_drop.as_ref());
+                            let drops_net_raw = Self::has_capability(cap_drop, "NET_RAW");
+                            let adds_net_raw = Self::has_capability(cap_add, "NET_RAW");
+                            let name = Self::container_name(c.names.as_ref(), id);
+
+                            raw_lines.push(format!(
+                                "{name}: CapAdd={} CapDrop={}",
+                                Self::list_or_empty(cap_add),
+                                Self::list_or_empty(cap_drop)
+                            ));
+
+                            if !drops_net_raw || adds_net_raw {
+                                failing.push(name);
+                            }
+                        }
+                    }
+
+                    Ok(CheckResult {
+                        rule: CisRule {
+                            id: "5.4".into(),
+                            title: "Ensure that Linux kernel capabilities are restricted within containers".into(),
+                            category: RuleCategory::Runtime,
+                            severity: Severity::High,
+                            section: "Container Runtime".into(),
+                            description: "Container Linux capabilities".into(),
+                            remediation: "Drop NET_RAW and any other unnecessary capabilities".into(),
+                        },
+                        status: if failing.is_empty() { CheckStatus::Pass } else { CheckStatus::Fail },
+                        message: if failing.is_empty() {
+                            "All containers drop NET_RAW or avoid adding it back".into()
+                        } else {
+                            format!("{} container(s) do not restrict NET_RAW", failing.len())
+                        },
+                        affected: failing,
+                        remediation_kind: RemediationKind::Auto,
+                        audit_command: Some("docker ps --quiet --all | xargs docker inspect --format '{{ .Id }}: CapAdd={{ .HostConfig.CapAdd }} CapDrop={{ .HostConfig.CapDrop }}'".into()),
+                        raw_output: Some(raw_lines.join("\n")),
+                        references: None,
+                        rationale: None,
+                        impact: None,
+                        tags: None,
+                        ..Default::default()
+                    })
+                })
+            },
+
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|docker| {
+                let docker = docker.clone();
+                Box::pin(async move { Box::pin(fix_helpers::apply_runtime_isolation_fix(&docker, "5.4")).await })
+            }),
+            remediation_guide: RULE_5_4_GUIDE.into(),
+            requires_restart: true,
+            requires_elevation: false,
+
+            references: vec![
+                "https://docs.docker.com/engine/containers/run/#runtime-privilege-and-linux-capabilities".into(),
+                "CIS Docker Benchmark v1.8.0, Section 5.4".into(),
+            ],
+            rationale: "Dropping unnecessary Linux capabilities reduces what a compromised container process can do in the kernel. NET_RAW is especially risky because it allows raw packet creation and spoofing.".into(),
+            impact: "Containers that legitimately require raw sockets or other dropped capabilities need documented exceptions and narrowly scoped cap-add values.".into(),
+            tags: vec!["runtime".into(), "capabilities".into(), "isolation".into()],
         }
     }
 
@@ -287,6 +499,123 @@ impl Section5 {
             rationale: "Privileged containers can access host devices and bypass several default Docker isolation controls, increasing the blast radius of a container compromise.".into(),
             impact: "Workloads that rely on broad host device access must be redesigned to use narrower capabilities or device mappings.".into(),
             tags: vec!["runtime".into(), "privileged".into(), "isolation".into()],
+        }
+    }
+
+    // ── 5.6 — Sensitive Host Mounts ───────────────────────────────────────────
+
+    /// 5.6 - Ensure sensitive host system directories are not mounted on containers
+    fn rule_5_6() -> RuleDefinition {
+        RuleDefinition {
+            id: "5.6".into(),
+            section: 5,
+            title: "Ensure sensitive host system directories are not mounted on containers".into(),
+            description: "Sensitive host directories such as /, /boot, /dev, /etc, /lib, /lib64, /proc, /sys, and /usr should not be bind-mounted into containers.".into(),
+
+            category: RuleCategory::Runtime,
+            severity: Severity::High,
+            scored: true,
+
+            audit_command: Some("docker ps --quiet --all | xargs docker inspect --format '{{ .Id }}: Volumes={{ .Mounts }}'".into()),
+            check_fn: |docker, containers| {
+                let docker = docker.clone();
+                let containers = containers.to_vec();
+                Box::pin(async move {
+                    if containers.is_empty() {
+                        return Ok(Self::no_running_containers_result(
+                            "5.6",
+                            "Ensure sensitive host system directories are not mounted on containers",
+                            RuleCategory::Runtime,
+                            Severity::High,
+                            "Sensitive host bind mounts",
+                            "Remove sensitive host directory bind mounts from containers",
+                            RemediationKind::Auto,
+                        ));
+                    }
+
+                    let mut failing = Vec::new();
+                    let mut raw_lines = Vec::new();
+
+                    for c in &containers {
+                        let id = c.id.as_deref().unwrap_or("");
+                        if let Ok(inspect) = docker.inspect_container(id, None).await {
+                            let name = Self::container_name(c.names.as_ref(), id);
+                            let Some(mounts) = inspect.mounts.as_ref() else {
+                                raw_lines.push(format!("{name}: Mounts=[]"));
+                                continue;
+                            };
+
+                            if mounts.is_empty() {
+                                raw_lines.push(format!("{name}: Mounts=[]"));
+                                continue;
+                            }
+
+                            for mount in mounts {
+                                if !matches!(mount.typ, Some(MountPointTypeEnum::BIND)) {
+                                    continue;
+                                }
+
+                                let source = mount.source.as_deref().unwrap_or("");
+                                let destination = mount.destination.as_deref().unwrap_or("");
+                                let mode = Self::rw_label(mount.rw);
+                                raw_lines.push(format!(
+                                    "{name}: {source}:{destination}:{mode}"
+                                ));
+
+                                if Self::is_sensitive_host_path(source) {
+                                    failing.push(format!(
+                                        "{name} ({source} -> {destination}, {mode})"
+                                    ));
+                                }
+                            }
+                        }
+                    }
+
+                    Ok(CheckResult {
+                        rule: CisRule {
+                            id: "5.6".into(),
+                            title: "Ensure sensitive host system directories are not mounted on containers".into(),
+                            category: RuleCategory::Runtime,
+                            severity: Severity::High,
+                            section: "Container Runtime".into(),
+                            description: "Sensitive host bind mounts".into(),
+                            remediation: "Remove sensitive host directory bind mounts from containers".into(),
+                        },
+                        status: if failing.is_empty() { CheckStatus::Pass } else { CheckStatus::Fail },
+                        message: if failing.is_empty() {
+                            "No containers mount sensitive host directories".into()
+                        } else {
+                            format!("{} sensitive host mount(s) found", failing.len())
+                        },
+                        affected: failing,
+                        remediation_kind: RemediationKind::Auto,
+                        audit_command: Some("docker ps --quiet --all | xargs docker inspect --format '{{ .Id }}: Volumes={{ .Mounts }}'".into()),
+                        raw_output: Some(raw_lines.join("\n")),
+                        references: None,
+                        rationale: None,
+                        impact: None,
+                        tags: None,
+                        ..Default::default()
+                    })
+                })
+            },
+
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|docker| {
+                let docker = docker.clone();
+                Box::pin(async move { Box::pin(fix_helpers::apply_runtime_isolation_fix(&docker, "5.6")).await })
+            }),
+            remediation_guide: RULE_5_6_GUIDE.into(),
+            requires_restart: true,
+            requires_elevation: false,
+
+            references: vec![
+                "https://docs.docker.com/storage/bind-mounts/".into(),
+                "CIS Docker Benchmark v1.8.0, Section 5.6".into(),
+            ],
+            rationale: "Mounting sensitive host directories lets a container read or modify host files and can turn a container compromise into a host compromise.".into(),
+            impact: "Applications that currently depend on broad host bind mounts must be reworked to use named volumes or narrow application-specific paths.".into(),
+            tags: vec!["runtime".into(), "mounts".into(), "filesystem".into(), "isolation".into()],
         }
     }
 
@@ -856,6 +1185,118 @@ impl Section5 {
         }
     }
 
+    // ── 5.18 — Host Device Exposure ───────────────────────────────────────────
+
+    /// 5.18 - Ensure that host devices are not directly exposed to containers
+    fn rule_5_18() -> RuleDefinition {
+        RuleDefinition {
+            id: "5.18".into(),
+            section: 5,
+            title: "Ensure that host devices are not directly exposed to containers".into(),
+            description: "Host devices should not be directly exposed to containers unless there is a documented workload requirement with least-privilege device permissions.".into(),
+
+            category: RuleCategory::Runtime,
+            severity: Severity::High,
+            scored: true,
+
+            audit_command: Some("docker ps --quiet --all | xargs docker inspect --format '{{ .Id }}: Devices={{ .HostConfig.Devices }}'".into()),
+            check_fn: |docker, containers| {
+                let docker = docker.clone();
+                let containers = containers.to_vec();
+                Box::pin(async move {
+                    if containers.is_empty() {
+                        return Ok(Self::no_running_containers_result(
+                            "5.18",
+                            "Ensure that host devices are not directly exposed to containers",
+                            RuleCategory::Runtime,
+                            Severity::High,
+                            "Direct host device mappings",
+                            "Remove direct host device mappings or reduce permissions",
+                            RemediationKind::Auto,
+                        ));
+                    }
+
+                    let mut failing = Vec::new();
+                    let mut raw_lines = Vec::new();
+
+                    for c in &containers {
+                        let id = c.id.as_deref().unwrap_or("");
+                        if let Ok(inspect) = docker.inspect_container(id, None).await {
+                            let name = Self::container_name(c.names.as_ref(), id);
+                            let devices = inspect
+                                .host_config
+                                .as_ref()
+                                .and_then(|host_config| host_config.devices.as_ref());
+
+                            let Some(devices) = devices.filter(|devices| !devices.is_empty()) else {
+                                raw_lines.push(format!("{name}: Devices=[]"));
+                                continue;
+                            };
+
+                            for device in devices {
+                                let host_path = device.path_on_host.as_deref().unwrap_or("");
+                                let container_path =
+                                    device.path_in_container.as_deref().unwrap_or("");
+                                let permissions =
+                                    device.cgroup_permissions.as_deref().unwrap_or("rwm");
+                                raw_lines.push(format!(
+                                    "{name}: {host_path}->{container_path}:{permissions}"
+                                ));
+                                failing.push(format!(
+                                    "{name} ({host_path} -> {container_path}, {permissions})"
+                                ));
+                            }
+                        }
+                    }
+
+                    Ok(CheckResult {
+                        rule: CisRule {
+                            id: "5.18".into(),
+                            title: "Ensure that host devices are not directly exposed to containers".into(),
+                            category: RuleCategory::Runtime,
+                            severity: Severity::High,
+                            section: "Container Runtime".into(),
+                            description: "Direct host device mappings".into(),
+                            remediation: "Remove direct host device mappings or reduce permissions".into(),
+                        },
+                        status: if failing.is_empty() { CheckStatus::Pass } else { CheckStatus::Fail },
+                        message: if failing.is_empty() {
+                            "No containers directly expose host devices".into()
+                        } else {
+                            format!("{} host device mapping(s) found", failing.len())
+                        },
+                        affected: failing,
+                        remediation_kind: RemediationKind::Auto,
+                        audit_command: Some("docker ps --quiet --all | xargs docker inspect --format '{{ .Id }}: Devices={{ .HostConfig.Devices }}'".into()),
+                        raw_output: Some(raw_lines.join("\n")),
+                        references: None,
+                        rationale: None,
+                        impact: None,
+                        tags: None,
+                        ..Default::default()
+                    })
+                })
+            },
+
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|docker| {
+                let docker = docker.clone();
+                Box::pin(async move { Box::pin(fix_helpers::apply_runtime_isolation_fix(&docker, "5.18")).await })
+            }),
+            remediation_guide: RULE_5_18_GUIDE.into(),
+            requires_restart: true,
+            requires_elevation: false,
+
+            references: vec![
+                "https://docs.docker.com/engine/containers/run/#add-host-device-to-container-device".into(),
+                "CIS Docker Benchmark v1.8.0, Section 5.18".into(),
+            ],
+            rationale: "Direct device mappings allow a container to access host hardware interfaces and can bypass isolation without requiring full privileged mode.".into(),
+            impact: "Workloads that require hardware access need documented exceptions and the narrowest device permissions possible.".into(),
+            tags: vec!["runtime".into(), "devices".into(), "isolation".into()],
+        }
+    }
+
     // ── 5.21 — UTS Namespace ──────────────────────────────────────────────────
 
     /// 5.21 - Ensure that the host's UTS namespace is not shared
@@ -966,6 +1407,116 @@ impl Section5 {
             rationale: "Sharing the host UTS namespace allows a container to change the hostname and domain name of the host, which can affect logging and network service identification.".into(),
             impact: "None. Containers work correctly without sharing the host UTS namespace.".into(),
             tags: vec!["namespace".into(), "uts".into(), "hostname".into(), "isolation".into()],
+        }
+    }
+
+    // ── 5.22 — Seccomp Profile ────────────────────────────────────────────────
+
+    /// 5.22 - Ensure the default seccomp profile is not disabled
+    fn rule_5_22() -> RuleDefinition {
+        RuleDefinition {
+            id: "5.22".into(),
+            section: 5,
+            title: "Ensure the default seccomp profile is not Disabled".into(),
+            description: "Docker's default seccomp profile should remain enabled unless a reviewed custom profile is used. Containers should not run with seccomp=unconfined.".into(),
+
+            category: RuleCategory::Runtime,
+            severity: Severity::High,
+            scored: true,
+
+            audit_command: Some("docker ps --quiet --all | xargs docker inspect --format '{{ .Id }}: SecurityOpt={{ .HostConfig.SecurityOpt }}'".into()),
+            check_fn: |docker, containers| {
+                let docker = docker.clone();
+                let containers = containers.to_vec();
+                Box::pin(async move {
+                    if containers.is_empty() {
+                        return Ok(Self::no_running_containers_result(
+                            "5.22",
+                            "Ensure the default seccomp profile is not Disabled",
+                            RuleCategory::Runtime,
+                            Severity::High,
+                            "Container seccomp profile",
+                            "Remove seccomp=unconfined from container security options",
+                            RemediationKind::Auto,
+                        ));
+                    }
+
+                    let mut failing = Vec::new();
+                    let mut raw_lines = Vec::new();
+
+                    for c in &containers {
+                        let id = c.id.as_deref().unwrap_or("");
+                        if let Ok(inspect) = docker.inspect_container(id, None).await {
+                            let security_opt = inspect
+                                .host_config
+                                .as_ref()
+                                .and_then(|host_config| host_config.security_opt.as_ref());
+                            let name = Self::container_name(c.names.as_ref(), id);
+
+                            raw_lines.push(format!(
+                                "{name}: SecurityOpt={}",
+                                Self::list_or_empty(security_opt)
+                            ));
+
+                            let disables_seccomp = security_opt.is_some_and(|options| {
+                                options.iter().any(|option| {
+                                    let normalized = option.trim().to_ascii_lowercase();
+                                    normalized == "seccomp=unconfined"
+                                        || normalized == "seccomp:unconfined"
+                                })
+                            });
+
+                            if disables_seccomp {
+                                failing.push(name);
+                            }
+                        }
+                    }
+
+                    Ok(CheckResult {
+                        rule: CisRule {
+                            id: "5.22".into(),
+                            title: "Ensure the default seccomp profile is not Disabled".into(),
+                            category: RuleCategory::Runtime,
+                            severity: Severity::High,
+                            section: "Container Runtime".into(),
+                            description: "Container seccomp profile".into(),
+                            remediation: "Remove seccomp=unconfined from container security options".into(),
+                        },
+                        status: if failing.is_empty() { CheckStatus::Pass } else { CheckStatus::Fail },
+                        message: if failing.is_empty() {
+                            "No containers disable seccomp".into()
+                        } else {
+                            format!("{} container(s) disable seccomp", failing.len())
+                        },
+                        affected: failing,
+                        remediation_kind: RemediationKind::Auto,
+                        audit_command: Some("docker ps --quiet --all | xargs docker inspect --format '{{ .Id }}: SecurityOpt={{ .HostConfig.SecurityOpt }}'".into()),
+                        raw_output: Some(raw_lines.join("\n")),
+                        references: None,
+                        rationale: None,
+                        impact: None,
+                        tags: None,
+                        ..Default::default()
+                    })
+                })
+            },
+
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|docker| {
+                let docker = docker.clone();
+                Box::pin(async move { Box::pin(fix_helpers::apply_runtime_isolation_fix(&docker, "5.22")).await })
+            }),
+            remediation_guide: RULE_5_22_GUIDE.into(),
+            requires_restart: true,
+            requires_elevation: false,
+
+            references: vec![
+                "https://docs.docker.com/engine/security/seccomp/".into(),
+                "CIS Docker Benchmark v1.8.0, Section 5.22".into(),
+            ],
+            rationale: "Seccomp reduces the kernel syscall surface exposed to containers. Disabling it increases the chance that a container compromise can reach vulnerable kernel functionality.".into(),
+            impact: "Containers that require blocked syscalls may need a reviewed custom seccomp profile instead of disabling seccomp entirely.".into(),
+            tags: vec!["runtime".into(), "seccomp".into(), "syscalls".into(), "isolation".into()],
         }
     }
 

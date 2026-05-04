@@ -296,6 +296,18 @@ impl RuleRegistry {
             .await;
         }
 
+        if super::fix_helpers::supports_runtime_isolation_fix(&request.rule_id) {
+            return Box::pin(
+                super::fix_helpers::apply_runtime_isolation_fix_with_progress(
+                    docker,
+                    &request.rule_id,
+                    &request.targets,
+                    progress,
+                ),
+            )
+            .await;
+        }
+
         if super::fix_helpers::supports_privileged_fix(&request.rule_id) {
             return Box::pin(super::fix_helpers::apply_privileged_fix_with_progress(
                 docker,
