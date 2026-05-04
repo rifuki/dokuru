@@ -122,6 +122,8 @@ const DOCKER_ROOT_LV_HEADROOM_BYTES: u64 = 1024 * 1024 * 1024;
 const USERNS_SNAPSHOT_PATH: &str = "/tmp/dokuru-userns-remap-snapshot.json";
 const USERNS_REMAP_RULE_ID: &str = "2.10";
 const USERNS_REMAP_TOTAL_STEPS: u8 = 9;
+const DAEMON_NO_NEW_PRIVILEGES_RULE_ID: &str = "2.15";
+const DAEMON_NO_NEW_PRIVILEGES_TOTAL_STEPS: u8 = 3;
 const STRATEGY_DOKURU_OVERRIDE: &str = "dokuru_override";
 const STRATEGY_COMPOSE_UPDATE: &str = "compose_update";
 const STRATEGY_DOCKER_UPDATE: &str = "docker_update";
@@ -149,10 +151,6 @@ const RUNTIME_BIND_COMPONENTS: &[&str] = &[
     "tmp",
     "uploads",
 ];
-const SENSITIVE_HOST_MOUNT_PATHS: &[&str] = &[
-    "/", "/boot", "/dev", "/etc", "/lib", "/lib64", "/proc", "/sys", "/usr",
-];
-
 /// Run a shell command and return (stdout, stderr, success)
 pub async fn run_cmd(cmd: &str, args: &[&str]) -> std::io::Result<(String, String, bool)> {
     let output = Command::new(cmd).args(args).output().await?;
@@ -207,7 +205,11 @@ pub fn supports_image_config_fix(rule_id: &str) -> bool {
 }
 
 pub fn supports_runtime_isolation_fix(rule_id: &str) -> bool {
-    matches!(rule_id, "5.4" | "5.6" | "5.18" | "5.22")
+    matches!(rule_id, "5.4" | "5.18" | "5.22")
+}
+
+pub fn supports_daemon_no_new_privileges_fix(rule_id: &str) -> bool {
+    rule_id == DAEMON_NO_NEW_PRIVILEGES_RULE_ID
 }
 
 fn is_dokuru_override_strategy(strategy: Option<&str>) -> bool {
@@ -334,6 +336,13 @@ pub fn fix_steps(rule_id: &str) -> Vec<String> {
             "Write audit rule".to_string(),
             "Reload auditd".to_string(),
             "Verify persisted audit rule".to_string(),
+        ];
+    }
+    if supports_daemon_no_new_privileges_fix(rule_id) {
+        return vec![
+            "Write no-new-privileges to daemon.json".to_string(),
+            "Restart Docker daemon".to_string(),
+            "Verify daemon security options".to_string(),
         ];
     }
     if supports_userns_remap_fix(rule_id) {
@@ -1590,6 +1599,225 @@ pub async fn apply_docker_root_partition_fix_with_progress(
     match persist_restart_and_verify_docker_root(&plan, progress).await {
         Ok(outcome) | Err(outcome) => Ok(outcome),
     }
+}
+
+fn daemon_no_new_privileges_progress_event(
+    step: u8,
+    action: &str,
+    status: &str,
+    detail: Option<String>,
+    command: Option<String>,
+) -> FixProgress {
+    FixProgress {
+        rule_id: DAEMON_NO_NEW_PRIVILEGES_RULE_ID.to_string(),
+        container_name: "Docker daemon".to_string(),
+        step,
+        total_steps: DAEMON_NO_NEW_PRIVILEGES_TOTAL_STEPS,
+        action: action.to_string(),
+        status: status.to_string(),
+        detail,
+        command,
+        stdout: None,
+        stderr: None,
+    }
+}
+
+fn security_options_include_no_new_privileges(options: Option<&[String]>) -> bool {
+    options.is_some_and(|options| {
+        options
+            .iter()
+            .any(|option| option.to_ascii_lowercase().contains("no-new-privileges"))
+    })
+}
+
+async fn verify_daemon_no_new_privileges(
+    docker: &Docker,
+    progress: Option<&ProgressSender>,
+) -> bool {
+    send_progress(
+        progress,
+        daemon_no_new_privileges_progress_event(
+            3,
+            "verify_daemon_security_options",
+            "in_progress",
+            Some("Checking Docker daemon SecurityOptions".to_string()),
+            Some("docker info --format '{{ .SecurityOptions }}'".to_string()),
+        ),
+    );
+
+    let mut last_detail = String::new();
+    for _ in 0..10 {
+        match docker.info().await {
+            Ok(info) => {
+                let raw = info
+                    .security_options
+                    .as_ref()
+                    .map(|options| options.join(", "))
+                    .unwrap_or_default();
+                if security_options_include_no_new_privileges(info.security_options.as_deref()) {
+                    send_progress(
+                        progress,
+                        daemon_no_new_privileges_progress_event(
+                            3,
+                            "verify_daemon_security_options",
+                            "done",
+                            Some(format!("Verified SecurityOptions: {raw}")),
+                            None,
+                        ),
+                    );
+                    return true;
+                }
+                last_detail = format!("SecurityOptions did not include no-new-privileges: {raw}");
+            }
+            Err(error) => {
+                last_detail = format!("docker info failed after restart: {error}");
+            }
+        }
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+    }
+
+    send_progress(
+        progress,
+        daemon_no_new_privileges_progress_event(
+            3,
+            "verify_daemon_security_options",
+            "error",
+            Some(last_detail),
+            None,
+        ),
+    );
+    false
+}
+
+pub async fn apply_daemon_no_new_privileges_fix(docker: &Docker) -> eyre::Result<FixOutcome> {
+    apply_daemon_no_new_privileges_fix_with_progress(docker, None).await
+}
+
+async fn restart_docker_for_no_new_privileges(
+    progress: Option<&ProgressSender>,
+) -> Option<FixOutcome> {
+    send_progress(
+        progress,
+        daemon_no_new_privileges_progress_event(
+            2,
+            "restart_docker",
+            "in_progress",
+            Some(
+                "Restarting Docker daemon so future containers inherit no-new-privileges"
+                    .to_string(),
+            ),
+            Some("systemctl restart docker".to_string()),
+        ),
+    );
+
+    match run_cmd("systemctl", &["restart", "docker"]).await {
+        Ok((stdout, stderr, true)) => {
+            let mut event = daemon_no_new_privileges_progress_event(
+                2,
+                "restart_docker",
+                "done",
+                Some("Docker daemon restarted".to_string()),
+                None,
+            );
+            event.stdout = (!stdout.is_empty()).then_some(stdout);
+            event.stderr = (!stderr.is_empty()).then_some(stderr);
+            send_progress(progress, event);
+            None
+        }
+        Ok((stdout, stderr, _)) => {
+            let mut event = daemon_no_new_privileges_progress_event(
+                2,
+                "restart_docker",
+                "error",
+                Some("Docker restart failed after daemon.json update".to_string()),
+                None,
+            );
+            event.stdout = (!stdout.is_empty()).then_some(stdout);
+            event.stderr = (!stderr.is_empty()).then_some(stderr.clone());
+            send_progress(progress, event);
+            Some(blocked(
+                DAEMON_NO_NEW_PRIVILEGES_RULE_ID,
+                &format!("daemon.json updated but Docker restart failed: {stderr}"),
+            ))
+        }
+        Err(error) => {
+            send_progress(
+                progress,
+                daemon_no_new_privileges_progress_event(
+                    2,
+                    "restart_docker",
+                    "error",
+                    Some(error.to_string()),
+                    None,
+                ),
+            );
+            Some(blocked(
+                DAEMON_NO_NEW_PRIVILEGES_RULE_ID,
+                &format!("daemon.json updated but restart command failed: {error}"),
+            ))
+        }
+    }
+}
+
+pub async fn apply_daemon_no_new_privileges_fix_with_progress(
+    docker: &Docker,
+    progress: Option<&ProgressSender>,
+) -> eyre::Result<FixOutcome> {
+    send_progress(
+        progress,
+        daemon_no_new_privileges_progress_event(
+            1,
+            "write_daemon_json",
+            "in_progress",
+            Some("Writing no-new-privileges to /etc/docker/daemon.json".to_string()),
+            Some(r#"{"no-new-privileges":true} -> /etc/docker/daemon.json"#.to_string()),
+        ),
+    );
+
+    if let Err(error) = merge_daemon_json("no-new-privileges", serde_json::Value::Bool(true)) {
+        send_progress(
+            progress,
+            daemon_no_new_privileges_progress_event(
+                1,
+                "write_daemon_json",
+                "error",
+                Some(error.to_string()),
+                None,
+            ),
+        );
+        return Ok(blocked(
+            DAEMON_NO_NEW_PRIVILEGES_RULE_ID,
+            &format!("Failed to update daemon.json: {error}"),
+        ));
+    }
+
+    send_progress(
+        progress,
+        daemon_no_new_privileges_progress_event(
+            1,
+            "write_daemon_json",
+            "done",
+            Some("no-new-privileges: true written to daemon.json".to_string()),
+            None,
+        ),
+    );
+
+    if let Some(outcome) = restart_docker_for_no_new_privileges(progress).await {
+        return Ok(outcome);
+    }
+
+    if !verify_daemon_no_new_privileges(docker, progress).await {
+        return Ok(blocked(
+            DAEMON_NO_NEW_PRIVILEGES_RULE_ID,
+            "daemon.json updated and Docker restarted, but docker info did not report no-new-privileges",
+        ));
+    }
+
+    Ok(applied(
+        DAEMON_NO_NEW_PRIVILEGES_RULE_ID,
+        "Docker daemon now applies no-new-privileges by default to future containers",
+        false,
+    ))
 }
 
 pub fn supports_userns_remap_fix(rule_id: &str) -> bool {
@@ -2857,9 +3085,11 @@ pub async fn preview_fix(docker: &Docker, rule_id: &str) -> eyre::Result<FixPrev
             || supports_image_config_fix(rule_id)
             || supports_runtime_isolation_fix(rule_id)
             || supports_userns_remap_fix(rule_id)
+            || supports_daemon_no_new_privileges_fix(rule_id)
             || supports_docker_root_partition_fix(rule_id),
         requires_elevation: supports_audit_rule_fix(rule_id)
             || supports_userns_remap_fix(rule_id)
+            || supports_daemon_no_new_privileges_fix(rule_id)
             || supports_docker_root_partition_fix(rule_id),
         steps: fix_steps(rule_id),
     })
@@ -2884,13 +3114,8 @@ fn preview_target_from_inspect(
         STRATEGY_DOKURU_OVERRIDE
     } else if supports_cgroup_resource_fix(rule_id) {
         STRATEGY_DOCKER_UPDATE
-    } else if supports_runtime_isolation_fix(rule_id)
-        && matches!(rule_id, "5.4" | "5.18" | "5.22")
-        && compose.is_some()
-    {
+    } else if supports_runtime_isolation_fix(rule_id) && compose.is_some() {
         STRATEGY_DOKURU_OVERRIDE
-    } else if supports_runtime_isolation_fix(rule_id) && rule_id == "5.6" && compose.is_some() {
-        STRATEGY_COMPOSE_UPDATE
     } else if supports_runtime_isolation_fix(rule_id) {
         "recreate"
     } else if compose.is_some() {
@@ -5089,7 +5314,7 @@ pub async fn apply_runtime_isolation_fix_with_progress(
     if !supports_runtime_isolation_fix(rule_id) {
         return Ok(blocked(
             rule_id,
-            "Runtime isolation fix only supports rules 5.4, 5.6, 5.18, 5.22",
+            "Runtime isolation fix only supports rules 5.4, 5.18, 5.22",
         ));
     }
 
@@ -5141,12 +5366,8 @@ async fn default_runtime_isolation_targets(
             continue;
         }
 
-        let strategy = if compose_context_from_inspect(&inspect).is_some()
-            && matches!(rule_id, "5.4" | "5.18" | "5.22")
-        {
+        let strategy = if compose_context_from_inspect(&inspect).is_some() {
             STRATEGY_DOKURU_OVERRIDE
-        } else if compose_context_from_inspect(&inspect).is_some() && rule_id == "5.6" {
-            STRATEGY_COMPOSE_UPDATE
         } else {
             "recreate"
         };
@@ -5220,9 +5441,8 @@ async fn apply_runtime_isolation_target(
         Some("Container violates runtime isolation rule".to_string()),
     );
 
-    let use_override = is_dokuru_override_strategy(target.strategy.as_deref()) && rule_id != "5.6";
-    let use_compose_source = is_compose_source_strategy(target.strategy.as_deref())
-        || (rule_id == "5.6" && is_dokuru_override_strategy(target.strategy.as_deref()));
+    let use_override = is_dokuru_override_strategy(target.strategy.as_deref());
+    let use_compose_source = is_compose_source_strategy(target.strategy.as_deref());
     if use_override || use_compose_source {
         let Some(ctx) = compose_context_from_inspect(&inspect) else {
             return Err(format!(
@@ -5321,7 +5541,6 @@ fn harden_runtime_host_config(
 ) -> eyre::Result<()> {
     match rule_id {
         "5.4" => restrict_linux_capabilities(host_config),
-        "5.6" => remove_sensitive_bind_mounts(host_config),
         "5.18" => host_config.devices = Some(Vec::new()),
         "5.22" => remove_seccomp_unconfined(host_config),
         _ => return Err(eyre::eyre!("unsupported runtime isolation rule {rule_id}")),
@@ -5332,7 +5551,6 @@ fn harden_runtime_host_config(
 fn runtime_fix_detail(rule_id: &str) -> &'static str {
     match rule_id {
         "5.4" => "Drop NET_RAW and remove broad capability additions",
-        "5.6" => "Remove sensitive host bind mounts",
         "5.18" => "Remove direct host device mappings",
         "5.22" => "Remove seccomp=unconfined security option",
         _ => "Apply runtime isolation fix",
@@ -5354,24 +5572,6 @@ fn restrict_linux_capabilities(host_config: &mut bollard::models::HostConfig) {
     }
 }
 
-fn remove_sensitive_bind_mounts(host_config: &mut bollard::models::HostConfig) {
-    if let Some(binds) = host_config.binds.as_mut() {
-        binds.retain(|bind| {
-            bind_mount_source(bind).is_none_or(|source| !is_sensitive_host_mount_path(source))
-        });
-    }
-
-    if let Some(mounts) = host_config.mounts.as_mut() {
-        mounts.retain(|mount| {
-            !matches!(mount.typ, Some(bollard::models::MountTypeEnum::BIND))
-                || mount
-                    .source
-                    .as_deref()
-                    .is_none_or(|source| !is_sensitive_host_mount_path(source))
-        });
-    }
-}
-
 fn remove_seccomp_unconfined(host_config: &mut bollard::models::HostConfig) {
     if let Some(security_opt) = host_config.security_opt.as_mut() {
         security_opt.retain(|option| !security_opt_disables_seccomp(option));
@@ -5385,42 +5585,6 @@ fn capability_matches(value: &str, capability: &str) -> bool {
         .replace('-', "_")
         .to_ascii_uppercase();
     normalized == capability || normalized == "ALL"
-}
-
-fn bind_mount_source(bind: &str) -> Option<&str> {
-    let bind = bind.trim();
-    if bind.is_empty() {
-        return None;
-    }
-    bind.split_once(':')
-        .map(|(source, _)| source)
-        .filter(|source| !source.is_empty())
-}
-
-fn is_sensitive_host_mount_path(source: &str) -> bool {
-    let trimmed = source.trim_end_matches('/');
-    if trimmed.is_empty() {
-        return false;
-    }
-
-    for sensitive in SENSITIVE_HOST_MOUNT_PATHS {
-        if *sensitive == "/" {
-            if trimmed == "/" {
-                return true;
-            }
-            continue;
-        }
-
-        if trimmed == *sensitive
-            || trimmed
-                .strip_prefix(*sensitive)
-                .is_some_and(|rest| rest.starts_with('/'))
-        {
-            return true;
-        }
-    }
-
-    false
 }
 
 fn security_opt_disables_seccomp(option: &str) -> bool {
@@ -5439,18 +5603,6 @@ fn container_restricts_net_raw(host_config: Option<&bollard::models::HostConfig>
         values
             .iter()
             .any(|value| capability_matches(value, "NET_RAW"))
-    })
-}
-
-fn container_has_sensitive_host_mount(inspect: &ContainerInspectResponse) -> bool {
-    inspect.mounts.as_ref().is_some_and(|mounts| {
-        mounts.iter().any(|mount| {
-            matches!(mount.typ, Some(MountPointTypeEnum::BIND))
-                && mount
-                    .source
-                    .as_deref()
-                    .is_some_and(is_sensitive_host_mount_path)
-        })
     })
 }
 
@@ -6379,7 +6531,6 @@ fn update_compose_service_lines(
                 | set_service_value_text(lines, block, "cap_drop", "[NET_RAW]")
         }
         "5.5" => set_existing_service_value(lines, block, "privileged", "false"),
-        "5.6" => remove_sensitive_volume_entries_text(lines, block),
         "5.18" => remove_service_keys_text(lines, block, &["devices"]),
         "5.22" => remove_service_keys_text(lines, block, &["security_opt"]),
         "5.10" => remove_service_keys_text(lines, block, &["network_mode"]),
@@ -6599,132 +6750,6 @@ fn remove_service_keys_text(
     }
     block.end = block.end.saturating_sub(removed);
     removed > 0
-}
-
-fn remove_sensitive_volume_entries_text(
-    lines: &mut Vec<String>,
-    block: &mut ComposeServiceBlock,
-) -> bool {
-    let Some(range) = service_key_range(lines, block, "volumes") else {
-        return false;
-    };
-    if range.len() <= 1 {
-        return false;
-    }
-
-    let item_ranges = service_sequence_item_ranges(lines, range.start + 1..range.end);
-    if item_ranges.is_empty() {
-        return false;
-    }
-
-    let mut remove_ranges = item_ranges
-        .iter()
-        .filter(|range| volume_item_uses_sensitive_host_path(&lines[range.start..range.end]))
-        .cloned()
-        .collect::<Vec<_>>();
-
-    if remove_ranges.is_empty() {
-        return false;
-    }
-
-    if remove_ranges.len() == item_ranges.len() {
-        let removed = range.len();
-        lines.drain(range);
-        block.end = block.end.saturating_sub(removed);
-        return true;
-    }
-
-    let removed = remove_ranges
-        .iter()
-        .map(std::ops::Range::len)
-        .sum::<usize>();
-    remove_ranges.sort_by_key(|range| range.start);
-    for range in remove_ranges.into_iter().rev() {
-        lines.drain(range);
-    }
-    block.end = block.end.saturating_sub(removed);
-    true
-}
-
-fn service_sequence_item_ranges(
-    lines: &[String],
-    range: std::ops::Range<usize>,
-) -> Vec<std::ops::Range<usize>> {
-    let starts = range
-        .clone()
-        .filter(|&idx| {
-            let trimmed = lines[idx].trim_start();
-            !trimmed.starts_with('#') && trimmed.starts_with("- ")
-        })
-        .collect::<Vec<_>>();
-
-    starts
-        .iter()
-        .enumerate()
-        .map(|(idx, start)| {
-            let end = starts.get(idx + 1).copied().unwrap_or(range.end);
-            *start..end
-        })
-        .collect()
-}
-
-fn volume_item_uses_sensitive_host_path(lines: &[String]) -> bool {
-    let Some(first_line) = lines.first() else {
-        return false;
-    };
-    let first_value = first_line
-        .trim_start()
-        .strip_prefix("- ")
-        .unwrap_or_default()
-        .trim();
-
-    if let Some(source) = short_volume_host_source(first_value) {
-        return is_sensitive_host_mount_path(source);
-    }
-
-    let mut source =
-        mapping_value(first_value, "source").or_else(|| mapping_value(first_value, "src"));
-    let mut typ = mapping_value(first_value, "type");
-
-    for line in lines.iter().skip(1) {
-        let trimmed = line.trim();
-        source = source
-            .or_else(|| mapping_value(trimmed, "source"))
-            .or_else(|| mapping_value(trimmed, "src"));
-        typ = typ.or_else(|| mapping_value(trimmed, "type"));
-    }
-
-    let is_bind = typ.is_none_or(|value| value.eq_ignore_ascii_case("bind"));
-    is_bind && source.as_deref().is_some_and(is_sensitive_host_mount_path)
-}
-
-fn short_volume_host_source(value: &str) -> Option<&str> {
-    if value.is_empty() || value.contains(':') && value.split_once(':')?.0.contains(' ') {
-        return None;
-    }
-
-    let value = unquote_yaml_scalar(value);
-    value
-        .split_once(':')
-        .map(|(source, _)| source.trim())
-        .filter(|source| source.starts_with('/'))
-}
-
-fn mapping_value(line: &str, key: &str) -> Option<String> {
-    let (raw_key, raw_value) = line.split_once(':')?;
-    (unquote_yaml_key(raw_key.trim()) == key)
-        .then(|| unquote_yaml_scalar(raw_value.trim()).to_string())
-        .filter(|value| !value.is_empty())
-}
-
-fn unquote_yaml_scalar(raw: &str) -> &str {
-    raw.strip_prefix('"')
-        .and_then(|value| value.strip_suffix('"'))
-        .or_else(|| {
-            raw.strip_prefix('\'')
-                .and_then(|value| value.strip_suffix('\''))
-        })
-        .unwrap_or(raw)
 }
 
 fn set_existing_service_value(
@@ -6950,7 +6975,6 @@ fn container_violates_rule(inspect: &ContainerInspectResponse, rule_id: &str) ->
             .is_none(),
         "5.4" => !container_restricts_net_raw(host_config),
         "5.5" => host_config.and_then(|h| h.privileged).unwrap_or(false),
-        "5.6" => container_has_sensitive_host_mount(inspect),
         "5.10" => host_config.and_then(|h| h.network_mode.as_deref()) == Some("host"),
         "5.16" => host_config.and_then(|h| h.pid_mode.as_deref()) == Some("host"),
         "5.17" => host_config.and_then(|h| h.ipc_mode.as_deref()) == Some("host"),
@@ -7911,45 +7935,6 @@ services:
     }
 
     #[test]
-    fn update_compose_content_removes_only_sensitive_volume_entries() {
-        let input = r#"services:
-  web:
-    image: nginx
-    volumes:
-      - app-data:/var/lib/app
-      - /etc:/host/etc:ro
-      - type: bind
-        source: /sys
-        target: /host/sys
-        read_only: true
-      - ./config:/etc/app
-    ports:
-      - "8080:80"
-
-volumes:
-  app-data:
-"#;
-        let expected = r#"services:
-  web:
-    image: nginx
-    volumes:
-      - app-data:/var/lib/app
-      - ./config:/etc/app
-    ports:
-      - "8080:80"
-
-volumes:
-  app-data:
-"#;
-
-        let updated = update_compose_content(input, "web", "5.6", None)
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(updated, expected);
-    }
-
-    #[test]
     fn update_compose_content_removes_both_userns_keys_for_rule_531() {
         let input = r#"services:
   web:
@@ -8106,20 +8091,6 @@ services:
         assert!(capability_matches("CAP_NET_RAW", "NET_RAW"));
         assert!(capability_matches("net-raw", "NET_RAW"));
         assert!(capability_matches("ALL", "NET_RAW"));
-
-        assert!(is_sensitive_host_mount_path("/etc"));
-        assert!(is_sensitive_host_mount_path("/etc/passwd"));
-        assert!(is_sensitive_host_mount_path("/sys/kernel"));
-        assert!(!is_sensitive_host_mount_path("/etc-app/config"));
-        assert!(!is_sensitive_host_mount_path("/var/lib/app"));
-
-        assert_eq!(short_volume_host_source("/etc:/host/etc:ro"), Some("/etc"));
-        assert_eq!(
-            short_volume_host_source("\"/proc:/host/proc:ro\""),
-            Some("/proc")
-        );
-        assert_eq!(short_volume_host_source("app-data:/var/lib/app"), None);
-        assert_eq!(short_volume_host_source("/container-only"), None);
     }
 
     #[test]

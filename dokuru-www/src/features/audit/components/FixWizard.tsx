@@ -141,7 +141,6 @@ function currentValueLabel(ruleId: string, target: FixPreview["targets"][number]
     if (ruleId === "4.1") return "root or no explicit user";
     if (ruleId === "4.6") return "no healthcheck";
     if (ruleId === "5.4") return "NET_RAW allowed";
-    if (ruleId === "5.6") return "sensitive host mount";
     if (ruleId === "5.11") return formatBytesAsMb(target.current_memory);
     if (ruleId === "5.12") return target.current_cpu_shares ? `${target.current_cpu_shares} shares` : "no CPU shares";
     if (ruleId === "5.18") return "host device mapped";
@@ -158,7 +157,6 @@ function normalizeStrategy(ruleId: string, target: FixPreview["targets"][number]
     const canCompose = Boolean(target.compose_project && target.compose_service);
     if (isImageConfigRecreateRule(ruleId) && !canCompose) return "recreate";
     if (isRuntimeIsolationRule(ruleId) && !canCompose) return "recreate";
-    if (ruleId === "5.6" && canCompose) return "compose_update";
     return canCompose ? "dokuru_override" : "docker_update";
 }
 
@@ -262,23 +260,17 @@ function NamespaceModePicker({
 }
 
 function RuntimeModePicker({
-    ruleId,
     value,
     canCompose,
     onChange,
 }: {
-    ruleId: string;
     value: ApplyStrategy;
     canCompose: boolean;
     onChange: (strategy: ApplyStrategy) => void;
 }) {
-    const options = ruleId === "5.6"
-        ? NAMESPACE_APPLY_MODE_OPTIONS.filter(option => option.value !== "dokuru_override")
-        : NAMESPACE_APPLY_MODE_OPTIONS;
+    const options = NAMESPACE_APPLY_MODE_OPTIONS;
     const effectiveValue = canCompose
-        ? ruleId === "5.6"
-            ? value === "recreate" || value === "dokuru_override" ? "compose_update" : value
-            : value === "recreate" ? "dokuru_override" : value
+        ? value === "recreate" ? "dokuru_override" : value
         : "docker_update";
 
     return (
@@ -295,7 +287,7 @@ function RuntimeModePicker({
                         type="button"
                         role="radio"
                         aria-checked={active}
-                        title={ruleId === "5.6" && option.value === "compose_update" ? "Patch source Compose YAML to remove only sensitive mounts" : option.title}
+                        title={option.title}
                         disabled={disabled}
                         onClick={() => onChange(option.value)}
                         className={cn(
@@ -393,6 +385,7 @@ function ConfirmStep({
     const isImageConfig = isImageConfigRecreateRule(rule.id);
     const isNamespace = isNamespaceIsolationRule(rule.id);
     const isRuntimeIsolation = isRuntimeIsolationRule(rule.id);
+    const isDaemonDefault = rule.id === "2.15";
     const targets = preview?.targets ?? [];
     const showStructuredTargets = isCgroup || isImageConfig || isNamespace || isRuntimeIsolation;
 
@@ -418,6 +411,24 @@ function ConfirmStep({
                         <p className="text-xs text-red-400/70 leading-relaxed">
                             Dokuru will snapshot containers first, migrate Docker volumes into the remapped storage root, chown safe bind mounts, and restart recovered Compose stacks. Docker socket mounts and other system paths are skipped and may still need manual handling.
                         </p>
+                    </div>
+                </div>
+            )}
+
+            {isDaemonDefault && (
+                <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3.5 py-3">
+                    <div className="flex items-center gap-3">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-amber-400/25 bg-amber-400/10 text-amber-300">
+                            <RotateCcw className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0">
+                            <p className="text-xs font-semibold text-amber-300">
+                                Docker daemon restart required
+                            </p>
+                            <p className="mt-0.5 text-[11px] leading-snug text-amber-200/55">
+                                Dokuru writes a daemon-wide default to daemon.json, restarts Docker, then verifies SecurityOptions. Workloads relying on setuid/setgid privilege escalation can break.
+                            </p>
+                        </div>
                     </div>
                 </div>
             )}
@@ -494,7 +505,7 @@ function ConfirmStep({
                             <div className="flex items-start gap-2.5">
                                 <FileCode2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#2496ED]/70" />
                                 <p className="leading-relaxed">
-                                    Override persists resettable runtime settings. Sensitive host mounts use Patch so Dokuru removes only risky volume entries from source Compose YAML.
+                                    Override persists resettable runtime settings. Patch edits source YAML; Live recreates only the current container and is not source-persistent.
                                 </p>
                             </div>
                         </div>
@@ -565,7 +576,6 @@ function ConfirmStep({
                                     {isRuntimeIsolation && config && (
                                         canCompose ? (
                                             <RuntimeModePicker
-                                                ruleId={rule.id}
                                                 value={strategy}
                                                 canCompose={canCompose}
                                                 onChange={(nextStrategy) => onTargetChange(target.container_id, { strategy: nextStrategy })}
@@ -633,7 +643,7 @@ function ConfirmStep({
                 </div>
             ) : null}
 
-            {preview && targets.length === 0 && (
+            {preview && targets.length === 0 && !isDaemonDefault && (
                 <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/8 px-4 py-3 text-xs text-emerald-400/80">
                     Agent preview says no containers currently need this fix.
                 </div>

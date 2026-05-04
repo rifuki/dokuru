@@ -337,6 +337,13 @@ impl RuleRegistry {
                 .await;
         }
 
+        if super::fix_helpers::supports_daemon_no_new_privileges_fix(&request.rule_id) {
+            return super::fix_helpers::apply_daemon_no_new_privileges_fix_with_progress(
+                docker, progress,
+            )
+            .await;
+        }
+
         if !request.targets.is_empty() {
             return Ok(FixOutcome {
                 rule_id: request.rule_id.clone(),

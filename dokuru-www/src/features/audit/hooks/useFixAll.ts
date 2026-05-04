@@ -18,7 +18,7 @@ export type RuleFixStatus = {
     highRisk: boolean;
 };
 
-const HIGH_RISK_AUTO_FIX_RULES = new Set(["2.10", "4.1", "5.4", "5.5", "5.6", "5.10", "5.16", "5.17", "5.18", "5.21", "5.22", "5.31"]);
+const HIGH_RISK_AUTO_FIX_RULES = new Set(["2.10", "2.15", "4.1", "5.4", "5.5", "5.10", "5.16", "5.17", "5.18", "5.21", "5.22", "5.31"]);
 const CGROUP_RULE_IDS = ["5.11", "5.12", "5.25", "5.29"] as const;
 const MIN_CGROUP_VALUES = {
     memoryMb: 64,

@@ -25,6 +25,19 @@ STEP 5: Recreate existing containers with new user namespace mapping
 
 ⚠️  WARNING: Existing containers will need to be recreated. Volume permissions may need adjustment."#;
 
+const RULE_2_15_GUIDE: &str = r#"Restrict containers from acquiring additional privileges through setuid/setgid binaries.
+
+Dokuru applies the daemon-wide default so future containers and recreated Compose services inherit it:
+  /etc/docker/daemon.json:
+  {
+    "no-new-privileges": true
+  }
+
+Then Docker is restarted and the setting is verified with:
+  docker info --format '{{ .SecurityOptions }}'
+
+This can affect workloads that intentionally rely on setuid/setgid privilege escalation."#;
+
 /// Section 2: Docker Daemon Configuration
 /// CIS Docker Benchmark v1.8.0
 pub struct Section2;
@@ -34,6 +47,7 @@ impl Section2 {
     pub fn rules() -> Vec<RuleDefinition> {
         vec![
             Self::rule_2_10(),
+            Self::rule_2_15(),
             Self::rule_2_11(),
             // Add more rules here - easy to see what's missing!
         ]
@@ -148,6 +162,80 @@ impl Section2 {
             rationale: "Without user namespace remapping, container processes run as root (UID 0) on the host. If a container is compromised, the attacker has root privileges on the host system, allowing them to escape the container, access sensitive files, and compromise other containers. User namespace remapping maps container root to an unprivileged user on the host, significantly reducing the attack surface.".into(),
             impact: "• Existing containers must be recreated\n• Volume permissions may need adjustment\n• Some Docker features may be incompatible (e.g., --pid=host, --network=host)\n• Slight performance overhead for UID/GID mapping".into(),
             tags: vec!["security".into(), "namespace".into(), "isolation".into(), "privilege-escalation".into()],
+        }
+    }
+
+    /// 2.15 - Ensure containers are restricted from acquiring new privileges
+    fn rule_2_15() -> RuleDefinition {
+        RuleDefinition {
+            id: "2.15".into(),
+            section: 2,
+            title: "Ensure containers are restricted from acquiring new privileges".into(),
+            description: "Docker should set no-new-privileges by default so container processes cannot gain additional privileges through setuid or setgid binaries.".into(),
+
+            category: RuleCategory::Runtime,
+            severity: Severity::High,
+            scored: true,
+
+            audit_command: Some("docker info --format '{{ .SecurityOptions }}'".into()),
+            check_fn: |docker, _containers| {
+                let docker = docker.clone();
+                Box::pin(async move {
+                    let info = docker.info().await?;
+                    let enabled = info.security_options.as_ref().is_some_and(|options| {
+                        options.iter().any(|option| {
+                            option.to_ascii_lowercase().contains("no-new-privileges")
+                        })
+                    });
+
+                    Ok(CheckResult {
+                        rule: CisRule {
+                            id: "2.15".into(),
+                            title: "Ensure containers are restricted from acquiring new privileges".into(),
+                            category: RuleCategory::Runtime,
+                            severity: Severity::High,
+                            section: "Daemon Configuration".into(),
+                            description: "Daemon-wide no-new-privileges default".into(),
+                            remediation: "Set no-new-privileges to true in /etc/docker/daemon.json and restart Docker".into(),
+                        },
+                        status: if enabled { CheckStatus::Pass } else { CheckStatus::Fail },
+                        message: if enabled {
+                            "Docker daemon restricts containers from acquiring new privileges".into()
+                        } else {
+                            "Docker daemon does not set no-new-privileges by default".into()
+                        },
+                        affected: if enabled { Vec::new() } else { vec!["Docker daemon".into()] },
+                        remediation_kind: RemediationKind::Auto,
+                        audit_command: Some("docker info --format '{{ .SecurityOptions }}'".into()),
+                        raw_output: info.security_options.map(|options| options.join(", ")),
+                        references: None,
+                        rationale: None,
+                        impact: None,
+                        tags: None,
+                        ..Default::default()
+                    })
+                })
+            },
+
+            remediation_kind: RemediationKind::Auto,
+            fix_fn: Some(|docker| {
+                let docker = docker.clone();
+                Box::pin(async move {
+                    fix_helpers::apply_daemon_no_new_privileges_fix(&docker).await
+                })
+            }),
+            remediation_guide: RULE_2_15_GUIDE.into(),
+            requires_restart: true,
+            requires_elevation: true,
+
+            references: vec![
+                "https://docs.docker.com/engine/reference/commandline/dockerd/".into(),
+                "https://github.com/moby/moby/pull/20727".into(),
+                "CIS Docker Benchmark v1.8.0, Section 2.15".into(),
+            ],
+            rationale: "The no-new-privileges kernel bit prevents processes and their children from gaining additional privileges via setuid or setgid bits, reducing privilege escalation paths inside containers.".into(),
+            impact: "Workloads that intentionally rely on setuid/setgid privilege escalation may need an exception or application changes.".into(),
+            tags: vec!["runtime".into(), "privileges".into(), "daemon".into(), "isolation".into()],
         }
     }
 

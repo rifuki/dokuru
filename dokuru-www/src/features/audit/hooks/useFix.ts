@@ -40,14 +40,6 @@ export function getFixSteps(ruleId: string): string[] {
         "Recreating without --privileged flag…",
         "Verifying privilege isolation…",
     ];
-    if (ruleId === "5.6") return [
-        "Inspecting sensitive host bind mounts…",
-        "Saving container configuration…",
-        "Stopping affected container(s)…",
-        "Recreating without sensitive mounts…",
-        "Starting container(s)…",
-        "Verifying mount isolation…",
-    ];
     if (ruleId === "5.10") return [
         "Inspecting containers with --network=host…",
         "Saving container configuration…",
@@ -124,6 +116,11 @@ export function getFixSteps(ruleId: string): string[] {
         "Applying selected Docker/Compose resource limits…",
         "Verifying cgroup confinement…",
     ];
+    if (ruleId === "2.15") return [
+        "Writing no-new-privileges to daemon.json…",
+        "Restarting Docker daemon…",
+        "Verifying daemon security options…",
+    ];
     if (ruleId === "2.10") return [
         "Snapshotting container mounts and Compose context...",
         "Creating dockremap system user…",
@@ -151,7 +148,7 @@ export function getFixSteps(ruleId: string): string[] {
 }
 
 export function isNamespaceRecreateRule(ruleId: string): boolean {
-    return ["5.4", "5.5", "5.6", "5.10", "5.16", "5.17", "5.18", "5.21", "5.22", "5.31"].includes(ruleId);
+    return ["5.4", "5.5", "5.10", "5.16", "5.17", "5.18", "5.21", "5.22", "5.31"].includes(ruleId);
 }
 
 export function isNamespaceIsolationRule(ruleId: string): boolean {
@@ -159,7 +156,7 @@ export function isNamespaceIsolationRule(ruleId: string): boolean {
 }
 
 export function isRuntimeIsolationRule(ruleId: string): boolean {
-    return ["5.4", "5.6", "5.18", "5.22"].includes(ruleId);
+    return ["5.4", "5.18", "5.22"].includes(ruleId);
 }
 
 export function isImageConfigRecreateRule(ruleId: string): boolean {
@@ -222,7 +219,6 @@ function normalizePreviewStrategy(ruleId: string, strategy: string, canCompose: 
     }
     if (isImageConfigRecreateRule(ruleId) && !canCompose) return "recreate";
     if ((isNamespaceIsolationRule(ruleId) || isRuntimeIsolationRule(ruleId)) && !canCompose) return "recreate";
-    if (ruleId === "5.6" && canCompose) return "compose_update";
     return canCompose ? "dokuru_override" : "docker_update";
 }
 

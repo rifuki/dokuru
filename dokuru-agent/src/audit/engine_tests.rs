@@ -65,7 +65,9 @@ mod tests {
         assert!(rules.iter().all(|rule| rule.scored));
         assert!(rules.iter().all(|rule| rule.id != "1.1.1"));
 
-        for rule_id in ["5.4", "5.6", "5.18", "5.22"] {
+        assert!(rules.iter().all(|rule| rule.id != "5.6"));
+
+        for rule_id in ["2.15", "5.4", "5.18", "5.22"] {
             assert!(rules.iter().any(|rule| rule.id == rule_id));
         }
     }

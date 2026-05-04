@@ -5,11 +5,6 @@ use crate::audit::{
     fix_helpers,
     types::{CheckResult, CheckStatus, CisRule, RemediationKind, RuleCategory, Severity},
 };
-use bollard::models::MountPointTypeEnum;
-
-const SENSITIVE_HOST_PATHS: &[&str] = &[
-    "/", "/boot", "/dev", "/etc", "/lib", "/lib64", "/proc", "/sys", "/usr",
-];
 
 const RULE_5_4_GUIDE: &str = r"Drop unnecessary Linux capabilities from every container.
 
@@ -36,16 +31,6 @@ Example (correct):
   docker run nginx
 
 If specific kernel capabilities are required, grant only the minimum capability with --cap-add instead of enabling full privileged mode.";
-
-const RULE_5_6_GUIDE: &str = r"Do not bind-mount sensitive host directories into containers.
-
-Avoid mounting host paths such as /, /boot, /dev, /etc, /lib, /lib64, /proc, /sys, and /usr.
-
-Use named volumes or application-specific directories instead:
-  docker volume create app-data
-  docker run -v app-data:/var/lib/app nginx
-
-If a host bind mount is unavoidable, make it narrow and read-only where possible.";
 
 const RULE_5_10_GUIDE: &str = r"Do not pass --network=host when starting containers.
 Use the default bridge network or a custom user-defined network instead.
@@ -173,7 +158,6 @@ impl Section5 {
         vec![
             Self::rule_5_4(),
             Self::rule_5_5(),
-            Self::rule_5_6(),
             Self::rule_5_10(),
             Self::rule_5_11(),
             Self::rule_5_12(),
@@ -258,40 +242,6 @@ impl Section5 {
             || "[]".to_string(),
             |values| format!("[{}]", values.join(", ")),
         )
-    }
-
-    fn is_sensitive_host_path(source: &str) -> bool {
-        let trimmed = source.trim_end_matches('/');
-        if trimmed.is_empty() {
-            return false;
-        }
-
-        for sensitive in SENSITIVE_HOST_PATHS {
-            if *sensitive == "/" {
-                if trimmed == "/" {
-                    return true;
-                }
-                continue;
-            }
-
-            if trimmed == *sensitive
-                || trimmed
-                    .strip_prefix(*sensitive)
-                    .is_some_and(|rest| rest.starts_with('/'))
-            {
-                return true;
-            }
-        }
-
-        false
-    }
-
-    fn rw_label(read_write: Option<bool>) -> &'static str {
-        if read_write.unwrap_or(false) {
-            "rw"
-        } else {
-            "ro"
-        }
     }
 
     // ── 5.4 — Linux Kernel Capabilities ───────────────────────────────────────
@@ -499,123 +449,6 @@ impl Section5 {
             rationale: "Privileged containers can access host devices and bypass several default Docker isolation controls, increasing the blast radius of a container compromise.".into(),
             impact: "Workloads that rely on broad host device access must be redesigned to use narrower capabilities or device mappings.".into(),
             tags: vec!["runtime".into(), "privileged".into(), "isolation".into()],
-        }
-    }
-
-    // ── 5.6 — Sensitive Host Mounts ───────────────────────────────────────────
-
-    /// 5.6 - Ensure sensitive host system directories are not mounted on containers
-    fn rule_5_6() -> RuleDefinition {
-        RuleDefinition {
-            id: "5.6".into(),
-            section: 5,
-            title: "Ensure sensitive host system directories are not mounted on containers".into(),
-            description: "Sensitive host directories such as /, /boot, /dev, /etc, /lib, /lib64, /proc, /sys, and /usr should not be bind-mounted into containers.".into(),
-
-            category: RuleCategory::Runtime,
-            severity: Severity::High,
-            scored: true,
-
-            audit_command: Some("docker ps --quiet --all | xargs docker inspect --format '{{ .Id }}: Volumes={{ .Mounts }}'".into()),
-            check_fn: |docker, containers| {
-                let docker = docker.clone();
-                let containers = containers.to_vec();
-                Box::pin(async move {
-                    if containers.is_empty() {
-                        return Ok(Self::no_running_containers_result(
-                            "5.6",
-                            "Ensure sensitive host system directories are not mounted on containers",
-                            RuleCategory::Runtime,
-                            Severity::High,
-                            "Sensitive host bind mounts",
-                            "Remove sensitive host directory bind mounts from containers",
-                            RemediationKind::Auto,
-                        ));
-                    }
-
-                    let mut failing = Vec::new();
-                    let mut raw_lines = Vec::new();
-
-                    for c in &containers {
-                        let id = c.id.as_deref().unwrap_or("");
-                        if let Ok(inspect) = docker.inspect_container(id, None).await {
-                            let name = Self::container_name(c.names.as_ref(), id);
-                            let Some(mounts) = inspect.mounts.as_ref() else {
-                                raw_lines.push(format!("{name}: Mounts=[]"));
-                                continue;
-                            };
-
-                            if mounts.is_empty() {
-                                raw_lines.push(format!("{name}: Mounts=[]"));
-                                continue;
-                            }
-
-                            for mount in mounts {
-                                if !matches!(mount.typ, Some(MountPointTypeEnum::BIND)) {
-                                    continue;
-                                }
-
-                                let source = mount.source.as_deref().unwrap_or("");
-                                let destination = mount.destination.as_deref().unwrap_or("");
-                                let mode = Self::rw_label(mount.rw);
-                                raw_lines.push(format!(
-                                    "{name}: {source}:{destination}:{mode}"
-                                ));
-
-                                if Self::is_sensitive_host_path(source) {
-                                    failing.push(format!(
-                                        "{name} ({source} -> {destination}, {mode})"
-                                    ));
-                                }
-                            }
-                        }
-                    }
-
-                    Ok(CheckResult {
-                        rule: CisRule {
-                            id: "5.6".into(),
-                            title: "Ensure sensitive host system directories are not mounted on containers".into(),
-                            category: RuleCategory::Runtime,
-                            severity: Severity::High,
-                            section: "Container Runtime".into(),
-                            description: "Sensitive host bind mounts".into(),
-                            remediation: "Remove sensitive host directory bind mounts from containers".into(),
-                        },
-                        status: if failing.is_empty() { CheckStatus::Pass } else { CheckStatus::Fail },
-                        message: if failing.is_empty() {
-                            "No containers mount sensitive host directories".into()
-                        } else {
-                            format!("{} sensitive host mount(s) found", failing.len())
-                        },
-                        affected: failing,
-                        remediation_kind: RemediationKind::Auto,
-                        audit_command: Some("docker ps --quiet --all | xargs docker inspect --format '{{ .Id }}: Volumes={{ .Mounts }}'".into()),
-                        raw_output: Some(raw_lines.join("\n")),
-                        references: None,
-                        rationale: None,
-                        impact: None,
-                        tags: None,
-                        ..Default::default()
-                    })
-                })
-            },
-
-            remediation_kind: RemediationKind::Auto,
-            fix_fn: Some(|docker| {
-                let docker = docker.clone();
-                Box::pin(async move { Box::pin(fix_helpers::apply_runtime_isolation_fix(&docker, "5.6")).await })
-            }),
-            remediation_guide: RULE_5_6_GUIDE.into(),
-            requires_restart: true,
-            requires_elevation: false,
-
-            references: vec![
-                "https://docs.docker.com/storage/bind-mounts/".into(),
-                "CIS Docker Benchmark v1.8.0, Section 5.6".into(),
-            ],
-            rationale: "Mounting sensitive host directories lets a container read or modify host files and can turn a container compromise into a host compromise.".into(),
-            impact: "Applications that currently depend on broad host bind mounts must be reworked to use named volumes or narrow application-specific paths.".into(),
-            tags: vec!["runtime".into(), "mounts".into(), "filesystem".into(), "isolation".into()],
         }
     }
 

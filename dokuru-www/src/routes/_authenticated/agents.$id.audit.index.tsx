@@ -102,10 +102,10 @@ function StatusIcon({ status, severity }: { status: "Pass" | "Fail" | "Error"; s
 
 const KNOWN_AUTO_FIX_RULE_IDS = new Set([
     "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.1.10", "1.1.11", "1.1.12", "1.1.14", "1.1.18",
-    "2.10",
+    "2.10", "2.15",
     "3.1", "3.2", "3.3", "3.4", "3.5", "3.6", "3.17", "3.18",
     "4.1", "4.6",
-    "5.4", "5.5", "5.6", "5.10", "5.11", "5.12", "5.16", "5.17", "5.18", "5.21", "5.22", "5.25", "5.29", "5.31",
+    "5.4", "5.5", "5.10", "5.11", "5.12", "5.16", "5.17", "5.18", "5.21", "5.22", "5.25", "5.29", "5.31",
 ]);
 
 function remediationKindForResult(result: AuditResult) {
@@ -179,6 +179,11 @@ function FixPanel({ outcome, onDismiss }: { outcome: FixOutcome; onDismiss: () =
 // ── Fix step definitions ──────────────────────────────────────────────────────
 
 function getFixSteps(ruleId: string): string[] {
+    if (ruleId === "2.15") return [
+        "Writing no-new-privileges to daemon.json…",
+        "Restarting Docker daemon…",
+        "Verifying daemon security options…",
+    ];
     if (ruleId === "2.10") return [
         "Creating dockremap system user…",
         "Creating /etc/subuid and /etc/subgid…",
@@ -215,7 +220,7 @@ function getFixSteps(ruleId: string): string[] {
 }
 
 function requiresDockerRestart(ruleId: string) {
-    return ruleId === "2.10";
+    return ruleId === "2.10" || ruleId === "2.15";
 }
 
 // ── Live progress panel ───────────────────────────────────────────────────────

@@ -110,7 +110,7 @@ pub(crate) struct Pain {
 pub(crate) const PAINS: &[Pain] = &[
     Pain { num: "01", title: "Manual review doesn't scale.", body: "Inspecting namespaces, cgroup limits, and runtime flags by hand across every Docker host is slow, error-prone, and hard to repeat." },
     Pain { num: "02", title: "Isolation quietly breaks.", body: "Misconfigured user, network, PID, or IPC namespaces — and missing cgroup limits — weaken the boundaries that keep containers contained." },
-    Pain { num: "03", title: "Runtime flags bypass your threat model.", body: "Privileged mode, sensitive host-path mounts, and an exposed Docker socket silently hand containers the keys to the host." },
+    Pain { num: "03", title: "Runtime flags bypass your threat model.", body: "Privileged mode, broad capabilities, exposed host devices, and disabled seccomp quietly punch holes through container boundaries." },
     Pain { num: "04", title: "Findings without evidence don't ship.", body: "Teams need rule-level results, evidence, and a remediation path — not another dashboard of vague severity counts." },
 ];
 
@@ -172,7 +172,7 @@ pub(crate) const COVERAGE_GROUPS: &[CoverageGroup] = &[
         intro: "Supporting CIS checks for the host, daemon, images, and unsafe runtime flags.",
         rules: &[
             "Privileged container detection (5.5)",
-            "Capabilities, mounts, devices, and seccomp (5.4, 5.6, 5.18, 5.22)",
+            "Capabilities, no-new-privileges, devices, and seccomp (5.4, 2.15, 5.18, 5.22)",
             "Host audit trails (1.1.2-1.1.18)",
             "Docker daemon file permissions (3.1-3.8)",
             "Image hygiene: user and healthcheck overrides (4.1, 4.6)",
