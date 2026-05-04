@@ -252,15 +252,34 @@ function severityRank(severity: string) {
 }
 
 const KNOWN_AUTO_FIX_RULE_IDS = new Set([
-  "1.1.1", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.1.10", "1.1.11", "1.1.12", "1.1.14", "1.1.18",
+  "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8", "1.1.9", "1.1.10", "1.1.11", "1.1.12", "1.1.14", "1.1.18",
   "2.10",
   "3.1", "3.2", "3.3", "3.4", "3.5", "3.6", "3.17", "3.18",
   "4.1", "4.6",
   "5.5", "5.10", "5.11", "5.12", "5.16", "5.17", "5.21", "5.25", "5.29", "5.31",
 ]);
 
+const GUIDED_ONLY_RULE_IDS = new Set(["1.1.1"]);
+
+const DOCKER_ROOT_PARTITION_GUIDE = `Dokuru does not auto-migrate DockerRootDir.
+
+Use this only as planned host provisioning:
+1. Attach or allocate separate storage.
+2. Stop Docker during a maintenance window.
+3. Copy DockerRootDir with ownership, xattrs, and hard links preserved.
+4. Mount the new filesystem at DockerRootDir and persist it in /etc/fstab.
+5. Start Docker and rerun the audit.
+
+For small single-disk VMs, document or accept this low-severity exception instead of creating loopback storage on the same root filesystem.`;
+
 function remediationKindForResult(result: AuditResult): AuditResult["remediation_kind"] {
+  if (GUIDED_ONLY_RULE_IDS.has(result.rule.id)) return "guided";
   return result.remediation_kind ?? (KNOWN_AUTO_FIX_RULE_IDS.has(result.rule.id) ? "auto" : "manual");
+}
+
+function remediationGuideForResult(result: AuditResult) {
+  if (result.rule.id === "1.1.1") return DOCKER_ROOT_PARTITION_GUIDE;
+  return result.remediation_guide;
 }
 
 function isAutoFixableResult(result: AuditResult) {
@@ -558,8 +577,9 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
   onActiveTabChange: (tab: RuleCardTab) => void;
   onOpenWizard: (result: AuditResult) => void;
 }) {
-  const { rule, status, message, affected, audit_command, raw_output, command_stderr, command_exit_code, references, rationale, impact, remediation_guide } = result;
+  const { rule, status, message, affected, audit_command, raw_output, command_stderr, command_exit_code, references, rationale, impact } = result;
   const remediation_kind = remediationKindForResult(result);
+  const remediation_guide = remediationGuideForResult(result);
   const fixJob = useAuditStore((state) => state.fixJobs[fixJobKey(agentId, rule.id)]);
   const storedOutcome = useAuditStore((state) => state.fixOutcomes[agentId]?.[rule.id] ?? null);
   const isFocused = focusedRuleId === rule.id;
@@ -1957,7 +1977,7 @@ function AuditDetailPage() {
   const checkRuleTotal = baseResults.length || scoredRuleTotal;
   const hasUnscoredChecks = checkRuleTotal > scoredRuleTotal || baseResults.some(result => result.status === "Error");
   const ruleCountSummary = hasUnscoredChecks
-    ? `${checkRuleTotal} checks · ${scoredRuleTotal} scored`
+    ? `${checkRuleTotal} checks total · ${scoredRuleTotal} scored`
     : `${scoredRuleTotal} rules`;
   const appliedHistoryByRule = latestAppliedFixesAfterAudit(fixHistoryQuery.data ?? [], auditData);
   const fixedRuleIds = new Set<string>(appliedHistoryByRule.keys());
@@ -2290,12 +2310,12 @@ function AuditDetailPage() {
                     )}
                   </button>
                   <div className="flex min-h-[76px] flex-col items-center justify-center rounded-[12px] border border-border bg-muted/20 px-2 py-2.5 text-center sm:min-h-[84px] sm:px-3">
-                    <span className="block text-2xl font-black leading-none text-foreground/80 sm:text-3xl">{scoredRuleTotal}</span>
+                    <span className="block text-2xl font-black leading-none text-foreground/80 sm:text-3xl">{hasUnscoredChecks ? checkRuleTotal : scoredRuleTotal}</span>
                     <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                      {hasUnscoredChecks ? "Scored" : "Total"}
+                      {hasUnscoredChecks ? "Checks" : "Total"}
                     </span>
                     <span className="mt-0.5 text-[10px] font-medium text-muted-foreground/60">
-                      {hasUnscoredChecks ? `of ${checkRuleTotal} checks` : "audited"}
+                      {hasUnscoredChecks ? `${scoredRuleTotal} scored` : "audited"}
                     </span>
                   </div>
                 </div>

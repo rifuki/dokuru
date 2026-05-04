@@ -345,6 +345,7 @@ function ConfirmStep({
         const value = config[meta.key] ?? 0;
         return value < meta.min;
     });
+    const applyDisabled = previewLoading || hasInvalidValues || isHostPartition;
 
     return (
         <div className="flex flex-col gap-5">
@@ -368,10 +369,10 @@ function ConfirmStep({
                     <AlertTriangle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
                     <div className="space-y-1">
                         <p className="text-xs font-semibold text-red-400">
-                            High-risk host storage migration
+                            Manual host storage provisioning
                         </p>
                         <p className="text-xs text-red-400/70 leading-relaxed">
-                            Dokuru only proceeds when one LVM volume group is clearly eligible. It creates a new logical volume, copies DockerRootDir, stops Docker for the final sync, updates /etc/fstab, and keeps the original Docker root as a backup.
+                            Dokuru does not auto-migrate DockerRootDir. Use this as a planned storage change with separate backing storage, Docker downtime, and a post-change audit rerun.
                         </p>
                     </div>
                 </div>
@@ -577,7 +578,7 @@ function ConfirmStep({
             {/* Steps preview */}
             <div>
                 <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/40 mb-2">
-                    Fix will execute
+                    {isHostPartition ? "Guided remediation" : "Fix will execute"}
                 </p>
                 <div className="space-y-1.5">
                     {steps.map((s, i) => (
@@ -593,16 +594,16 @@ function ConfirmStep({
             <div className="flex justify-end pt-1">
                 <button
                     onClick={onConfirm}
-                    disabled={previewLoading || hasInvalidValues}
+                    disabled={applyDisabled}
                     className={cn(
                         "audit-on-primary inline-flex h-9 w-full max-w-[156px] items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold text-white transition-all active:scale-[0.98]",
-                        previewLoading || hasInvalidValues
+                        applyDisabled
                             ? "bg-white/10 cursor-not-allowed opacity-50"
                             : "bg-[#2496ED] hover:bg-[#1e80cc]"
                     )}
                 >
                     <Wrench className="h-3.5 w-3.5" />
-                    Apply Fix
+                    {isHostPartition ? "Guided Only" : "Apply Fix"}
                 </button>
             </div>
         </div>

@@ -155,7 +155,7 @@ impl Section1 {
                             format!("{docker_root} is NOT on a separate partition")
                         },
                         affected: if found { vec![] } else { vec![docker_root] },
-                        remediation_kind: RemediationKind::Auto,
+                        remediation_kind: RemediationKind::Guided,
                         audit_command: Some("mountpoint -- \"$(docker info -f '{{ .DockerRootDir }}')\"".into()),
                         raw_output: Some(if matching.is_empty() { "(no mount entry)".into() } else { matching.join("\n") }),
                         references: None,
@@ -166,19 +166,14 @@ impl Section1 {
                     })
                 })
             },
-            remediation_kind: RemediationKind::Auto,
-            fix_fn: Some(|docker| {
-                let docker = docker.clone();
-                Box::pin(async move {
-                    fix_helpers::apply_docker_root_partition_fix_with_progress(&docker, None).await
-                })
-            }),
-            remediation_guide: "Dokuru can auto-remediate this when the host has exactly one LVM volume group with enough free space:\n  1. Create a dedicated LVM logical volume for DockerRootDir\n  2. Format it as ext4\n  3. Copy DockerRootDir data with rsync\n  4. Stop Docker for a final sync\n  5. Mount the volume at DockerRootDir and persist it in /etc/fstab\n  6. Restart Docker\n\nIf LVM is unavailable or multiple VGs are eligible, create/select the target partition manually before rerunning the fix.".into(),
+            remediation_kind: RemediationKind::Guided,
+            fix_fn: None,
+            remediation_guide: "Dokuru does not auto-migrate DockerRootDir. Treat this as planned host provisioning:\n  1. Attach or allocate separate storage for DockerRootDir\n  2. Stop Docker during a maintenance window\n  3. Copy DockerRootDir data while preserving ownership, xattrs, and hard links\n  4. Mount the new filesystem at DockerRootDir and persist it in /etc/fstab\n  5. Start Docker and rerun the audit\n\nFor small single-disk VMs, document or accept this low-severity exception instead of creating loopback storage on the same root filesystem.".into(),
             requires_restart: true,
             requires_elevation: true,
             references: vec!["CIS Docker Benchmark v1.8.0, Section 1.1.1".into()],
             rationale: "Without a separate partition, Docker data can fill the root filesystem.".into(),
-            impact: "Requires partitioning and data migration.".into(),
+            impact: "Requires planned downtime and host storage migration; small single-disk VMs may reasonably document an exception.".into(),
             tags: vec!["host".into(), "partition".into(), "filesystem".into()],
         }
     }

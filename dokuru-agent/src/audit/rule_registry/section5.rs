@@ -981,7 +981,7 @@ impl Section5 {
 
             category: RuleCategory::Cgroup,
             severity: Severity::Medium,
-            scored: false,
+            scored: true,
 
             audit_command: Some(Self::inspect_command(".HostConfig.CgroupParent", "CgroupParent")),
             check_fn: |docker, containers| {

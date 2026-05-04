@@ -670,8 +670,10 @@ pub async fn apply_audit_rule_fix_with_progress(
     }
 }
 
-pub fn supports_docker_root_partition_fix(rule_id: &str) -> bool {
-    rule_id == DOCKER_ROOT_PARTITION_RULE_ID
+pub const fn supports_docker_root_partition_fix(_rule_id: &str) -> bool {
+    // Host partitioning is intentionally guided-only. Auto-migrating DockerRootDir
+    // is too environment-specific to run safely from a generic remediation flow.
+    false
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

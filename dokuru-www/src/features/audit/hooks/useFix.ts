@@ -9,15 +9,11 @@ export type WizardStep = "confirm" | "applying" | "result";
 
 export function getFixSteps(ruleId: string): string[] {
     if (ruleId === "1.1.1") return [
-        "Preflighting Docker root and host storage…",
-        "Selecting an unambiguous LVM volume group…",
-        "Creating a dedicated Docker logical volume…",
-        "Formatting and mounting the new volume temporarily…",
-        "Copying Docker root data into the new volume…",
-        "Stopping Docker services for final sync…",
-        "Switching DockerRootDir to the dedicated mount…",
-        "Persisting the mount in /etc/fstab…",
-        "Restarting Docker and verifying the mount point…",
+        "Review DockerRootDir storage layout…",
+        "Plan separate storage outside the root filesystem…",
+        "Schedule Docker downtime for data migration…",
+        "Mount the dedicated filesystem and persist it…",
+        "Rerun the audit after manual provisioning…",
     ];
     if (ruleId === "4.1") return [
         "Finding containers running as root…",
