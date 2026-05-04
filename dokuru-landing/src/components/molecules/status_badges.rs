@@ -62,7 +62,7 @@ pub(crate) fn remediation_pill(kind: RemediationKind) -> impl IntoView {
     };
 
     view! {
-        <span class=format!("inline-flex items-center gap-1 font-mono text-[10px] {} px-2 py-0.5 rounded-full border {}", text_case, remediation_class(kind)) data-testid=format!("remediation-{}", remediation_label(kind).to_lowercase().replace(" ", "-"))>
+        <span class=format!("inline-flex items-center gap-1 font-mono text-[10px] {} px-2 py-0.5 rounded-full border {}", text_case, remediation_class(kind)) data-testid=format!("remediation-{}", remediation_label(kind).to_lowercase().replace(' ', "-"))>
             {icon(remediation_icon(kind), 10, "", "2.5")}
             {remediation_label(kind)}
         </span>

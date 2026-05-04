@@ -63,7 +63,7 @@ pub(crate) fn header() -> impl IntoView {
 
                 <div class="flex items-center gap-3">
                     <a href=APP_URL target="_blank" rel="noopener noreferrer" data-testid="header-cta-enter-app" class="animate-pop-in inline-flex items-center gap-2 bg-[#2496ED] hover:bg-[#1C7CBA] text-white text-sm font-medium px-4 py-2 rounded-xl shadow-sm transition-colors active:scale-[0.98]" style="--motion-delay: 500ms">
-                        "Enter App"
+                        "Open App"
                     </a>
                     <button
                         data-testid="header-mobile-toggle"

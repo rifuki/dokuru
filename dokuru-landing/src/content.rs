@@ -145,19 +145,7 @@ pub(crate) const FEATURES: &[Feature] = &[
     Feature { icon: IconKind::ShieldCheck, label: "01 / audit", title: "Isolation-focused security audits", body: "CIS-aligned checks for namespace isolation and cgroup controls, plus runtime inspection of risky Docker configurations — with structured pass/fail evidence per rule.", points: &["Namespace and cgroup coverage", "Runtime flag inspection", "Rule-level evidence"] },
     Feature { icon: IconKind::Wrench, label: "02 / remediate", title: "Supported auto-remediation", body: "Apply one-click fixes for supported rules. For the rest, Dokuru provides guided remediation or clear manual steps — never an unsafe automatic change.", points: &["One-click auto-fixes", "Guided remediation", "Manual playbooks"] },
     Feature { icon: IconKind::History, label: "03 / history", title: "Audit reports and history", body: "Every run is stored per host: security score summary, detailed rule-level findings, and a timeline you can come back to for review and evidence.", points: &["Per-host score summary", "Rule-level findings", "Stored timeline"] },
-    Feature { icon: IconKind::ServerCog, label: "04 / agent", title: "Agent-based host inspection", body: "A lightweight Rust agent installs on each Docker host and exposes a token-authenticated endpoint. Manage many hosts from a single dashboard.", points: &["Lightweight Rust agent", "Token-authenticated access", "Multi-host dashboard"] },
-];
-
-pub(crate) struct Step {
-    pub(crate) num: &'static str,
-    pub(crate) title: &'static str,
-    pub(crate) body: &'static str,
-}
-
-pub(crate) const STEPS: &[Step] = &[
-    Step { num: "01", title: "Install the agent", body: "Run one command to install the agent. It auto-configures, starts a Cloudflare Tunnel, and generates your credentials." },
-    Step { num: "02", title: "Add to dashboard", body: "Copy the agent URL and token from the install output, then add it to your dashboard to connect." },
-    Step { num: "03", title: "Run security audit", body: "Click 'Run Audit' from the dashboard to scan your Docker host against CIS benchmarks and apply fixes." },
+    Feature { icon: IconKind::ServerCog, label: "04 / agent", title: "Agent with a bundled dashboard", body: "The Rust agent installs on each Docker host, serves its own dashboard, and can optionally join the hosted app for multi-host control.", points: &["Built-in dashboard", "Token-authenticated access", "Optional control plane"] },
 ];
 
 pub struct CoverageGroup {
