@@ -2066,7 +2066,7 @@ function AuditDetailPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full min-w-0 sm:min-w-[150px]"
+                className="w-full min-w-0 sm:w-auto sm:min-w-[150px]"
                 disabled={!auditData || !!documentExporting}
               >
                 {documentExporting ? (
