@@ -125,6 +125,10 @@ function rememberableAgentDetail(pathname: string) {
   };
 }
 
+function rememberedAuditHubHref(pathname: string) {
+  return /^\/agents\/[^/]+\/audit$/.test(pathname) ? pathname : null;
+}
+
 export function AppSidebar() {
   const user = useAuthUser();
   const isAdmin = user?.role === "admin";
@@ -177,6 +181,26 @@ export function AppSidebar() {
       setLastDetailHrefByDefaultHref((prev) => {
         if (prev[detail.defaultHref] === detail.detailHref) return prev;
         return { ...prev, [detail.defaultHref]: detail.detailHref };
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const auditHubHref = rememberedAuditHubHref(location.pathname);
+    if (!auditHubHref) return;
+
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setLastDetailHrefByDefaultHref((prev) => {
+        if (!prev[auditHubHref]) return prev;
+        const next = { ...prev };
+        delete next[auditHubHref];
+        return next;
       });
     });
 
