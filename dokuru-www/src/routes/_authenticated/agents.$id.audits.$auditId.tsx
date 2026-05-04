@@ -373,8 +373,12 @@ function ruleStatusTone(status: "Pass" | "Fail" | "Error") {
   };
 }
 
-function RuleStatusBadge({ status }: { status: "Pass" | "Fail" | "Error" }) {
-  const config = {
+function RuleStatusBadge({ status, fixedAfterAudit = false }: { status: "Pass" | "Fail" | "Error"; fixedAfterAudit?: boolean }) {
+  const config = fixedAfterAudit ? {
+    label: "Fixed, audit stale",
+    cls: "border-emerald-500/25 bg-emerald-500/10 text-emerald-400",
+    dot: "bg-emerald-400",
+  } : {
     Pass: { label: "Passed", cls: "border-emerald-500/20 bg-emerald-500/10 text-emerald-400", dot: "bg-emerald-400" },
     Fail: { label: "Needs fix", cls: "border-rose-500/25 bg-rose-500/10 text-rose-400", dot: "bg-rose-400" },
     Error: { label: "Error", cls: "border-amber-500/20 bg-amber-500/10 text-amber-400", dot: "bg-amber-400" },
@@ -570,8 +574,6 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
     return () => window.clearTimeout(timeout);
   }, [isFocused]);
 
-  const statusTone = ruleStatusTone(status);
-
   const pillar = getRulePillar(rule.id);
   const pillarMeta = PILLAR_META[pillar];
   const PillarIcon = pillarMeta.icon;
@@ -582,6 +584,12 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
   const hasAppliedOutcome = storedOutcome?.status === "Applied" || appliedFixEntry?.outcome.status === "Applied";
   const isFixing = !hasAppliedOutcome && isCurrentFixJob && fixJob?.status === "running";
   const isFixed = hasAppliedOutcome || (isCurrentFixJob && fixJob?.status === "applied");
+  const isStaleFixed = isFixed && status === "Fail";
+  const statusTone = isStaleFixed ? {
+    borderLeft: "border-l-emerald-500/70",
+    cardTone: "border-border bg-card/95 hover:bg-muted/[0.08]",
+    icon: "text-emerald-400",
+  } : ruleStatusTone(status);
   const isFixBlocked = isCurrentFixJob && (fixJob?.status === "blocked" || fixJob?.status === "failed" || storedOutcome?.status === "Blocked");
   const tabs = [
     { id: "overview" as const, label: "Overview", show: true },
@@ -599,10 +607,10 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
       {/* Header row */}
       <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:px-5">
         <button onClick={() => onOpenChange(!open)} className="flex min-w-0 flex-1 items-start gap-3 text-left sm:items-center">
-          <StatusIcon status={status} />
+          {isStaleFixed ? <ShieldCheck className={cn("h-5 w-5 shrink-0", statusTone.icon)} /> : <StatusIcon status={status} />}
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
-              <RuleStatusBadge status={status} />
+              <RuleStatusBadge status={status} fixedAfterAudit={isStaleFixed} />
               <span className="inline-flex h-6 items-center rounded-md border border-border/70 bg-muted/35 px-2 font-mono text-[11px] font-bold text-muted-foreground/80">
                 {rule.id}
               </span>
@@ -617,7 +625,7 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
                   Fixing now
                 </span>
               )}
-              {isFixed && (
+              {isFixed && !isStaleFixed && (
                 <span className="inline-flex h-6 items-center gap-1.5 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 text-xs font-semibold text-emerald-400">
                   <ShieldCheck className="h-3 w-3" />
                   Fix applied
