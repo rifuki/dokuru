@@ -13,6 +13,7 @@ import type { AuditResult, FixOutcome, FixPreview, FixProgress } from "@/lib/api
 import type { Container as DockerContainer } from "@/services/docker-api";
 import {
     getFixSteps, isContainerRecreateRule, isCgroupRule, isImageConfigRecreateRule,
+    isNamespaceIsolationRule,
     type TargetConfig, type WizardStep,
 } from "@/features/audit/hooks/useFix";
 import { ResizableSheetContent } from "@/features/audit/components/ResizableSheetContent";
@@ -31,6 +32,12 @@ const CGROUP_APPLY_MODE_OPTIONS: { value: ApplyStrategy; label: string; title: s
     { value: "dokuru_override", label: "Override", title: "Write Compose override file" },
     { value: "compose_update", label: "Patch", title: "Patch source Compose YAML" },
     { value: "docker_update", label: "Live", title: "Update current container only" },
+];
+
+const NAMESPACE_APPLY_MODE_OPTIONS: { value: Extract<ApplyStrategy, "dokuru_override" | "compose_update" | "docker_update">; label: string; title: string }[] = [
+    { value: "dokuru_override", label: "Override", title: "Write Compose override file" },
+    { value: "compose_update", label: "Patch", title: "Patch source Compose YAML" },
+    { value: "docker_update", label: "Live", title: "Recreate current container only" },
 ];
 
 type ImageConfigMode = Extract<ApplyStrategy, "dockerfile_update" | "dokuru_override" | "compose_update">;
@@ -206,6 +213,48 @@ function ApplyModePicker({
     );
 }
 
+function NamespaceModePicker({
+    value,
+    canCompose,
+    onChange,
+}: {
+    value: ApplyStrategy;
+    canCompose: boolean;
+    onChange: (strategy: ApplyStrategy) => void;
+}) {
+    const effectiveValue = canCompose
+        ? value === "recreate" ? "dokuru_override" : value
+        : "docker_update";
+
+    return (
+        <div className="audit-fix-mode-control grid h-9 grid-cols-3 rounded-md border p-0.5" role="radiogroup" aria-label="Namespace apply mode">
+            {NAMESPACE_APPLY_MODE_OPTIONS.map((option) => {
+                const disabled = !canCompose && option.value !== "docker_update";
+                const active = effectiveValue === option.value;
+                return (
+                    <button
+                        key={option.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        title={option.title}
+                        disabled={disabled}
+                        onClick={() => onChange(option.value)}
+                        className={cn(
+                            "audit-fix-mode-button h-full min-w-0 rounded-[6px] px-2 text-[10px] font-semibold transition-colors whitespace-nowrap outline-none",
+                            active && "audit-fix-mode-button-active",
+                            !active && "audit-fix-mode-button-idle",
+                            disabled && "cursor-not-allowed opacity-35",
+                        )}
+                    >
+                        {option.label}
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
 function ImageConfigModePicker({
     value,
     dockerfileTitle,
@@ -284,9 +333,10 @@ function ConfirmStep({
     const isRecreate = isContainerRecreateRule(rule.id);
     const isCgroup = isCgroupRule(rule.id);
     const isImageConfig = isImageConfigRecreateRule(rule.id);
+    const isNamespace = isNamespaceIsolationRule(rule.id);
     const isHostPartition = rule.id === "1.1.1";
     const targets = preview?.targets ?? [];
-    const showStructuredTargets = isCgroup || isImageConfig;
+    const showStructuredTargets = isCgroup || isImageConfig || isNamespace;
 
     const meta = valueMeta(rule.id);
     const hasInvalidValues = isCgroup && targets.some(target => {
@@ -336,11 +386,13 @@ function ConfirmStep({
                         </span>
                         <div className="min-w-0">
                             <p className="text-xs font-semibold text-amber-300">
-                                {isImageConfig ? "Recreate required" : "Restart/recreate required"}
+                                {isImageConfig ? "Recreate required" : isNamespace ? "Namespace recreate required" : "Restart/recreate required"}
                             </p>
                             <p className="mt-0.5 text-[11px] leading-snug text-amber-200/55">
                                 {isImageConfig
                                     ? "No live USER/HEALTHCHECK update."
+                                    : isNamespace
+                                    ? "Override/Patch persist Compose changes; Live recreates the current container only."
                                     : "Dokuru handles it during apply; Compose targets persist the change in YAML."}
                             </p>
                         </div>
@@ -361,9 +413,9 @@ function ConfirmStep({
                         <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/40">
                             Agent preview ({targets.length})
                         </p>
-                        {isCgroup && (
+                        {(isCgroup || isNamespace) && (
                             <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-[#2496ED]/60">
-                                editable values
+                                {isCgroup ? "editable values" : "apply mode"}
                             </p>
                         )}
                     </div>
@@ -374,6 +426,17 @@ function ConfirmStep({
                                 <FileCode2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#2496ED]/70" />
                                 <p className="leading-relaxed">
                                     Compose fixes write a <span className="font-semibold text-[#7dd3fc]">standard override file</span> by default. Patch edits source YAML; Live only changes the running container.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    {isNamespace && targets.some(target => target.compose_project) && (
+                        <div className="rounded-md border border-white/8 bg-white/[0.018] px-3 py-2.5 text-xs text-white/48">
+                            <div className="flex items-start gap-2.5">
+                                <FileCode2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#2496ED]/70" />
+                                <p className="leading-relaxed">
+                                    Override writes a <span className="font-semibold text-[#7dd3fc]">Dokuru override</span>. Patch edits source YAML; Live recreates only the current container and is not source-persistent.
                                 </p>
                             </div>
                         </div>
@@ -399,6 +462,7 @@ function ConfirmStep({
                                         "text-xs font-mono",
                                         showStructuredTargets ? "audit-fix-target-row" : "grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center",
                                         isImageConfig && "audit-fix-target-row-image",
+                                        isNamespace && "audit-fix-target-row-namespace",
                                         i < targets.length - 1 && "border-b border-white/6"
                                     )}
                                 >
@@ -426,6 +490,18 @@ function ConfirmStep({
                                             canCompose={canCompose}
                                             onChange={(nextStrategy) => onTargetChange(target.container_id, { strategy: nextStrategy })}
                                         />
+                                    )}
+
+                                    {isNamespace && config && (
+                                        canCompose ? (
+                                            <NamespaceModePicker
+                                                value={strategy}
+                                                canCompose={canCompose}
+                                                onChange={(nextStrategy) => onTargetChange(target.container_id, { strategy: nextStrategy })}
+                                            />
+                                        ) : (
+                                            <StaticModePanel strategy="recreate" />
+                                        )
                                     )}
 
                                     {isImageConfig && config && (

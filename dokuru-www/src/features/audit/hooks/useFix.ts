@@ -133,6 +133,10 @@ export function isNamespaceRecreateRule(ruleId: string): boolean {
     return ["5.5", "5.10", "5.16", "5.17", "5.21", "5.31"].includes(ruleId);
 }
 
+export function isNamespaceIsolationRule(ruleId: string): boolean {
+    return ["5.10", "5.16", "5.17", "5.21", "5.31"].includes(ruleId);
+}
+
 export function isImageConfigRecreateRule(ruleId: string): boolean {
     return ["4.1", "4.6"].includes(ruleId);
 }
@@ -192,6 +196,7 @@ function normalizePreviewStrategy(ruleId: string, strategy: string, canCompose: 
         return strategy;
     }
     if (isImageConfigRecreateRule(ruleId) && !canCompose) return "recreate";
+    if (isNamespaceIsolationRule(ruleId) && !canCompose) return "recreate";
     return canCompose ? "dokuru_override" : "docker_update";
 }
 

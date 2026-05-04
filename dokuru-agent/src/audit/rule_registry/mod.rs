@@ -290,6 +290,7 @@ impl RuleRegistry {
             return Box::pin(super::fix_helpers::apply_namespace_fix_with_progress(
                 docker,
                 &request.rule_id,
+                &request.targets,
                 progress,
             ))
             .await;

@@ -220,6 +220,8 @@ fn compose_strategy_label(strategy: Option<&str>) -> &'static str {
         "dockerfile"
     } else if is_dokuru_override_strategy(strategy) {
         "dokuru override"
+    } else if is_compose_source_strategy(strategy) {
+        "patch"
     } else {
         "compose"
     }
@@ -4614,12 +4616,19 @@ async fn create_container_for_recreate(
 
 /// Stop → remove → recreate (with namespace isolation fixed) → start all violating containers.
 pub async fn apply_namespace_fix(docker: &Docker, rule_id: &str) -> eyre::Result<FixOutcome> {
-    Box::pin(apply_namespace_fix_with_progress(docker, rule_id, None)).await
+    Box::pin(apply_namespace_fix_with_progress(
+        docker,
+        rule_id,
+        &[],
+        None,
+    ))
+    .await
 }
 
 pub async fn apply_namespace_fix_with_progress(
     docker: &Docker,
     rule_id: &str,
+    targets: &[FixTarget],
     progress: Option<&ProgressSender>,
 ) -> eyre::Result<FixOutcome> {
     if !supports_namespace_fix(rule_id) {
@@ -4629,90 +4638,24 @@ pub async fn apply_namespace_fix_with_progress(
         ));
     }
 
-    let containers = docker.list_containers::<String>(None).await?;
-    let mut updated: Vec<String> = Vec::new();
-    let mut failed: Vec<String> = Vec::new();
-    let mut compose_services: HashSet<String> = HashSet::new();
+    let targets = if targets.is_empty() {
+        default_namespace_targets(docker, rule_id).await?
+    } else {
+        targets.to_vec()
+    };
 
-    for c in &containers {
-        let id = c.id.as_deref().unwrap_or("");
-        let inspect = match docker.inspect_container(id, None).await {
-            Ok(i) => i,
-            Err(e) => {
-                emit_progress(
-                    progress,
-                    rule_id,
-                    &short_id(id),
-                    ProgressStep::new(1, 6),
-                    "inspect_container",
-                    "error",
-                    Some(e.to_string()),
-                );
-                failed.push(format!("{}: inspect failed: {e}", short_id(id)));
-                continue;
-            }
-        };
-
-        let hc = inspect.host_config.as_ref();
-        let violates = match rule_id {
-            "5.10" => hc.and_then(|h| h.network_mode.as_deref()) == Some("host"),
-            "5.16" => hc.and_then(|h| h.pid_mode.as_deref()) == Some("host"),
-            "5.17" => hc.and_then(|h| h.ipc_mode.as_deref()) == Some("host"),
-            "5.21" => hc.and_then(|h| h.uts_mode.as_deref()) == Some("host"),
-            "5.31" => hc.and_then(|h| h.userns_mode.as_deref()) == Some("host"),
-            _ => false,
-        };
-
-        if !violates {
-            continue;
-        }
-
-        let label = inspect
-            .name
-            .as_deref()
-            .unwrap_or("")
-            .trim_start_matches('/')
-            .to_string();
-        let label = if label.is_empty() {
-            short_id(id)
-        } else {
-            label
-        };
-
-        emit_progress(
-            progress,
-            rule_id,
-            &label,
-            ProgressStep::new(1, 6),
-            "inspect_container",
-            "done",
-            Some("Container violates namespace isolation rule".to_string()),
-        );
-
-        if let Some(ctx) = compose_context_from_inspect(&inspect) {
-            let key = ctx.key();
-            if compose_services.insert(key) {
-                match apply_compose_service_override_fix(docker, rule_id, &ctx, None, progress)
-                    .await
-                {
-                    Ok(()) => {
-                        updated.push(format!("{}:{} (dokuru override)", ctx.project, ctx.service));
-                    }
-                    Err(e) => failed.push(format!("{label}: compose fix failed: {e}")),
-                }
-            }
-            continue;
-        }
-
-        match Box::pin(recreate_without_namespace(
-            docker, id, inspect, rule_id, progress, &label,
-        ))
-        .await
-        {
-            Ok(()) => updated.push(label),
-            Err(e) => failed.push(format!("{label}: {e}")),
-        }
+    if targets.is_empty() {
+        return Ok(FixOutcome {
+            rule_id: rule_id.to_string(),
+            status: FixStatus::Applied,
+            message: "No containers needed namespace isolation fix".to_string(),
+            requires_restart: false,
+            restart_command: None,
+            requires_elevation: false,
+        });
     }
+
+    let (updated, failed) = apply_namespace_targets(docker, rule_id, &targets, progress).await;
 
     Ok(fix_outcome(
         rule_id,
@@ -4724,6 +4667,132 @@ pub async fn apply_namespace_fix_with_progress(
             updated.len()
         ),
     ))
+}
+
+async fn default_namespace_targets(docker: &Docker, rule_id: &str) -> eyre::Result<Vec<FixTarget>> {
+    let containers = docker.list_containers::<String>(None).await?;
+    let mut targets = Vec::new();
+
+    for container in &containers {
+        let Some(id) = container.id.as_deref() else {
+            continue;
+        };
+        let inspect = docker.inspect_container(id, None).await?;
+        if !container_violates_rule(&inspect, rule_id) {
+            continue;
+        }
+        let strategy = if compose_context_from_inspect(&inspect).is_some() {
+            STRATEGY_DOKURU_OVERRIDE
+        } else {
+            "recreate"
+        };
+        targets.push(FixTarget {
+            container_id: id.to_string(),
+            memory: None,
+            cpu_shares: None,
+            pids_limit: None,
+            strategy: Some(strategy.to_string()),
+        });
+    }
+
+    Ok(targets)
+}
+
+async fn apply_namespace_targets(
+    docker: &Docker,
+    rule_id: &str,
+    targets: &[FixTarget],
+    progress: Option<&ProgressSender>,
+) -> (Vec<String>, Vec<String>) {
+    let mut updated = Vec::new();
+    let mut failed = Vec::new();
+    let mut compose_services = HashSet::<String>::new();
+
+    for target in targets {
+        match apply_namespace_target(docker, rule_id, target, progress, &mut compose_services).await
+        {
+            Ok(Some(label)) => updated.push(label),
+            Ok(None) => {}
+            Err(error) => failed.push(error),
+        }
+    }
+
+    (updated, failed)
+}
+
+async fn apply_namespace_target(
+    docker: &Docker,
+    rule_id: &str,
+    target: &FixTarget,
+    progress: Option<&ProgressSender>,
+    compose_services: &mut HashSet<String>,
+) -> Result<Option<String>, String> {
+    let container_label = container_label(docker, &target.container_id).await;
+    let inspect = match docker.inspect_container(&target.container_id, None).await {
+        Ok(inspect) => inspect,
+        Err(error) => return Err(format!("{container_label}: inspect failed: {error}")),
+    };
+
+    if !container_violates_rule(&inspect, rule_id) {
+        return Ok(None);
+    }
+
+    emit_progress(
+        progress,
+        rule_id,
+        &container_label,
+        ProgressStep::new(1, 6),
+        "inspect_container",
+        "done",
+        Some("Container violates namespace isolation rule".to_string()),
+    );
+
+    if is_dokuru_override_strategy(target.strategy.as_deref())
+        || is_compose_source_strategy(target.strategy.as_deref())
+    {
+        let Some(ctx) = compose_context_from_inspect(&inspect) else {
+            return Err(format!(
+                "{container_label}: compose strategy requested but container has no Compose metadata"
+            ));
+        };
+        let key = format!(
+            "{}:{}",
+            target.strategy.as_deref().unwrap_or_default(),
+            ctx.key()
+        );
+        if !compose_services.insert(key) {
+            return Ok(None);
+        }
+
+        let result = if is_dokuru_override_strategy(target.strategy.as_deref()) {
+            apply_compose_service_override_fix(docker, rule_id, &ctx, None, progress).await
+        } else {
+            apply_compose_service_fix(docker, rule_id, &ctx, progress).await
+        };
+
+        return result
+            .map(|()| {
+                Some(format!(
+                    "{}:{} ({})",
+                    ctx.project,
+                    ctx.service,
+                    compose_strategy_label(target.strategy.as_deref())
+                ))
+            })
+            .map_err(|error| format!("{container_label}: compose fix failed: {error}"));
+    }
+
+    Box::pin(recreate_without_namespace(
+        docker,
+        &target.container_id,
+        inspect,
+        rule_id,
+        progress,
+        &container_label,
+    ))
+    .await
+    .map(|()| Some(container_label.clone()))
+    .map_err(|error| format!("{container_label}: {error}"))
 }
 
 async fn recreate_without_namespace(
@@ -6139,9 +6208,11 @@ pub async fn rollback_plan_for_request(
     request: &FixRequest,
 ) -> eyre::Result<RollbackPlan> {
     if !supports_cgroup_resource_fix(&request.rule_id) {
-        if supports_namespace_fix(&request.rule_id)
-            || supports_privileged_fix(&request.rule_id)
-            || supports_image_config_fix(&request.rule_id)
+        if supports_namespace_fix(&request.rule_id) {
+            return namespace_rollback_plan(docker, request).await;
+        }
+
+        if supports_privileged_fix(&request.rule_id) || supports_image_config_fix(&request.rule_id)
         {
             return Ok(RollbackPlan {
                 cgroup_targets: Vec::new(),
@@ -6154,6 +6225,53 @@ pub async fn rollback_plan_for_request(
     }
 
     cgroup_rollback_plan(docker, request).await
+}
+
+async fn namespace_rollback_plan(
+    docker: &Docker,
+    request: &FixRequest,
+) -> eyre::Result<RollbackPlan> {
+    if request.targets.is_empty() {
+        return Ok(RollbackPlan {
+            cgroup_targets: Vec::new(),
+            compose_targets: compose_rollback_targets_for_rule(docker, &request.rule_id).await?,
+        });
+    }
+
+    let mut compose_targets = Vec::new();
+    let mut compose_services = HashSet::<String>::new();
+
+    for target in &request.targets {
+        let inspect = docker.inspect_container(&target.container_id, None).await?;
+        if !container_violates_rule(&inspect, &request.rule_id) {
+            continue;
+        }
+
+        let Some(ctx) = compose_context_from_inspect(&inspect) else {
+            continue;
+        };
+        let key = format!(
+            "{}:{}",
+            target.strategy.as_deref().unwrap_or_default(),
+            ctx.key()
+        );
+        if !compose_services.insert(key) {
+            continue;
+        }
+
+        if is_dokuru_override_strategy(target.strategy.as_deref()) {
+            compose_targets.push(compose_rollback_target_for_override(&ctx).await?);
+        } else if is_compose_source_strategy(target.strategy.as_deref()) {
+            let compose_path =
+                find_compose_update_path(&ctx, &request.rule_id, Some(target)).await?;
+            compose_targets.push(compose_rollback_target_with_backup(&ctx, compose_path).await?);
+        }
+    }
+
+    Ok(RollbackPlan {
+        cgroup_targets: Vec::new(),
+        compose_targets,
+    })
 }
 
 async fn cgroup_rollback_plan(docker: &Docker, request: &FixRequest) -> eyre::Result<RollbackPlan> {
