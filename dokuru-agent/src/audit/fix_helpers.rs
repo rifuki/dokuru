@@ -2889,6 +2889,8 @@ fn preview_target_from_inspect(
         && compose.is_some()
     {
         STRATEGY_DOKURU_OVERRIDE
+    } else if supports_runtime_isolation_fix(rule_id) && rule_id == "5.6" && compose.is_some() {
+        STRATEGY_COMPOSE_UPDATE
     } else if supports_runtime_isolation_fix(rule_id) {
         "recreate"
     } else if compose.is_some() {
@@ -5143,6 +5145,8 @@ async fn default_runtime_isolation_targets(
             && matches!(rule_id, "5.4" | "5.18" | "5.22")
         {
             STRATEGY_DOKURU_OVERRIDE
+        } else if compose_context_from_inspect(&inspect).is_some() && rule_id == "5.6" {
+            STRATEGY_COMPOSE_UPDATE
         } else {
             "recreate"
         };
@@ -5216,9 +5220,10 @@ async fn apply_runtime_isolation_target(
         Some("Container violates runtime isolation rule".to_string()),
     );
 
-    if is_dokuru_override_strategy(target.strategy.as_deref())
-        || is_compose_source_strategy(target.strategy.as_deref())
-    {
+    let use_override = is_dokuru_override_strategy(target.strategy.as_deref()) && rule_id != "5.6";
+    let use_compose_source = is_compose_source_strategy(target.strategy.as_deref())
+        || (rule_id == "5.6" && is_dokuru_override_strategy(target.strategy.as_deref()));
+    if use_override || use_compose_source {
         let Some(ctx) = compose_context_from_inspect(&inspect) else {
             return Err(format!(
                 "{container_label}: compose strategy requested but container has no Compose metadata"
@@ -5233,7 +5238,7 @@ async fn apply_runtime_isolation_target(
             return Ok(None);
         }
 
-        let result = if is_dokuru_override_strategy(target.strategy.as_deref()) {
+        let result = if use_override {
             apply_compose_service_override_fix(docker, rule_id, &ctx, None, progress).await
         } else {
             apply_compose_service_fix(docker, rule_id, &ctx, None, progress).await
@@ -5241,11 +5246,16 @@ async fn apply_runtime_isolation_target(
 
         return result
             .map(|()| {
+                let applied_strategy = if use_compose_source {
+                    Some(STRATEGY_COMPOSE_UPDATE)
+                } else {
+                    target.strategy.as_deref()
+                };
                 Some(format!(
                     "{}:{} ({})",
                     ctx.project,
                     ctx.service,
-                    compose_strategy_label(target.strategy.as_deref())
+                    compose_strategy_label(applied_strategy)
                 ))
             })
             .map_err(|error| format!("{container_label}: compose fix failed: {error}"));
@@ -6369,6 +6379,7 @@ fn update_compose_service_lines(
                 | set_service_value_text(lines, block, "cap_drop", "[NET_RAW]")
         }
         "5.5" => set_existing_service_value(lines, block, "privileged", "false"),
+        "5.6" => remove_sensitive_volume_entries_text(lines, block),
         "5.18" => remove_service_keys_text(lines, block, &["devices"]),
         "5.22" => remove_service_keys_text(lines, block, &["security_opt"]),
         "5.10" => remove_service_keys_text(lines, block, &["network_mode"]),
@@ -6588,6 +6599,132 @@ fn remove_service_keys_text(
     }
     block.end = block.end.saturating_sub(removed);
     removed > 0
+}
+
+fn remove_sensitive_volume_entries_text(
+    lines: &mut Vec<String>,
+    block: &mut ComposeServiceBlock,
+) -> bool {
+    let Some(range) = service_key_range(lines, block, "volumes") else {
+        return false;
+    };
+    if range.len() <= 1 {
+        return false;
+    }
+
+    let item_ranges = service_sequence_item_ranges(lines, range.start + 1..range.end);
+    if item_ranges.is_empty() {
+        return false;
+    }
+
+    let mut remove_ranges = item_ranges
+        .iter()
+        .filter(|range| volume_item_uses_sensitive_host_path(&lines[range.start..range.end]))
+        .cloned()
+        .collect::<Vec<_>>();
+
+    if remove_ranges.is_empty() {
+        return false;
+    }
+
+    if remove_ranges.len() == item_ranges.len() {
+        let removed = range.len();
+        lines.drain(range);
+        block.end = block.end.saturating_sub(removed);
+        return true;
+    }
+
+    let removed = remove_ranges
+        .iter()
+        .map(std::ops::Range::len)
+        .sum::<usize>();
+    remove_ranges.sort_by_key(|range| range.start);
+    for range in remove_ranges.into_iter().rev() {
+        lines.drain(range);
+    }
+    block.end = block.end.saturating_sub(removed);
+    true
+}
+
+fn service_sequence_item_ranges(
+    lines: &[String],
+    range: std::ops::Range<usize>,
+) -> Vec<std::ops::Range<usize>> {
+    let starts = range
+        .clone()
+        .filter(|&idx| {
+            let trimmed = lines[idx].trim_start();
+            !trimmed.starts_with('#') && trimmed.starts_with("- ")
+        })
+        .collect::<Vec<_>>();
+
+    starts
+        .iter()
+        .enumerate()
+        .map(|(idx, start)| {
+            let end = starts.get(idx + 1).copied().unwrap_or(range.end);
+            *start..end
+        })
+        .collect()
+}
+
+fn volume_item_uses_sensitive_host_path(lines: &[String]) -> bool {
+    let Some(first_line) = lines.first() else {
+        return false;
+    };
+    let first_value = first_line
+        .trim_start()
+        .strip_prefix("- ")
+        .unwrap_or_default()
+        .trim();
+
+    if let Some(source) = short_volume_host_source(first_value) {
+        return is_sensitive_host_mount_path(source);
+    }
+
+    let mut source =
+        mapping_value(first_value, "source").or_else(|| mapping_value(first_value, "src"));
+    let mut typ = mapping_value(first_value, "type");
+
+    for line in lines.iter().skip(1) {
+        let trimmed = line.trim();
+        source = source
+            .or_else(|| mapping_value(trimmed, "source"))
+            .or_else(|| mapping_value(trimmed, "src"));
+        typ = typ.or_else(|| mapping_value(trimmed, "type"));
+    }
+
+    let is_bind = typ.is_none_or(|value| value.eq_ignore_ascii_case("bind"));
+    is_bind && source.as_deref().is_some_and(is_sensitive_host_mount_path)
+}
+
+fn short_volume_host_source(value: &str) -> Option<&str> {
+    if value.is_empty() || value.contains(':') && value.split_once(':')?.0.contains(' ') {
+        return None;
+    }
+
+    let value = unquote_yaml_scalar(value);
+    value
+        .split_once(':')
+        .map(|(source, _)| source.trim())
+        .filter(|source| source.starts_with('/'))
+}
+
+fn mapping_value(line: &str, key: &str) -> Option<String> {
+    let (raw_key, raw_value) = line.split_once(':')?;
+    (unquote_yaml_key(raw_key.trim()) == key)
+        .then(|| unquote_yaml_scalar(raw_value.trim()).to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn unquote_yaml_scalar(raw: &str) -> &str {
+    raw.strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+        .or_else(|| {
+            raw.strip_prefix('\'')
+                .and_then(|value| value.strip_suffix('\''))
+        })
+        .unwrap_or(raw)
 }
 
 fn set_existing_service_value(
@@ -7774,6 +7911,45 @@ services:
     }
 
     #[test]
+    fn update_compose_content_removes_only_sensitive_volume_entries() {
+        let input = r#"services:
+  web:
+    image: nginx
+    volumes:
+      - app-data:/var/lib/app
+      - /etc:/host/etc:ro
+      - type: bind
+        source: /sys
+        target: /host/sys
+        read_only: true
+      - ./config:/etc/app
+    ports:
+      - "8080:80"
+
+volumes:
+  app-data:
+"#;
+        let expected = r#"services:
+  web:
+    image: nginx
+    volumes:
+      - app-data:/var/lib/app
+      - ./config:/etc/app
+    ports:
+      - "8080:80"
+
+volumes:
+  app-data:
+"#;
+
+        let updated = update_compose_content(input, "web", "5.6", None)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(updated, expected);
+    }
+
+    #[test]
     fn update_compose_content_removes_both_userns_keys_for_rule_531() {
         let input = r#"services:
   web:
@@ -7936,6 +8112,14 @@ services:
         assert!(is_sensitive_host_mount_path("/sys/kernel"));
         assert!(!is_sensitive_host_mount_path("/etc-app/config"));
         assert!(!is_sensitive_host_mount_path("/var/lib/app"));
+
+        assert_eq!(short_volume_host_source("/etc:/host/etc:ro"), Some("/etc"));
+        assert_eq!(
+            short_volume_host_source("\"/proc:/host/proc:ro\""),
+            Some("/proc")
+        );
+        assert_eq!(short_volume_host_source("app-data:/var/lib/app"), None);
+        assert_eq!(short_volume_host_source("/container-only"), None);
     }
 
     #[test]

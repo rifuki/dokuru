@@ -157,6 +157,8 @@ function normalizeStrategy(ruleId: string, target: FixPreview["targets"][number]
     }
     const canCompose = Boolean(target.compose_project && target.compose_service);
     if (isImageConfigRecreateRule(ruleId) && !canCompose) return "recreate";
+    if (isRuntimeIsolationRule(ruleId) && !canCompose) return "recreate";
+    if (ruleId === "5.6" && canCompose) return "compose_update";
     return canCompose ? "dokuru_override" : "docker_update";
 }
 
@@ -242,6 +244,58 @@ function NamespaceModePicker({
                         role="radio"
                         aria-checked={active}
                         title={option.title}
+                        disabled={disabled}
+                        onClick={() => onChange(option.value)}
+                        className={cn(
+                            "audit-fix-mode-button h-full min-w-0 rounded-[6px] px-2 text-[10px] font-semibold transition-colors whitespace-nowrap outline-none",
+                            active && "audit-fix-mode-button-active",
+                            !active && "audit-fix-mode-button-idle",
+                            disabled && "cursor-not-allowed opacity-35",
+                        )}
+                    >
+                        {option.label}
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
+function RuntimeModePicker({
+    ruleId,
+    value,
+    canCompose,
+    onChange,
+}: {
+    ruleId: string;
+    value: ApplyStrategy;
+    canCompose: boolean;
+    onChange: (strategy: ApplyStrategy) => void;
+}) {
+    const options = ruleId === "5.6"
+        ? NAMESPACE_APPLY_MODE_OPTIONS.filter(option => option.value !== "dokuru_override")
+        : NAMESPACE_APPLY_MODE_OPTIONS;
+    const effectiveValue = canCompose
+        ? ruleId === "5.6"
+            ? value === "recreate" || value === "dokuru_override" ? "compose_update" : value
+            : value === "recreate" ? "dokuru_override" : value
+        : "docker_update";
+
+    return (
+        <div className={cn(
+            "audit-fix-mode-control grid h-9 rounded-md border p-0.5",
+            options.length === 2 ? "grid-cols-2" : "grid-cols-3",
+        )} role="radiogroup" aria-label="Runtime isolation apply mode">
+            {options.map((option) => {
+                const disabled = !canCompose && option.value !== "docker_update";
+                const active = effectiveValue === option.value;
+                return (
+                    <button
+                        key={option.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        title={ruleId === "5.6" && option.value === "compose_update" ? "Patch source Compose YAML to remove only sensitive mounts" : option.title}
                         disabled={disabled}
                         onClick={() => onChange(option.value)}
                         className={cn(
@@ -440,7 +494,7 @@ function ConfirmStep({
                             <div className="flex items-start gap-2.5">
                                 <FileCode2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#2496ED]/70" />
                                 <p className="leading-relaxed">
-                                    Override/Patch persist removable runtime settings when Compose can express them. Sensitive host mounts use Recreate because subtracting Compose volume arrays safely is not portable.
+                                    Override persists resettable runtime settings. Sensitive host mounts use Patch so Dokuru removes only risky volume entries from source Compose YAML.
                                 </p>
                             </div>
                         </div>
@@ -509,8 +563,9 @@ function ConfirmStep({
                                     )}
 
                                     {isRuntimeIsolation && config && (
-                                        rule.id !== "5.6" && canCompose ? (
-                                            <NamespaceModePicker
+                                        canCompose ? (
+                                            <RuntimeModePicker
+                                                ruleId={rule.id}
                                                 value={strategy}
                                                 canCompose={canCompose}
                                                 onChange={(nextStrategy) => onTargetChange(target.container_id, { strategy: nextStrategy })}

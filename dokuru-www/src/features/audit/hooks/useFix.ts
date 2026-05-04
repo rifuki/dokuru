@@ -222,6 +222,7 @@ function normalizePreviewStrategy(ruleId: string, strategy: string, canCompose: 
     }
     if (isImageConfigRecreateRule(ruleId) && !canCompose) return "recreate";
     if ((isNamespaceIsolationRule(ruleId) || isRuntimeIsolationRule(ruleId)) && !canCompose) return "recreate";
+    if (ruleId === "5.6" && canCompose) return "compose_update";
     return canCompose ? "dokuru_override" : "docker_update";
 }
 
