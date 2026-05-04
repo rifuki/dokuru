@@ -60,7 +60,7 @@ pub(crate) fn header() -> impl IntoView {
                     <button
                         data-testid="header-mobile-toggle"
                         on:click=move |_| open.update(|value| *value = !*value)
-                        class="md:hidden text-zinc-400 hover:text-white"
+                        class="cursor-pointer text-zinc-400 hover:text-white md:hidden"
                         aria-label="Toggle menu"
                     >
                         <span class=move || if open.get() { "hidden" } else { "block" }>{icon(IconKind::Menu, 20, "", "2")}</span>

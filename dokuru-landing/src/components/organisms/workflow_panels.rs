@@ -15,7 +15,7 @@ pub(crate) fn terminal_install_panel(
             <div class="flex items-center px-4 py-3 border-b border-white/10 bg-[#0d0d0f]">
                 <div class="flex gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-zinc-700"/><span class="w-2.5 h-2.5 rounded-full bg-zinc-700"/><span class="w-2.5 h-2.5 rounded-full bg-zinc-700"/></div>
                 <span class="font-mono text-[11px] text-zinc-500 ml-3">"bash · docker-host-01"</span>
-                <button on:click=handle_copy class="ml-auto inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-400 hover:text-white border border-white/10 hover:border-white/25 rounded px-2 py-1 transition-colors">
+                <button on:click=handle_copy class="ml-auto inline-flex cursor-pointer items-center gap-1.5 rounded border border-white/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-400 transition-colors hover:border-white/25 hover:text-white">
                     <span class=move || if copied.get() { "inline-flex items-center gap-1.5" } else { "hidden" }>{icon(IconKind::Check, 11, "", "2")} "copied"</span>
                     <span class=move || if copied.get() { "hidden" } else { "inline-flex items-center gap-1.5" }>{icon(IconKind::Copy, 11, "", "2")} "copy"</span>
                 </button>
@@ -74,7 +74,7 @@ pub(crate) fn cloud_dashboard_panel() -> impl IntoView {
                     {form_field("Agent Name", "Production Server", "text-zinc-500")}
                     {form_field("Agent URL", "https://xxx.trycloudflare.com", "text-[#00E5FF] font-mono")}
                     {form_field("Agent Token", "dok_************", "text-amber-300 font-mono")}
-                    <button class="h-[38px] rounded-lg bg-[#2496ED] px-4 text-sm font-semibold text-white shadow-[0_0_24px_rgba(36,150,237,0.18)] transition-colors hover:bg-[#2496ED]/90 lg:whitespace-nowrap">"Add Agent"</button>
+                    <button class="h-[38px] cursor-pointer rounded-lg bg-[#2496ED] px-4 text-sm font-semibold text-white shadow-[0_0_24px_rgba(36,150,237,0.18)] transition-colors hover:bg-[#2496ED]/90 lg:whitespace-nowrap">"Add Agent"</button>
                 </div>
 
                 <div class="flex flex-col gap-2 border-t border-white/10 pt-3 text-[11px] leading-5 text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
@@ -144,24 +144,29 @@ pub(crate) fn agent_dashboard_panel() -> impl IntoView {
         <>
             <div class="flex items-center px-4 py-3 border-b border-white/10 bg-[#0d0d0f]">
                 <div class="flex gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-zinc-700"/><span class="w-2.5 h-2.5 rounded-full bg-zinc-700"/><span class="w-2.5 h-2.5 rounded-full bg-zinc-700"/></div>
-                <span class="font-mono text-[11px] text-zinc-500 ml-3">"bash · docker-host-01"</span>
+                <span class="font-mono text-[11px] text-zinc-500 ml-3">"dokuru-agent · local dashboard"</span>
             </div>
-            <div class="p-6 font-mono text-[12px] leading-7 space-y-3 overflow-x-auto">
-                <div class="text-zinc-500 text-[11px]">"# From the install output:"</div>
+            <div class="p-5 md:p-6 font-mono text-[12px] leading-7 space-y-3 overflow-x-auto">
+                <div class="text-zinc-500 text-[11px]">"# Direct agent dashboard:"</div>
                 <div class="space-y-1.5 pl-2 border-l-2 border-[#2496ED]/30">
-                    <div class="text-zinc-300">"Dashboard: " <span class="text-[#00E5FF]">"https://xxx.trycloudflare.com"</span></div>
-                    <div class="text-zinc-300">"Token:     " <span class="text-amber-300">"dok_cbb8becb44ca7ace..."</span></div>
+                    <div class="text-zinc-300">"Host:  " <span class="text-[#00E5FF]">"http://x.x.x.x:3939"</span></div>
+                    <div class="text-zinc-300">"Local: " <span class="text-[#00E5FF]">"http://localhost:3939"</span></div>
+                    <div class="text-zinc-300">"Token: " <span class="text-amber-300">"dok_cbb8becb44ca7ace..."</span></div>
                 </div>
                 <div class="mt-4 pt-4 border-t border-white/5 space-y-2">
                     <div class="flex items-start gap-3">
                         <span class="text-[#2496ED]">"$"</span>
-                        <span class="text-zinc-100">"open " <span class="text-[#00E5FF]">"https://xxx.trycloudflare.com"</span></span>
+                        <span class="text-zinc-100">"ssh -L 3939:localhost:3939 " <span class="text-[#00E5FF]">"user@docker-host-01"</span></span>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <span class="text-[#2496ED]">"$"</span>
+                        <span class="text-zinc-100">"open " <span class="text-[#00E5FF]">"http://localhost:3939"</span></span>
                     </div>
                 </div>
                 <div class="mt-4 pt-3 border-t border-white/5">
                     <div class="text-zinc-500 text-[11px] leading-relaxed">
-                        "Open the URL in your browser. Same dashboard UI —"<br/>
-                        "served directly from the agent. No server needed."
+                        "Use the VPS/public or private host URL when reachable."<br/>
+                        "Otherwise forward 3939 over SSH. No Dokuru server required."
                     </div>
                 </div>
             </div>

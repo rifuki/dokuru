@@ -80,7 +80,8 @@ pub(crate) fn how_it_works() -> impl IntoView {
 
 fn mode_tabs(active_mode: RwSignal<WorkflowMode>) -> impl IntoView {
     view! {
-        <div class="inline-flex items-center rounded-full border border-white/10 bg-white/[0.02] p-1.5 backdrop-blur-sm shadow-xl">
+        <div class="relative grid w-[430px] max-w-[calc(100vw-3rem)] grid-cols-2 rounded-full border border-white/10 bg-white/[0.02] p-1.5 backdrop-blur-sm shadow-xl">
+            <span class=move || if active_mode.get() == WorkflowMode::Hosted { "absolute inset-y-1.5 left-1.5 w-[calc((100%-0.75rem)/2)] translate-x-0 rounded-full bg-white/[0.08] shadow-sm ring-1 ring-white/10 transition-transform duration-200 ease-out" } else { "absolute inset-y-1.5 left-1.5 w-[calc((100%-0.75rem)/2)] translate-x-full rounded-full bg-white/[0.08] shadow-sm ring-1 ring-white/10 transition-transform duration-200 ease-out" } />
             {mode_tab(active_mode, WorkflowMode::Hosted, "Hosted", "via server")}
             {mode_tab(active_mode, WorkflowMode::Direct, "Direct", "no server")}
         </div>
@@ -94,7 +95,7 @@ fn mode_tab(
     label: &'static str,
 ) -> impl IntoView {
     view! {
-        <button type="button" on:click=move |_| active_mode.set(mode) class=move || if active_mode.get() == mode { "relative flex items-center gap-2.5 rounded-full bg-white/[0.08] px-6 py-2.5 text-white shadow-sm ring-1 ring-white/10 transition-all" } else { "relative flex items-center gap-2.5 rounded-full px-6 py-2.5 text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04] transition-all" }>
+        <button type="button" on:click=move |_| active_mode.set(mode) class=move || if active_mode.get() == mode { "relative z-10 flex h-11 cursor-pointer items-center justify-center gap-2.5 rounded-full px-4 text-white transition-colors" } else { "relative z-10 flex h-11 cursor-pointer items-center justify-center gap-2.5 rounded-full px-4 text-zinc-400 transition-colors hover:text-zinc-200" }>
             <span class="font-heading text-[15px] font-semibold">{title}</span>
             <span class=move || if active_mode.get() == mode { "font-mono text-[10px] uppercase tracking-wider text-[#2496ED]" } else { "font-mono text-[10px] uppercase tracking-wider text-zinc-500" }>{label}</span>
         </button>
@@ -110,7 +111,7 @@ fn step_item(
 
     view! {
         <li node_ref=step_ref data-testid=format!("how-step-{}", step_num(index)) class="reveal group" data-reveal="right" style=format!("--motion-delay: {}ms", index * 100)>
-            <button type="button" on:click=move |_| active_step.set(index) class=move || if active_step.get() == index { "relative w-full text-left flex gap-5 rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-transparent p-5 md:p-6 shadow-lg transition-all ring-1 ring-white/5 overflow-hidden before:absolute before:inset-0 before:bg-gradient-to-r before:from-[#2496ED]/10 before:to-transparent before:opacity-100" } else { "relative w-full text-left flex gap-5 rounded-2xl border border-transparent p-5 md:p-6 hover:bg-white/[0.03] transition-all overflow-hidden before:absolute before:inset-0 before:bg-gradient-to-r before:from-[#2496ED]/10 before:to-transparent before:opacity-0 hover:before:opacity-50" }>
+            <button type="button" on:click=move |_| active_step.set(index) class=move || if active_step.get() == index { "relative flex w-full cursor-pointer gap-5 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-transparent p-5 text-left shadow-lg ring-1 ring-white/5 transition-all before:absolute before:inset-0 before:bg-gradient-to-r before:from-[#2496ED]/10 before:to-transparent before:opacity-100 md:p-6" } else { "relative flex w-full cursor-pointer gap-5 overflow-hidden rounded-2xl border border-transparent p-5 text-left transition-all before:absolute before:inset-0 before:bg-gradient-to-r before:from-[#2496ED]/10 before:to-transparent before:opacity-0 hover:bg-white/[0.03] hover:before:opacity-50 md:p-6" }>
                 <div class="relative z-10 flex-shrink-0 pt-0.5">
                     <div class=move || if active_step.get() == index { "w-8 h-8 rounded-full border border-[#2496ED]/50 bg-[#2496ED]/10 grid place-items-center font-mono text-[11px] font-semibold text-[#2496ED] shadow-[0_0_12px_rgba(36,150,237,0.4)] transition-all" } else { "w-8 h-8 rounded-full border border-white/10 bg-black/50 grid place-items-center font-mono text-[11px] font-medium text-zinc-500 group-hover:text-zinc-300 transition-all" }>
                         {step_num(index)}
@@ -162,7 +163,7 @@ const fn step_body(mode: WorkflowMode, index: usize) -> &'static str {
     match (mode, index) {
         (_, 0) => "Run one command to install the agent. It starts the service, opens a tunnel, and generates your credentials.",
         (WorkflowMode::Hosted, 1) => "Paste the agent URL and token into the hosted dashboard. Pick Cloudflare Tunnel for the fastest setup.",
-        (WorkflowMode::Direct, 1) => "Open the dashboard URL from the install output. Authenticate with the generated token \u{2014} no server needed.",
+        (WorkflowMode::Direct, 1) => "Open the agent on its public/private :3939 host URL, or forward port 3939 over SSH for locked-down hosts.",
         _ => "Run the audit from whichever dashboard you chose, inspect evidence, then apply supported fixes.",
     }
 }
