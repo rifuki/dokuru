@@ -6,21 +6,50 @@ use leptos::prelude::*;
 pub(crate) fn header() -> impl IntoView {
     let open = RwSignal::new(false);
     let scrolled = RwSignal::new(false);
+    let hidden = RwSignal::new(false);
+    let initial_load = RwSignal::new(true);
 
     #[cfg(target_arch = "wasm32")]
     {
         use wasm_bindgen::{closure::Closure, JsCast};
 
         if let Some(window) = web_sys::window() {
-            let initial_scrolled = window.scroll_y().unwrap_or_default() > 8.0;
+            let initial_y = window.scroll_y().unwrap_or_default();
+            let initial_scrolled = initial_y > 8.0;
             scrolled.set(initial_scrolled);
 
+            let last_y = std::rc::Rc::new(std::cell::Cell::new(initial_y));
             let listener_window = window.clone();
+
             let on_scroll = Closure::wrap(Box::new(move || {
-                let next_scrolled = listener_window.scroll_y().unwrap_or_default() > 8.0;
+                let current_y = listener_window.scroll_y().unwrap_or_default();
+                let next_scrolled = current_y > 8.0;
+
+                if initial_load.get_untracked() {
+                    initial_load.set(false);
+                }
+
                 if scrolled.get_untracked() != next_scrolled {
                     scrolled.set(next_scrolled);
                 }
+
+                let last = last_y.get();
+                // Hide if scrolling down and past 100px threshold, show if scrolling up
+                if current_y > last && current_y > 100.0 {
+                    if !hidden.get_untracked() {
+                        hidden.set(true);
+                        // Optional: close mobile menu when hiding
+                        if open.get_untracked() {
+                            open.set(false);
+                        }
+                    }
+                } else if current_y < last {
+                    if hidden.get_untracked() {
+                        hidden.set(false);
+                    }
+                }
+
+                last_y.set(current_y);
             }) as Box<dyn FnMut()>);
 
             let options = web_sys::AddEventListenerOptions::new();
@@ -38,10 +67,26 @@ pub(crate) fn header() -> impl IntoView {
     view! {
         <header
             data-testid="site-header"
-            class=move || if scrolled.get() {
-                "animate-enter-down fixed top-0 left-0 right-0 z-50 transition-all duration-300 bg-[#030507]/82 backdrop-blur-xl border-b border-white/10"
-            } else {
-                "animate-enter-down fixed top-0 left-0 right-0 z-50 transition-all duration-300 bg-transparent border-b border-transparent"
+            class=move || {
+                let mut classes = vec!["fixed top-0 left-0 right-0 z-50 transition-all duration-300 ease-in-out"];
+
+                if initial_load.get() {
+                    classes.push("animate-enter-down");
+                }
+
+                if hidden.get() {
+                    classes.push("-translate-y-full opacity-0 pointer-events-none");
+                } else {
+                    classes.push("translate-y-0 opacity-100 pointer-events-auto");
+                }
+
+                if scrolled.get() {
+                    classes.push("bg-[#030507]/82 backdrop-blur-xl border-b border-white/10 shadow-sm");
+                } else {
+                    classes.push("bg-transparent border-b border-transparent");
+                }
+
+                classes.join(" ")
             }
         >
             <div class="max-w-7xl mx-auto px-6 md:px-10 h-16 flex items-center justify-between">
