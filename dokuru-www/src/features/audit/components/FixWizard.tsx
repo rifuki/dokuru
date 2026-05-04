@@ -12,7 +12,7 @@ import { AffectedItems } from "@/features/audit/components/AffectedItems";
 import type { AuditResult, FixOutcome, FixPreview, FixProgress } from "@/lib/api/agent-direct";
 import type { Container as DockerContainer } from "@/services/docker-api";
 import {
-    getFixSteps, isContainerRecreateRule, isCgroupRule,
+    getFixSteps, isContainerRecreateRule, isCgroupRule, isImageConfigRecreateRule,
     type TargetConfig, type WizardStep,
 } from "@/features/audit/hooks/useFix";
 import { ResizableSheetContent } from "@/features/audit/components/ResizableSheetContent";
@@ -27,11 +27,38 @@ const WIZARD_STEPS: { key: WizardStep; label: string }[] = [
 
 type ApplyStrategy = TargetConfig["strategy"];
 
-const APPLY_MODE_OPTIONS: { value: ApplyStrategy; label: string; title: string }[] = [
+const CGROUP_APPLY_MODE_OPTIONS: { value: ApplyStrategy; label: string; title: string }[] = [
     { value: "dokuru_override", label: "Override", title: "Write Compose override file" },
     { value: "compose_update", label: "Patch", title: "Patch source Compose YAML" },
     { value: "docker_update", label: "Live", title: "Update current container only" },
 ];
+
+type ImageConfigMode = "dockerfile" | "dokuru_override" | "compose_update";
+
+const IMAGE_CONFIG_MODE_OPTIONS: { value: ImageConfigMode; label: string; title: string }[] = [
+    { value: "dockerfile", label: "Dockerfile", title: "Strict source fix; rebuild required" },
+    { value: "dokuru_override", label: "Override", title: "Write Compose override file" },
+    { value: "compose_update", label: "Patch", title: "Patch source Compose YAML" },
+];
+
+const STRATEGY_META: Record<ApplyStrategy, { label: string; title: string }> = {
+    dokuru_override: {
+        label: "Override",
+        title: "Compose override",
+    },
+    compose_update: {
+        label: "Patch",
+        title: "Patch Compose YAML",
+    },
+    docker_update: {
+        label: "Live",
+        title: "Docker live update",
+    },
+    recreate: {
+        label: "Recreate",
+        title: "Container recreate",
+    },
+};
 
 function StepIndicator({ current, complete = false }: { current: WizardStep; complete?: boolean }) {
     const idx = WIZARD_STEPS.findIndex(s => s.key === current);
@@ -100,10 +127,43 @@ function formatBytesAsMb(bytes?: number | null) {
 }
 
 function currentValueLabel(ruleId: string, target: FixPreview["targets"][number]) {
+    if (ruleId === "4.1") return "root or no explicit user";
+    if (ruleId === "4.6") return "no healthcheck";
     if (ruleId === "5.11") return formatBytesAsMb(target.current_memory);
     if (ruleId === "5.12") return target.current_cpu_shares ? `${target.current_cpu_shares} shares` : "no CPU shares";
     if (ruleId === "5.29") return target.current_pids_limit && target.current_pids_limit > 0 ? `${target.current_pids_limit} PIDs` : "no PID limit";
     return "current";
+}
+
+function normalizeStrategy(ruleId: string, target: FixPreview["targets"][number], configured?: TargetConfig): ApplyStrategy {
+    const raw = configured?.strategy ?? target.strategy;
+    if (raw === "docker_update" || raw === "compose_update" || raw === "dokuru_override" || raw === "recreate") {
+        return raw;
+    }
+    const canCompose = Boolean(target.compose_project && target.compose_service);
+    if (isImageConfigRecreateRule(ruleId) && !canCompose) return "recreate";
+    return canCompose ? "dokuru_override" : "docker_update";
+}
+
+function healthcheckCommandForTarget(target?: FixPreview["targets"][number]) {
+    const label = `${target?.container_name ?? ""} ${target?.image ?? ""}`.toLowerCase();
+    if (label.includes("pgadmin")) return "curl -fsS http://localhost/misc/ping || exit 1";
+    if (label.includes("postgres") || label.includes("postgis")) return "pg_isready -U postgres || exit 1";
+    if (label.includes("mysql") || label.includes("mariadb")) return "mysqladmin ping -h 127.0.0.1 --silent || exit 1";
+    if (label.includes("redis")) return "redis-cli ping || exit 1";
+    if (label.includes("mongo")) return "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' || exit 1";
+    return "curl -fsS http://localhost/health || wget -qO- http://localhost/health >/dev/null || exit 1";
+}
+
+function dockerfileSnippet(ruleId: string, targets: FixPreview["targets"]) {
+    if (ruleId === "4.1") {
+        return `# Adjust for your base image and app-owned paths.\nRUN groupadd -r appuser && useradd -r -g appuser appuser\nUSER appuser`;
+    }
+    if (ruleId === "4.6") {
+        const command = targets.length === 1 ? healthcheckCommandForTarget(targets[0]) : healthcheckCommandForTarget();
+        return `# Replace this with the service's real readiness check.\nHEALTHCHECK --interval=30s --timeout=10s --retries=3 \\\n  CMD ${command}`;
+    }
+    return null;
 }
 
 function valueMeta(ruleId: string) {
@@ -121,11 +181,11 @@ function ApplyModePicker({
     canCompose: boolean;
     onChange: (strategy: ApplyStrategy) => void;
 }) {
-    const effectiveValue = canCompose ? value : "docker_update";
+    const effectiveValue = canCompose ? (value === "recreate" ? "dokuru_override" : value) : "docker_update";
 
     return (
         <div className="audit-fix-mode-control grid h-9 grid-cols-3 rounded-md border p-0.5" role="radiogroup" aria-label="Apply mode">
-            {APPLY_MODE_OPTIONS.map((option) => {
+            {CGROUP_APPLY_MODE_OPTIONS.map((option) => {
                 const disabled = !canCompose && option.value !== "docker_update";
                 const active = effectiveValue === option.value;
                 return (
@@ -152,6 +212,58 @@ function ApplyModePicker({
     );
 }
 
+function ImageConfigModePicker({
+    value,
+    dockerfileTitle,
+    onChange,
+}: {
+    value: ApplyStrategy;
+    dockerfileTitle: string;
+    onChange: (strategy: ApplyStrategy) => void;
+}) {
+    const effectiveValue = value === "compose_update" ? "compose_update" : "dokuru_override";
+
+    return (
+        <div className="audit-fix-mode-control grid h-9 grid-cols-3 rounded-md border p-0.5" role="radiogroup" aria-label="Image config apply mode">
+            {IMAGE_CONFIG_MODE_OPTIONS.map((option) => {
+                const dockerfileDisabled = option.value === "dockerfile";
+                const active = !dockerfileDisabled && effectiveValue === option.value;
+                return (
+                    <button
+                        key={option.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        aria-disabled={dockerfileDisabled}
+                        title={dockerfileDisabled ? dockerfileTitle : option.title}
+                        onClick={() => {
+                            if (option.value !== "dockerfile") onChange(option.value);
+                        }}
+                        className={cn(
+                            "audit-fix-mode-button h-full min-w-0 rounded-[6px] px-2 text-[10px] font-semibold transition-colors whitespace-nowrap outline-none",
+                            active && "audit-fix-mode-button-active",
+                            !active && "audit-fix-mode-button-idle",
+                            dockerfileDisabled && "cursor-not-allowed opacity-45",
+                        )}
+                    >
+                        {option.label}
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
+function StaticModePanel({ strategy }: { strategy: ApplyStrategy }) {
+    const meta = STRATEGY_META[strategy];
+    return (
+        <div className="audit-fix-mode-control flex h-9 min-w-0 items-center justify-between gap-3 rounded-md border px-3">
+            <span className="truncate text-[10px] font-semibold text-[#7dd3fc]">{meta.label}</span>
+            <span className="truncate text-[10px] text-white/32">{meta.title}</span>
+        </div>
+    );
+}
+
 // ── Step 1: Confirm ───────────────────────────────────────────────────────────
 
 function ConfirmStep({
@@ -173,8 +285,10 @@ function ConfirmStep({
     const steps = preview?.steps ?? getFixSteps(rule.id);
     const isRecreate = isContainerRecreateRule(rule.id);
     const isCgroup = isCgroupRule(rule.id);
+    const isImageConfig = isImageConfigRecreateRule(rule.id);
     const isHostPartition = rule.id === "1.1.1";
     const targets = preview?.targets ?? [];
+    const showStructuredTargets = isCgroup || isImageConfig;
 
     const meta = valueMeta(rule.id);
     const hasInvalidValues = isCgroup && targets.some(target => {
@@ -223,9 +337,13 @@ function ConfirmStep({
                             <RotateCcw className="h-4 w-4" />
                         </span>
                         <div className="min-w-0">
-                            <p className="text-xs font-semibold text-amber-300">Restart/recreate required</p>
+                            <p className="text-xs font-semibold text-amber-300">
+                                {isImageConfig ? "Recreate required" : "Restart/recreate required"}
+                            </p>
                             <p className="mt-0.5 text-[11px] leading-snug text-amber-200/55">
-                                Dokuru handles it during apply; Compose targets persist the change in YAML.
+                                {isImageConfig
+                                    ? "No live USER/HEALTHCHECK update."
+                                    : "Dokuru handles it during apply; Compose targets persist the change in YAML."}
                             </p>
                         </div>
                     </div>
@@ -267,16 +385,20 @@ function ConfirmStep({
                         {targets.map((target, i) => {
                             const config = targetConfig[target.container_id];
                             const canCompose = Boolean(target.compose_project && target.compose_service);
-                            const strategy = config?.strategy ?? (target.strategy === "dokuru_override" || target.strategy === "compose_update" ? target.strategy : "docker_update");
+                            const strategy = normalizeStrategy(rule.id, target, config);
                             const meta = valueMeta(rule.id);
                             const value = config?.[meta.key] ?? 0;
+                            const dockerfileTitle = dockerfileSnippet(rule.id, [target])
+                                ? "Requires Dockerfile detection + rebuild"
+                                : IMAGE_CONFIG_MODE_OPTIONS[0].title;
 
                             return (
                                 <div
                                     key={target.container_id}
                                     className={cn(
                                         "text-xs font-mono",
-                                        isCgroup ? "audit-fix-target-row" : "grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center",
+                                        showStructuredTargets ? "audit-fix-target-row" : "grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center",
+                                        isImageConfig && "audit-fix-target-row-image",
                                         i < targets.length - 1 && "border-b border-white/6"
                                     )}
                                 >
@@ -288,11 +410,11 @@ function ConfirmStep({
                                         </div>
                                     </div>
 
-                                    {isCgroup && (
+                                    {showStructuredTargets && (
                                         <div className="audit-fix-target-source flex min-w-0 items-center gap-2">
                                             {canCompose ? <FileCode2 className="h-3.5 w-3.5 shrink-0 text-[#2496ED]" /> : <Box className="h-3.5 w-3.5 shrink-0 text-white/35" />}
                                             <div className="min-w-0">
-                                                <span className={cn("block truncate text-[10px] uppercase tracking-[0.16em]", canCompose ? "text-[#2496ED]/80" : "text-white/35")}>{canCompose ? "compose" : "runtime"}</span>
+                                                <span className={cn("block truncate text-[10px] uppercase tracking-[0.16em]", canCompose ? "text-[#2496ED]/80" : "text-white/35")}>{canCompose ? "compose" : isImageConfig ? "standalone" : "runtime"}</span>
                                                 <span className="block truncate text-[10px] text-white/30">{canCompose ? `${target.compose_project}/${target.compose_service}` : "standalone"}</span>
                                             </div>
                                         </div>
@@ -304,6 +426,18 @@ function ConfirmStep({
                                             canCompose={canCompose}
                                             onChange={(nextStrategy) => onTargetChange(target.container_id, { strategy: nextStrategy })}
                                         />
+                                    )}
+
+                                    {isImageConfig && config && (
+                                        canCompose ? (
+                                            <ImageConfigModePicker
+                                                value={strategy}
+                                                dockerfileTitle={dockerfileTitle}
+                                                onChange={(nextStrategy) => onTargetChange(target.container_id, { strategy: nextStrategy })}
+                                            />
+                                        ) : (
+                                            <StaticModePanel strategy="recreate" />
+                                        )
                                     )}
 
                                     {isCgroup && config && (
@@ -471,6 +605,9 @@ function ProgressEventsPanel({
 
 function progressModeLabel(progressEvents: FixProgress[]) {
     if (progressEvents.some(event => event.action.includes("dokuru_override") || event.action.includes("dokuru"))) return "Override";
+    if (progressEvents.some(event => event.action.includes("update_compose_yaml") || event.action.includes("backup_compose_yaml"))) return "Patch";
+    if (progressEvents.some(event => event.action.includes("docker_update"))) return "Live";
+    if (progressEvents.some(event => event.action.includes("create_container") || event.action.includes("recreate"))) return "Recreate";
     if (progressEvents.some(event => event.action.includes("compose"))) return "Compose";
     return "Live";
 }

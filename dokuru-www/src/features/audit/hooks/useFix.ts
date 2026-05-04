@@ -184,8 +184,16 @@ export type TargetConfig = {
     memoryMb: number;
     cpuShares: number;
     pidsLimit: number;
-    strategy: "docker_update" | "compose_update" | "dokuru_override";
+    strategy: "docker_update" | "compose_update" | "dokuru_override" | "recreate";
 };
+
+function normalizePreviewStrategy(ruleId: string, strategy: string, canCompose: boolean): TargetConfig["strategy"] {
+    if (strategy === "docker_update" || strategy === "compose_update" || strategy === "dokuru_override" || strategy === "recreate") {
+        return strategy;
+    }
+    if (isImageConfigRecreateRule(ruleId) && !canCompose) return "recreate";
+    return canCompose ? "dokuru_override" : "docker_update";
+}
 
 export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs) {
     const [open, setOpen] = useState(false);
@@ -247,7 +255,7 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
                             memoryMb: target.suggestion ? Math.round(target.suggestion.memory / 1024 / 1024) : fallback.memoryMb,
                             cpuShares: target.suggestion?.cpu_shares ?? fallback.cpuShares,
                             pidsLimit: target.suggestion?.pids_limit ?? fallback.pidsLimit,
-                            strategy: target.strategy === "dokuru_override" || target.strategy === "compose_update" ? target.strategy : "docker_update",
+                            strategy: normalizePreviewStrategy(result.rule.id, target.strategy, Boolean(target.compose_project && target.compose_service)),
                         };
                     })(),
                 ])));
@@ -278,7 +286,7 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
         if (!preview) return [];
         return preview.targets.map((target) => {
             const config = targetConfig[target.container_id];
-            const strategy = config?.strategy ?? (target.compose_project ? "dokuru_override" : target.strategy);
+            const strategy = config?.strategy ?? normalizePreviewStrategy(ruleId, target.strategy, Boolean(target.compose_project && target.compose_service));
             const base: FixTarget = {
                 container_id: target.container_id,
                 strategy,
