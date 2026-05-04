@@ -80,7 +80,7 @@ export function SecuritySettings() {
     return (
         <div className="space-y-10 animate-fade-in pb-10">
             <div>
-                <h2 className="text-2xl font-bold tracking-tight mb-2">Password and Authentication</h2>
+                <h2 className="mb-2 text-2xl font-bold tracking-tight sm:text-3xl">Password and Authentication</h2>
                 <p className="text-[15px] text-muted-foreground">
                     Manage your account security and change your password.
                 </p>
@@ -172,11 +172,11 @@ export function SecuritySettings() {
                     </div>
                 </div>
 
-                <div className="pt-6">
+                <div className="pt-4 sm:pt-6">
                     <Button
                         type="submit"
                         disabled={!isPasswordValid || isSubmitting}
-                        className="h-10 px-8 font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-md"
+                        className="h-10 w-full bg-primary px-8 font-medium text-primary-foreground shadow-md transition-all hover:bg-primary/90 sm:w-auto"
                     >
                         {isSubmitting ? "Updating..." : "Update Password"}
                     </Button>

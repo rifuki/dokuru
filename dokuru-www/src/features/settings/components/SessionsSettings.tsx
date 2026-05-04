@@ -112,7 +112,7 @@ export function SessionsSettings() {
     return (
         <div className="space-y-10 animate-fade-in pb-10">
             <div>
-                <h2 className="text-2xl font-bold tracking-tight mb-2">Devices</h2>
+                <h2 className="mb-2 text-2xl font-bold tracking-tight sm:text-3xl">Devices</h2>
                 <p className="text-[15px] text-muted-foreground">
                     Here are all the devices that are currently logged in with your account. You can log out of each one individually or all other devices.
                 </p>
@@ -128,13 +128,13 @@ export function SessionsSettings() {
                     <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
                 </div>
             ) : (
-                <div className="space-y-8 max-w-2xl">
+                <div className="max-w-2xl space-y-8">
                     {/* Current Device section */}
                     <div className="space-y-4">
                         <h3 className="text-[16px] font-bold">Current Device</h3>
                         {sessions.filter(s => s.is_current).map((session) => (
-                            <div key={session.id} className="flex items-center justify-between py-2 group">
-                                <div className="flex items-center gap-4">
+                            <div key={session.id} className="group flex min-w-0 items-center justify-between py-2">
+                                <div className="flex min-w-0 items-center gap-4">
                                     <div className="h-12 w-12 shrink-0 rounded-full bg-muted/50 flex items-center justify-center">
                                         {isTabletSession(session) ? (
                                             <Tablet className="h-6 w-6 text-foreground/80" />
@@ -144,11 +144,11 @@ export function SessionsSettings() {
                                             <Monitor className="h-6 w-6 text-foreground/80" />
                                         )}
                                     </div>
-                                    <div className="space-y-0.5">
-                                        <div className="text-[15px] font-bold">
+                                    <div className="min-w-0 space-y-0.5">
+                                        <div className="break-words text-[15px] font-bold">
                                             {session.device.toUpperCase()}
                                         </div>
-                                        <div className="text-[14px] text-muted-foreground">
+                                        <div className="break-words text-[14px] text-muted-foreground">
                                             {sessionDetails(session)}
                                         </div>
                                         {formatDateTime(session.last_active_at) && (
@@ -169,8 +169,8 @@ export function SessionsSettings() {
                             <div className="space-y-4">
                                 <h3 className="text-[16px] font-bold">Other Devices</h3>
                                 {otherSessions.map((session) => (
-                                    <div key={session.id} className="flex items-center justify-between py-4 border-b border-border/20 last:border-0 group">
-                                        <div className="flex items-center gap-4">
+                                    <div key={session.id} className="group flex flex-col gap-3 border-b border-border/20 py-4 last:border-0 sm:flex-row sm:items-center sm:justify-between">
+                                        <div className="flex min-w-0 items-center gap-4">
                                             <div className="h-12 w-12 shrink-0 rounded-full bg-muted/50 flex items-center justify-center">
                                                 {isTabletSession(session) ? (
                                                     <Tablet className="h-6 w-6 text-foreground/80" />
@@ -180,11 +180,11 @@ export function SessionsSettings() {
                                                     <Monitor className="h-6 w-6 text-foreground/80" />
                                                 )}
                                             </div>
-                                            <div className="space-y-0.5">
-                                                <div className="text-[15px] font-bold">
+                                            <div className="min-w-0 space-y-0.5">
+                                                <div className="break-words text-[15px] font-bold">
                                                     {session.device.toUpperCase()}
                                                 </div>
-                                                <div className="text-[14px] text-muted-foreground">
+                                                <div className="break-words text-[14px] text-muted-foreground">
                                                     {sessionDetails(session, true)}
                                                 </div>
                                                 {formatDateTime(session.last_active_at) && (
@@ -197,7 +197,7 @@ export function SessionsSettings() {
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="h-8 w-8 rounded-full text-destructive/80 hover:!bg-destructive/80 hover:!text-destructive-foreground focus-visible:ring-destructive/30 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            className="h-8 w-8 shrink-0 rounded-full text-destructive/80 opacity-100 transition-opacity hover:!bg-destructive/80 hover:!text-destructive-foreground focus-visible:ring-destructive/30 sm:opacity-0 sm:group-hover:opacity-100"
                                             onClick={() => handleRevokeSession(session.id)}
                                             title="Log out device"
                                         >
@@ -225,12 +225,12 @@ export function SessionsSettings() {
                                 <DialogTrigger asChild>
                                     <Button
                                         variant="destructive"
-                                        className="bg-destructive hover:bg-destructive/90 text-destructive-foreground font-medium"
+                                        className="w-full bg-destructive font-medium text-destructive-foreground hover:bg-destructive/90 sm:w-auto"
                                     >
                                         Log Out All Devices
                                     </Button>
                                 </DialogTrigger>
-                                <DialogContent>
+                                <DialogContent className="w-[calc(100vw-1rem)] sm:max-w-lg">
                                     <DialogHeader>
                                         <DialogTitle>Log out of all devices?</DialogTitle>
                                         <DialogDescription>
@@ -238,11 +238,11 @@ export function SessionsSettings() {
                                             You'll need to log back in on those devices.
                                         </DialogDescription>
                                     </DialogHeader>
-                                    <DialogFooter>
-                                        <Button variant="outline" onClick={() => setLogoutAllDialogOpen(false)}>
+                                    <DialogFooter className="flex-col-reverse sm:flex-row">
+                                        <Button variant="outline" onClick={() => setLogoutAllDialogOpen(false)} className="w-full sm:w-auto">
                                             Cancel
                                         </Button>
-                                        <Button variant="destructive" onClick={handleLogoutAll}>
+                                        <Button variant="destructive" onClick={handleLogoutAll} className="w-full sm:w-auto">
                                             Log Out All
                                         </Button>
                                     </DialogFooter>

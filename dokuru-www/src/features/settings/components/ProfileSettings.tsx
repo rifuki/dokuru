@@ -232,7 +232,7 @@ export function ProfileSettings() {
             />
 
             <AlertDialog open={isRemoveModalOpen} onOpenChange={setIsRemoveModalOpen}>
-                <AlertDialogContent>
+                <AlertDialogContent className="w-[calc(100vw-1rem)] sm:max-w-lg">
                     <AlertDialogHeader>
                         <AlertDialogTitle>Remove Profile Picture?</AlertDialogTitle>
                         <AlertDialogDescription>
@@ -293,7 +293,7 @@ export function ProfileSettings() {
             )}
 
             <div>
-                <h2 className="text-2xl font-bold tracking-tight mb-2">My Account</h2>
+                <h2 className="mb-2 text-2xl font-bold tracking-tight sm:text-3xl">My Account</h2>
                 <p className="text-[15px] text-muted-foreground">
                     This is how others will see you on the site.
                 </p>
@@ -301,9 +301,9 @@ export function ProfileSettings() {
 
             <Separator className="bg-border/40" />
 
-            <form onSubmit={handleProfileSubmit} noValidate className="space-y-8 max-w-2xl">
+            <form onSubmit={handleProfileSubmit} noValidate className="max-w-2xl space-y-8">
                 {/* Avatar Section */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 rounded-xl border border-border/70 bg-transparent p-6 dark:border-border/30 dark:bg-muted/20">
+                <div className="flex flex-col items-start gap-5 rounded-xl border border-border/70 bg-transparent p-4 dark:border-border/30 dark:bg-muted/20 sm:flex-row sm:items-center sm:gap-6 sm:p-6">
                     <button
                         type="button"
                         className={cn(
@@ -321,13 +321,13 @@ export function ProfileSettings() {
                             </AvatarFallback>
                         </Avatar>
                     </button>
-                    <div className="space-y-3">
+                    <div className="w-full min-w-0 space-y-3 sm:w-auto">
                         <h4 className="text-[15px] font-bold">Profile Picture</h4>
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                             <Button
                                 type="button"
                                 size="sm"
-                                className="bg-primary text-primary-foreground hover:bg-primary/90"
+                                className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto"
                                 onClick={() => setIsUploadModalOpen(true)}
                             >
                                 <Camera className="mr-2 h-4 w-4" /> Change Avatar
@@ -337,7 +337,7 @@ export function ProfileSettings() {
                                     type="button"
                                     variant="ghost"
                                     size="sm"
-                                    className="bg-destructive/15 text-destructive hover:!bg-destructive/70 hover:!text-destructive-foreground"
+                                    className="w-full bg-destructive/15 text-destructive hover:!bg-destructive/70 hover:!text-destructive-foreground sm:w-auto"
                                     onClick={() => setIsRemoveModalOpen(true)}
                                     disabled={isRemovingAvatar}
                                 >
@@ -385,7 +385,7 @@ export function ProfileSettings() {
                         </p>
                     </div>
                     <div className="space-y-2 sm:col-span-2">
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                             <Label htmlFor="email" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                                 Email Address
                             </Label>
@@ -404,7 +404,7 @@ export function ProfileSettings() {
                                 onChange={(e) => setEmail(e.target.value)}
                                 placeholder="your@email.com"
                                 disabled={isSendingVerification}
-                                className="h-11 border-border/80 bg-transparent pr-24 shadow-none hover:border-border focus-visible:border-primary/50 focus-visible:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-70 dark:border-transparent dark:bg-muted/40 dark:hover:bg-muted/60 dark:focus-visible:ring-primary/50"
+                                className="h-11 border-border/80 bg-transparent pr-4 shadow-none hover:border-border focus-visible:border-primary/50 focus-visible:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-70 dark:border-transparent dark:bg-muted/40 dark:hover:bg-muted/60 dark:focus-visible:ring-primary/50 sm:pr-24"
                             />
                             {(isEmailChanged || !user.email_verified) && (
                                 <button
@@ -412,7 +412,7 @@ export function ProfileSettings() {
                                     onClick={handleSendVerification}
                                     disabled={!canSendVerification}
                                     className={cn(
-                                        "absolute right-2 top-1/2 flex h-7 -translate-y-1/2 items-center gap-1.5 rounded-md border px-3 text-[12px] font-medium shadow-none transition-colors disabled:cursor-not-allowed",
+                                        "mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-md border px-3 text-[12px] font-medium shadow-none transition-colors disabled:cursor-not-allowed sm:absolute sm:right-2 sm:top-1/2 sm:mt-0 sm:h-7 sm:w-auto sm:-translate-y-1/2",
                                         canSendVerification
                                             ? "border-border/80 bg-transparent text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground dark:border-border dark:bg-muted dark:text-foreground dark:hover:bg-muted/80"
                                             : "border-border/60 bg-muted/20 text-muted-foreground opacity-70 dark:bg-muted"
@@ -441,11 +441,11 @@ export function ProfileSettings() {
                     </div>
                 </div>
 
-                <div className="pt-6">
+                <div className="pt-4 sm:pt-6">
                     <Button
                         type="submit"
                         disabled={isUpdating || !isProfileChanged}
-                        className="h-10 px-8 font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-md"
+                        className="h-10 w-full bg-primary px-8 font-medium text-primary-foreground shadow-md transition-all hover:bg-primary/90 sm:w-auto"
                     >
                         {isUpdating ? <LoadingDots /> : "Save Changes"}
                     </Button>

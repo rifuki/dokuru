@@ -46,37 +46,49 @@ export function SettingsLayout() {
     }, [navigate, user?.role]);
 
     return (
-        <div className="fixed inset-0 z-50 flex w-full bg-background overflow-hidden">
+        <div className="fixed inset-0 z-50 flex w-full flex-col overflow-hidden bg-background sm:flex-row">
             {/* Sidebar Area */}
-            <aside className="flex w-[230px] md:w-[280px] lg:w-[30%] lg:min-w-[280px] lg:max-w-[340px] justify-end bg-muted/30 pb-10 border-r border-border/50">
-                <nav className="w-full max-w-[240px] px-2 md:px-4 pt-16 flex flex-col gap-0.5">
-                    <div className="px-3 pb-2 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">
-                        User Settings
+            <aside className="flex w-full shrink-0 justify-start border-b border-border/50 bg-muted/30 px-4 py-3 sm:w-[230px] sm:justify-end sm:border-b-0 sm:border-r sm:px-0 sm:pb-10 sm:pt-0 md:w-[280px] lg:w-[30%] lg:min-w-[280px] lg:max-w-[340px]">
+                <nav className="flex w-full flex-col gap-2 sm:max-w-[240px] sm:gap-0.5 sm:px-2 sm:pt-16 md:px-4">
+                    <div className="flex items-center justify-between gap-3 px-1 sm:block sm:px-3 sm:pb-2">
+                        <div className="text-[12px] font-bold uppercase tracking-wider text-muted-foreground">
+                            User Settings
+                        </div>
+                        <button
+                            type="button"
+                            aria-label="Close settings"
+                            onClick={() => navigate({ to: user?.role === 'admin' ? '/admin' : '/' })}
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/80 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:hidden"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
                     </div>
-                    {settingsNavigation.map((item) => {
-                        const isActive = location.pathname.startsWith(item.href);
-                        return (
-                            <Link
-                                key={item.href}
-                                to={item.href}
-                                className={`
-                                        flex items-center gap-3 rounded-[8px] px-3 py-1.5 text-[15px] font-medium transition-colors
-                                        ${isActive
-                                        ? "bg-primary/15 text-primary"
-                                        : "text-muted-foreground hover:bg-primary/10 hover:text-foreground"
-                                    }
-                                    `}
-                            >
-                                {item.name}
-                            </Link>
-                        );
-                    })}
+                    <div className="flex gap-2 overflow-x-auto pb-0.5 sm:flex-col sm:gap-0.5 sm:overflow-visible sm:pb-0">
+                        {settingsNavigation.map((item) => {
+                            const isActive = location.pathname.startsWith(item.href);
+                            return (
+                                <Link
+                                    key={item.href}
+                                    to={item.href}
+                                    className={`
+                                            flex shrink-0 items-center gap-3 rounded-[8px] px-3 py-2 text-sm font-medium transition-colors sm:py-1.5 sm:text-[15px]
+                                            ${isActive
+                                            ? "bg-primary/15 text-primary"
+                                            : "text-muted-foreground hover:bg-primary/10 hover:text-foreground"
+                                        }
+                                        `}
+                                >
+                                    {item.name}
+                                </Link>
+                            );
+                        })}
+                    </div>
                 </nav>
             </aside>
 
             {/* Main Content Area */}
-            <main className="flex-1 overflow-y-auto relative">
-                <div className="px-10 md:px-14 py-16 max-w-[740px]">
+            <main className="relative min-h-0 flex-1 overflow-y-auto">
+                <div className="w-full max-w-none px-5 py-6 sm:max-w-[740px] sm:px-10 sm:py-16 md:px-14">
                     <Outlet />
                 </div>
 
