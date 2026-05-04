@@ -9,9 +9,9 @@ pub(crate) fn hero() -> impl IntoView {
         <section id="top" data-testid="hero-section" class="relative min-h-[100svh] flex flex-col justify-center pt-24 pb-20 md:pb-28 overflow-hidden">
             <div class="absolute inset-0 bg-grid-fine mask-fade-b pointer-events-none animate-fade-in"/>
 
-            <div class="relative max-w-7xl mx-auto px-6 md:px-10 w-full">
-                <div class="grid lg:grid-cols-12 gap-10 lg:gap-14 items-center">
-                    <div class="lg:col-span-7">
+            <div class="relative mx-auto w-full max-w-[1500px] px-6 md:px-10">
+                <div class="grid items-center gap-12 lg:grid-cols-2 xl:gap-16">
+                    <div class="min-w-0">
                         <h1 data-testid="hero-headline" class="animate-enter-up font-heading text-5xl sm:text-6xl lg:text-[64px] xl:text-[72px] font-bold tracking-tight leading-[1.05] text-white" style="--motion-delay: 300ms; --motion-duration: 800ms">
                             "Docker security"
                             <br/>
@@ -47,12 +47,11 @@ pub(crate) fn hero() -> impl IntoView {
                         </div>
                     </div>
 
-                    <div class="animate-enter-right lg:col-span-5 relative lg:pl-4" style="--motion-delay: 600ms">
-                        <div class="absolute inset-0 bg-[#2496ED]/10 blur-[100px] rounded-full scale-90"/>
-                        <div class="relative rounded-xl border border-white/10 bg-[#050505] shadow-[0_0_40px_rgba(0,0,0,0.8)] overflow-hidden">
+                    <div class="animate-enter-right relative min-w-0 xl:-mr-6" style="--motion-delay: 600ms">
+                        <div class="absolute inset-0 scale-95 rounded-full bg-[#2496ED]/10 blur-[120px]"/>
+                        <div class="relative overflow-hidden rounded-2xl border border-white/10 bg-[#050505] shadow-[0_0_70px_rgba(0,0,0,0.82)]">
                             {audit_panel()}
                         </div>
-
                     </div>
                 </div>
             </div>

@@ -2,21 +2,6 @@ use crate::components::atoms::{icon::icon, IconKind};
 use leptos::prelude::*;
 
 #[must_use]
-pub(crate) fn audit_count(
-    color: &'static str,
-    text_color: &'static str,
-    count: &'static str,
-    label: &'static str,
-) -> impl IntoView {
-    view! {
-        <div class="flex items-center gap-1.5">
-            <span class=format!("w-1 h-1 rounded-sm {}", color)/>
-            <span class="font-mono text-[10px] text-zinc-300"><span class=format!("{} font-semibold", text_color)>{count}</span> " " {label}</span>
-        </div>
-    }
-}
-
-#[must_use]
 pub(crate) fn preview_count(
     color: &'static str,
     text_color: &'static str,
