@@ -28,6 +28,7 @@ import { setAgentToken } from "@/stores/use-agent-store";
 import type { Agent } from "@/types/agent";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 type ConnectionFilter = "all" | "cloudflare" | "direct" | "domain" | "relay";
 type StatusFilter     = "all" | "online" | "connecting" | "offline";
@@ -309,27 +310,37 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
           </Button>
 
           <div className="flex shrink-0 items-center rounded-[10px] border bg-background/60 p-1 shadow-sm dark:bg-white/[0.025]">
-            <button
-              type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-[7px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-              title="Edit agent"
-              aria-label={`Edit ${agent.name}`}
-              onClick={openEdit}
-            >
-              <Edit className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowDeleteDialog(true);
-              }}
-              className="flex h-8 w-8 items-center justify-center rounded-[7px] text-destructive transition-colors hover:bg-destructive/10 hover:text-destructive"
-              title="Delete agent"
-              aria-label={`Delete ${agent.name}`}
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            <TooltipProvider delayDuration={150}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex h-8 w-8 items-center justify-center rounded-[7px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                    aria-label={`Edit ${agent.name}`}
+                    onClick={openEdit}
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Edit agent</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowDeleteDialog(true);
+                    }}
+                    className="flex h-8 w-8 items-center justify-center rounded-[7px] text-destructive transition-colors hover:bg-destructive/10 hover:text-destructive"
+                    aria-label={`Delete ${agent.name}`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Delete agent</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </div>
       </div>
