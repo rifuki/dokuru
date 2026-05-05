@@ -1,4 +1,4 @@
-import { ChevronRight, Clock, Container, Cpu, Server, ShieldCheck } from "lucide-react";
+import { ChevronRight, Clock, Container, Cpu, Server } from "lucide-react";
 import type { AuditResponse } from "@/lib/api/agent-direct";
 import { cn } from "@/lib/utils";
 
@@ -11,30 +11,27 @@ type AuditSummaryCardProps = {
 function scoreTone(score: number) {
   if (score >= 80) {
     return {
-      label: "Healthy posture",
-      hex: "#10b981",
-      text: "text-emerald-400",
-      border: "border-emerald-500/25",
-      bg: "bg-emerald-500/10",
+      label: "Healthy",
+      accent: "#10b981",
+      soft: "rgba(16, 185, 129, 0.1)",
+      border: "rgba(16, 185, 129, 0.26)",
     };
   }
 
   if (score >= 60) {
     return {
-      label: "Needs attention",
-      hex: "#f59e0b",
-      text: "text-amber-400",
-      border: "border-amber-500/25",
-      bg: "bg-amber-500/10",
+      label: "Attention",
+      accent: "#f59e0b",
+      soft: "rgba(245, 158, 11, 0.1)",
+      border: "rgba(245, 158, 11, 0.26)",
     };
   }
 
   return {
-    label: "Critical exposure",
-    hex: "#f43f5e",
-    text: "text-rose-400",
-    border: "border-rose-500/25",
-    bg: "bg-rose-500/10",
+    label: "Critical",
+    accent: "#f43f5e",
+    soft: "rgba(244, 63, 94, 0.1)",
+    border: "rgba(244, 63, 94, 0.26)",
   };
 }
 
@@ -48,87 +45,78 @@ function fmtDate(value: string) {
 
 export function AuditSummaryCard({ audit, onOpen, className }: AuditSummaryCardProps) {
   const tone = scoreTone(audit.summary.score);
-  const radius = 34;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (audit.summary.score / 100) * circumference;
 
   return (
     <button
       type="button"
       onClick={onOpen}
       className={cn(
-        "group relative w-full overflow-hidden rounded-[22px] border border-border bg-card/95 text-left shadow-sm transition-colors hover:border-primary/30 hover:bg-muted/20 dark:bg-white/[0.035]",
+        "group relative w-full overflow-hidden rounded-[18px] border border-border bg-card/90 text-left shadow-sm transition-colors hover:border-primary/25 hover:bg-muted/15 dark:bg-white/[0.025]",
         className,
       )}
     >
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-      <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:gap-5 sm:p-5">
-        <div className="relative flex size-20 shrink-0 items-center justify-center sm:size-24">
-          <svg className="size-full -rotate-90" viewBox="0 0 88 88" aria-hidden="true">
-            <circle cx="44" cy="44" r={radius} fill="none" stroke="currentColor" strokeWidth="8" className="text-muted-foreground/10" />
-            <circle
-              cx="44"
-              cy="44"
-              r={radius}
-              fill="none"
-              stroke={tone.hex}
-              strokeWidth="8"
-              strokeDasharray={circumference}
-              strokeDashoffset={offset}
-              strokeLinecap="round"
-              className="drop-shadow-sm transition-all duration-700"
-            />
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className={cn("text-2xl font-black leading-none tabular-nums sm:text-3xl", tone.text)}>
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/18 to-transparent" />
+      <div className="grid gap-4 p-4 md:grid-cols-[150px_minmax(0,1fr)_auto] md:items-center md:p-5">
+        <div
+          className="rounded-[14px] border bg-muted/10 px-4 py-3"
+          style={{ borderColor: tone.border, backgroundColor: tone.soft }}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">Score</span>
+            <span className="text-[11px] font-semibold" style={{ color: tone.accent }}>{tone.label}</span>
+          </div>
+          <div className="mt-3 flex items-end gap-1.5">
+            <span className="text-4xl font-black leading-none tracking-tight text-foreground tabular-nums">
               {audit.summary.score}
             </span>
-            <span className="mt-1 text-[10px] font-bold text-muted-foreground/60">/100</span>
+            <span className="pb-1 text-sm font-semibold text-muted-foreground/60">/100</span>
+          </div>
+          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-black/10 dark:bg-white/[0.08]">
+            <div
+              className="h-full rounded-full transition-all duration-700"
+              style={{ width: `${audit.summary.score}%`, backgroundColor: tone.accent }}
+            />
           </div>
         </div>
 
-        <div className="min-w-0 flex-1 space-y-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="min-w-0 space-y-3">
+          <div className="flex min-w-0 items-center gap-2">
             <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="truncate font-mono text-sm font-semibold text-foreground sm:text-base">{fmtDate(audit.timestamp)}</span>
-            <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em]", tone.border, tone.bg, tone.text)}>
-              <ShieldCheck className="h-3 w-3" />
-              {tone.label}
-            </span>
+            <span className="truncate font-mono text-base font-semibold text-foreground">{fmtDate(audit.timestamp)}</span>
           </div>
 
-          <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-3">
+          <div className="grid gap-2 text-sm text-muted-foreground md:grid-cols-3">
             <span className="flex min-w-0 items-center gap-1.5">
-              <Server className="h-3.5 w-3.5 shrink-0" />
+              <Server className="h-4 w-4 shrink-0" />
               <span className="truncate">{audit.hostname}</span>
             </span>
             <span className="flex min-w-0 items-center gap-1.5">
-              <Cpu className="h-3.5 w-3.5 shrink-0" />
+              <Cpu className="h-4 w-4 shrink-0" />
               <span className="truncate">Docker {audit.docker_version}</span>
             </span>
             <span className="flex min-w-0 items-center gap-1.5">
-              <Container className="h-3.5 w-3.5 shrink-0" />
+              <Container className="h-4 w-4 shrink-0" />
               <span className="truncate">{audit.total_containers} containers</span>
             </span>
           </div>
 
           <div className="grid grid-cols-3 gap-2">
-            <div className="rounded-[12px] border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-2">
-              <p className="text-lg font-black leading-none text-emerald-400 tabular-nums">{audit.summary.passed}</p>
-              <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Passed</p>
+            <div className="rounded-[10px] border border-border bg-background/45 px-3 py-2 dark:bg-black/10">
+              <p className="text-xl font-black leading-none tabular-nums" style={{ color: "#10b981" }}>{audit.summary.passed}</p>
+              <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Passed</p>
             </div>
-            <div className="rounded-[12px] border border-rose-500/20 bg-rose-500/[0.06] px-3 py-2">
-              <p className="text-lg font-black leading-none text-rose-400 tabular-nums">{audit.summary.failed}</p>
-              <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Failed</p>
+            <div className="rounded-[10px] border border-border bg-background/45 px-3 py-2 dark:bg-black/10">
+              <p className="text-xl font-black leading-none tabular-nums" style={{ color: "#fb7185" }}>{audit.summary.failed}</p>
+              <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Failed</p>
             </div>
-            <div className="rounded-[12px] border border-border bg-muted/10 px-3 py-2">
-              <p className="text-lg font-black leading-none text-foreground/85 tabular-nums">{audit.summary.total}</p>
-              <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Total</p>
+            <div className="rounded-[10px] border border-border bg-background/45 px-3 py-2 dark:bg-black/10">
+              <p className="text-xl font-black leading-none text-foreground/85 tabular-nums">{audit.summary.total}</p>
+              <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Total</p>
             </div>
           </div>
         </div>
 
-        <ChevronRight className="hidden h-5 w-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary sm:block" />
+        <ChevronRight className="hidden h-5 w-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary md:block" />
       </div>
     </button>
   );
