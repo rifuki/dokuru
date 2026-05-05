@@ -669,7 +669,7 @@ function ResourceOverview({
             description="Containers, images, networks, and storage reported by this agent."
             action={<Button size="sm" variant="outline" asChild><Link to="/agents/$id/containers" params={{ id }}>Open Inventory</Link></Button>}
         >
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                 <MetricCard
                     icon={ContainerIcon}
                     label="Containers"
@@ -715,15 +715,6 @@ function ResourceOverview({
                     detail="Persistent Docker storage"
                     tone="blue"
                     to="/agents/$id/volumes"
-                    id={id}
-                />
-                <MetricCard
-                    icon={Activity}
-                    label="Events"
-                    value="Live"
-                    detail="System event stream"
-                    tone="zinc"
-                    to="/agents/$id/events"
                     id={id}
                 />
             </div>
@@ -1101,8 +1092,14 @@ function ActionPanel({ id, agent, latestAudit }: { id: string; agent: Agent; lat
                         </Link>
                     </Button>
                     <Button variant="outline" className="w-full justify-between hover:bg-muted/50" asChild>
+                        <Link to="/agents/$id/events" params={{ id }}>
+                            <span className="inline-flex items-center gap-2"><Activity className="h-4 w-4 text-muted-foreground" />Live Events</span>
+                            <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Link>
+                    </Button>
+                    <Button variant="outline" className="w-full justify-between hover:bg-muted/50 sm:col-span-2 2xl:col-span-1" asChild>
                         <Link to="/agents/$id/audits" params={{ id }}>
-                            <span className="inline-flex items-center gap-2"><Activity className="h-4 w-4 text-muted-foreground" />Audit Reports</span>
+                            <span className="inline-flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-muted-foreground" />Audit Reports</span>
                             <Badge variant="outline" className="font-mono text-[10px] bg-muted/10">{latestAudit ? latestAudit.summary.score : "-"}</Badge>
                         </Link>
                     </Button>
