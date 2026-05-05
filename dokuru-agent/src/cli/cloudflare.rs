@@ -160,6 +160,31 @@ WantedBy=multi-user.target
              Check: journalctl -u dokuru-tunnel -f"
         ))
     }
+
+    /// Poll the public tunnel health endpoint until Cloudflare finishes routing it.
+    pub fn wait_for_health(url: &str, timeout_secs: u64) -> Result<()> {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
+        let health_url = format!("{}/health", url.trim_end_matches('/'));
+        let client = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .wrap_err("Failed to create health check client")?;
+
+        while std::time::Instant::now() < deadline {
+            if client
+                .get(&health_url)
+                .send()
+                .is_ok_and(|response| response.status().is_success())
+            {
+                return Ok(());
+            }
+            std::thread::sleep(std::time::Duration::from_secs(2));
+        }
+
+        Err(eyre::eyre!(
+            "Timed out after {timeout_secs}s waiting for {health_url}"
+        ))
+    }
 }
 
 /// Extract URL from cloudflared output

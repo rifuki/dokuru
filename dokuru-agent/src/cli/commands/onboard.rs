@@ -538,6 +538,8 @@ fn setup_cloudflare_access(port: u16) -> Result<String> {
     CloudflareTunnel::start_service().wrap_err("Failed to start tunnel service")?;
     let url = CloudflareTunnel::wait_for_url_since(&tunnel_started_after, 30)
         .wrap_err("Timed out waiting for Cloudflare Tunnel URL")?;
+    CloudflareTunnel::wait_for_health(&url, 30)
+        .wrap_err("Timed out waiting for Cloudflare Tunnel health")?;
 
     spinner.stop(format!("✓ Tunnel started: {url}"));
     Ok(url)

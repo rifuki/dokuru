@@ -37,6 +37,12 @@ pub fn run_restart(service_only: bool) -> Result<()> {
                         cliclack::log::warning(format!("Tunnel URL not saved to config: {error}"))?;
                     }
                     cliclack::log::info(format!("Tunnel URL: {url}"))?;
+                    match crate::cli::CloudflareTunnel::wait_for_health(&url, 30) {
+                        Ok(()) => cliclack::log::success("✓ tunnel reachable")?,
+                        Err(error) => cliclack::log::warning(format!(
+                            "Tunnel URL saved but not reachable yet: {error}"
+                        ))?,
+                    }
                 }
                 Err(_) => cliclack::log::warning(
                     "Tunnel URL not ready yet — check: journalctl -u dokuru-tunnel -n 20 | grep https",
