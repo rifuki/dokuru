@@ -16,7 +16,7 @@ pub(crate) fn hero() -> impl IntoView {
 
     view! {
         <div class="flex flex-col">
-            <section id="top" data-testid="hero-section" class="relative flex min-h-[100svh] flex-col justify-start overflow-hidden px-0 pb-8 pt-[5.5rem] sm:justify-center sm:pt-0 sm:pb-0">
+            <section id="top" data-testid="hero-section" class="relative flex min-h-[100svh] flex-col justify-center overflow-hidden px-0 pb-8 pt-20 sm:pt-0 sm:pb-0">
                 <div class="absolute inset-0 bg-grid-fine mask-fade-b pointer-events-none animate-fade-in"/>
 
                 // Top heavenly glow
@@ -30,7 +30,7 @@ pub(crate) fn hero() -> impl IntoView {
                         {icon(IconKind::ArrowRight, 14, "opacity-70", "2")}
                     </a>
 
-                    <h1 data-testid="hero-headline" class="animate-enter-up font-heading text-[40px] font-bold tracking-tight leading-[0.98] text-white sm:hidden" style="--motion-delay: 300ms; --motion-duration: 800ms">
+                    <h1 data-testid="hero-headline" class="animate-enter-up font-heading text-[44px] font-bold tracking-tight leading-[1] text-white sm:hidden" style="--motion-delay: 300ms; --motion-duration: 800ms">
                         "Docker audits,"
                         <br/>
                         "shipped as"
@@ -51,7 +51,7 @@ pub(crate) fn hero() -> impl IntoView {
                         </span>
                     </h1>
 
-                    <p data-testid="hero-subheadline" class="animate-enter-up mt-5 max-w-[21rem] text-[15px] leading-6 text-zinc-400 sm:mx-auto sm:mt-8 sm:max-w-2xl sm:text-[16px] sm:leading-relaxed md:text-[20px]" style="--motion-delay: 500ms; --motion-duration: 600ms">
+                    <p data-testid="hero-subheadline" class="animate-enter-up mt-6 max-w-[22rem] text-[16px] leading-7 text-zinc-400 sm:mx-auto sm:mt-8 sm:max-w-2xl sm:leading-relaxed md:text-[20px]" style="--motion-delay: 500ms; --motion-duration: 600ms">
                         <span class="sm:hidden">
                             "Run CIS-aligned Docker checks, review evidence, and apply supported fixes from one lightweight Rust agent."
                         </span>
@@ -62,8 +62,8 @@ pub(crate) fn hero() -> impl IntoView {
                         </span>
                     </p>
 
-                    <div class="animate-enter-up mt-7 flex w-full flex-wrap items-center justify-start gap-3 sm:mt-10 sm:w-auto sm:justify-center sm:gap-4" style="--motion-delay: 700ms; --motion-duration: 600ms">
-                        <a href="#how-it-works" data-testid="hero-cta-primary" class="group inline-flex items-center justify-center gap-2 rounded-xl bg-[#2496ED] px-5 py-3 text-[15px] font-medium text-white shadow-[0_0_30px_rgba(36,150,237,0.3)] transition-all hover:bg-[#1C7CBA] hover:shadow-[0_0_40px_rgba(36,150,237,0.4)] active:scale-[0.98] sm:px-7 sm:py-3.5 sm:text-base">
+                    <div class="animate-enter-up mt-8 flex w-full flex-wrap items-center justify-start gap-3 sm:mt-10 sm:w-auto sm:justify-center sm:gap-4" style="--motion-delay: 700ms; --motion-duration: 600ms">
+                        <a href="#how-it-works" data-testid="hero-cta-primary" class="group inline-flex items-center justify-center gap-2 rounded-xl bg-[#2496ED] px-6 py-3.5 text-base font-medium text-white shadow-[0_0_30px_rgba(36,150,237,0.3)] transition-all hover:bg-[#1C7CBA] hover:shadow-[0_0_40px_rgba(36,150,237,0.4)] active:scale-[0.98] sm:px-7 sm:text-base">
                             "Install Agent"
                             {icon(IconKind::ArrowRight, 16, "transition-transform group-hover:translate-x-1", "2")}
                         </a>
@@ -73,21 +73,21 @@ pub(crate) fn hero() -> impl IntoView {
                         </a>
                     </div>
 
-                    <div class="animate-enter-up mt-12 hidden flex-wrap items-center justify-center gap-3 sm:flex md:gap-4" style="--motion-delay: 800ms; --motion-duration: 600ms">
-                        <div class="flex items-center gap-2.5 rounded-full border border-white/5 bg-white/[0.02] pl-1.5 pr-4 py-1.5 text-sm font-medium text-zinc-400 backdrop-blur-md">
-                            <div class="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
+                    <div class="animate-enter-up mt-8 flex max-w-[22rem] flex-wrap items-center justify-start gap-2 sm:mt-12 sm:max-w-none sm:justify-center sm:gap-3 md:gap-4" style="--motion-delay: 800ms; --motion-duration: 600ms">
+                        <div class="flex items-center gap-2 rounded-full border border-white/5 bg-white/[0.02] pl-1.5 pr-3 py-1.5 text-xs font-medium text-zinc-400 backdrop-blur-md sm:gap-2.5 sm:pr-4 sm:text-sm">
+                            <div class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400 sm:h-6 sm:w-6">
                                 {icon(IconKind::Check, 12, "", "2.5")}
                             </div>
                             "Built-in dashboard"
                         </div>
-                        <div class="flex items-center gap-2.5 rounded-full border border-white/5 bg-white/[0.02] pl-1.5 pr-4 py-1.5 text-sm font-medium text-zinc-400 backdrop-blur-md">
-                            <div class="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
+                        <div class="flex items-center gap-2 rounded-full border border-white/5 bg-white/[0.02] pl-1.5 pr-3 py-1.5 text-xs font-medium text-zinc-400 backdrop-blur-md sm:gap-2.5 sm:pr-4 sm:text-sm">
+                            <div class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400 sm:h-6 sm:w-6">
                                 {icon(IconKind::Check, 12, "", "2.5")}
                             </div>
                             "Rule-level evidence"
                         </div>
-                        <div class="flex items-center gap-2.5 rounded-full border border-white/5 bg-white/[0.02] pl-1.5 pr-4 py-1.5 text-sm font-medium text-zinc-400 backdrop-blur-md">
-                            <div class="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
+                        <div class="flex items-center gap-2 rounded-full border border-white/5 bg-white/[0.02] pl-1.5 pr-3 py-1.5 text-xs font-medium text-zinc-400 backdrop-blur-md sm:gap-2.5 sm:pr-4 sm:text-sm">
+                            <div class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400 sm:h-6 sm:w-6">
                                 {icon(IconKind::Check, 12, "", "2.5")}
                             </div>
                             "Supported fixes"
