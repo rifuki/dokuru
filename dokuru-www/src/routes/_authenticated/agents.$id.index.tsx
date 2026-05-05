@@ -824,18 +824,18 @@ function SecurityOverview({
         >
             <div className="space-y-4">
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_460px]">
-                    <div className="rounded-[18px] border bg-background/55 p-5 shadow-sm dark:bg-white/[0.025]">
-                        <div className="space-y-4">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Audit Score</p>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">CIS Benchmark</span>
-                                    <Badge variant="outline" className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-medium", scoreBadgeClass)}>
-                                        {bandLabel}
-                                    </Badge>
-                                </div>
+                    <div className="flex h-full flex-col justify-between rounded-[18px] border bg-background/55 p-5 shadow-sm dark:bg-white/[0.025]">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Audit Score</p>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">CIS Benchmark</span>
+                                <Badge variant="outline" className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-medium", scoreBadgeClass)}>
+                                    {bandLabel}
+                                </Badge>
                             </div>
-                            
+                        </div>
+                        
+                        <div className="flex flex-col gap-4">
                             <div className="flex items-baseline gap-2">
                                 <span className={cn("text-5xl font-bold tabular-nums",
                                     latestAudit.summary.score >= 80 ? "text-emerald-500"
@@ -857,20 +857,20 @@ function SecurityOverview({
                                     style={{ width: `${latestAudit.summary.score}%` }}
                                 />
                             </div>
-                            
-                            <div className="grid grid-cols-3 gap-2">
-                                <div className="flex flex-col items-center py-2.5 rounded-[14px] border bg-card/70 cursor-default select-none">
-                                    <span className="text-xl font-semibold tabular-nums text-primary">{latestAudit.summary.passed}</span>
-                                    <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Passed</span>
-                                </div>
-                                <div className="flex flex-col items-center py-2.5 rounded-[14px] border bg-card/70 cursor-default select-none">
-                                    <span className="text-xl font-semibold tabular-nums text-rose-500">{latestAudit.summary.failed}</span>
-                                    <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Failed</span>
-                                </div>
-                                <div className="flex flex-col items-center py-2.5 rounded-[14px] border bg-card/70 cursor-default select-none">
-                                    <span className="text-xl font-semibold tabular-nums text-foreground">{latestAudit.summary.total}</span>
-                                    <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Total</span>
-                                </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-3 gap-2">
+                            <div className="flex flex-col items-center py-2.5 rounded-[14px] border bg-card/70 cursor-default select-none">
+                                <span className="text-xl font-semibold tabular-nums text-primary">{latestAudit.summary.passed}</span>
+                                <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Passed</span>
+                            </div>
+                            <div className="flex flex-col items-center py-2.5 rounded-[14px] border bg-card/70 cursor-default select-none">
+                                <span className="text-xl font-semibold tabular-nums text-rose-500">{latestAudit.summary.failed}</span>
+                                <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Failed</span>
+                            </div>
+                            <div className="flex flex-col items-center py-2.5 rounded-[14px] border bg-card/70 cursor-default select-none">
+                                <span className="text-xl font-semibold tabular-nums text-foreground">{latestAudit.summary.total}</span>
+                                <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Total</span>
                             </div>
                         </div>
                     </div>
