@@ -8,11 +8,13 @@
     "lint": "cargo fmt --check && cargo clippy -- -W clippy::pedantic -W clippy::nursery -D warnings",
     "css": "tailwindcss -i style/main.css -o style/app.generated.css --minify",
     "css:dev": "tailwindcss -i style/main.css -o style/app.generated.css",
+    "css:watch": "tailwindcss -i style/main.css -o style/app.generated.css --watch",
     "build": "bun run css && trunk build --release",
-    "dev": "bun run css:dev && trunk serve"
+    "dev": "bun run css:dev && concurrently -k -n tailwind,trunk -c cyan,magenta \"bun run css:watch\" \"trunk serve\""
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.2.1",
+    "concurrently": "^9.2.1",
     "tailwindcss": "^4.2.1"
   }
 }

@@ -372,7 +372,7 @@ cargo test
 # Landing
 cd dokuru-landing
 bun install
-bun run dev                    # trunk serve on http://localhost:8080
+bun run dev                    # Tailwind watch + trunk serve on http://localhost:8080
 bun run build
 
 # Deploy CLI
