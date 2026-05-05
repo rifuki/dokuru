@@ -1,5 +1,5 @@
 import type { CSSProperties, FormEvent } from "react";
-import { Eye, EyeOff, Link2, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
     Dialog,
@@ -213,7 +213,6 @@ export function EditAgentModal({
                                 Cancel
                             </Button>
                             <Button type="submit" disabled={!canSave} className="w-full sm:w-auto">
-                                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                 Save Changes
                             </Button>
                         </div>

@@ -13,7 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, RefreshCw, Container, Box, HardDrive, Search, ChevronDown, Edit, Trash2, Cpu, Cloud, Globe, Link2, Loader2, WifiOff, AlertTriangle, ArrowUp, ArrowDown, ArrowUpRight, X, Check, Copy, MemoryStick } from "lucide-react";
+import { Plus, RefreshCw, Container, Box, HardDrive, Search, ChevronDown, Edit, Trash2, Cpu, Cloud, CloudOff, Globe, Link2, Link2Off, Loader2, KeyRound, ServerOff, ShieldAlert, AlertTriangle, ArrowUp, ArrowDown, ArrowUpRight, X, Check, Copy, MemoryStick } from "lucide-react";
 import { AddAgentModal } from "@/components/agents/AddAgentModal";
 import { EditAgentModal } from "@/components/agents/EditAgentModal";
 import {
@@ -39,6 +39,30 @@ type ConnectionFilter = "all" | "cloudflare" | "direct" | "domain" | "relay";
 type StatusFilter     = "all" | "online" | "connecting" | "offline";
 type SortField        = "name" | "status" | "connection";
 type SortDir          = "asc" | "desc";
+
+function ConnectionIssueIcon({ code, className }: { code: AgentConnectionIssue["code"] | undefined; className?: string }) {
+  switch (code) {
+    case "missing_token":
+    case "invalid_token":
+      return <KeyRound className={className} />;
+    case "access_denied":
+    case "cloudflare_access":
+      return <ShieldAlert className={className} />;
+    case "cloudflare_tunnel":
+    case "connection_timeout":
+      return <CloudOff className={className} />;
+    case "wrong_agent_url":
+      return <Link2Off className={className} />;
+    case "agent_unreachable":
+    case "docker_unavailable":
+    case "agent_error":
+    case "websocket_error":
+    case "connection_closed":
+      return <ServerOff className={className} />;
+    default:
+      return <AlertTriangle className={className} />;
+  }
+}
 
 export const Route = createFileRoute("/_authenticated/agents/")({
   component: AgentsPage,
@@ -274,13 +298,15 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
                 className="mt-3 flex min-w-0 items-center gap-2 text-[12px] font-medium"
                 title={connectionDetail || undefined}
               >
-                <WifiOff className={`h-3.5 w-3.5 shrink-0 ${connectionIconClass}`} />
+                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${connectionError?.retryable === false ? "bg-red-500/10" : "bg-amber-400/10"}`}>
+                  <ConnectionIssueIcon code={connectionError?.code} className={`h-3.5 w-3.5 ${connectionIconClass}`} />
+                </span>
                 <span className={`shrink-0 font-semibold ${connectionTextClass}`}>
                   {connectionError?.title ?? "Unable to connect"}
                 </span>
                 <span className="h-1 w-1 shrink-0 rounded-full bg-muted-foreground/40" />
                 {connectionError?.retryable === false ? (
-                  <span className="shrink-0 rounded border border-red-500/25 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-300">
+                  <span className="shrink-0 rounded-full border border-red-500/25 bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-300">
                     Paused
                   </span>
                 ) : null}
