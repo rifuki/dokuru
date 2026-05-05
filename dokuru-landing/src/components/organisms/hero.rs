@@ -70,23 +70,32 @@ pub(crate) fn hero() -> impl IntoView {
                     </div>
                 </div>
             </section>
-
             <section id="preview" data-testid="preview-section" class="relative min-h-[100svh] flex flex-col justify-center px-6 md:px-10 overflow-hidden">
-                <div class="mb-16 text-center animate-enter-up z-20" style="--motion-delay: 200ms">
+                <div class="mb-16 text-center animate-enter-up z-50 relative" style="--motion-delay: 200ms">
                     <h2 class="font-heading text-2xl font-bold text-white md:text-4xl">"Real-time security at a glance"</h2>
                     <p class="mt-3 text-sm text-zinc-400 md:text-base">"The agent serves its own dashboard with live metrics and auto-fixes."</p>
                 </div>
 
-                <div class="relative mx-auto w-full max-w-5xl h-[400px] sm:h-[450px] md:h-[500px]">
-                    // Terminal (Background Layer, offset to left)
-                    <div class="absolute left-0 top-0 hidden md:block w-[460px] -rotate-2 opacity-50 transition-all duration-500 hover:rotate-0 hover:opacity-100 hover:z-30 hover:scale-105 z-0" style="--motion-delay: 400ms">
-                        {terminal_preview()}
+                <div class="relative mx-auto w-full max-w-6xl h-[450px] sm:h-[500px] md:h-[650px]">
+                    // 1. Onboard Terminal (Background Layer, Top Left)
+                    <div class="absolute left-0 top-4 hidden lg:block w-[440px] -rotate-3 opacity-40 transition-all duration-500 hover:rotate-0 hover:opacity-100 hover:z-50 hover:scale-105 z-10" style="--motion-delay: 400ms">
+                        {onboard_terminal()}
                     </div>
 
-                    // Audit Panel (Foreground Layer, offset to right)
-                    <div class="absolute right-0 md:bottom-0 top-0 md:top-auto w-full md:w-[700px] z-10 transition-transform duration-500 hover:scale-[1.02]" style="--motion-delay: 500ms">
-                        <div class="absolute inset-0 scale-90 rounded-full bg-[#2496ED]/15 blur-[100px] pointer-events-none"/>
-                        <div class="relative overflow-hidden rounded-2xl border border-white/10 bg-[#050505] shadow-[0_30px_100px_rgba(0,0,0,0.8)] text-left ring-1 ring-white/5 backdrop-blur-xl">
+                    // 2. Scanning Terminal (Background Layer, Bottom Left)
+                    <div class="absolute left-10 bottom-4 hidden lg:block w-[400px] rotate-2 opacity-50 transition-all duration-500 hover:rotate-0 hover:opacity-100 hover:z-50 hover:scale-105 z-20" style="--motion-delay: 600ms">
+                        {scanning_terminal()}
+                    </div>
+
+                    // 3. Fix Alert (Foreground Layer, Top Right)
+                    <div class="absolute right-4 top-16 hidden lg:block w-[320px] rotate-3 opacity-90 transition-all duration-500 hover:rotate-0 hover:opacity-100 hover:z-50 hover:scale-105 z-40" style="--motion-delay: 700ms">
+                        {fix_alert()}
+                    </div>
+
+                    // 4. Audit Panel (Foreground Layer, Center Right)
+                    <div class="absolute right-0 md:bottom-10 top-0 md:top-auto w-full lg:right-20 lg:w-[680px] z-30 transition-transform duration-500 hover:scale-[1.02]" style="--motion-delay: 500ms">
+                        <div class="absolute inset-0 scale-90 rounded-full bg-[#2496ED]/15 blur-[120px] pointer-events-none"/>
+                        <div class="relative overflow-hidden rounded-2xl border border-white/10 bg-[#050505] shadow-[0_40px_100px_rgba(0,0,0,0.9)] text-left ring-1 ring-white/5 backdrop-blur-xl">
                             {audit_panel()}
                         </div>
                     </div>
@@ -96,7 +105,7 @@ pub(crate) fn hero() -> impl IntoView {
     }
 }
 
-fn terminal_preview() -> impl IntoView {
+fn onboard_terminal() -> impl IntoView {
     view! {
         <div class="w-full rounded-xl border border-white/10 bg-[#050505] shadow-2xl overflow-hidden font-mono text-[11px] leading-relaxed text-zinc-300 ring-1 ring-white/5">
             <div class="flex items-center gap-1.5 border-b border-white/5 bg-white/[0.02] px-4 py-2.5">
@@ -126,6 +135,50 @@ fn terminal_preview() -> impl IntoView {
                 <div class="flex gap-2 pt-2 animate-pulse">
                     <span class="text-[#2496ED]">"❯"</span>
                     <span class="w-2 h-3 bg-zinc-400 inline-block"></span>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+fn scanning_terminal() -> impl IntoView {
+    view! {
+        <div class="w-full rounded-xl border border-white/10 bg-[#0A0A0A] shadow-2xl overflow-hidden font-mono text-[10px] leading-relaxed text-zinc-400 ring-1 ring-white/5">
+            <div class="flex items-center gap-1.5 border-b border-white/5 bg-white/[0.02] px-4 py-2">
+                <div class="h-2 w-2 rounded-full bg-[#FF5F56]"></div>
+                <div class="h-2 w-2 rounded-full bg-[#FFBD2E]"></div>
+                <div class="h-2 w-2 rounded-full bg-[#27C93F]"></div>
+                <div class="ml-2 text-[9px] text-zinc-600 font-sans">"dokuru-audit.log"</div>
+            </div>
+            <div class="p-4 space-y-1 opacity-90">
+                <div><span class="text-zinc-500">"[14:02:11]"</span> " Scanning Docker daemon configuration..."</div>
+                <div class="text-emerald-400">"✓ TLS authentication enabled"</div>
+                <div class="text-rose-400">"✗ Userland proxy is enabled (CIS 2.11)"</div>
+                <div><span class="text-zinc-500">"[14:02:12]"</span> " Inspecting running containers (8 found)..."</div>
+                <div><span class="text-zinc-500">"[14:02:13]"</span> " Analyzing namespace isolation..."</div>
+                <div class="text-emerald-400">"✓ Container 'brave_lion' uses private namespaces"</div>
+                <div class="text-emerald-400">"✓ Container 'web_proxy' uses private namespaces"</div>
+                <div><span class="text-zinc-500">"[14:02:14]"</span> " Checking cgroup resource limits..."</div>
+                <div class="flex gap-2 pt-1 animate-pulse">
+                    <span class="text-[#2496ED]">"▶"</span>
+                    <span class="w-1.5 h-2.5 bg-zinc-400 inline-block"></span>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+fn fix_alert() -> impl IntoView {
+    view! {
+        <div class="w-full rounded-xl border border-[#2496ED]/30 bg-[#050505]/90 shadow-[0_20px_40px_rgba(36,150,237,0.15)] overflow-hidden font-sans text-sm backdrop-blur-xl ring-1 ring-white/10">
+            <div class="flex items-start gap-4 p-4">
+                <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#2496ED]/20 text-[#2496ED] shadow-[0_0_15px_rgba(36,150,237,0.4)]">
+                    {icon(IconKind::Wrench, 14, "", "2")}
+                </div>
+                <div class="flex-1 space-y-1">
+                    <p class="font-bold text-white">"Auto-fix applied"</p>
+                    <p class="text-[12px] text-zinc-400">"Restricted cgroup memory limit for "<span class="font-mono text-[#2496ED]">"redis_cache"</span></p>
+                    <div class="mt-2 text-[10px] font-mono text-emerald-400">"Resolved in 14ms"</div>
                 </div>
             </div>
         </div>
