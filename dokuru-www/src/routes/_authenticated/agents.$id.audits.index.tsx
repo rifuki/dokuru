@@ -97,10 +97,6 @@ function AuditHistoryPage() {
     };
 
     const handleBack = () => {
-        if (window.history.length > 1) {
-            window.history.back();
-            return;
-        }
         void navigate({ to: "/agents/$id/audit", params: { id } });
     };
 
@@ -110,7 +106,7 @@ function AuditHistoryPage() {
             toast.success("Audit JSON downloaded");
         } else {
             toast("Opening audit detail", { description: `Please export ${format.toUpperCase()} from the detail page.` });
-            void navigate({ to: "/agents/$id/audits/$auditId", params: { id, auditId: audit.id! } });
+            void navigate({ to: "/agents/$id/audits/$auditId", params: { id, auditId: audit.id! }, search: { from: "history" } });
         }
     };
 

@@ -1596,7 +1596,7 @@ function OfflinePanel({
                             <div className="flex flex-col gap-2 sm:flex-row">
                                 {latestAudit.id ? (
                                     <Button size="sm" className="h-8 flex-1 text-xs" asChild>
-                                        <Link to="/agents/$id/audits/$auditId" params={{ id, auditId: latestAudit.id }} search={{ from: "latest" }}>
+                                        <Link to="/agents/$id/audits/$auditId" params={{ id, auditId: latestAudit.id }} search={{ from: "dashboard" }}>
                                             <ShieldCheck className="mr-2 h-3.5 w-3.5" />
                                             Latest Audit
                                         </Link>

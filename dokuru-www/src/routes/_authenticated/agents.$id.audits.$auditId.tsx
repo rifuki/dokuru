@@ -54,7 +54,7 @@ type AuditDetailSearch = {
   from?: AuditDetailSource;
 };
 
-type AuditDetailSource = "latest" | "history";
+type AuditDetailSource = "latest" | "history" | "dashboard";
 type StatusFilter = "all" | "Pass" | "Fail" | "Error";
 type ViewMode = "pillar" | "section";
 type RuleCardTab = "overview" | "fix" | "debug";
@@ -148,7 +148,7 @@ function normalizeSearchRuleId(value: unknown) {
 }
 
 function normalizeAuditDetailSource(value: unknown): AuditDetailSource | undefined {
-  return value === "latest" || value === "history" ? value : undefined;
+  return value === "latest" || value === "history" || value === "dashboard" ? value : undefined;
 }
 
 function findAuditRuleCard(ruleId: string) {
@@ -2069,6 +2069,10 @@ function AuditDetailPage() {
   };
 
   const handleBack = () => {
+    if (auditDetailBackTarget === "dashboard") {
+      navigate({ to: "/agents/$id", params: { id } });
+      return;
+    }
     if (auditDetailBackTarget === "latest") {
       navigate({ to: "/agents/$id/audit", params: { id } });
       return;
