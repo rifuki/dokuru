@@ -91,13 +91,6 @@ type AgentWithInfo = {
   connectionError: AgentConnectionIssue | null; // last classified connection issue
 };
 
-function getDockerInfoErrorMessage(error: unknown, agent: Agent) {
-  return connectionIssueSummary(classifyAgentConnectionError(error, {
-    accessMode: agent.access_mode,
-    endpoint: "info",
-  }));
-}
-
 function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWithInfo; onClick: () => void; onUpdated: (agent: Agent) => void; onRefreshInfo: () => void }) {
   const { agent, infoEntry, wsOnline, isConnecting, connectionError } = data;
   const { deleteAgent } = useAgentStore();
@@ -430,7 +423,7 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
 
 function AgentsList() {
   const navigate = useNavigate();
-  const { agents, isLoading, fetchAgents, updateAgent, agentInfos, setAgentInfo, setAgentInfoLoading, setAgentInfoError, agentOnlineStatus, agentConnectingStatus, agentConnectionError } = useAgentStore();
+  const { agents, isLoading, fetchAgents, updateAgent, agentInfos, setAgentInfo, setAgentInfoLoading, setAgentInfoError, setAgentOnline, setAgentConnectionError, agentOnlineStatus, agentConnectingStatus, agentConnectionError } = useAgentStore();
   const infoRequestsRef = useRef(new Set<string>());
   const previousOnlineStatusRef = useRef<Record<string, boolean | undefined>>({});
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -470,8 +463,24 @@ function AgentsList() {
     infoRequestsRef.current.add(agent.id);
     setAgentInfoLoading(agent.id, true);
     agentDirectApi.getInfo(agent.url, token)
-      .then((info) => setAgentInfo(agent.id, info))
-      .catch((error) => setAgentInfoError(agent.id, getDockerInfoErrorMessage(error, agent)))
+      .then((info) => {
+        setAgentInfo(agent.id, info);
+        if (agent.access_mode === "relay") {
+          setAgentOnline(agent.id, true);
+          setAgentConnectionError(agent.id, null);
+        }
+      })
+      .catch((error) => {
+        const issue = classifyAgentConnectionError(error, {
+          accessMode: agent.access_mode,
+          endpoint: "info",
+        });
+        setAgentInfoError(agent.id, connectionIssueSummary(issue));
+        if (agent.access_mode === "relay") {
+          setAgentOnline(agent.id, false);
+          setAgentConnectionError(agent.id, issue);
+        }
+      })
       .finally(() => infoRequestsRef.current.delete(agent.id));
   }
 

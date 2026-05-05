@@ -2,11 +2,46 @@ import { useEffect } from "react";
 import { useWebSocket } from "@/providers/WebSocketProvider";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAgentStore } from "@/stores/use-agent-store";
+import { agentDirectApi } from "@/lib/api/agent-direct";
 
 export function useRealtimeAgents() {
     const { status, lastMessage } = useWebSocket();
     const queryClient = useQueryClient();
-    const { setAgentOnline, agents } = useAgentStore();
+    const { setAgentOnline, setAgentConnecting, setAgentConnectionError, agents } = useAgentStore();
+    const relayAgentIdsKey = agents
+        .filter((agent) => agent.access_mode === "relay")
+        .map((agent) => agent.id)
+        .join(",");
+
+    useEffect(() => {
+        if (status !== "connected" || !relayAgentIdsKey) return;
+
+        let cancelled = false;
+        const relayAgentIds = relayAgentIdsKey.split(",");
+
+        for (const agentId of relayAgentIds) {
+            setAgentConnecting(agentId, true);
+            void agentDirectApi.checkHealth("relay", agentId)
+                .then((online) => {
+                    if (cancelled) return;
+                    setAgentConnecting(agentId, false);
+                    setAgentOnline(agentId, online);
+                    if (online) setAgentConnectionError(agentId, null);
+                })
+                .catch(() => {
+                    if (cancelled) return;
+                    setAgentConnecting(agentId, false);
+                    setAgentOnline(agentId, false);
+                });
+        }
+
+        return () => {
+            cancelled = true;
+            for (const agentId of relayAgentIds) {
+                setAgentConnecting(agentId, false);
+            }
+        };
+    }, [relayAgentIdsKey, setAgentConnecting, setAgentConnectionError, setAgentOnline, status]);
 
     useEffect(() => {
         if (!lastMessage) return;

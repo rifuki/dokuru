@@ -221,7 +221,7 @@ export function AppSidebar() {
   const isAdmin = user?.role === "admin";
   const location = useLocation();
   const navigate = useNavigate();
-  const { agents, fetchAgents, agentOnlineStatus, agentConnectingStatus, setAgentOnline } = useAgentStore();
+  const { agents, fetchAgents, agentOnlineStatus, agentConnectingStatus } = useAgentStore();
   const auditStreams = useAuditStore((state) => state.auditStreams);
   const viewedAuditResults = useAuditStore((state) => state.viewedAuditResults);
   const fixJobs = useAuditStore((state) => state.fixJobs);
@@ -330,17 +330,6 @@ export function AppSidebar() {
       });
     }
   }, [auditStreams, location.pathname, navigate]);
-
-  // Seed relay agents as offline on load (their status comes from backend WS events only).
-  useEffect(() => {
-    if (isAdmin || agents.length === 0) return;
-    for (const agent of agents) {
-      if (agent.access_mode === "relay") {
-        setAgentOnline(agent.id, false);
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agents.map(a => a.id).join(","), isAdmin]);
 
   const isActive = (href: string) => {
     if (href === "/admin") return location.pathname === "/admin";

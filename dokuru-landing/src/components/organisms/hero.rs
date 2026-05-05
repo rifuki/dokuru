@@ -7,181 +7,216 @@ use leptos::{html, prelude::*};
 #[must_use]
 pub(crate) fn hero() -> impl IntoView {
     let (fixing, set_fixing) = signal(false);
+
+    view! {
+        <div class="flex flex-col">
+            {hero_top()}
+            {preview_section(fixing, set_fixing)}
+        </div>
+    }
+}
+
+fn hero_top() -> impl IntoView {
+    view! {
+        <section id="top" data-testid="hero-section" class="relative flex min-h-[100svh] flex-col justify-center overflow-hidden px-0 pb-8 pt-20 sm:pt-0 sm:pb-0">
+            <div class="absolute inset-0 bg-grid-fine mask-fade-b pointer-events-none animate-fade-in"/>
+            <div class="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-[400px] bg-[#2496ED]/15 blur-[120px] pointer-events-none rounded-full"/>
+
+            <div class="relative mx-auto flex w-full max-w-4xl flex-col items-start px-5 text-left sm:items-center sm:px-6 sm:text-center md:px-10">
+                <a href="https://github.com/rifuki/dokuru" target="_blank" rel="noopener noreferrer" class="animate-enter-up mb-5 inline-flex items-center gap-2 rounded-full border border-[#2496ED]/20 bg-[#2496ED]/10 px-2.5 py-1 text-xs font-medium text-[#2496ED] transition-colors hover:bg-[#2496ED]/20 sm:mb-8 sm:gap-2.5 sm:px-3 sm:py-1.5 sm:text-sm" style="--motion-delay: 200ms; --motion-duration: 800ms">
+                    <span class="flex h-1.5 w-1.5 rounded-full bg-[#2496ED] shadow-[0_0_8px_#2496ED]"/>
+                    <span>"Dokuru is Open Source"</span>
+                    {icon(IconKind::ArrowRight, 14, "opacity-70", "2")}
+                </a>
+
+                {hero_headlines()}
+                {hero_subheadline()}
+                {hero_actions()}
+                {hero_feature_pills()}
+            </div>
+        </section>
+    }
+}
+
+fn hero_headlines() -> impl IntoView {
+    view! {
+        <>
+            <h1 data-testid="hero-headline" class="animate-enter-up font-heading text-[44px] font-bold tracking-tight leading-[1] text-white sm:hidden" style="--motion-delay: 300ms; --motion-duration: 800ms">
+                "Docker audits,"<br/>"shipped as"<br/>
+                <span class="relative inline-block whitespace-nowrap">
+                    <span class="bg-gradient-to-r from-[#2496ED] to-[#38BDF8] bg-clip-text text-transparent">"an agent."</span>
+                    <span class="absolute -bottom-1 left-0 right-0 h-[2px] bg-gradient-to-r from-[#2496ED]/0 via-[#2496ED] to-[#2496ED]/0"/>
+                </span>
+            </h1>
+
+            <h1 class="animate-enter-up hidden font-heading font-bold tracking-tight text-white sm:block sm:text-6xl sm:leading-[1.08] lg:text-[76px] lg:leading-[1.1]" style="--motion-delay: 300ms; --motion-duration: 800ms">
+                "Docker security audits,"<br/>"shipped "
+                <span class="relative inline-block whitespace-nowrap">
+                    <span class="bg-gradient-to-r from-[#2496ED] to-[#38BDF8] bg-clip-text text-transparent">"as an agent."</span>
+                    <span class="absolute -bottom-1 left-0 right-0 h-[2px] bg-gradient-to-r from-[#2496ED]/0 via-[#2496ED] to-[#2496ED]/0"/>
+                </span>
+            </h1>
+        </>
+    }
+}
+
+fn hero_subheadline() -> impl IntoView {
+    view! {
+        <p data-testid="hero-subheadline" class="animate-enter-up mt-6 max-w-[22rem] text-[16px] leading-7 text-zinc-400 sm:mx-auto sm:mt-8 sm:max-w-2xl sm:leading-relaxed md:text-[20px]" style="--motion-delay: 500ms; --motion-duration: 600ms">
+            <span class="sm:hidden">
+                "Run CIS-aligned Docker checks, review evidence, and apply supported fixes from one lightweight Rust agent."
+            </span>
+            <span class="hidden sm:inline">
+                "Install one lightweight Rust agent on a Docker host. It serves its "
+                <span class="text-zinc-200 font-medium">"own dashboard"</span>
+                " for audits, evidence, and supported fixes — then joins the app when you need multi-host control."
+            </span>
+        </p>
+    }
+}
+
+fn hero_actions() -> impl IntoView {
+    view! {
+        <div class="animate-enter-up mt-8 flex w-full flex-wrap items-center justify-start gap-3 sm:mt-10 sm:w-auto sm:justify-center sm:gap-4" style="--motion-delay: 700ms; --motion-duration: 600ms">
+            <a href="#how-it-works" data-testid="hero-cta-primary" class="group inline-flex items-center justify-center gap-2 rounded-xl bg-[#2496ED] px-6 py-3.5 text-base font-medium text-white shadow-[0_0_30px_rgba(36,150,237,0.3)] transition-all hover:bg-[#1C7CBA] hover:shadow-[0_0_40px_rgba(36,150,237,0.4)] active:scale-[0.98] sm:px-7 sm:text-base">
+                "Install Agent"
+                {icon(IconKind::ArrowRight, 16, "transition-transform group-hover:translate-x-1", "2")}
+            </a>
+            <a href=APP_URL target="_blank" rel="noopener noreferrer" data-testid="hero-cta-secondary" class="group hidden items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-7 py-3.5 font-medium text-white backdrop-blur-sm transition-all hover:border-white/20 hover:bg-white/[0.06] active:scale-[0.98] sm:inline-flex">
+                {icon(IconKind::Terminal, 16, "text-zinc-400 transition-colors group-hover:text-white", "2")}
+                "Open App"
+            </a>
+        </div>
+    }
+}
+
+fn hero_feature_pills() -> impl IntoView {
+    view! {
+        <div class="animate-enter-up mt-8 flex max-w-[22rem] flex-wrap items-center justify-start gap-2 sm:mt-12 sm:max-w-none sm:justify-center sm:gap-3 md:gap-4" style="--motion-delay: 800ms; --motion-duration: 600ms">
+            {hero_feature_pill("Built-in dashboard")}
+            {hero_feature_pill("Rule-level evidence")}
+            {hero_feature_pill("Supported fixes")}
+        </div>
+    }
+}
+
+fn hero_feature_pill(label: &'static str) -> impl IntoView {
+    view! {
+        <div class="flex items-center gap-2 rounded-full border border-white/5 bg-white/[0.02] pl-1.5 pr-3 py-1.5 text-xs font-medium text-zinc-400 backdrop-blur-md sm:gap-2.5 sm:pr-4 sm:text-sm">
+            <div class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400 sm:h-6 sm:w-6">
+                {icon(IconKind::Check, 12, "", "2.5")}
+            </div>
+            {label}
+        </div>
+    }
+}
+
+fn preview_section(fixing: ReadSignal<bool>, set_fixing: WriteSignal<bool>) -> impl IntoView {
+    view! {
+        <section id="preview" data-testid="preview-section" class="relative px-4 py-20 sm:px-6 md:px-10 md:py-28 lg:min-h-[100svh] lg:flex lg:flex-col lg:justify-center lg:py-32 overflow-hidden">
+            {preview_heading()}
+
+            <div class="relative mx-auto flex h-[680px] w-full max-w-6xl items-center justify-center sm:h-[620px] lg:h-[650px]">
+                {preview_mobile_layers()}
+                {preview_desktop_layers()}
+                {preview_audit_panel(fixing, set_fixing)}
+            </div>
+
+            {fix_toast(fixing)}
+        </section>
+    }
+}
+
+fn preview_heading() -> impl IntoView {
     let preview_heading_ref = reveal_ref::<html::Div>();
+
+    view! {
+        <div node_ref=preview_heading_ref class="reveal relative z-50 mx-auto mb-8 max-w-2xl text-center sm:mb-12 lg:mb-16" style="--motion-delay: 100ms; --motion-duration: 650ms">
+            <h2 class="font-heading text-[28px] font-bold leading-tight text-white md:text-4xl">"The complete security workflow"</h2>
+            <p class="mt-4 text-sm text-zinc-400 md:text-base max-w-2xl mx-auto">"Seamless onboarding, real-time scanning, and 1-click auto-fixes — all orchestrated by a single lightweight agent."</p>
+        </div>
+    }
+}
+
+fn preview_mobile_layers() -> impl IntoView {
+    view! {
+        <>
+            <div class="pointer-events-none absolute -left-24 top-6 z-10 w-[360px] -rotate-6 opacity-35 lg:hidden">
+                <div class="origin-top-left scale-[0.72]">{onboard_terminal()}</div>
+            </div>
+
+            <div class="pointer-events-none absolute -right-20 top-14 z-20 w-[300px] rotate-6 opacity-80 lg:hidden">
+                <div class="origin-top-right scale-[0.78]">{fix_alert()}</div>
+            </div>
+
+            <div class="pointer-events-none absolute -left-12 bottom-16 z-20 w-[250px] -rotate-3 opacity-70 lg:hidden">
+                <div class="origin-bottom-left scale-[0.82]">{agent_telemetry()}</div>
+            </div>
+
+            <div class="pointer-events-none absolute -right-28 bottom-8 z-10 w-[360px] rotate-3 opacity-30 lg:hidden">
+                <div class="origin-bottom-right scale-[0.76]">{scanning_terminal()}</div>
+            </div>
+        </>
+    }
+}
+
+fn preview_desktop_layers() -> impl IntoView {
     let onboard_ref = reveal_ref::<html::Div>();
     let scanning_ref = reveal_ref::<html::Div>();
     let fix_alert_ref = reveal_ref::<html::Div>();
     let telemetry_ref = reveal_ref::<html::Div>();
+
+    view! {
+        <>
+            <div node_ref=onboard_ref class="reveal group absolute left-0 lg:-left-4 top-4 hidden lg:block w-[440px] z-10 hover:z-50" data-reveal="right" style="--motion-delay: 180ms; --motion-duration: 650ms">
+                <div class="w-full -rotate-3 opacity-40 transition-all duration-500 group-hover:rotate-0 group-hover:opacity-100 group-hover:scale-105">{onboard_terminal()}</div>
+            </div>
+
+            <div node_ref=scanning_ref class="reveal group absolute right-0 lg:-right-4 bottom-10 hidden lg:block w-[400px] z-20 hover:z-50" data-reveal="left" style="--motion-delay: 320ms; --motion-duration: 650ms">
+                <div class="w-full rotate-2 opacity-50 transition-all duration-500 group-hover:rotate-0 group-hover:opacity-100 group-hover:scale-105">{scanning_terminal()}</div>
+            </div>
+
+            <div node_ref=fix_alert_ref class="reveal group absolute right-10 lg:right-0 top-10 hidden lg:block w-[320px] z-20 hover:z-50" data-reveal="left" style="--motion-delay: 460ms; --motion-duration: 650ms">
+                <div class="w-full rotate-3 opacity-90 transition-all duration-500 group-hover:rotate-0 group-hover:opacity-100 group-hover:scale-105">{fix_alert()}</div>
+            </div>
+
+            <div node_ref=telemetry_ref class="reveal group absolute left-10 lg:-left-2 bottom-6 hidden lg:block w-[280px] z-20 hover:z-50" data-reveal="right" style="--motion-delay: 600ms; --motion-duration: 650ms">
+                <div class="w-full -rotate-2 opacity-80 transition-all duration-500 group-hover:rotate-0 group-hover:opacity-100 group-hover:scale-105">{agent_telemetry()}</div>
+            </div>
+        </>
+    }
+}
+
+fn preview_audit_panel(fixing: ReadSignal<bool>, set_fixing: WriteSignal<bool>) -> impl IntoView {
     let audit_panel_ref = reveal_ref::<html::Div>();
 
     view! {
-        <div class="flex flex-col">
-            <section id="top" data-testid="hero-section" class="relative flex min-h-[100svh] flex-col justify-center overflow-hidden px-0 pb-8 pt-20 sm:pt-0 sm:pb-0">
-                <div class="absolute inset-0 bg-grid-fine mask-fade-b pointer-events-none animate-fade-in"/>
-
-                // Top heavenly glow
-                <div class="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-[400px] bg-[#2496ED]/15 blur-[120px] pointer-events-none rounded-full"/>
-
-                <div class="relative mx-auto flex w-full max-w-4xl flex-col items-start px-5 text-left sm:items-center sm:px-6 sm:text-center md:px-10">
-
-                    <a href="https://github.com/rifuki/dokuru" target="_blank" rel="noopener noreferrer" class="animate-enter-up mb-5 inline-flex items-center gap-2 rounded-full border border-[#2496ED]/20 bg-[#2496ED]/10 px-2.5 py-1 text-xs font-medium text-[#2496ED] transition-colors hover:bg-[#2496ED]/20 sm:mb-8 sm:gap-2.5 sm:px-3 sm:py-1.5 sm:text-sm" style="--motion-delay: 200ms; --motion-duration: 800ms">
-                        <span class="flex h-1.5 w-1.5 rounded-full bg-[#2496ED] shadow-[0_0_8px_#2496ED]"/>
-                        <span>"Dokuru is Open Source"</span>
-                        {icon(IconKind::ArrowRight, 14, "opacity-70", "2")}
-                    </a>
-
-                    <h1 data-testid="hero-headline" class="animate-enter-up font-heading text-[44px] font-bold tracking-tight leading-[1] text-white sm:hidden" style="--motion-delay: 300ms; --motion-duration: 800ms">
-                        "Docker audits,"
-                        <br/>
-                        "shipped as"
-                        <br/>
-                        <span class="relative inline-block whitespace-nowrap">
-                            <span class="bg-gradient-to-r from-[#2496ED] to-[#38BDF8] bg-clip-text text-transparent">"an agent."</span>
-                            <span class="absolute -bottom-1 left-0 right-0 h-[2px] bg-gradient-to-r from-[#2496ED]/0 via-[#2496ED] to-[#2496ED]/0"/>
-                        </span>
-                    </h1>
-
-                    <h1 class="animate-enter-up hidden font-heading font-bold tracking-tight text-white sm:block sm:text-6xl sm:leading-[1.08] lg:text-[76px] lg:leading-[1.1]" style="--motion-delay: 300ms; --motion-duration: 800ms">
-                        "Docker security audits,"
-                        <br/>
-                        "shipped "
-                        <span class="relative inline-block whitespace-nowrap">
-                            <span class="bg-gradient-to-r from-[#2496ED] to-[#38BDF8] bg-clip-text text-transparent">"as an agent."</span>
-                            <span class="absolute -bottom-1 left-0 right-0 h-[2px] bg-gradient-to-r from-[#2496ED]/0 via-[#2496ED] to-[#2496ED]/0"/>
-                        </span>
-                    </h1>
-
-                    <p data-testid="hero-subheadline" class="animate-enter-up mt-6 max-w-[22rem] text-[16px] leading-7 text-zinc-400 sm:mx-auto sm:mt-8 sm:max-w-2xl sm:leading-relaxed md:text-[20px]" style="--motion-delay: 500ms; --motion-duration: 600ms">
-                        <span class="sm:hidden">
-                            "Run CIS-aligned Docker checks, review evidence, and apply supported fixes from one lightweight Rust agent."
-                        </span>
-                        <span class="hidden sm:inline">
-                        "Install one lightweight Rust agent on a Docker host. It serves its "
-                        <span class="text-zinc-200 font-medium">"own dashboard"</span>
-                        " for audits, evidence, and supported fixes — then joins the app when you need multi-host control."
-                        </span>
-                    </p>
-
-                    <div class="animate-enter-up mt-8 flex w-full flex-wrap items-center justify-start gap-3 sm:mt-10 sm:w-auto sm:justify-center sm:gap-4" style="--motion-delay: 700ms; --motion-duration: 600ms">
-                        <a href="#how-it-works" data-testid="hero-cta-primary" class="group inline-flex items-center justify-center gap-2 rounded-xl bg-[#2496ED] px-6 py-3.5 text-base font-medium text-white shadow-[0_0_30px_rgba(36,150,237,0.3)] transition-all hover:bg-[#1C7CBA] hover:shadow-[0_0_40px_rgba(36,150,237,0.4)] active:scale-[0.98] sm:px-7 sm:text-base">
-                            "Install Agent"
-                            {icon(IconKind::ArrowRight, 16, "transition-transform group-hover:translate-x-1", "2")}
-                        </a>
-                        <a href=APP_URL target="_blank" rel="noopener noreferrer" data-testid="hero-cta-secondary" class="group hidden items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-7 py-3.5 font-medium text-white backdrop-blur-sm transition-all hover:border-white/20 hover:bg-white/[0.06] active:scale-[0.98] sm:inline-flex">
-                            {icon(IconKind::Terminal, 16, "text-zinc-400 transition-colors group-hover:text-white", "2")}
-                            "Open App"
-                        </a>
-                    </div>
-
-                    <div class="animate-enter-up mt-8 flex max-w-[22rem] flex-wrap items-center justify-start gap-2 sm:mt-12 sm:max-w-none sm:justify-center sm:gap-3 md:gap-4" style="--motion-delay: 800ms; --motion-duration: 600ms">
-                        <div class="flex items-center gap-2 rounded-full border border-white/5 bg-white/[0.02] pl-1.5 pr-3 py-1.5 text-xs font-medium text-zinc-400 backdrop-blur-md sm:gap-2.5 sm:pr-4 sm:text-sm">
-                            <div class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400 sm:h-6 sm:w-6">
-                                {icon(IconKind::Check, 12, "", "2.5")}
-                            </div>
-                            "Built-in dashboard"
-                        </div>
-                        <div class="flex items-center gap-2 rounded-full border border-white/5 bg-white/[0.02] pl-1.5 pr-3 py-1.5 text-xs font-medium text-zinc-400 backdrop-blur-md sm:gap-2.5 sm:pr-4 sm:text-sm">
-                            <div class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400 sm:h-6 sm:w-6">
-                                {icon(IconKind::Check, 12, "", "2.5")}
-                            </div>
-                            "Rule-level evidence"
-                        </div>
-                        <div class="flex items-center gap-2 rounded-full border border-white/5 bg-white/[0.02] pl-1.5 pr-3 py-1.5 text-xs font-medium text-zinc-400 backdrop-blur-md sm:gap-2.5 sm:pr-4 sm:text-sm">
-                            <div class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400 sm:h-6 sm:w-6">
-                                {icon(IconKind::Check, 12, "", "2.5")}
-                            </div>
-                            "Supported fixes"
-                        </div>
-                    </div>
+        <div node_ref=audit_panel_ref class="reveal relative z-30 w-full max-w-[720px]" style="--motion-delay: 260ms; --motion-duration: 700ms">
+            <div class="transition-transform duration-500 hover:scale-[1.02]">
+                <div class="absolute inset-0 scale-90 rounded-full bg-[#2496ED]/15 blur-[120px] pointer-events-none"/>
+                <div class="relative overflow-hidden rounded-2xl border border-white/10 bg-[#050505] shadow-[0_40px_100px_rgba(0,0,0,0.9)] text-left ring-1 ring-white/5 backdrop-blur-xl">
+                    {audit_panel(fixing, set_fixing)}
                 </div>
-            </section>
-            <section id="preview" data-testid="preview-section" class="relative px-4 py-20 sm:px-6 md:px-10 md:py-28 lg:min-h-[100svh] lg:flex lg:flex-col lg:justify-center lg:py-32 overflow-hidden">
-                <div node_ref=preview_heading_ref class="reveal relative z-50 mx-auto mb-8 max-w-2xl text-center sm:mb-12 lg:mb-16" style="--motion-delay: 100ms; --motion-duration: 650ms">
-                    <h2 class="font-heading text-[28px] font-bold leading-tight text-white md:text-4xl">"The complete security workflow"</h2>
-                    <p class="mt-4 text-sm text-zinc-400 md:text-base max-w-2xl mx-auto">"Seamless onboarding, real-time scanning, and 1-click auto-fixes — all orchestrated by a single lightweight agent."</p>
-                </div>
-
-                <div class="relative mx-auto flex h-[680px] w-full max-w-6xl items-center justify-center sm:h-[620px] lg:h-[650px]">
-                    // Mobile decorative layers keep the floating-window feel without requiring desktop width.
-                    <div class="pointer-events-none absolute -left-24 top-6 z-10 w-[360px] -rotate-6 opacity-35 lg:hidden">
-                        <div class="origin-top-left scale-[0.72]">
-                            {onboard_terminal()}
-                        </div>
-                    </div>
-
-                    <div class="pointer-events-none absolute -right-20 top-14 z-20 w-[300px] rotate-6 opacity-80 lg:hidden">
-                        <div class="origin-top-right scale-[0.78]">
-                            {fix_alert()}
-                        </div>
-                    </div>
-
-                    <div class="pointer-events-none absolute -left-12 bottom-16 z-20 w-[250px] -rotate-3 opacity-70 lg:hidden">
-                        <div class="origin-bottom-left scale-[0.82]">
-                            {agent_telemetry()}
-                        </div>
-                    </div>
-
-                    <div class="pointer-events-none absolute -right-28 bottom-8 z-10 w-[360px] rotate-3 opacity-30 lg:hidden">
-                        <div class="origin-bottom-right scale-[0.76]">
-                            {scanning_terminal()}
-                        </div>
-                    </div>
-
-                    // 1. Onboard Terminal (Background Layer, Top Left)
-                    <div node_ref=onboard_ref class="reveal group absolute left-0 lg:-left-4 top-4 hidden lg:block w-[440px] z-10 hover:z-50" data-reveal="right" style="--motion-delay: 180ms; --motion-duration: 650ms">
-                        <div class="w-full -rotate-3 opacity-40 transition-all duration-500 group-hover:rotate-0 group-hover:opacity-100 group-hover:scale-105">
-                            {onboard_terminal()}
-                        </div>
-                    </div>
-
-                    // 2. Scanning Terminal (Background Layer, Bottom Right)
-                    <div node_ref=scanning_ref class="reveal group absolute right-0 lg:-right-4 bottom-10 hidden lg:block w-[400px] z-20 hover:z-50" data-reveal="left" style="--motion-delay: 320ms; --motion-duration: 650ms">
-                        <div class="w-full rotate-2 opacity-50 transition-all duration-500 group-hover:rotate-0 group-hover:opacity-100 group-hover:scale-105">
-                            {scanning_terminal()}
-                        </div>
-                    </div>
-
-                    // 3. Fix Alert (Background Layer, Top Right)
-                    <div node_ref=fix_alert_ref class="reveal group absolute right-10 lg:right-0 top-10 hidden lg:block w-[320px] z-20 hover:z-50" data-reveal="left" style="--motion-delay: 460ms; --motion-duration: 650ms">
-                        <div class="w-full rotate-3 opacity-90 transition-all duration-500 group-hover:rotate-0 group-hover:opacity-100 group-hover:scale-105">
-                            {fix_alert()}
-                        </div>
-                    </div>
-
-                    // 4. Agent Telemetry (Background Layer, Bottom Left)
-                    <div node_ref=telemetry_ref class="reveal group absolute left-10 lg:-left-2 bottom-6 hidden lg:block w-[280px] z-20 hover:z-50" data-reveal="right" style="--motion-delay: 600ms; --motion-duration: 650ms">
-                        <div class="w-full -rotate-2 opacity-80 transition-all duration-500 group-hover:rotate-0 group-hover:opacity-100 group-hover:scale-105">
-                            {agent_telemetry()}
-                        </div>
-                    </div>
-
-                    // 5. Audit Panel (Foreground Layer, Center)
-                    <div node_ref=audit_panel_ref class="reveal relative z-30 w-full max-w-[720px]" style="--motion-delay: 260ms; --motion-duration: 700ms">
-                        <div class="transition-transform duration-500 hover:scale-[1.02]">
-                            <div class="absolute inset-0 scale-90 rounded-full bg-[#2496ED]/15 blur-[120px] pointer-events-none"/>
-                            <div class="relative overflow-hidden rounded-2xl border border-white/10 bg-[#050505] shadow-[0_40px_100px_rgba(0,0,0,0.9)] text-left ring-1 ring-white/5 backdrop-blur-xl">
-                                {audit_panel(fixing, set_fixing)}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                // Easter Egg Toast rendered outside transform bounds
-                {move || fixing.get().then(|| view! {
-                    <div class="fixed bottom-5 left-4 right-4 animate-enter-up z-[9999] pointer-events-none sm:left-auto sm:right-6">
-                        <div class="mx-auto flex w-full max-w-[320px] items-start gap-3 rounded-xl border border-white/10 bg-[#09090B]/95 px-5 py-4 shadow-[0_20px_40px_rgba(0,0,0,0.8)] backdrop-blur-xl sm:mx-0">
-                            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 mt-0.5">
-                                {icon(IconKind::Check, 16, "", "2")}
-                            </div>
-                            <div>
-                                <div class="text-[13px] font-bold text-white">"Magic applied! ✨"</div>
-                                <div class="mt-1 text-[12px] text-zinc-400">"We just hypothetically fixed 8 vulnerabilities for you in 12ms. (This is just a demo!)"</div>
-                            </div>
-                        </div>
-                    </div>
-                })}
-            </section>
+            </div>
         </div>
+    }
+}
+
+fn fix_toast(fixing: ReadSignal<bool>) -> impl IntoView {
+    view! {
+        {move || fixing.get().then(|| view! {
+            <div class="fixed bottom-5 left-4 right-4 animate-enter-up z-[9999] pointer-events-none sm:left-auto sm:right-6">
+                <div class="mx-auto flex w-full max-w-[320px] items-start gap-3 rounded-xl border border-white/10 bg-[#09090B]/95 px-5 py-4 shadow-[0_20px_40px_rgba(0,0,0,0.8)] backdrop-blur-xl sm:mx-0">
+                    <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 mt-0.5">
+                        {icon(IconKind::Check, 16, "", "2")}
+                    </div>
+                    <div>
+                        <div class="text-[13px] font-bold text-white">"Magic applied! ✨"</div>
+                        <div class="mt-1 text-[12px] text-zinc-400">"We just hypothetically fixed 8 vulnerabilities for you in 12ms. (This is just a demo!)"</div>
+                    </div>
+                </div>
+            </div>
+        })}
     }
 }
 
