@@ -90,7 +90,7 @@ function AuditHistoryPage() {
 
     if (loading) {
         return (
-            <div className="max-w-4xl mx-auto w-full py-20 text-center">
+            <div className="mx-auto w-full max-w-5xl py-20 text-center">
                 <p className="text-muted-foreground">Loading audit history...</p>
             </div>
         );
@@ -98,7 +98,7 @@ function AuditHistoryPage() {
 
     return (
         <>
-        <div className="max-w-4xl mx-auto w-full space-y-6 pb-10">
+        <div className="mx-auto w-full max-w-5xl space-y-6 pb-10">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                     <h2 className="text-2xl font-bold tracking-tight">Audit History</h2>
