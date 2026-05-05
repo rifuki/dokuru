@@ -819,7 +819,13 @@ function SecurityOverview({
         <SectionCard
             title="Security Overview"
             description="Latest CIS Docker Benchmark result and remediation priority."
-            action={<Button size="sm" asChild><Link to="/agents/$id/audit" params={{ id }}>Run Audit</Link></Button>}
+            action={
+                <Button size="sm" asChild>
+                    <Link to="/agents/$id/audit" params={{ id }}>
+                        View Audit <ArrowUpRight className="ml-1.5 h-3.5 w-3.5" />
+                    </Link>
+                </Button>
+            }
         >
             <div className="space-y-4">
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_460px]">
