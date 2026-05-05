@@ -7,7 +7,7 @@ use leptos::prelude::*;
 pub(crate) fn hero() -> impl IntoView {
     view! {
         <div class="flex flex-col">
-            <section id="top" data-testid="hero-section" class="relative min-h-[90svh] flex flex-col justify-center overflow-hidden px-0 pt-20">
+            <section id="top" data-testid="hero-section" class="relative min-h-[100svh] flex flex-col justify-center overflow-hidden px-0">
                 <div class="absolute inset-0 bg-grid-fine mask-fade-b pointer-events-none animate-fade-in"/>
 
                 <div class="relative mx-auto w-full max-w-4xl px-6 md:px-10 text-center">
@@ -46,13 +46,13 @@ pub(crate) fn hero() -> impl IntoView {
                 </div>
             </section>
 
-            <section id="preview" data-testid="preview-section" class="relative pb-24 md:pb-32 px-6 md:px-10">
-                <div class="mb-10 text-center animate-enter-up" style="--motion-delay: 800ms">
-                    <h2 class="font-heading text-2xl font-bold text-white md:text-3xl">"Real-time security at a glance"</h2>
+            <section id="preview" data-testid="preview-section" class="relative min-h-[100svh] flex flex-col justify-center px-6 md:px-10">
+                <div class="mb-10 text-center animate-enter-up" style="--motion-delay: 200ms">
+                    <h2 class="font-heading text-2xl font-bold text-white md:text-4xl">"Real-time security at a glance"</h2>
                     <p class="mt-3 text-sm text-zinc-400 md:text-base">"The agent serves its own dashboard with live metrics and auto-fixes."</p>
                 </div>
-                <div class="relative mx-auto w-full max-w-2xl">
-                    <div class="animate-enter-up relative" style="--motion-delay: 900ms">
+                <div class="relative mx-auto w-full max-w-3xl">
+                    <div class="animate-enter-up relative" style="--motion-delay: 400ms">
                         <div class="absolute inset-0 scale-90 rounded-full bg-[#2496ED]/10 blur-[100px]"/>
                         <div class="relative overflow-hidden rounded-2xl border border-white/10 bg-[#050505] shadow-[0_0_54px_rgba(0,0,0,0.78)] text-left ring-1 ring-white/5">
                             {audit_panel()}
