@@ -65,6 +65,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
+import { readCachedAuditHistory, sortAuditHistory, writeCachedAuditHistory } from "@/features/audit/audit-history-cache";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/")({
     component: AgentDashboard,
@@ -122,10 +123,6 @@ function relativeTime(value: string | null | undefined) {
         }
     }
     return formatter.format(-seconds, "second");
-}
-
-function auditSortDesc(a: AuditResponse, b: AuditResponse) {
-    return Date.parse(b.timestamp) - Date.parse(a.timestamp);
 }
 
 function scoreBand(score: number): keyof typeof SCORE_COPY {
@@ -200,12 +197,18 @@ function AgentDashboard() {
 
     const auditsQuery = useQuery({
         queryKey: ["audits", id],
-        queryFn: () => agentApi.listAudits(id),
+        queryFn: async () => {
+            const history = sortAuditHistory(await agentApi.listAudits(id));
+            writeCachedAuditHistory(id, history);
+            return history;
+        },
         enabled: !!id,
+        initialData: () => readCachedAuditHistory(id),
     });
 
-    const sortedAudits = [...(auditsQuery.data ?? [])].sort(auditSortDesc);
+    const sortedAudits = sortAuditHistory(auditsQuery.data ?? []);
     const latestAudit = sortedAudits[0] ?? null;
+    const isAuditHistoryCached = !!auditsQuery.error && sortedAudits.length > 0;
 
     const reportQuery = useQuery({
         queryKey: ["audit-report", id, latestAudit?.id],
@@ -377,7 +380,16 @@ function AgentDashboard() {
             {isInitialLoading ? (
                 <DashboardContentSkeleton />
             ) : !dockerInfo ? (
-                <OfflinePanel agent={agent} hasCredential={!!credential} onRetry={() => void refreshAll()} />
+                <OfflinePanel
+                    id={id}
+                    agent={agent}
+                    hasCredential={!!credential}
+                    latestAudit={latestAudit}
+                    auditHistoryCount={sortedAudits.length}
+                    isAuditHistoryLoading={auditsQuery.isFetching && sortedAudits.length === 0}
+                    isAuditHistoryCached={isAuditHistoryCached}
+                    onRetry={() => void refreshAll()}
+                />
             ) : (
                 <DashboardContent
                     id={id}
@@ -1389,27 +1401,131 @@ function SmallEmpty({ label }: { label: string }) {
     return <div className="px-4 py-8 text-center text-sm text-muted-foreground">{label}</div>;
 }
 
-function OfflinePanel({ agent, hasCredential, onRetry }: { agent: Agent; hasCredential: boolean; onRetry: () => void }) {
+function fmtAuditTimestamp(value: string | null | undefined) {
+    if (!value) return "Unknown time";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+    }).format(date);
+}
+
+function OfflinePanel({
+    id,
+    agent,
+    hasCredential,
+    latestAudit,
+    auditHistoryCount,
+    isAuditHistoryLoading,
+    isAuditHistoryCached,
+    onRetry,
+}: {
+    id: string;
+    agent: Agent;
+    hasCredential: boolean;
+    latestAudit: AuditResponse | null;
+    auditHistoryCount: number;
+    isAuditHistoryLoading: boolean;
+    isAuditHistoryCached: boolean;
+    onRetry: () => void;
+}) {
+    const latestAuditId = latestAudit?.id;
+
     return (
-        <div className="rounded-3xl border border-dashed bg-card p-10 text-center shadow-sm">
+        <div className="rounded-3xl border border-dashed bg-card p-6 shadow-sm sm:p-8">
             <div className="mx-auto flex size-16 items-center justify-center rounded-2xl border bg-muted/30 text-muted-foreground">
                 <Server className="h-8 w-8" />
             </div>
-            <h2 className="mt-5 text-xl font-bold">Agent unreachable</h2>
-            <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
-                {hasCredential
-                    ? `Dokuru could not reach ${agent.name}. Confirm the agent service is running and the URL is reachable from this browser.`
-                    : "This direct-mode agent needs a local token before Dokuru can query Docker data."}
-            </p>
+            <div className="mt-5 text-center">
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                    <h2 className="text-xl font-bold">Offline Review Mode</h2>
+                    {isAuditHistoryCached ? (
+                        <Badge variant="outline" className="border-amber-400/30 bg-amber-400/10 text-[10px] text-amber-300">Cached</Badge>
+                    ) : null}
+                </div>
+                <p className="mx-auto mt-2 max-w-2xl text-sm text-muted-foreground">
+                    {hasCredential
+                        ? `Dokuru could not reach ${agent.name}. Live Docker inventory is paused, but saved audit reports can still be reviewed.`
+                        : "This direct-mode agent needs a local token before Dokuru can query Docker data. Saved audit reports may still be available."}
+                </p>
+            </div>
+
+            <div className="mx-auto mt-6 max-w-3xl rounded-2xl border bg-background/55 p-4 text-left shadow-sm dark:bg-white/[0.025]">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-semibold">Saved audit access</p>
+                            <Badge variant="outline" className="font-mono text-[10px] bg-muted/10">{auditHistoryCount} reports</Badge>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            {latestAudit
+                                ? `Latest report captured ${fmtAuditTimestamp(latestAudit.timestamp)}.`
+                                : isAuditHistoryLoading
+                                    ? "Checking for saved audit reports..."
+                                    : "No saved audit reports were found for this agent yet."}
+                        </p>
+                    </div>
+
+                    {latestAudit ? (
+                        <div className="grid grid-cols-3 gap-2 text-center sm:w-[240px]">
+                            <div className="rounded-xl border bg-card/70 px-3 py-2">
+                                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Score</p>
+                                <p className="mt-1 text-2xl font-black tabular-nums">{latestAudit.summary.score}</p>
+                            </div>
+                            <div className="rounded-xl border bg-card/70 px-3 py-2">
+                                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Pass</p>
+                                <p className="mt-1 text-2xl font-black tabular-nums text-emerald-500">{latestAudit.summary.passed}</p>
+                            </div>
+                            <div className="rounded-xl border bg-card/70 px-3 py-2">
+                                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Fail</p>
+                                <p className="mt-1 text-2xl font-black tabular-nums text-rose-500">{latestAudit.summary.failed}</p>
+                            </div>
+                        </div>
+                    ) : null}
+                </div>
+            </div>
+
             <div className="mt-6 flex flex-wrap justify-center gap-2">
-                <Button onClick={onRetry}>
+                {latestAuditId ? (
+                    <Button asChild>
+                        <Link
+                            to="/agents/$id/audits/$auditId"
+                            params={{ id, auditId: latestAuditId }}
+                            search={{ from: "latest" }}
+                        >
+                            <ShieldCheck className="mr-2 h-4 w-4" />
+                            View Latest Audit
+                        </Link>
+                    </Button>
+                ) : null}
+                <Button variant={latestAuditId ? "outline" : "default"} asChild>
+                    <Link to="/agents/$id/audits" params={{ id }}>
+                        <Clock3 className="mr-2 h-4 w-4" />
+                        Audit History
+                    </Link>
+                </Button>
+                <Button variant="outline" onClick={onRetry}>
                     <RefreshCw className="mr-2 h-4 w-4" />
                     Retry Connection
                 </Button>
-                <Button variant="outline" asChild>
-                    <Link to="/agents">Back to Agents</Link>
+                <Button variant="ghost" asChild>
+                    <Link to="/agents">
+                        Back to Agents
+                        <ArrowUpRight className="ml-2 h-3.5 w-3.5" />
+                    </Link>
                 </Button>
             </div>
+
+            <p className="mx-auto mt-4 flex max-w-2xl items-start justify-center gap-2 text-center text-xs text-muted-foreground">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
+                {hasCredential
+                    ? "Live pages such as containers, stacks, images, events, and shell remain unavailable until the agent reconnects."
+                    : "Paste the agent token from Edit Agent to restore live Docker data."}
+            </p>
         </div>
     );
 }
