@@ -47,9 +47,13 @@ pub(crate) fn hero() -> impl IntoView {
             </section>
 
             <section id="preview" data-testid="preview-section" class="relative pb-24 md:pb-32 px-6 md:px-10">
-                <div class="relative mx-auto w-full max-w-4xl">
+                <div class="mb-10 text-center animate-enter-up" style="--motion-delay: 800ms">
+                    <h2 class="font-heading text-2xl font-bold text-white md:text-3xl">"Real-time security at a glance"</h2>
+                    <p class="mt-3 text-sm text-zinc-400 md:text-base">"The agent serves its own dashboard with live metrics and auto-fixes."</p>
+                </div>
+                <div class="relative mx-auto w-full max-w-2xl">
                     <div class="animate-enter-up relative" style="--motion-delay: 900ms">
-                        <div class="absolute inset-0 scale-95 rounded-full bg-[#2496ED]/10 blur-[120px]"/>
+                        <div class="absolute inset-0 scale-90 rounded-full bg-[#2496ED]/10 blur-[100px]"/>
                         <div class="relative overflow-hidden rounded-2xl border border-white/10 bg-[#050505] shadow-[0_0_54px_rgba(0,0,0,0.78)] text-left ring-1 ring-white/5">
                             {audit_panel()}
                         </div>
