@@ -880,7 +880,13 @@ function AuditRunTerminal({
             <div className="flex flex-col gap-3 border-b border-border bg-muted/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                 <div className="flex min-w-0 items-center gap-3">
                     <div className="flex shrink-0 items-center gap-1.5" aria-hidden="true">
-                        <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f56]" />
+                        <button
+                            type="button"
+                            onClick={onClear}
+                            className="h-2.5 w-2.5 rounded-full bg-[#ff5f56] hover:brightness-75 transition-all"
+                            title="Close Terminal"
+                            aria-label="Close Terminal"
+                        />
                         <span className="h-2.5 w-2.5 rounded-full bg-[#ffbd2e]" />
                         <span className="h-2.5 w-2.5 rounded-full bg-[#27c93f]" />
                     </div>
