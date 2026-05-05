@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAgentStore } from "@/stores/use-agent-store";
 import { AUDIT_CANCELLED_MESSAGE, useAuditStore, type AuditProgressLine, type AuditStreamStatus } from "@/stores/use-audit-store";
@@ -1019,6 +1019,7 @@ function AuditRunTerminal({
 function AuditPage() {
     const { id } = Route.useParams();
     const navigate = useNavigate();
+    const router = useRouter();
     const queryClient = useQueryClient();
     const { agentOnlineStatus } = useAgentStore();
     const { auditHistories, setAuditHistory, startAudit, cancelAudit, clearAuditStream } = useAuditStore();
@@ -1115,6 +1116,15 @@ function AuditPage() {
         };
     }, []);
 
+    useEffect(() => {
+        if (!savedAuditId) return;
+        void router.preloadRoute({
+            to: "/agents/$id/audits/$auditId",
+            params: { id, auditId: savedAuditId },
+            search: { from: "latest" },
+        });
+    }, [id, router, savedAuditId]);
+
     const handleRunAudit = async () => {
         if (!agent) return;
         if (agent.access_mode !== "relay" && !token && agent.id !== LOCAL_AGENT_ID) {
@@ -1172,6 +1182,11 @@ function AuditPage() {
 
     const openSavedAudit = () => {
         if (!savedAuditId) return;
+        void router.preloadRoute({
+            to: "/agents/$id/audits/$auditId",
+            params: { id, auditId: savedAuditId },
+            search: { from: "latest" },
+        });
         void navigate({
             to: "/agents/$id/audits/$auditId",
             params: { id, auditId: savedAuditId },

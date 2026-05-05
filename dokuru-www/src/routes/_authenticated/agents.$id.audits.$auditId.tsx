@@ -192,6 +192,9 @@ export const Route = createFileRoute("/_authenticated/agents/$id/audits/$auditId
     ruleId: normalizeSearchRuleId(search.ruleId),
     from: normalizeAuditDetailSource(search.from),
   }),
+  pendingComponent: AuditDetailSkeleton,
+  pendingMs: 0,
+  pendingMinMs: 250,
   component: AuditDetailPage,
 });
 

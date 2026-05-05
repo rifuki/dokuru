@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 
 import "./index.css";
+import { RoutePendingFallback } from "@/components/layout/RoutePendingFallback";
 
 // Import the generated route tree
 import { routeTree } from "./routeTree.gen";
@@ -11,6 +12,9 @@ import { routeTree } from "./routeTree.gen";
 const router = createRouter({
   routeTree,
   scrollRestoration: ({ location }) => !location.pathname.startsWith("/agents/"),
+  defaultPendingComponent: RoutePendingFallback,
+  defaultPendingMs: 120,
+  defaultPendingMinMs: 250,
 });
 
 // Register the router instance for type safety
