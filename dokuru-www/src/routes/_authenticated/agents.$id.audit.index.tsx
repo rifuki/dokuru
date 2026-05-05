@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { AffectedItems } from "@/features/audit/components/AffectedItems";
 import { AuditSummaryCard } from "@/features/audit/components/AuditSummaryCard";
+import { downloadAuditJson } from "@/features/audit/audit-export";
 import { LOCAL_AGENT_ID } from "@/lib/local-agent";
 import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 
@@ -1406,6 +1407,10 @@ function AuditPage() {
                                     params: { id, auditId: latestAudit.id! },
                                     search: { from: "latest" },
                                 })}
+                                onExport={() => {
+                                    downloadAuditJson(latestAudit);
+                                    toast.success("Audit JSON downloaded");
+                                }}
                             />
                         ) : historyLoading ? (
                             <LatestAuditSkeleton />

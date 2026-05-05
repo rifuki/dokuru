@@ -102,6 +102,21 @@ impl AuditResultService {
     /// # Errors
     ///
     /// Returns an error if the underlying operation fails.
+    pub async fn delete_by_id(
+        &self,
+        pool: &PgPool,
+        audit_id: Uuid,
+        agent_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<bool> {
+        self.repo
+            .delete_by_id(pool, audit_id, agent_id, user_id)
+            .await
+    }
+
+    /// # Errors
+    ///
+    /// Returns an error if the underlying operation fails.
     pub async fn get_report(
         &self,
         pool: &PgPool,

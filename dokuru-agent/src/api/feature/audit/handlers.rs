@@ -8,6 +8,7 @@ use axum::{
         Json, Path, State,
         ws::{Message, WebSocket, WebSocketUpgrade},
     },
+    http::StatusCode,
     response::IntoResponse,
 };
 use bollard::{Docker, models::ContainerSummary};
@@ -56,6 +57,19 @@ pub async fn list_saved_audits() -> ApiResult<Vec<StoredAuditReport>> {
 pub async fn get_saved_audit(Path(audit_id): Path<String>) -> ApiResult<StoredAuditReport> {
     let audit = read_stored_audit(&audit_id).await?;
     Ok(ApiSuccess::default().with_data(audit))
+}
+
+pub async fn delete_saved_audit(Path(audit_id): Path<String>) -> ApiResult<()> {
+    let path = audit_path(&audit_id)?;
+    match tokio::fs::remove_file(path).await {
+        Ok(()) => Ok(ApiSuccess::<()>::default().with_message("Audit deleted")),
+        Err(error) if error.kind() == ErrorKind::NotFound => Err(ApiError::default()
+            .with_code(StatusCode::NOT_FOUND)
+            .with_message("Audit not found")),
+        Err(error) => {
+            Err(ApiError::default().with_message(format!("Failed to delete audit: {error}")))
+        }
+    }
 }
 
 pub async fn get_saved_audit_report(

@@ -136,6 +136,14 @@ export const agentApi = {
     return response.data.data;
   },
 
+  deleteAudit: async (id: string, auditId: string): Promise<void> => {
+    if (IS_LOCAL_AGENT_MODE && id === LOCAL_AGENT_ID) {
+      await axios.delete(`${localAgentRootUrl()}/audit/history/${auditId}`, { headers: localAgentHeaders() });
+      return;
+    }
+    await apiClient.delete(`/agents/${id}/audit/${auditId}`);
+  },
+
   getAuditReport: async (id: string, auditId: string): Promise<AuditReportResponse> => {
     if (IS_LOCAL_AGENT_MODE && id === LOCAL_AGENT_ID) {
       const response = await axios.get(`${localAgentRootUrl()}/audit/history/${auditId}/report`, { headers: localAgentHeaders() });

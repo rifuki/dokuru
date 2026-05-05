@@ -9,7 +9,10 @@ pub fn routes() -> Router<AppState> {
             "/audit/history",
             get(handlers::list_saved_audits).post(handlers::save_audit),
         )
-        .route("/audit/history/{audit_id}", get(handlers::get_saved_audit))
+        .route(
+            "/audit/history/{audit_id}",
+            get(handlers::get_saved_audit).delete(handlers::delete_saved_audit),
+        )
         .route(
             "/audit/history/{audit_id}/report",
             get(handlers::get_saved_audit_report),

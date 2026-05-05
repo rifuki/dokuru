@@ -63,7 +63,7 @@ pub fn agent_routes() -> Router<AppState> {
         )
         .route(
             "/{id}/audit/{audit_id}",
-            get(audit_handlers::get_audit_by_id),
+            get(audit_handlers::get_audit_by_id).delete(audit_handlers::delete_audit_by_id),
         )
         .route("/{id}/audits", get(audit_handlers::list_audits))
         .layer(middleware::from_fn(auth_middleware))

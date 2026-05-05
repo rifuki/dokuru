@@ -27,6 +27,13 @@ pub trait AuditResultRepository: Send + Sync {
         agent_id: Uuid,
         user_id: Uuid,
     ) -> Result<Vec<AuditResultRecord>>;
+    async fn delete_by_id(
+        &self,
+        pool: &PgPool,
+        audit_id: Uuid,
+        agent_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<bool>;
 }
 
 pub struct AuditResultRepositoryImpl;
@@ -137,5 +144,28 @@ impl AuditResultRepository for AuditResultRepositoryImpl {
         .await?;
 
         Ok(records)
+    }
+
+    async fn delete_by_id(
+        &self,
+        pool: &PgPool,
+        audit_id: Uuid,
+        agent_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<bool> {
+        let deleted = sqlx::query_scalar::<_, Uuid>(
+            r"
+            DELETE FROM audit_results
+            WHERE id = $1 AND agent_id = $2 AND user_id = $3
+            RETURNING id
+            ",
+        )
+        .bind(audit_id)
+        .bind(agent_id)
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(deleted.is_some())
     }
 }

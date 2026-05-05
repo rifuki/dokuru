@@ -739,6 +739,41 @@ pub async fn get_audit_by_id(
 /// # Errors
 ///
 /// Returns an error if the underlying operation fails.
+pub async fn delete_audit_by_id(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path((agent_id, audit_id)): Path<(Uuid, Uuid)>,
+) -> ApiResult<()> {
+    let agent = state
+        .agent_service
+        .get_agent(state.db.pool(), agent_id, auth_user.user_id)
+        .await
+        .map_err(|e| ApiError::default().with_message(e.to_string()))?;
+
+    if agent.is_none() {
+        return Err(ApiError::default()
+            .with_code(StatusCode::NOT_FOUND)
+            .with_message("Agent not found"));
+    }
+
+    let deleted = state
+        .audit_service
+        .delete_by_id(state.db.pool(), audit_id, agent_id, auth_user.user_id)
+        .await
+        .map_err(|e| ApiError::default().with_message(e.to_string()))?;
+
+    if !deleted {
+        return Err(ApiError::default()
+            .with_code(StatusCode::NOT_FOUND)
+            .with_message("Audit not found"));
+    }
+
+    Ok(ApiSuccess::<()>::default().with_message("Audit deleted"))
+}
+
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
 pub async fn get_audit_report(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
