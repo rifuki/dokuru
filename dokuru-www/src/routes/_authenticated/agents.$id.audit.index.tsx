@@ -14,6 +14,7 @@ import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
     Play, Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
     Terminal, Wrench, ExternalLink, AlertTriangle, Info, Server,
@@ -905,9 +906,16 @@ function AuditRunTerminal({
                         </Button>
                     )}
                     {status !== "running" && status !== "saving" && (
-                        <Button size="sm" variant="ghost" className="h-8 px-2 text-muted-foreground hover:bg-muted" onClick={onClear} aria-label="Close terminal">
-                            <X className="h-4 w-4" />
-                        </Button>
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button size="sm" variant="ghost" className="h-8 px-2 text-muted-foreground hover:bg-destructive hover:text-destructive-foreground" onClick={onClear} aria-label="Close terminal">
+                                        <X className="h-4 w-4" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Close terminal</TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
                     )}
                     <div className="flex items-center gap-2">
                         <span className="text-xs font-medium text-muted-foreground">Auto Scroll</span>
