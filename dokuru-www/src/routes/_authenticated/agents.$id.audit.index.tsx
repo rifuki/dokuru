@@ -1407,9 +1407,18 @@ function AuditPage() {
                                     params: { id, auditId: latestAudit.id! },
                                     search: { from: "latest" },
                                 })}
-                                onExport={() => {
-                                    downloadAuditJson(latestAudit);
-                                    toast.success("Audit JSON downloaded");
+                                onExport={(format) => {
+                                    if (format === "json") {
+                                        downloadAuditJson(latestAudit);
+                                        toast.success("Audit JSON downloaded");
+                                    } else {
+                                        toast("Opening audit detail", { description: `Please export ${format.toUpperCase()} from the detail page.` });
+                                        void navigate({
+                                            to: "/agents/$id/audits/$auditId",
+                                            params: { id, auditId: latestAudit.id! },
+                                            search: { from: "latest" },
+                                        });
+                                    }
                                 }}
                             />
                         ) : historyLoading ? (

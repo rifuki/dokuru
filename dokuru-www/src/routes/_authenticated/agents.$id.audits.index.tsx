@@ -8,7 +8,7 @@ import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, History } from "lucide-react";
 import { toast } from "sonner";
 import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 import { AuditSummaryCard } from "@/features/audit/components/AuditSummaryCard";
@@ -40,7 +40,7 @@ function AuditHistoryPage() {
 
     const handleAuditClick = (audit: AuditResponse) => {
         if (audit.id) {
-            navigate({ to: "/agents/$id/audits/$auditId", params: { id, auditId: audit.id }, search: { from: "history" } });
+            void navigate({ to: "/agents/$id/audits/$auditId", params: { id, auditId: audit.id }, search: { from: "history" } });
         }
     };
 
@@ -49,12 +49,17 @@ function AuditHistoryPage() {
             window.history.back();
             return;
         }
-        navigate({ to: "/agents/$id/audit", params: { id } });
+        void navigate({ to: "/agents/$id/audit", params: { id } });
     };
 
-    const handleExportAudit = (audit: AuditResponse) => {
-        downloadAuditJson(audit);
-        toast.success("Audit JSON downloaded");
+    const handleExportAudit = (audit: AuditResponse, format: "pdf" | "html" | "json") => {
+        if (format === "json") {
+            downloadAuditJson(audit);
+            toast.success("Audit JSON downloaded");
+        } else {
+            toast("Opening audit detail", { description: `Please export ${format.toUpperCase()} from the detail page.` });
+            void navigate({ to: "/agents/$id/audits/$auditId", params: { id, auditId: audit.id! } });
+        }
     };
 
     const requestDeleteAudit = (audit: AuditResponse) => {
@@ -66,25 +71,22 @@ function AuditHistoryPage() {
     };
 
     const handleDeleteAudit = async () => {
-        const auditId = deleteTarget?.id;
-        if (!auditId) return;
-
-        setDeletingAuditId(auditId);
+        if (!deleteTarget?.id) return;
+        
+        setDeletingAuditId(deleteTarget.id);
         try {
-            await agentApi.deleteAudit(id, auditId);
-            const nextAudits = sortAuditHistory(audits.filter((audit) => audit.id !== auditId));
+            await agentApi.deleteAudit(id, deleteTarget.id);
+            const nextAudits = sortAuditHistory(audits.filter((audit) => audit.id !== deleteTarget.id));
             setAudits(nextAudits);
             setAuditHistory(id, nextAudits);
             writeCachedAuditHistory(id, nextAudits);
             queryClient.setQueryData(["audits", id], nextAudits);
-            queryClient.removeQueries({ queryKey: ["audit", id, auditId] });
-            await queryClient.invalidateQueries({ queryKey: ["audits", id] });
             toast.success("Audit deleted");
-            setDeleteTarget(null);
         } catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to delete audit");
         } finally {
             setDeletingAuditId(null);
+            setDeleteTarget(null);
         }
     };
 
@@ -102,31 +104,35 @@ function AuditHistoryPage() {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                     <h2 className="text-2xl font-bold tracking-tight">Audit History</h2>
-                    <p className="text-muted-foreground text-sm mt-0.5">
-                        All security audit results for this agent
-                    </p>
+                    <p className="text-muted-foreground text-sm mt-0.5">All security audit results for this agent</p>
                 </div>
-                <Button type="button" variant="outline" size="sm" className="w-full shrink-0 sm:w-auto" onClick={handleBack}>
-                    <ArrowLeft className="h-4 w-4" />
-                    Back
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleBack}
+                >
+                    <ArrowLeft className="h-4 w-4 mr-2" /> Back
                 </Button>
             </div>
 
             {audits.length === 0 ? (
-                <div className="text-center py-20 text-muted-foreground">
-                    No audit history yet. Run your first audit to get started.
+                <div className="rounded-[14px] border border-border bg-background/25 p-8 text-center">
+                    <History className="mx-auto h-8 w-8 text-muted-foreground/50 mb-3" />
+                    <p className="text-foreground font-semibold">No audits found</p>
+                    <p className="text-muted-foreground text-sm mt-1">Run a security audit to see history here.</p>
                 </div>
             ) : (
-                <div className="grid gap-4">
-                    {audits.map((audit, idx) => (
-                        <AuditSummaryCard
-                            key={audit.id ?? idx}
-                            audit={audit}
-                            onOpen={() => handleAuditClick(audit)}
-                            onExport={() => handleExportAudit(audit)}
-                            onDelete={audit.id ? () => requestDeleteAudit(audit) : undefined}
-                            isDeleting={deletingAuditId === audit.id}
-                        />
+                <div className="flex flex-col gap-4">
+                    {audits.map((audit) => (
+                        <div key={audit.id || audit.timestamp} className="w-full">
+                            <AuditSummaryCard
+                                audit={audit}
+                                onOpen={() => handleAuditClick(audit)}
+                                onExport={(format) => handleExportAudit(audit, format)}
+                                onDelete={() => requestDeleteAudit(audit)}
+                                isDeleting={deletingAuditId === audit.id}
+                            />
+                        </div>
                     ))}
                 </div>
             )}

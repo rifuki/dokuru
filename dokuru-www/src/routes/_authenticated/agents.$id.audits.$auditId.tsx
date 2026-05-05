@@ -22,7 +22,7 @@ import {
   Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
   Terminal, Wrench, AlertTriangle, Server,
   ArrowLeft, Clock, Cpu, Container, BookOpen,
-  Search, X, Layers, ArrowLeftRight, Link, FileText, Download, Printer, RefreshCw,
+  Search, X, Layers, ArrowLeftRight, Link, FileText, Download, Printer, FileJson, RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -47,6 +47,7 @@ import { useFix } from "@/features/audit/hooks/useFix";
 import { useFixAll } from "@/features/audit/hooks/useFixAll";
 import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 import { isSidebarNavigationForPath } from "@/lib/sidebar-navigation";
+import { downloadAuditJson } from "@/features/audit/audit-export";
 
 type AuditDetailSearch = {
   ruleId?: string;
@@ -2139,8 +2140,15 @@ function AuditDetailPage() {
     });
   };
 
-  const handleExportDocument = (format: "html" | "pdf") => {
+  const handleExportDocument = (format: "html" | "pdf" | "json") => {
     if (!auditData || documentExporting) return;
+    
+    if (format === "json") {
+      downloadAuditJson(auditData);
+      toast.success("Audit JSON report downloaded");
+      return;
+    }
+    
     setDocumentExporting(format);
     try {
       const html = buildCurrentAuditDocumentHtml();
@@ -2232,6 +2240,10 @@ function AuditDetailPage() {
               <DropdownMenuItem className="whitespace-nowrap pr-4" onClick={() => handleExportDocument("html")}>
                 <Download className="h-4 w-4" />
                 Download HTML
+              </DropdownMenuItem>
+              <DropdownMenuItem className="whitespace-nowrap pr-4" onClick={() => handleExportDocument("json")}>
+                <FileJson className="h-4 w-4" />
+                Download JSON
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

@@ -1,12 +1,20 @@
-import { Clock, Container, Download, Eye, Loader2, Server, Trash2 } from "lucide-react";
+import { Clock, Container, Download, Eye, Loader2, Server, Trash2, Printer, FileJson, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { AuditResponse } from "@/lib/api/agent-direct";
 import { cn } from "@/lib/utils";
 
 type AuditSummaryCardProps = {
   audit: AuditResponse;
   onOpen: () => void;
-  onExport?: () => void;
+  onExport?: (format: "pdf" | "html" | "json") => void;
   onDelete?: () => void;
   isDeleting?: boolean;
   className?: string;
@@ -126,17 +134,37 @@ export function AuditSummaryCard({ audit, onOpen, onExport, onDelete, isDeleting
               View
             </Button>
             {onExport && (
-              <Button 
-                type="button" 
-                variant="outline" 
-                size="sm" 
-                onClick={onExport} 
-                className={cn("h-8 text-xs text-muted-foreground", onDelete ? "col-span-1 justify-center px-0" : "col-span-2 justify-start")}
-                title="Export JSON"
-              >
-                <Download className={cn("h-3.5 w-3.5 opacity-70", !onDelete && "mr-2")} />
-                {!onDelete && "Export"}
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm" 
+                    className={cn("h-8 text-xs text-muted-foreground", onDelete ? "col-span-1 justify-center px-0" : "col-span-2 justify-start")}
+                    title="Export Audit"
+                  >
+                    <Download className={cn("h-3.5 w-3.5 opacity-70", !onDelete && "mr-2")} />
+                    {!onDelete && "Export"}
+                    {!onDelete && <ChevronDown className="ml-auto h-3.5 w-3.5 opacity-50" />}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-fit min-w-0">
+                  <DropdownMenuLabel className="whitespace-nowrap pr-4">Document Format</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="whitespace-nowrap pr-4" onClick={() => onExport("pdf")}>
+                    <Printer className="h-4 w-4 mr-2" />
+                    Print / Save PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="whitespace-nowrap pr-4" onClick={() => onExport("html")}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Download HTML
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="whitespace-nowrap pr-4" onClick={() => onExport("json")}>
+                    <FileJson className="h-4 w-4 mr-2" />
+                    Download JSON
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
             {onDelete && (
               <Button
@@ -145,10 +173,10 @@ export function AuditSummaryCard({ audit, onOpen, onExport, onDelete, isDeleting
                 size="sm"
                 onClick={onDelete}
                 disabled={isDeleting}
-                className={cn("h-8 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive", onExport ? "col-span-1 justify-center px-0" : "col-span-2 justify-start")}
+                className={cn("h-8 text-xs text-destructive hover:bg-destructive dark:hover:bg-destructive hover:text-white dark:hover:text-white transition-colors", onExport ? "col-span-1 justify-center px-0" : "col-span-2 justify-start")}
                 title="Delete Audit"
               >
-                {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5 opacity-70" />}
+                {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                 {!onExport && "Delete"}
               </Button>
             )}
