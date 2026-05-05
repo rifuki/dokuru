@@ -5,9 +5,11 @@ use leptos::prelude::*;
 use wasm_bindgen::{closure::Closure, JsCast};
 
 #[must_use]
-pub(crate) fn audit_panel() -> impl IntoView {
+pub(crate) fn audit_panel(
+    fixing: ReadSignal<bool>,
+    set_fixing: WriteSignal<bool>,
+) -> impl IntoView {
     let (active_tab, set_active_tab) = signal("pillars");
-    let (fixing, set_fixing) = signal(false);
     view! {
         <div data-testid="hero-audit-panel" class="relative w-full overflow-hidden rounded-[18px] border border-white/10 bg-[#09090B] shadow-[0_36px_84px_-28px_rgba(0,0,0,0.86)]">
             <div class="pointer-events-none absolute inset-0 overflow-hidden opacity-40">
@@ -97,20 +99,6 @@ pub(crate) fn audit_panel() -> impl IntoView {
                     {icon(IconKind::Wrench, 13, "", "2")}
                     "Fix All (8)"
                 </button>
-
-                {move || fixing.get().then(|| view! {
-                    <div class="fixed bottom-6 right-6 animate-enter-up z-[100] pointer-events-none">
-                        <div class="rounded-xl bg-[#09090B]/95 px-5 py-4 border border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.8)] backdrop-blur-xl flex items-start gap-3 w-[320px]">
-                            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 mt-0.5">
-                                {icon(IconKind::Check, 16, "", "2")}
-                            </div>
-                            <div>
-                                <div class="text-[13px] font-bold text-white">"Magic applied! ✨"</div>
-                                <div class="mt-1 text-[12px] text-zinc-400">"We just hypothetically fixed 8 vulnerabilities for you in 12ms. (This is just a demo!)"</div>
-                            </div>
-                        </div>
-                    </div>
-                })}
             </div>
         </div>
     }

@@ -5,6 +5,7 @@ use leptos::prelude::*;
 
 #[must_use]
 pub(crate) fn hero() -> impl IntoView {
+    let (fixing, set_fixing) = signal(false);
     view! {
         <div class="flex flex-col">
             <section id="top" data-testid="hero-section" class="relative min-h-[100svh] flex flex-col justify-center overflow-hidden px-0">
@@ -70,7 +71,7 @@ pub(crate) fn hero() -> impl IntoView {
                     </div>
                 </div>
             </section>
-            <section id="preview" data-testid="preview-section" class="relative min-h-[100svh] flex flex-col justify-center px-6 md:px-10 overflow-hidden">
+            <section id="preview" data-testid="preview-section" class="relative min-h-[100svh] flex flex-col justify-center border-t border-white/5 px-6 md:px-10 overflow-hidden">
                 <div class="mb-16 text-center animate-enter-up z-50 relative" style="--motion-delay: 200ms">
                     <h2 class="font-heading text-2xl font-bold text-white md:text-4xl">"The complete security workflow"</h2>
                     <p class="mt-4 text-sm text-zinc-400 md:text-base max-w-2xl mx-auto">"Seamless onboarding, real-time scanning, and 1-click auto-fixes — all orchestrated by a single lightweight agent."</p>
@@ -87,8 +88,8 @@ pub(crate) fn hero() -> impl IntoView {
                         {scanning_terminal()}
                     </div>
 
-                    // 3. Fix Alert (Foreground Layer, Top Right)
-                    <div class="absolute right-10 top-10 hidden lg:block w-[320px] rotate-3 opacity-90 transition-all duration-500 hover:rotate-0 hover:opacity-100 hover:z-50 hover:scale-105 z-40" style="--motion-delay: 700ms">
+                    // 3. Fix Alert (Background Layer, Top Right)
+                    <div class="absolute right-10 top-10 hidden lg:block w-[320px] rotate-3 opacity-90 transition-all duration-500 hover:rotate-0 hover:opacity-100 hover:z-50 hover:scale-105 z-20" style="--motion-delay: 700ms">
                         {fix_alert()}
                     </div>
 
@@ -96,10 +97,25 @@ pub(crate) fn hero() -> impl IntoView {
                     <div class="relative w-full lg:w-[720px] z-30 transition-transform duration-500 hover:scale-[1.02]" style="--motion-delay: 500ms">
                         <div class="absolute inset-0 scale-90 rounded-full bg-[#2496ED]/15 blur-[120px] pointer-events-none"/>
                         <div class="relative overflow-hidden rounded-2xl border border-white/10 bg-[#050505] shadow-[0_40px_100px_rgba(0,0,0,0.9)] text-left ring-1 ring-white/5 backdrop-blur-xl">
-                            {audit_panel()}
+                            {audit_panel(fixing, set_fixing)}
                         </div>
                     </div>
                 </div>
+
+                // Easter Egg Toast rendered outside transform bounds
+                {move || fixing.get().then(|| view! {
+                    <div class="fixed bottom-6 right-6 animate-enter-up z-[9999] pointer-events-none">
+                        <div class="rounded-xl bg-[#09090B]/95 px-5 py-4 border border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.8)] backdrop-blur-xl flex items-start gap-3 w-[320px]">
+                            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 mt-0.5">
+                                {icon(IconKind::Check, 16, "", "2")}
+                            </div>
+                            <div>
+                                <div class="text-[13px] font-bold text-white">"Magic applied! ✨"</div>
+                                <div class="mt-1 text-[12px] text-zinc-400">"We just hypothetically fixed 8 vulnerabilities for you in 12ms. (This is just a demo!)"</div>
+                            </div>
+                        </div>
+                    </div>
+                })}
             </section>
         </div>
     }
