@@ -18,7 +18,7 @@ import {
     Play, Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
     Terminal, Wrench, ExternalLink, AlertTriangle, Info, Server,
     Clock, Cpu, Container, RefreshCw, BookOpen, CheckCircle2,
-    RotateCcw, ShieldAlert, XCircle, ListChecks,
+    RotateCcw, ShieldAlert, XCircle, ListChecks, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -814,6 +814,7 @@ function AuditRunTerminal({
     canCancel,
     onOpenResult,
     onCancel,
+    onClear,
 }: {
     agentId: string;
     total: number;
@@ -825,6 +826,7 @@ function AuditRunTerminal({
     canCancel: boolean;
     onOpenResult: () => void;
     onCancel: () => void;
+    onClear: () => void;
 }) {
     const isComplete = status === "complete";
     const isSaving = status === "saving";
@@ -900,6 +902,11 @@ function AuditRunTerminal({
                         <Button size="sm" variant="outline" className="h-8 px-3 text-muted-foreground hover:text-rose-400" onClick={onCancel}>
                             <XCircle className="h-4 w-4" />
                             Cancel Audit
+                        </Button>
+                    )}
+                    {status !== "running" && status !== "saving" && (
+                        <Button size="sm" variant="ghost" className="h-8 px-2 text-muted-foreground hover:bg-muted" onClick={onClear} aria-label="Close terminal">
+                            <X className="h-4 w-4" />
                         </Button>
                     )}
                     <div className="flex items-center gap-2">
@@ -1000,7 +1007,7 @@ function AuditPage() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const { agentOnlineStatus } = useAgentStore();
-    const { auditHistories, setAuditHistory, startAudit, cancelAudit } = useAuditStore();
+    const { auditHistories, setAuditHistory, startAudit, cancelAudit, clearAuditStream } = useAuditStore();
     const auditStream = useAuditStore((state) => state.auditStreams[id]);
     const isOnline = !!agentOnlineStatus[id];
     const [agent, setAgent] = useState<Agent | null>(null);
@@ -1419,6 +1426,7 @@ function AuditPage() {
                                 canCancel={canCancelAudit}
                                 onOpenResult={openSavedAudit}
                                 onCancel={handleCancelAudit}
+                                onClear={() => clearAuditStream(id)}
                             />
                         ) : (
                             <div className="relative z-10 flex h-full flex-col items-center justify-center gap-4 text-center">

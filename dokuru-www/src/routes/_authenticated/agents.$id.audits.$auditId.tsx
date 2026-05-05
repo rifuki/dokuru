@@ -1698,7 +1698,6 @@ function AuditDetailPage() {
   const auditStream = useAuditStore((state) => state.auditStreams[id]);
   const auditUiMemoryKey = auditDetailUiStorageKey(id, auditId);
   const shouldUseInitialAuditUiMemory = isSidebarNavigationForPath();
-  const shouldUseAuditUiMemoryRef = useRef(shouldUseInitialAuditUiMemory);
   const [initialAuditUiState] = useState(() => shouldUseInitialAuditUiMemory ? readAuditDetailUiState(auditUiMemoryKey) : DEFAULT_AUDIT_DETAIL_UI_STATE);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialAuditUiState.statusFilter);
   const [sectionFilter, setSectionFilter] = useState<string>(initialAuditUiState.sectionFilter);
@@ -1906,7 +1905,6 @@ function AuditDetailPage() {
     auditUiMemoryKeyRef.current = auditUiMemoryKey;
     skipNextAuditUiWriteRef.current = true;
     const shouldUseAuditUiMemory = isSidebarNavigationForPath();
-    shouldUseAuditUiMemoryRef.current = shouldUseAuditUiMemory;
     const savedState = shouldUseAuditUiMemory ? readAuditDetailUiState(auditUiMemoryKey) : DEFAULT_AUDIT_DETAIL_UI_STATE;
     setStatusFilter(savedState.statusFilter);
     setSectionFilter(savedState.sectionFilter);
@@ -1918,7 +1916,6 @@ function AuditDetailPage() {
   }, [auditUiMemoryKey]);
 
   useEffect(() => {
-    if (!shouldUseAuditUiMemoryRef.current) return;
     if (skipNextAuditUiWriteRef.current) {
       skipNextAuditUiWriteRef.current = false;
       return;
