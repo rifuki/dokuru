@@ -1,9 +1,13 @@
 use crate::components::atoms::{icon::icon, IconKind};
 use crate::content::{AuditSection, AUDIT_SECTIONS};
 use leptos::prelude::*;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::{closure::Closure, JsCast};
 
 #[must_use]
 pub(crate) fn audit_panel() -> impl IntoView {
+    let (active_tab, set_active_tab) = signal("pillars");
+    let (fixing, set_fixing) = signal(false);
     view! {
         <div data-testid="hero-audit-panel" class="relative w-full overflow-hidden rounded-[18px] border border-white/10 bg-[#09090B] shadow-[0_36px_84px_-28px_rgba(0,0,0,0.86)]">
             <div class="pointer-events-none absolute inset-0 overflow-hidden opacity-40">
@@ -47,16 +51,32 @@ pub(crate) fn audit_panel() -> impl IntoView {
                 <div class="p-3.5 md:p-4">
                     <div class="flex items-start justify-between gap-2.5">
                         <div>
-                            <div class="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-zinc-500">"security pillars"</div>
+                            <div class="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-zinc-500">
+                                {move || if active_tab.get() == "pillars" { "security pillars" } else { "cis benchmarks" }}
+                            </div>
                         </div>
-                        <div class="inline-flex rounded-lg border border-white/10 bg-black/30 p-0.5 text-[10px] font-semibold">
-                            <span class="rounded-md bg-[#2496ED] px-2 py-0.5 text-white">"Pillars"</span>
-                            <span class="px-2 py-0.5 text-zinc-500">"Sections"</span>
+                        <div class="inline-flex rounded-lg border border-white/10 bg-black/30 p-0.5 text-[10px] font-semibold cursor-pointer">
+                            <span
+                                on:click=move |_| set_active_tab.set("pillars")
+                                class=move || format!("rounded-md px-2 py-0.5 transition-colors {}", if active_tab.get() == "pillars" { "bg-[#2496ED] text-white" } else { "text-zinc-500 hover:text-zinc-300" })
+                            >
+                                "Pillars"
+                            </span>
+                            <span
+                                on:click=move |_| set_active_tab.set("sections")
+                                class=move || format!("rounded-md px-2 py-0.5 transition-colors {}", if active_tab.get() == "sections" { "bg-[#2496ED] text-white" } else { "text-zinc-500 hover:text-zinc-300" })
+                            >
+                                "Sections"
+                            </span>
                         </div>
                     </div>
 
-                    <div class="mt-3 flex flex-col gap-2.5">
-                        {AUDIT_SECTIONS.iter().map(pillar_row).collect_view()}
+                    <div class="mt-3 flex flex-col gap-2.5 min-h-[140px]">
+                        {move || if active_tab.get() == "pillars" {
+                            AUDIT_SECTIONS.iter().map(pillar_row).collect_view().into_any()
+                        } else {
+                            CIS_SECTIONS.iter().map(cis_row).collect_view().into_any()
+                        }}
                     </div>
                 </div>
             </div>
@@ -66,10 +86,31 @@ pub(crate) fn audit_panel() -> impl IntoView {
                     <div class="text-[13px] font-bold text-[#2496ED]">"8 rules can be auto-fixed"</div>
                     <div class="mt-1 text-[11px] text-[#2496ED]/70">"Namespace, cgroup limits, and privileged containers - one click."</div>
                 </div>
-                <button class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#2496ED] px-3.5 py-2 text-[13px] font-bold text-white shadow-[0_0_24px_rgba(36,150,237,0.22)] transition-colors hover:bg-[#1C7CBA] sm:shrink-0">
+                <button
+                    on:click=move |_| {
+                        if fixing.get() { return; }
+                        set_fixing.set(true);
+                        reset_fixing_after(set_fixing);
+                    }
+                    class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#2496ED] px-3.5 py-2 text-[13px] font-bold text-white shadow-[0_0_24px_rgba(36,150,237,0.22)] transition-colors hover:bg-[#1C7CBA] sm:shrink-0"
+                >
                     {icon(IconKind::Wrench, 13, "", "2")}
                     "Fix All (8)"
                 </button>
+
+                {move || fixing.get().then(|| view! {
+                    <div class="fixed bottom-6 right-6 animate-enter-up z-[100] pointer-events-none">
+                        <div class="rounded-xl bg-[#09090B]/95 px-5 py-4 border border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.8)] backdrop-blur-xl flex items-start gap-3 w-[320px]">
+                            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 mt-0.5">
+                                {icon(IconKind::Check, 16, "", "2")}
+                            </div>
+                            <div>
+                                <div class="text-[13px] font-bold text-white">"Magic applied! ✨"</div>
+                                <div class="mt-1 text-[12px] text-zinc-400">"We just hypothetically fixed 8 vulnerabilities for you in 12ms. (This is just a demo!)"</div>
+                            </div>
+                        </div>
+                    </div>
+                })}
             </div>
         </div>
     }
@@ -105,3 +146,84 @@ fn pillar_row(section: &'static AuditSection) -> impl IntoView {
         </div>
     }
 }
+
+struct CisSection {
+    id: &'static str,
+    name: &'static str,
+    passed: u32,
+    total: u32,
+}
+
+const CIS_SECTIONS: &[CisSection] = &[
+    CisSection {
+        id: "1",
+        name: "Host Configuration",
+        passed: 12,
+        total: 14,
+    },
+    CisSection {
+        id: "2",
+        name: "Docker Daemon",
+        passed: 9,
+        total: 10,
+    },
+    CisSection {
+        id: "3",
+        name: "Daemon Config Files",
+        passed: 15,
+        total: 20,
+    },
+    CisSection {
+        id: "4",
+        name: "Images and Build",
+        passed: 6,
+        total: 10,
+    },
+    CisSection {
+        id: "5",
+        name: "Container Runtime",
+        passed: 25,
+        total: 30,
+    },
+];
+
+fn cis_row(section: &'static CisSection) -> impl IntoView {
+    let width = format!("width: {}%", section.passed * 100 / section.total);
+    let bar_color = if section.passed == section.total {
+        "bg-emerald-400"
+    } else if section.passed * 100 / section.total > 50 {
+        "bg-amber-400"
+    } else {
+        "bg-rose-400"
+    };
+
+    view! {
+        <div>
+            <div class="mb-1.5 flex items-center gap-2.5">
+                <span class="grid h-5 w-5 shrink-0 place-items-center text-zinc-500 font-mono text-[10px] font-bold">{section.id}</span>
+                <span class="min-w-0 flex-1 truncate text-[13px] font-bold text-zinc-200">{section.name}</span>
+                <span class="font-mono text-[11px] text-zinc-500">{format!("{}/{}", section.passed, section.total)}</span>
+            </div>
+            <div class="h-1.5 overflow-hidden rounded-full bg-white/5">
+                <div class=format!("h-full rounded-full {}", bar_color) style=width/>
+            </div>
+        </div>
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn reset_fixing_after(set_fixing: WriteSignal<bool>) {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+
+    let closure = Closure::wrap(Box::new(move || set_fixing.set(false)) as Box<dyn FnMut()>);
+    let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+        closure.as_ref().unchecked_ref(),
+        3000,
+    );
+    closure.forget();
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+const fn reset_fixing_after(_set_fixing: WriteSignal<bool>) {}
