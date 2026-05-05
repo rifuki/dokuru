@@ -1,11 +1,19 @@
 use super::audit_panel::audit_panel;
 use crate::components::atoms::{icon::icon, IconKind};
 use crate::content::APP_URL;
-use leptos::prelude::*;
+use crate::utils::reveal::reveal_ref;
+use leptos::{html, prelude::*};
 
 #[must_use]
 pub(crate) fn hero() -> impl IntoView {
     let (fixing, set_fixing) = signal(false);
+    let preview_heading_ref = reveal_ref::<html::Div>();
+    let onboard_ref = reveal_ref::<html::Div>();
+    let scanning_ref = reveal_ref::<html::Div>();
+    let fix_alert_ref = reveal_ref::<html::Div>();
+    let telemetry_ref = reveal_ref::<html::Div>();
+    let audit_panel_ref = reveal_ref::<html::Div>();
+
     view! {
         <div class="flex flex-col">
             <section id="top" data-testid="hero-section" class="relative min-h-[100svh] flex flex-col justify-center overflow-hidden px-0">
@@ -72,37 +80,47 @@ pub(crate) fn hero() -> impl IntoView {
                 </div>
             </section>
             <section id="preview" data-testid="preview-section" class="relative min-h-[100svh] flex flex-col justify-center border-t border-white/5 px-6 pt-24 pb-16 md:px-10 md:pt-32 md:pb-24 overflow-hidden">
-                <div class="mb-16 text-center animate-enter-up z-50 relative" style="--motion-delay: 200ms">
+                <div node_ref=preview_heading_ref class="reveal mb-16 text-center z-50 relative" style="--motion-delay: 100ms; --motion-duration: 650ms">
                     <h2 class="font-heading text-2xl font-bold text-white md:text-4xl">"The complete security workflow"</h2>
                     <p class="mt-4 text-sm text-zinc-400 md:text-base max-w-2xl mx-auto">"Seamless onboarding, real-time scanning, and 1-click auto-fixes — all orchestrated by a single lightweight agent."</p>
                 </div>
 
                 <div class="relative mx-auto w-full max-w-6xl h-[450px] sm:h-[500px] md:h-[650px] flex items-center justify-center">
                     // 1. Onboard Terminal (Background Layer, Top Left)
-                    <div class="absolute left-0 top-4 hidden lg:block w-[440px] -rotate-3 opacity-40 transition-all duration-500 hover:rotate-0 hover:opacity-100 hover:z-50 hover:scale-105 z-10" style="--motion-delay: 400ms">
-                        {onboard_terminal()}
+                    <div node_ref=onboard_ref class="reveal group absolute left-0 lg:-left-4 top-4 hidden lg:block w-[440px] z-10 hover:z-50" data-reveal="right" style="--motion-delay: 180ms; --motion-duration: 650ms">
+                        <div class="w-full -rotate-3 opacity-40 transition-all duration-500 group-hover:rotate-0 group-hover:opacity-100 group-hover:scale-105">
+                            {onboard_terminal()}
+                        </div>
                     </div>
 
                     // 2. Scanning Terminal (Background Layer, Bottom Right)
-                    <div class="absolute right-0 bottom-10 hidden lg:block w-[400px] rotate-2 opacity-50 transition-all duration-500 hover:rotate-0 hover:opacity-100 hover:z-50 hover:scale-105 z-20" style="--motion-delay: 600ms">
-                        {scanning_terminal()}
+                    <div node_ref=scanning_ref class="reveal group absolute right-0 lg:-right-4 bottom-10 hidden lg:block w-[400px] z-20 hover:z-50" data-reveal="left" style="--motion-delay: 320ms; --motion-duration: 650ms">
+                        <div class="w-full rotate-2 opacity-50 transition-all duration-500 group-hover:rotate-0 group-hover:opacity-100 group-hover:scale-105">
+                            {scanning_terminal()}
+                        </div>
                     </div>
 
                     // 3. Fix Alert (Background Layer, Top Right)
-                    <div class="absolute right-10 top-10 hidden lg:block w-[320px] rotate-3 opacity-90 transition-all duration-500 hover:rotate-0 hover:opacity-100 hover:z-50 hover:scale-105 z-20" style="--motion-delay: 700ms">
-                        {fix_alert()}
+                    <div node_ref=fix_alert_ref class="reveal group absolute right-10 lg:right-0 top-10 hidden lg:block w-[320px] z-20 hover:z-50" data-reveal="left" style="--motion-delay: 460ms; --motion-duration: 650ms">
+                        <div class="w-full rotate-3 opacity-90 transition-all duration-500 group-hover:rotate-0 group-hover:opacity-100 group-hover:scale-105">
+                            {fix_alert()}
+                        </div>
                     </div>
 
                     // 4. Agent Telemetry (Background Layer, Bottom Left)
-                    <div class="absolute left-10 bottom-16 hidden lg:block w-[260px] -rotate-2 opacity-60 transition-all duration-500 hover:rotate-0 hover:opacity-100 hover:z-50 hover:scale-105 z-20" style="--motion-delay: 800ms">
-                        {agent_telemetry()}
+                    <div node_ref=telemetry_ref class="reveal group absolute left-10 lg:-left-2 bottom-6 hidden lg:block w-[280px] z-20 hover:z-50" data-reveal="right" style="--motion-delay: 600ms; --motion-duration: 650ms">
+                        <div class="w-full -rotate-2 opacity-80 transition-all duration-500 group-hover:rotate-0 group-hover:opacity-100 group-hover:scale-105">
+                            {agent_telemetry()}
+                        </div>
                     </div>
 
                     // 5. Audit Panel (Foreground Layer, Center)
-                    <div class="relative w-full lg:w-[720px] z-30 transition-transform duration-500 hover:scale-[1.02]" style="--motion-delay: 500ms">
-                        <div class="absolute inset-0 scale-90 rounded-full bg-[#2496ED]/15 blur-[120px] pointer-events-none"/>
-                        <div class="relative overflow-hidden rounded-2xl border border-white/10 bg-[#050505] shadow-[0_40px_100px_rgba(0,0,0,0.9)] text-left ring-1 ring-white/5 backdrop-blur-xl">
-                            {audit_panel(fixing, set_fixing)}
+                    <div node_ref=audit_panel_ref class="reveal relative w-full lg:w-[720px] z-30" style="--motion-delay: 260ms; --motion-duration: 700ms">
+                        <div class="transition-transform duration-500 hover:scale-[1.02]">
+                            <div class="absolute inset-0 scale-90 rounded-full bg-[#2496ED]/15 blur-[120px] pointer-events-none"/>
+                            <div class="relative overflow-hidden rounded-2xl border border-white/10 bg-[#050505] shadow-[0_40px_100px_rgba(0,0,0,0.9)] text-left ring-1 ring-white/5 backdrop-blur-xl">
+                                {audit_panel(fixing, set_fixing)}
+                            </div>
                         </div>
                     </div>
                 </div>

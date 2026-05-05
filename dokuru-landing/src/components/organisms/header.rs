@@ -40,7 +40,7 @@ pub(crate) fn header() -> impl IntoView {
                 <a href="#top" data-testid="header-logo" class="flex items-center gap-2.5 group transition-opacity hover:opacity-90">
                     {dokuru_mark("h-7 w-7")}
                     <span class="font-heading font-black text-white text-lg tracking-tight">"dokuru"</span>
-                    <span class="hidden sm:inline-block font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500 border border-white/10 rounded px-1.5 py-0.5 ml-1">"v1"</span>
+                    <span class="hidden sm:inline-block font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500 border border-white/10 rounded px-1.5 py-0.5 ml-1">"v0.1.0"</span>
                 </a>
 
                 <nav class="hidden md:flex items-center gap-6 absolute left-1/2 -translate-x-1/2">
