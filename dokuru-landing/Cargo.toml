@@ -2,6 +2,7 @@
 name = "dokuru-landing"
 version = "0.1.0"
 edition = "2021"
+license = "Elastic-2.0"
 
 [dependencies]
 console_error_panic_hook = "0.1.7"

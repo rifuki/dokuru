@@ -2,6 +2,7 @@
   "name": "dokuru-www",
   "private": true,
   "version": "0.0.0",
+  "license": "Elastic-2.0",
   "type": "module",
   "scripts": {
     "routes:generate": "node scripts/generate-route-tree.mjs",

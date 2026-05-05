@@ -16,8 +16,108 @@ The project is designed for real Docker hosts, not only static reporting:
 
 > Dokuru can change Docker daemon configuration, audit rules, Compose files, Dockerfiles, container runtime settings, and cgroup limits. Run it only on infrastructure you control, test fixes in staging first, and treat every agent token as a secret.
 
+## How To Install
+
+Dokuru can be used in two operating modes. Pick hosted mode when you want one dashboard for many Docker hosts. Pick direct mode when you only want the agent's built-in dashboard on a single host.
+
+| Mode | Server required | Best for | Access path |
+| --- | --- | --- | --- |
+| Hosted | Yes | Teams, multiple hosts, stored audit history, admin views | Browser to `dokuru-www`, then server to agent by relay or direct URL. |
+| Direct | No | Single host, local/private operation, quick inspection | Browser directly to the agent dashboard on port `3939`. |
+
+### Hosted Mode
+
+Use this mode when the hosted dashboard is available and you want to add Docker hosts as agents.
+
+```mermaid
+flowchart LR
+    install["1. Install agent on Docker host"]
+    choose["2. Choose access mode<br/>Cloudflare, Relay, or Direct"]
+    copy["3. Copy Agent URL + Token"]
+    add["4. Add Docker Agent<br/>in hosted dashboard"]
+    audit["5. Run audit and apply supported fixes"]
+
+    install --> choose --> copy --> add --> audit
+
+    classDef step fill:#082f49,stroke:#38bdf8,color:#e0f2fe
+    class install,choose,copy,add,audit step
+```
+
+Run this on the Docker host:
+
+```bash
+curl -fsSL https://dokuru.rifuki.dev/install | sudo bash
+```
+
+The onboarding wizard will:
+
+- Install the `dokuru` binary.
+- Create `/etc/dokuru/config.toml`.
+- Generate an agent token in the `dok_...` format.
+- Install and start the systemd service.
+- Configure the selected access mode.
+
+Recommended access mode choices:
+
+| Choice | Use when | What to paste into dashboard |
+| --- | --- | --- |
+| Cloudflare Tunnel | You want the fastest HTTPS setup without a domain. | The generated `https://*.trycloudflare.com` URL and the `dok_...` token. |
+| Relay Mode | The host is behind NAT/firewall and cannot expose inbound ports. | Use `relay` mode in Add Agent and paste the `dok_...` token. |
+| Direct HTTP/HTTPS | The browser can reach the host through LAN, VPN, or your reverse proxy. | The reachable agent URL and the `dok_...` token. |
+
+Then open the hosted dashboard, choose **Add Agent**, select the matching connection mode, paste the agent output, and run the first audit from the agent page.
+
+### Direct Mode
+
+Use this mode when you do not want a server. The agent serves its own embedded dashboard.
+
+```bash
+curl -fsSL https://dokuru.rifuki.dev/install | sudo bash
+```
+
+After onboarding, open the agent URL printed by the installer. By default, the local API and embedded dashboard listen on port `3939`.
+
+```bash
+# From the Docker host
+open http://localhost:3939
+
+# Or from your workstation through SSH port forwarding
+ssh -L 3939:localhost:3939 user@docker-host-01
+open http://localhost:3939
+```
+
+Use the token printed during onboarding when the dashboard asks for agent credentials. If the token is lost, rotate it on the host:
+
+```bash
+sudo dokuru token rotate
+sudo dokuru restart
+```
+
+### Install Output Checklist
+
+After installation, keep these values somewhere safe:
+
+| Value | Example | Why it matters |
+| --- | --- | --- |
+| Agent URL | `https://xxx.trycloudflare.com` or `http://10.0.0.5:3939` | The dashboard uses it for direct/cloudflare/domain access. |
+| Agent Token | `dok_...` | Required to authenticate privileged agent API calls. |
+| Access Mode | `cloudflare`, `relay`, or `direct` | Must match the Add Agent form. |
+
+Useful follow-up commands:
+
+```bash
+sudo dokuru status
+sudo dokuru doctor
+sudo dokuru config show
+sudo dokuru token show
+sudo dokuru token rotate
+sudo dokuru restart
+sudo dokuru update
+```
+
 ## Contents
 
+- [How To Install](#how-to-install)
 - [System Overview](#system-overview)
 - [Repository Map](#repository-map)
 - [Architecture](#architecture)
@@ -30,6 +130,7 @@ The project is designed for real Docker hosts, not only static reporting:
 - [Security Best Practices](#security-best-practices)
 - [Development](#development)
 - [CI And Releases](#ci-and-releases)
+- [License](#license)
 
 ## System Overview
 
@@ -979,6 +1080,10 @@ Release assets produced for the agent include:
 - `install.sh`
 - `SHA256SUMS`
 - `version.json`
+
+## License
+
+Dokuru is licensed under the Elastic License 2.0. See [`LICENSE`](LICENSE) for the full terms.
 
 ## Product Scope
 

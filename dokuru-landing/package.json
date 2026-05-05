@@ -2,6 +2,7 @@
   "name": "dokuru-landing",
   "version": "0.1.0",
   "private": true,
+  "license": "Elastic-2.0",
   "type": "module",
   "scripts": {
     "check": "cargo check && cargo fmt --check && cargo clippy -- -W clippy::pedantic -W clippy::nursery -D warnings && cargo build && bun lint && bun run build",
