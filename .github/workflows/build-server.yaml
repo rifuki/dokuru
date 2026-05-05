@@ -1,4 +1,4 @@
-name: Build Server Images
+name: Build Server Image
 
 on:
   push:
