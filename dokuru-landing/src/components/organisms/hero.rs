@@ -71,20 +71,63 @@ pub(crate) fn hero() -> impl IntoView {
                 </div>
             </section>
 
-            <section id="preview" data-testid="preview-section" class="relative min-h-[100svh] flex flex-col justify-center px-6 md:px-10">
-                <div class="mb-10 text-center animate-enter-up" style="--motion-delay: 200ms">
+            <section id="preview" data-testid="preview-section" class="relative min-h-[100svh] flex flex-col justify-center px-6 md:px-10 overflow-hidden">
+                <div class="mb-16 text-center animate-enter-up z-20" style="--motion-delay: 200ms">
                     <h2 class="font-heading text-2xl font-bold text-white md:text-4xl">"Real-time security at a glance"</h2>
                     <p class="mt-3 text-sm text-zinc-400 md:text-base">"The agent serves its own dashboard with live metrics and auto-fixes."</p>
                 </div>
-                <div class="relative mx-auto w-full max-w-3xl">
-                    <div class="animate-enter-up relative" style="--motion-delay: 400ms">
-                        <div class="absolute inset-0 scale-90 rounded-full bg-[#2496ED]/10 blur-[100px]"/>
-                        <div class="relative overflow-hidden rounded-2xl border border-white/10 bg-[#050505] shadow-[0_0_54px_rgba(0,0,0,0.78)] text-left ring-1 ring-white/5">
+
+                <div class="relative mx-auto w-full max-w-5xl h-[400px] sm:h-[450px] md:h-[500px]">
+                    // Terminal (Background Layer, offset to left)
+                    <div class="absolute left-0 top-0 hidden md:block w-[460px] -rotate-2 opacity-50 transition-all duration-500 hover:rotate-0 hover:opacity-100 hover:z-30 hover:scale-105 z-0" style="--motion-delay: 400ms">
+                        {terminal_preview()}
+                    </div>
+
+                    // Audit Panel (Foreground Layer, offset to right)
+                    <div class="absolute right-0 md:bottom-0 top-0 md:top-auto w-full md:w-[700px] z-10 transition-transform duration-500 hover:scale-[1.02]" style="--motion-delay: 500ms">
+                        <div class="absolute inset-0 scale-90 rounded-full bg-[#2496ED]/15 blur-[100px] pointer-events-none"/>
+                        <div class="relative overflow-hidden rounded-2xl border border-white/10 bg-[#050505] shadow-[0_30px_100px_rgba(0,0,0,0.8)] text-left ring-1 ring-white/5 backdrop-blur-xl">
                             {audit_panel()}
                         </div>
                     </div>
                 </div>
             </section>
+        </div>
+    }
+}
+
+fn terminal_preview() -> impl IntoView {
+    view! {
+        <div class="w-full rounded-xl border border-white/10 bg-[#050505] shadow-2xl overflow-hidden font-mono text-[11px] leading-relaxed text-zinc-300 ring-1 ring-white/5">
+            <div class="flex items-center gap-1.5 border-b border-white/5 bg-white/[0.02] px-4 py-2.5">
+                <div class="h-2.5 w-2.5 rounded-full bg-[#FF5F56]"></div>
+                <div class="h-2.5 w-2.5 rounded-full bg-[#FFBD2E]"></div>
+                <div class="h-2.5 w-2.5 rounded-full bg-[#27C93F]"></div>
+                <div class="ml-2 text-[10px] text-zinc-500 font-sans">"root@debian13-2c4g-dokuru-lab:~"</div>
+            </div>
+            <div class="p-5 space-y-2 opacity-90">
+                <div class="flex gap-2">
+                    <span class="text-[#2496ED]">"❯"</span>
+                    <span class="text-white">"dokuru onboard"</span>
+                </div>
+                <div class="text-zinc-400">"┌  🐳 Dokuru onboard"</div>
+                <div class="text-zinc-400">"│"</div>
+                <div class="text-zinc-400">"◇  Preflight"</div>
+                <div class="pl-4 text-zinc-500">
+                    "Distribution:   Debian GNU/Linux 13 (trixie)"<br/>
+                    "Docker:         installed "<span class="text-emerald-400">"✓"</span><br/>
+                    "Docker socket:  /var/run/docker.sock "<span class="text-emerald-400">"✓"</span>
+                </div>
+                <div class="text-zinc-400">"│"</div>
+                <div class="text-zinc-400">"◇  Starting Cloudflare Tunnel..."</div>
+                <div class="pl-4 text-emerald-400">"✓ Tunnel started: https://spears-clinical.trycloudflare.com"</div>
+                <div class="text-zinc-400">"│"</div>
+                <div class="text-zinc-400">"└  Dokuru is ready."</div>
+                <div class="flex gap-2 pt-2 animate-pulse">
+                    <span class="text-[#2496ED]">"❯"</span>
+                    <span class="w-2 h-3 bg-zinc-400 inline-block"></span>
+                </div>
+            </div>
         </div>
     }
 }
