@@ -35,18 +35,18 @@ pub(crate) fn audit_panel(
                 <div class="p-3.5 md:p-4">
                     <div class="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-zinc-500">"audit score"</div>
                     <div class="mt-2.5 flex items-end gap-2.5">
-                        <div class="font-heading text-[44px] font-black leading-none text-amber-400" data-testid="audit-score-value">"78"</div>
+                        <div class="font-heading text-[44px] font-black leading-none text-[#2496ED]" data-testid="audit-score-value">"97"</div>
                         <div class="pb-1 font-heading text-lg font-black text-zinc-600">"/100"</div>
                     </div>
                     <div class="mt-2.5 h-1.5 overflow-hidden rounded-full bg-white/5">
-                        <div class="h-full w-[78%] rounded-full bg-amber-400 shadow-[0_0_24px_rgba(251,191,36,0.28)]"/>
+                        <div class="h-full w-[97%] rounded-full bg-[#2496ED] shadow-[0_0_24px_rgba(36,150,237,0.28)]"/>
                     </div>
-                    <div class="mt-2.5 font-mono text-[10px] leading-relaxed text-zinc-500">"CIS Docker Benchmark · 36 checks"</div>
+                    <div class="mt-2.5 font-mono text-[10px] leading-relaxed text-zinc-500">"CIS Docker Benchmark · 39 checks"</div>
 
                     <div class="mt-4 grid grid-cols-3 gap-2">
-                        {score_stat("28", "pass", "text-emerald-400", "border-emerald-500/25 bg-emerald-500/8")}
-                        {score_stat("8", "fail", "text-rose-400", "border-rose-500/25 bg-rose-500/8")}
-                        {score_stat("36", "total", "text-zinc-200", "border-white/10 bg-white/[0.03]")}
+                        {score_stat("38", "pass", "text-emerald-400", "border-emerald-500/25 bg-emerald-500/8")}
+                        {score_stat("1", "fail", "text-rose-400", "border-rose-500/25 bg-rose-500/8")}
+                        {score_stat("39", "total", "text-zinc-200", "border-white/10 bg-white/[0.03]")}
                     </div>
                 </div>
 
@@ -146,32 +146,32 @@ const CIS_SECTIONS: &[CisSection] = &[
     CisSection {
         id: "1",
         name: "Host Configuration",
-        passed: 12,
-        total: 14,
+        passed: 13,
+        total: 13,
     },
     CisSection {
         id: "2",
         name: "Docker Daemon",
-        passed: 9,
-        total: 10,
+        passed: 2,
+        total: 3,
     },
     CisSection {
         id: "3",
         name: "Daemon Config Files",
-        passed: 15,
-        total: 20,
+        passed: 8,
+        total: 8,
     },
     CisSection {
         id: "4",
         name: "Images and Build",
-        passed: 6,
-        total: 10,
+        passed: 2,
+        total: 2,
     },
     CisSection {
         id: "5",
         name: "Container Runtime",
-        passed: 25,
-        total: 30,
+        passed: 13,
+        total: 13,
     },
 ];
 

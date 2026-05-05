@@ -30,6 +30,7 @@ pub enum IconKind {
     Cloud,
     Link2,
     Globe,
+    Activity,
 }
 
 const fn icon_markup(kind: IconKind) -> &'static str {
@@ -108,6 +109,7 @@ const fn icon_markup(kind: IconKind) -> &'static str {
         IconKind::Globe => {
             r#"<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>"#
         }
+        IconKind::Activity => r#"<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>"#,
     }
 }
 

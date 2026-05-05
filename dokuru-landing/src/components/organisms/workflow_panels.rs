@@ -189,12 +189,12 @@ pub(crate) fn audit_preview_panel() -> impl IntoView {
                 <div class="flex items-end justify-between border-b border-white/5 pb-5">
                     <div>
                         <div class="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500 mb-1.5">"audit score"</div>
-                        <div class="flex items-baseline gap-1 font-heading"><span class="text-5xl font-black text-amber-400 leading-none">"78"</span><span class="text-lg text-zinc-600 font-bold">"/ 100"</span></div>
-                        <div class="mt-2 text-xs text-zinc-500 font-mono">"CIS-aligned · 36 rules evaluated"</div>
+                        <div class="flex items-baseline gap-1 font-heading"><span class="text-5xl font-black text-[#2496ED] leading-none">"97"</span><span class="text-lg text-zinc-600 font-bold">"/ 100"</span></div>
+                        <div class="mt-2 text-xs text-zinc-500 font-mono">"CIS-aligned · 39 rules evaluated"</div>
                     </div>
                     <div class="flex flex-col items-end gap-1.5 text-right">
-                        {audit_stats::preview_count("bg-rose-500", "text-rose-400", "8", "failed")}
-                        {audit_stats::preview_count("bg-emerald-400", "text-emerald-400", "28", "passed")}
+                        {audit_stats::preview_count("bg-rose-500", "text-rose-400", "1", "failed")}
+                        {audit_stats::preview_count("bg-emerald-400", "text-emerald-400", "38", "passed")}
                     </div>
                 </div>
                 <div class="space-y-3">
