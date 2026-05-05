@@ -93,7 +93,12 @@ pub(crate) fn hero() -> impl IntoView {
                         {fix_alert()}
                     </div>
 
-                    // 4. Audit Panel (Foreground Layer, Center)
+                    // 4. Agent Telemetry (Background Layer, Bottom Left)
+                    <div class="absolute left-10 bottom-16 hidden lg:block w-[260px] -rotate-2 opacity-60 transition-all duration-500 hover:rotate-0 hover:opacity-100 hover:z-50 hover:scale-105 z-20" style="--motion-delay: 800ms">
+                        {agent_telemetry()}
+                    </div>
+
+                    // 5. Audit Panel (Foreground Layer, Center)
                     <div class="relative w-full lg:w-[720px] z-30 transition-transform duration-500 hover:scale-[1.02]" style="--motion-delay: 500ms">
                         <div class="absolute inset-0 scale-90 rounded-full bg-[#2496ED]/15 blur-[120px] pointer-events-none"/>
                         <div class="relative overflow-hidden rounded-2xl border border-white/10 bg-[#050505] shadow-[0_40px_100px_rgba(0,0,0,0.9)] text-left ring-1 ring-white/5 backdrop-blur-xl">
@@ -196,6 +201,35 @@ fn fix_alert() -> impl IntoView {
                     <p class="text-[12px] text-zinc-400">"Restricted cgroup memory limit for "<span class="font-mono text-[#2496ED]">"redis_cache"</span></p>
                     <div class="mt-2 text-[10px] font-mono text-emerald-400">"Resolved in 14ms"</div>
                 </div>
+            </div>
+        </div>
+    }
+}
+
+fn agent_telemetry() -> impl IntoView {
+    view! {
+        <div class="overflow-hidden rounded-xl border border-white/10 bg-[#09090B]/90 shadow-2xl backdrop-blur-xl ring-1 ring-white/5">
+            <div class="flex items-center justify-between border-b border-white/10 bg-white/[0.02] px-4 py-2.5">
+                <div class="flex items-center gap-2">
+                    {icon(IconKind::Activity, 14, "text-emerald-400", "2")}
+                    <span class="font-mono text-[11px] font-bold uppercase tracking-wider text-zinc-300">"Agent Telemetry"</span>
+                </div>
+                <span class="flex h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse"/>
+            </div>
+            <div class="flex flex-col gap-3 p-4">
+                <div class="flex justify-between items-center">
+                    <span class="text-[12px] text-zinc-500">"CPU Usage"</span>
+                    <span class="font-mono text-[12px] font-medium text-zinc-200">"0.2%"</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-[12px] text-zinc-500">"Memory Footprint"</span>
+                    <span class="font-mono text-[12px] font-medium text-emerald-400">"14.5 MB"</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-[12px] text-zinc-500">"Uptime"</span>
+                    <span class="font-mono text-[12px] font-medium text-zinc-200">"24d 12h"</span>
+                </div>
+                <div class="mt-1 h-8 w-full bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjQwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxwYXRoIGQ9Ik0wIDIwIFExMCAxMCAyMCAyMCBUMDQwIDIwIFQ2MCAyMCBUODAgMjAgVDEwMCAyMCBUMTIwIDIwIFQxNDAgMjAgVDE2MCAyMCBUMTgwIDIwIFQyMDAgMjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSg1MiwgMjExLCAxNTMsIDAuMykiIHN0cm9rZS13aWR0aD0iMiIvPjwvc3ZnPg==')] bg-cover bg-center opacity-70 mask-fade-x"></div>
             </div>
         </div>
     }
