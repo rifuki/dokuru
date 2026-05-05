@@ -72,8 +72,8 @@ pub(crate) fn hero() -> impl IntoView {
             </section>
             <section id="preview" data-testid="preview-section" class="relative min-h-[100svh] flex flex-col justify-center px-6 md:px-10 overflow-hidden">
                 <div class="mb-16 text-center animate-enter-up z-50 relative" style="--motion-delay: 200ms">
-                    <h2 class="font-heading text-2xl font-bold text-white md:text-4xl">"Real-time security at a glance"</h2>
-                    <p class="mt-3 text-sm text-zinc-400 md:text-base">"The agent serves its own dashboard with live metrics and auto-fixes."</p>
+                    <h2 class="font-heading text-2xl font-bold text-white md:text-4xl">"The complete security workflow"</h2>
+                    <p class="mt-4 text-sm text-zinc-400 md:text-base max-w-2xl mx-auto">"Seamless onboarding, real-time scanning, and 1-click auto-fixes — all orchestrated by a single lightweight agent."</p>
                 </div>
 
                 <div class="relative mx-auto w-full max-w-6xl h-[450px] sm:h-[500px] md:h-[650px]">
