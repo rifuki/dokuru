@@ -101,7 +101,32 @@ pub(crate) fn hero() -> impl IntoView {
                     <p class="mt-4 text-sm text-zinc-400 md:text-base max-w-2xl mx-auto">"Seamless onboarding, real-time scanning, and 1-click auto-fixes — all orchestrated by a single lightweight agent."</p>
                 </div>
 
-                <div class="relative mx-auto flex h-auto w-full max-w-6xl items-center justify-center lg:h-[650px]">
+                <div class="relative mx-auto flex h-[680px] w-full max-w-6xl items-center justify-center sm:h-[620px] lg:h-[650px]">
+                    // Mobile decorative layers keep the floating-window feel without requiring desktop width.
+                    <div class="pointer-events-none absolute -left-24 top-6 z-10 w-[360px] -rotate-6 opacity-35 lg:hidden">
+                        <div class="origin-top-left scale-[0.72]">
+                            {onboard_terminal()}
+                        </div>
+                    </div>
+
+                    <div class="pointer-events-none absolute -right-20 top-14 z-20 w-[300px] rotate-6 opacity-80 lg:hidden">
+                        <div class="origin-top-right scale-[0.78]">
+                            {fix_alert()}
+                        </div>
+                    </div>
+
+                    <div class="pointer-events-none absolute -left-12 bottom-16 z-20 w-[250px] -rotate-3 opacity-70 lg:hidden">
+                        <div class="origin-bottom-left scale-[0.82]">
+                            {agent_telemetry()}
+                        </div>
+                    </div>
+
+                    <div class="pointer-events-none absolute -right-28 bottom-8 z-10 w-[360px] rotate-3 opacity-30 lg:hidden">
+                        <div class="origin-bottom-right scale-[0.76]">
+                            {scanning_terminal()}
+                        </div>
+                    </div>
+
                     // 1. Onboard Terminal (Background Layer, Top Left)
                     <div node_ref=onboard_ref class="reveal group absolute left-0 lg:-left-4 top-4 hidden lg:block w-[440px] z-10 hover:z-50" data-reveal="right" style="--motion-delay: 180ms; --motion-duration: 650ms">
                         <div class="w-full -rotate-3 opacity-40 transition-all duration-500 group-hover:rotate-0 group-hover:opacity-100 group-hover:scale-105">
