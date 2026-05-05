@@ -541,9 +541,10 @@ fn configure_cloudflare_access(config: &InstallerConfig) -> Result<()> {
     spinner.start("Restarting tunnel...");
     CloudflareTunnel::create_systemd_service(config.port)?;
     let _ = run_command("systemctl", &["stop", "dokuru-tunnel"]);
+    let tunnel_started_after = CloudflareTunnel::journal_timestamp_now();
     CloudflareTunnel::start_service()?;
 
-    match CloudflareTunnel::wait_for_url(30) {
+    match CloudflareTunnel::wait_for_url_since(&tunnel_started_after, 30) {
         Ok(url) => save_cloudflare_url(config, &url, &spinner),
         Err(e) => {
             spinner.stop("✗ Tunnel started but URL not found");

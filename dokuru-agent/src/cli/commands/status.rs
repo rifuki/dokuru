@@ -185,7 +185,7 @@ fn is_url_reachable(url: &str, timeout_secs: u64) -> bool {
         .get(url)
         .timeout(std::time::Duration::from_secs(timeout_secs))
         .send()
-        .is_ok()
+        .is_ok_and(|response| response.status().is_success())
 }
 
 fn host_ip() -> String {

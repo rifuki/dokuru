@@ -534,8 +534,9 @@ fn setup_cloudflare_access(port: u16) -> Result<String> {
     spinner.start("Starting Cloudflare Tunnel...");
 
     CloudflareTunnel::create_systemd_service(port).wrap_err("Failed to create systemd service")?;
+    let tunnel_started_after = CloudflareTunnel::journal_timestamp_now();
     CloudflareTunnel::start_service().wrap_err("Failed to start tunnel service")?;
-    let url = CloudflareTunnel::wait_for_url(30)
+    let url = CloudflareTunnel::wait_for_url_since(&tunnel_started_after, 30)
         .wrap_err("Timed out waiting for Cloudflare Tunnel URL")?;
 
     spinner.stop(format!("✓ Tunnel started: {url}"));

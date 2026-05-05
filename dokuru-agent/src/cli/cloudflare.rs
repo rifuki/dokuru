@@ -1,3 +1,4 @@
+use chrono::Local;
 use eyre::{Result, WrapErr};
 use std::process::{Command, Stdio};
 
@@ -138,19 +139,17 @@ WantedBy=multi-user.target
         Err(eyre::eyre!("Tunnel URL not found in logs."))
     }
 
-    /// Get the tunnel URL from the last 60 seconds (after a fresh restart).
-    pub fn get_tunnel_url() -> Result<String> {
-        Self::get_tunnel_url_since("60 seconds ago").map_err(|_| {
-            eyre::eyre!("Tunnel URL not found in recent logs. Service may still be starting.")
-        })
+    /// Return a journalctl timestamp suitable for filtering future tunnel logs.
+    pub fn journal_timestamp_now() -> String {
+        Local::now().format("%Y-%m-%d %H:%M:%S%.6f").to_string()
     }
 
-    /// Poll journal until a fresh tunnel URL appears, up to `timeout_secs`.
-    pub fn wait_for_url(timeout_secs: u64) -> Result<String> {
+    /// Poll journal until a tunnel URL appears after `since`, up to `timeout_secs`.
+    pub fn wait_for_url_since(since: &str, timeout_secs: u64) -> Result<String> {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
 
         while std::time::Instant::now() < deadline {
-            if let Ok(url) = Self::get_tunnel_url() {
+            if let Ok(url) = Self::get_tunnel_url_since(since) {
                 return Ok(url);
             }
             std::thread::sleep(std::time::Duration::from_secs(2));

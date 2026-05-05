@@ -26,11 +26,12 @@ pub fn run_restart(service_only: bool) -> Result<()> {
     if !service_only {
         let tunnel_exists = command_success("systemctl", &["cat", "dokuru-tunnel"]);
         if tunnel_exists {
+            let tunnel_started_after = crate::cli::CloudflareTunnel::journal_timestamp_now();
             run_command("systemctl", &["restart", "dokuru-tunnel"])
                 .map_err(|e| eyre::eyre!("Failed to restart tunnel: {e}"))?;
             cliclack::log::success("✓ dokuru-tunnel restarted")?;
 
-            match crate::cli::CloudflareTunnel::wait_for_url(30) {
+            match crate::cli::CloudflareTunnel::wait_for_url_since(&tunnel_started_after, 30) {
                 Ok(url) => {
                     if let Err(error) = persist_cloudflare_url(&url) {
                         cliclack::log::warning(format!("Tunnel URL not saved to config: {error}"))?;
