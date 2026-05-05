@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { agentApi } from "@/lib/api/agent";
 import type { Agent, CreateAgentDto } from "@/types/agent";
 import type { DockerInfo } from "@/lib/api/agent-direct";
+import type { AgentConnectionIssue } from "@/lib/agent-connection-errors";
 
 export interface AgentInfoEntry {
   info: DockerInfo | null;
@@ -24,7 +25,7 @@ interface AgentState {
   error: string | null;
   agentOnlineStatus: Record<string, boolean>;
   agentConnectingStatus: Record<string, boolean>;
-  agentConnectionError: Record<string, string | null>;
+  agentConnectionError: Record<string, AgentConnectionIssue | null>;
   agentInfos: Record<string, AgentInfoEntry>;
 
   fetchAgents: () => Promise<void>;
@@ -34,7 +35,7 @@ interface AgentState {
   clearError: () => void;
   setAgentOnline: (id: string, online: boolean) => void;
   setAgentConnecting: (id: string, connecting: boolean) => void;
-  setAgentConnectionError: (id: string, error: string | null) => void;
+  setAgentConnectionError: (id: string, error: AgentConnectionIssue | null) => void;
   setAgentInfo: (id: string, info: DockerInfo | null) => void;
   setAgentInfoLoading: (id: string, loading: boolean) => void;
   setAgentInfoError: (id: string, error: string) => void;

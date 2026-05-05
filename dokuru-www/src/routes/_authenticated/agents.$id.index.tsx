@@ -66,6 +66,10 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 import { readCachedAuditHistory, sortAuditHistory, writeCachedAuditHistory } from "@/features/audit/audit-history-cache";
+import {
+    classifyAgentConnectionError,
+    type AgentConnectionIssue,
+} from "@/lib/agent-connection-errors";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/")({
     component: AgentDashboard,
@@ -165,7 +169,7 @@ function AgentDashboard() {
     const { id } = Route.useParams();
     const navigate = useNavigate();
     const queryClient = useQueryClient();
-    const { deleteAgent, updateAgent } = useAgentStore();
+    const { deleteAgent, updateAgent, agentConnectionError } = useAgentStore();
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [editDialogOpen, setEditDialogOpen] = useState(false);
     const [editName, setEditName] = useState("");
@@ -209,6 +213,10 @@ function AgentDashboard() {
     const sortedAudits = sortAuditHistory(auditsQuery.data ?? []);
     const latestAudit = sortedAudits[0] ?? null;
     const isAuditHistoryCached = !!auditsQuery.error && sortedAudits.length > 0;
+    const connectionIssue = agentConnectionError[id]
+        ?? (agent && dockerInfoQuery.error
+            ? classifyAgentConnectionError(dockerInfoQuery.error, { accessMode: agent.access_mode, endpoint: "info" })
+            : null);
 
     const reportQuery = useQuery({
         queryKey: ["audit-report", id, latestAudit?.id],
@@ -388,6 +396,7 @@ function AgentDashboard() {
                     auditHistoryCount={sortedAudits.length}
                     isAuditHistoryLoading={auditsQuery.isFetching && sortedAudits.length === 0}
                     isAuditHistoryCached={isAuditHistoryCached}
+                    connectionIssue={connectionIssue}
                     onRetry={() => void refreshAll()}
                 />
             ) : (
@@ -1422,6 +1431,7 @@ function OfflinePanel({
     auditHistoryCount,
     isAuditHistoryLoading,
     isAuditHistoryCached,
+    connectionIssue,
     onRetry,
 }: {
     id: string;
@@ -1431,9 +1441,11 @@ function OfflinePanel({
     auditHistoryCount: number;
     isAuditHistoryLoading: boolean;
     isAuditHistoryCached: boolean;
+    connectionIssue: AgentConnectionIssue | null;
     onRetry: () => void;
 }) {
     const latestAuditId = latestAudit?.id;
+    const canAutoRetry = connectionIssue?.retryable !== false;
 
     return (
         <div className="rounded-3xl border border-dashed bg-card p-6 shadow-sm sm:p-8">
@@ -1453,6 +1465,31 @@ function OfflinePanel({
                         : "This direct-mode agent needs a local token before Dokuru can query Docker data. Saved audit reports may still be available."}
                 </p>
             </div>
+
+            {connectionIssue ? (
+                <div className="mx-auto mt-5 max-w-3xl rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4 text-left">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <AlertTriangle className="h-4 w-4 text-amber-300" />
+                                <p className="text-sm font-semibold text-foreground">{connectionIssue.title}</p>
+                                {!canAutoRetry ? (
+                                    <Badge variant="outline" className="border-red-500/30 bg-red-500/10 text-[10px] text-red-300">Auto-retry paused</Badge>
+                                ) : (
+                                    <Badge variant="outline" className="border-amber-400/30 bg-amber-400/10 text-[10px] text-amber-200">Retrying</Badge>
+                                )}
+                            </div>
+                            <p className="mt-1 text-sm text-muted-foreground">{connectionIssue.message}</p>
+                            <p className="mt-2 text-xs font-medium text-foreground/90">{connectionIssue.action}</p>
+                            {connectionIssue.detail ? (
+                                <p className="mt-2 truncate font-mono text-[10px] text-muted-foreground/75" title={connectionIssue.detail}>
+                                    {connectionIssue.detail}
+                                </p>
+                            ) : null}
+                        </div>
+                    </div>
+                </div>
+            ) : null}
 
             <div className="mx-auto mt-6 max-w-3xl rounded-2xl border bg-background/55 p-4 text-left shadow-sm dark:bg-white/[0.025]">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1523,7 +1560,9 @@ function OfflinePanel({
             <p className="mx-auto mt-4 flex max-w-2xl items-start justify-center gap-2 text-center text-xs text-muted-foreground">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
                 {hasCredential
-                    ? "Live pages such as containers, stacks, images, events, and shell remain unavailable until the agent reconnects."
+                    ? canAutoRetry
+                        ? "Live pages such as containers, stacks, images, events, and shell remain unavailable until the agent reconnects."
+                        : "Live pages stay paused until this connection issue is fixed and the agent is saved or retried manually."
                     : "Paste the agent token from Edit Agent to restore live Docker data."}
             </p>
         </div>

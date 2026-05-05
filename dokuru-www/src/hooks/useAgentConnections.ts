@@ -1,6 +1,14 @@
 import { useEffect, useRef } from "react";
 import { useAgentStore, getAgentToken } from "@/stores/use-agent-store";
-import type { DockerInfo } from "@/lib/api/agent-direct";
+import { agentDirectApi, type DockerInfo } from "@/lib/api/agent-direct";
+import {
+    classifyAgentConnectionError,
+    classifyWebSocketClose,
+    connectionIssueSummary,
+    dockerUnavailableIssue,
+    missingTokenIssue,
+    type AgentConnectionIssue,
+} from "@/lib/agent-connection-errors";
 import type { Agent } from "@/types/agent";
 
 const RECONNECT_BASE_MS = 2_000;
@@ -11,8 +19,8 @@ const RECONNECT_MAX_MS  = 30_000;
  *
  * On connecting → marks agent as "connecting" (blinking blue state).
  * On connect   → marks agent online, clears connecting state.
- * On close     → marks agent offline, clears connecting state,
- *                schedules reconnect with exponential backoff (2s → 4s → … → 30s).
+ * On close     → classifies the failure. Retryable network/tunnel failures
+ *                reconnect with exponential backoff; token/auth failures stop.
  *
  * Relay agents are excluded — their status comes from the backend WS
  * (agent:connected / agent:disconnected events in useRealtimeAgents).
@@ -49,8 +57,15 @@ export function useAgentConnections(agents: Agent[]) {
         }
     };
 
-    const scheduleReconnect = (agentId: string) => {
+    const scheduleReconnect = (agentId: string, issue?: AgentConnectionIssue) => {
         clearReconnect(agentId);
+
+        if (issue && !issue.retryable) {
+            attemptMap.current.set(agentId, 0);
+            const agent = agentsRef.current.find((a) => a.id === agentId);
+            console.warn(`[WS] retry paused → ${agent?.name ?? agentId}: ${connectionIssueSummary(issue)}`);
+            return;
+        }
 
         const attempt = attemptMap.current.get(agentId) ?? 0;
         const delay   = Math.min(RECONNECT_BASE_MS * 2 ** attempt, RECONNECT_MAX_MS);
@@ -83,18 +98,16 @@ export function useAgentConnections(agents: Agent[]) {
         };
 
         ws.onclose = (ev) => {
-            const reason = ev.reason || resolveCloseReason(ev.code);
+            const issue = classifyWebSocketClose(ev.code, ev.reason, agent.access_mode);
             console.warn(
                 `[WS] closed     → ${agent.name}  code=${ev.code} wasClean=${ev.wasClean}` +
                 (ev.reason ? `  reason="${ev.reason}"` : ""),
             );
             setConnectingRef.current(agent.id, false);
             setOnlineRef.current(agent.id, false);
-            if (!ev.wasClean) {
-                setConnErrRef.current(agent.id, reason);
-            }
+            setConnErrRef.current(agent.id, issue);
             wsMap.current.delete(agent.id);
-            scheduleReconnect(agent.id);
+            scheduleReconnect(agent.id, issue);
         };
 
         ws.onerror = (ev) => {
@@ -110,6 +123,7 @@ export function useAgentConnections(agents: Agent[]) {
                     setInfoRef.current(agent.id, msg.data);
                 } else if (msg.type === "info:error") {
                     setInfoErrRef.current(agent.id, msg.message);
+                    setConnErrRef.current(agent.id, dockerUnavailableIssue(msg.message));
                 }
             } catch { /* ignore non-JSON */ }
         };
@@ -121,44 +135,45 @@ export function useAgentConnections(agents: Agent[]) {
 
         console.log(`[WS] connecting → ${agent.name} (${wsUrl.split("?")[0]})`);
 
+        if (!token) {
+            const issue = missingTokenIssue();
+            setConnectingRef.current(agent.id, false);
+            setOnlineRef.current(agent.id, false);
+            setInfoErrRef.current(agent.id, connectionIssueSummary(issue));
+            setConnErrRef.current(agent.id, issue);
+            scheduleReconnect(agent.id, issue);
+            return;
+        }
+
         // Mark as connecting immediately so UI shows pulsing blue state.
         setConnectingRef.current(agent.id, true);
         setConnErrRef.current(agent.id, null);
 
-        // First, test HTTP endpoint to get better error messages
-        const httpUrl = agent.url + "/health";
-        fetch(httpUrl, { 
-            method: "GET",
-            signal: AbortSignal.timeout(5000)
-        })
-        .then(async (res) => {
-            if (!res.ok) {
-                throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-            }
-            // Health check passed, now try WebSocket
+        // Protected preflight gives us real HTTP status codes before WebSocket.
+        // Browser WebSocket failures hide 401/403 details, which caused bad-token
+        // agents to reconnect forever.
+        agentDirectApi.getInfo(agent.url, token)
+        .then((info) => {
+            setInfoRef.current(agent.id, info);
             connectWebSocket(agent, wsUrl);
         })
         .catch((err) => {
+            const issue = classifyAgentConnectionError(err, {
+                accessMode: agent.access_mode,
+                endpoint: "info",
+            });
             console.error(`[WS] pre-check failed → ${agent.name}:`, err);
             setConnectingRef.current(agent.id, false);
             setOnlineRef.current(agent.id, false);
-            
-            // Better error messages
-            let errorMsg = "Connection failed";
-            if (err.name === "AbortError" || err.message.includes("timeout")) {
-                errorMsg = "Connection timeout - agent unreachable";
-            } else if (err.message.includes("404")) {
-                errorMsg = "Agent not found (404) - check URL";
-            } else if (err.message.includes("401") || err.message.includes("403")) {
-                errorMsg = "Authentication failed - check token";
-            } else if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
-                errorMsg = "Network error - agent offline or URL invalid";
-            } else {
-                errorMsg = err.message || "Unknown error";
+            setInfoErrRef.current(agent.id, connectionIssueSummary(issue));
+            setConnErrRef.current(agent.id, issue);
+
+            if (issue.code === "agent_error" || issue.code === "docker_unavailable") {
+                connectWebSocket(agent, wsUrl);
+                return;
             }
-            
-            setConnErrRef.current(agent.id, errorMsg);
-            scheduleReconnect(agent.id);
+
+            scheduleReconnect(agent.id, issue);
         });
     };
 
@@ -218,18 +233,3 @@ type AgentWsMessage =
     | { type: "ping" }
     | { type: "info:update"; reason?: string; data: DockerInfo }
     | { type: "info:error"; message: string };
-
-function resolveCloseReason(code: number): string {
-    switch (code) {
-        case 1000: return "Connection closed normally";
-        case 1001: return "Agent going away";
-        case 1006: return "Connection lost - agent offline or network error";
-        case 1008: return "Policy violation - check token or permissions";
-        case 1011: return "Agent internal error";
-        case 1012: return "Agent restarting";
-        case 4001: return "Authentication failed - invalid token";
-        case 4003: return "Access denied - insufficient permissions";
-        case 4004: return "Agent not found - check URL";
-        default:   return `Connection closed (code ${code})`;
-    }
-}

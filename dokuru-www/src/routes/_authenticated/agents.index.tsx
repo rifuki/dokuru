@@ -29,6 +29,11 @@ import type { Agent } from "@/types/agent";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  classifyAgentConnectionError,
+  connectionIssueSummary,
+  type AgentConnectionIssue,
+} from "@/lib/agent-connection-errors";
 
 type ConnectionFilter = "all" | "cloudflare" | "direct" | "domain" | "relay";
 type StatusFilter     = "all" | "online" | "connecting" | "offline";
@@ -59,23 +64,14 @@ type AgentWithInfo = {
   infoEntry: AgentInfoEntry | undefined;
   wsOnline: boolean | undefined;  // undefined = never connected yet
   isConnecting: boolean;          // WS is in connecting state
-  connectionError: string | null; // last WS close reason
+  connectionError: AgentConnectionIssue | null; // last classified connection issue
 };
 
-function getDockerInfoErrorMessage(error: unknown) {
-  const fallback = "Docker info unavailable";
-  if (error && typeof error === "object" && "response" in error) {
-    const response = (error as { response?: { status?: number; data?: { message?: string; debug?: string } } }).response;
-    if (response?.data?.message) return response.data.message;
-    if (response?.status === 401) return "Docker info auth failed";
-    if (response?.status === 404) return "Docker info endpoint not found";
-    if (response?.status) return `Docker info failed (HTTP ${response.status})`;
-  }
-  if (error instanceof Error && error.message) {
-    if (error.message.toLowerCase().includes("timeout")) return "Docker info request timed out";
-    return error.message;
-  }
-  return fallback;
+function getDockerInfoErrorMessage(error: unknown, agent: Agent) {
+  return connectionIssueSummary(classifyAgentConnectionError(error, {
+    accessMode: agent.access_mode,
+    endpoint: "info",
+  }));
 }
 
 function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWithInfo; onClick: () => void; onUpdated: (agent: Agent) => void; onRefreshInfo: () => void }) {
@@ -91,6 +87,8 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
   //   isOffline    = WS disconnected/failed
   const isOnline = !isConnecting && wsOnline === true;
   const isOffline = !isConnecting && wsOnline === false;
+  const connectionTextClass = connectionError?.retryable === false ? "text-red-400/80" : "text-amber-400/85";
+  const connectionIconClass = connectionError?.retryable === false ? "text-red-400/70" : "text-amber-400/80";
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -269,11 +267,29 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
                 </div>
               </div>
             ) : isOffline ? (
-              <div className="flex items-center gap-2 mt-3">
-                <WifiOff className="h-3.5 w-3.5 text-red-400/70" />
-                <span className="text-[12px] text-red-400/70">
-                  {connectionError ?? "Unable to connect"}
-                </span>
+              <div className="mt-3 flex items-start gap-2">
+                <WifiOff className={`mt-0.5 h-3.5 w-3.5 ${connectionIconClass}`} />
+                <div className={`min-w-0 text-[12px] ${connectionTextClass}`}>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="font-semibold">{connectionError?.title ?? "Unable to connect"}</span>
+                    {connectionError?.retryable === false ? (
+                      <span className="rounded border border-red-500/25 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-300">
+                        Auto-retry paused
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-0.5 text-muted-foreground">
+                    {connectionError?.message ?? "The agent did not respond."}
+                  </p>
+                  {connectionError?.action ? (
+                    <p className="mt-0.5 font-medium">{connectionError.action}</p>
+                  ) : null}
+                  {connectionError?.detail ? (
+                    <p className="mt-1 truncate font-mono text-[10px] text-muted-foreground/70" title={connectionError.detail}>
+                      {connectionError.detail}
+                    </p>
+                  ) : null}
+                </div>
               </div>
             ) : (
               <div className="mt-3 inline-flex w-fit items-center gap-2 rounded-[6px] border border-amber-600/25 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 dark:border-amber-400/25 dark:bg-amber-500/10 dark:text-amber-300">
@@ -425,7 +441,7 @@ function AgentsList() {
     setAgentInfoLoading(agent.id, true);
     agentDirectApi.getInfo(agent.url, token)
       .then((info) => setAgentInfo(agent.id, info))
-      .catch((error) => setAgentInfoError(agent.id, getDockerInfoErrorMessage(error)))
+      .catch((error) => setAgentInfoError(agent.id, getDockerInfoErrorMessage(error, agent)))
       .finally(() => infoRequestsRef.current.delete(agent.id));
   }
 
