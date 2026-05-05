@@ -76,24 +76,24 @@ pub(crate) fn hero() -> impl IntoView {
                     <p class="mt-4 text-sm text-zinc-400 md:text-base max-w-2xl mx-auto">"Seamless onboarding, real-time scanning, and 1-click auto-fixes — all orchestrated by a single lightweight agent."</p>
                 </div>
 
-                <div class="relative mx-auto w-full max-w-6xl h-[450px] sm:h-[500px] md:h-[650px]">
+                <div class="relative mx-auto w-full max-w-6xl h-[450px] sm:h-[500px] md:h-[650px] flex items-center justify-center">
                     // 1. Onboard Terminal (Background Layer, Top Left)
                     <div class="absolute left-0 top-4 hidden lg:block w-[440px] -rotate-3 opacity-40 transition-all duration-500 hover:rotate-0 hover:opacity-100 hover:z-50 hover:scale-105 z-10" style="--motion-delay: 400ms">
                         {onboard_terminal()}
                     </div>
 
-                    // 2. Scanning Terminal (Background Layer, Bottom Left)
-                    <div class="absolute left-10 bottom-4 hidden lg:block w-[400px] rotate-2 opacity-50 transition-all duration-500 hover:rotate-0 hover:opacity-100 hover:z-50 hover:scale-105 z-20" style="--motion-delay: 600ms">
+                    // 2. Scanning Terminal (Background Layer, Bottom Right)
+                    <div class="absolute right-0 bottom-10 hidden lg:block w-[400px] rotate-2 opacity-50 transition-all duration-500 hover:rotate-0 hover:opacity-100 hover:z-50 hover:scale-105 z-20" style="--motion-delay: 600ms">
                         {scanning_terminal()}
                     </div>
 
                     // 3. Fix Alert (Foreground Layer, Top Right)
-                    <div class="absolute right-4 top-16 hidden lg:block w-[320px] rotate-3 opacity-90 transition-all duration-500 hover:rotate-0 hover:opacity-100 hover:z-50 hover:scale-105 z-40" style="--motion-delay: 700ms">
+                    <div class="absolute right-10 top-10 hidden lg:block w-[320px] rotate-3 opacity-90 transition-all duration-500 hover:rotate-0 hover:opacity-100 hover:z-50 hover:scale-105 z-40" style="--motion-delay: 700ms">
                         {fix_alert()}
                     </div>
 
-                    // 4. Audit Panel (Foreground Layer, Center Right)
-                    <div class="absolute right-0 md:bottom-10 top-0 md:top-auto w-full lg:right-20 lg:w-[680px] z-30 transition-transform duration-500 hover:scale-[1.02]" style="--motion-delay: 500ms">
+                    // 4. Audit Panel (Foreground Layer, Center)
+                    <div class="relative w-full lg:w-[720px] z-30 transition-transform duration-500 hover:scale-[1.02]" style="--motion-delay: 500ms">
                         <div class="absolute inset-0 scale-90 rounded-full bg-[#2496ED]/15 blur-[120px] pointer-events-none"/>
                         <div class="relative overflow-hidden rounded-2xl border border-white/10 bg-[#050505] shadow-[0_40px_100px_rgba(0,0,0,0.9)] text-left ring-1 ring-white/5 backdrop-blur-xl">
                             {audit_panel()}
