@@ -128,6 +128,7 @@ interface AuditState {
     markAuditResultViewed: (agentId: string, auditId: string) => void;
     startAudit: (agent: Agent, token?: string) => Promise<AuditResponse>;
     cancelAudit: (agentId: string) => void;
+    clearAuditStream: (agentId: string) => void;
     startFixJob: (request: StartFixJobRequest) => Promise<FixOutcome>;
 }
 
@@ -481,6 +482,18 @@ export const useAuditStore = create<AuditState>((set) => ({
 
     cancelAudit: (agentId) => {
         auditCancels.get(agentId)?.();
+    },
+
+    clearAuditStream: (agentId) => {
+        set((s) => {
+            const newState = { ...s };
+            if (newState.auditStreams[agentId]) {
+                const streams = { ...newState.auditStreams };
+                delete streams[agentId];
+                newState.auditStreams = streams;
+            }
+            return newState;
+        });
     },
 
     startFixJob: (request) => {

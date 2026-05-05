@@ -54,6 +54,41 @@ import { HOST_SHELL_ENABLED } from "@/lib/host-shell";
 import { IS_LOCAL_AGENT_MODE } from "@/lib/env";
 import { markSidebarNavigation } from "@/lib/sidebar-navigation";
 
+const AGENT_NAV_MEMORY_KEY = "dokuru_agent_nav_memory";
+
+function readRememberedAgentNavTargets(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const raw = window.sessionStorage.getItem(AGENT_NAV_MEMORY_KEY);
+    if (!raw) return {};
+
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+
+    return Object.fromEntries(
+      Object.entries(parsed).filter(([key, value]) => (
+        typeof key === "string" &&
+        typeof value === "string" &&
+        key.startsWith("/agents/") &&
+        value.startsWith("/agents/")
+      )),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function writeRememberedAgentNavTargets(targets: Record<string, string>) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.sessionStorage.setItem(AGENT_NAV_MEMORY_KEY, JSON.stringify(targets));
+  } catch {
+    // Sidebar memory is a navigation hint only; ignore storage failures.
+  }
+}
+
 function auditSidebarStatus(stream?: AuditStreamState) {
   if (!stream) return null;
 
@@ -140,7 +175,7 @@ const agentNavItems = (agentId: string) => {
 };
 
 function rememberableAgentDetail(pathname: string) {
-  const auditMatch = pathname.match(/^\/agents\/([^/]+)\/audits\/[^/]+$/);
+  const auditMatch = pathname.match(/^\/agents\/([^/]+)\/audits(?:\/[^/]+)?$/);
   if (auditMatch) {
     return {
       defaultHref: `/agents/${auditMatch[1]}/audit`,
@@ -161,6 +196,21 @@ function rememberedAuditHubHref(pathname: string) {
   return /^\/agents\/[^/]+\/audit$/.test(pathname) ? pathname : null;
 }
 
+function isAuditNavHref(href: string) {
+  return /^\/agents\/[^/]+\/audit$/.test(href);
+}
+
+function isAgentAuditPath(pathname: string, agentId: string) {
+  const auditHref = `/agents/${agentId}/audit`;
+  const auditHistoryHref = `/agents/${agentId}/audits`;
+  return (
+    pathname === auditHref ||
+    pathname.startsWith(`${auditHref}/`) ||
+    pathname === auditHistoryHref ||
+    pathname.startsWith(`${auditHistoryHref}/`)
+  );
+}
+
 function rememberedResourceIndexHref(pathname: string) {
   const indexMatch = pathname.match(/^\/agents\/([^/]+)\/(containers|images|networks|volumes)\/?$/);
   return indexMatch ? `/agents/${indexMatch[1]}/${indexMatch[2]}` : null;
@@ -178,7 +228,7 @@ export function AppSidebar() {
   const { state: sidebarState } = useSidebar();
   const isIconMode = sidebarState === "collapsed";
   const [openAgents, setOpenAgents] = useState<Record<string, boolean>>({});
-  const [lastDetailHrefByDefaultHref, setLastDetailHrefByDefaultHref] = useState<Record<string, string>>({});
+  const [lastDetailHrefByDefaultHref, setLastDetailHrefByDefaultHref] = useState<Record<string, string>>(() => readRememberedAgentNavTargets());
   const notifiedAuditIdsRef = useRef<Set<string>>(new Set());
 
   // Backend WS: relay agents + server-level events (agent:connected / agent:disconnected)
@@ -192,6 +242,10 @@ export function AppSidebar() {
   useEffect(() => {
     if (!isAdmin) fetchAgents();
   }, [fetchAgents, isAdmin]);
+
+  useEffect(() => {
+    writeRememberedAgentNavTargets(lastDetailHrefByDefaultHref);
+  }, [lastDetailHrefByDefaultHref]);
 
   useEffect(() => {
     const active: Record<string, boolean> = {};
@@ -255,7 +309,7 @@ export function AppSidebar() {
       if (notifiedAuditIdsRef.current.has(savedAudit.id)) continue;
 
       notifiedAuditIdsRef.current.add(savedAudit.id);
-      if (location.pathname.startsWith(`/agents/${agentId}/audit`)) continue;
+      if (isAgentAuditPath(location.pathname, agentId)) continue;
 
       const toastId = `audit-complete-${agentId}-${savedAudit.id}`;
       toast.success(`Audit complete - ${savedAudit.summary.score}/100`, {
@@ -295,13 +349,7 @@ export function AppSidebar() {
     if (/^\/agents\/[^/]+$/.test(href)) return location.pathname === href;
     const auditMatch = href.match(/^\/agents\/([^/]+)\/audit$/);
     if (auditMatch) {
-      const auditHistoryHref = `/agents/${auditMatch[1]}/audits`;
-      return (
-        location.pathname === href ||
-        location.pathname.startsWith(`${href}/`) ||
-        location.pathname === auditHistoryHref ||
-        location.pathname.startsWith(`${auditHistoryHref}/`)
-      );
+      return isAgentAuditPath(location.pathname, auditMatch[1]);
     }
     if (href.startsWith("/agents/")) {
       return location.pathname === href || location.pathname.startsWith(`${href}/`);
@@ -314,6 +362,7 @@ export function AppSidebar() {
   };
 
   const getAgentNavTarget = (href: string, active: boolean) => {
+    if (active && isAuditNavHref(href) && location.pathname !== href) return location.pathname;
     if (active && location.pathname !== href) return href;
     return lastDetailHrefByDefaultHref[href] ?? href;
   };
@@ -498,12 +547,13 @@ export function AppSidebar() {
                           <CollapsibleContent>
                             <div className="border-t border-sidebar-border/60 overflow-hidden">
                               {agentNavItems(agent.id).map((item) => {
-                                const auditStream = item.title === "Audit" ? auditStreams[agent.id] : undefined;
-                                const isCurrentAuditPage = item.title === "Audit" && location.pathname === `/agents/${agent.id}/audit`;
+                                const isAuditItem = item.title === "Audit";
+                                const auditStream = isAuditItem ? auditStreams[agent.id] : undefined;
+                                const isCurrentAuditPage = isAuditItem && location.pathname === `/agents/${agent.id}/audit`;
                                 const completedAuditId = auditStream?.status === "complete" ? auditStream.savedAudit?.id : undefined;
                                 const completedAuditViewed = !!completedAuditId && viewedAuditResults[agent.id] === completedAuditId;
                                 const auditStatus = isCurrentAuditPage || completedAuditViewed ? null : auditSidebarStatus(auditStream);
-                                const fixStatus = item.title === "Audit" ? agentFixStatus : null;
+                                const fixStatus = isAuditItem ? agentFixStatus : null;
                                 const navStatus = fixStatus ?? auditStatus;
                                 const active = isActive(item.href);
                                 const disabled = item.requiresOnline && !isOnline;
@@ -521,11 +571,23 @@ export function AppSidebar() {
                                   <Link
                                      key={item.href}
                                       to={targetHref}
-                                     title={navStatus?.title}
-                                     onClick={(event) => {
-                                       markSidebarNavigation(targetHref);
-                                       if (targetHref === item.href) {
-                                         forgetAgentNavDetail(item.href);
+                                      title={navStatus?.title}
+                                      onClick={(event) => {
+                                        if (isAuditItem && active && location.pathname !== item.href) {
+                                          if (event.detail < 2) {
+                                            event.preventDefault();
+                                            return;
+                                          }
+                                          event.preventDefault();
+                                          forgetAgentNavDetail(item.href);
+                                          markSidebarNavigation(item.href);
+                                          void navigate({ to: item.href });
+                                          return;
+                                        }
+
+                                        markSidebarNavigation(targetHref);
+                                        if (targetHref === item.href) {
+                                          forgetAgentNavDetail(item.href);
                                          return;
                                        }
                                        if (event.detail < 2) return;

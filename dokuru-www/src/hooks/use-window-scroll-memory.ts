@@ -163,6 +163,9 @@ export function useWindowScrollMemory(key: string, canRestore = true) {
       if (targetReached || finalAttempt) finishRestore(targetReached);
     };
 
+    restore();
+    if (completed) return;
+
     for (const [index, delay] of RESTORE_DELAYS.entries()) {
       const finalAttempt = index === RESTORE_DELAYS.length - 1;
       const timeoutId = window.setTimeout(() => {
