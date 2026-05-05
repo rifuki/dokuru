@@ -918,13 +918,7 @@ function SignalCard({
 }) {
     const toneClass = toneClasses(tone);
     const isNeutral = tone === "zinc";
-    const cardBg = tone === "amber"
-        ? "border-amber-500/20 bg-amber-500/[0.07] hover:border-amber-500/40"
-        : tone === "red"
-            ? "border-rose-500/20 bg-rose-500/[0.07] hover:border-rose-500/40"
-            : tone === "blue"
-                ? "border-blue-500/20 bg-blue-500/[0.07] hover:border-blue-500/40"
-                : "bg-background/55 hover:border-primary/25 dark:bg-white/[0.025]";
+    const cardBg = "bg-background/55 hover:border-primary/25 dark:bg-white/[0.025]";
 
     return (
         <div className={cn("group rounded-[16px] border px-4 py-3.5 shadow-sm transition-colors", cardBg)}>
