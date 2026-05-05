@@ -560,7 +560,7 @@ fn save_cloudflare_url(
     url: &str,
     spinner: &cliclack::ProgressBar,
 ) -> Result<()> {
-    crate::cli::CloudflareTunnel::wait_for_health(url, 30)?;
+    crate::cli::CloudflareTunnel::wait_for_health(url, 60)?;
     spinner.stop(format!("✓ Tunnel restarted: {url}"));
     update_config_access_mode(config, crate::api::AccessMode::Cloudflare, url)?;
     note(

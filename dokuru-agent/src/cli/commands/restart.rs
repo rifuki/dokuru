@@ -37,7 +37,7 @@ pub fn run_restart(service_only: bool) -> Result<()> {
                         cliclack::log::warning(format!("Tunnel URL not saved to config: {error}"))?;
                     }
                     cliclack::log::info(format!("Tunnel URL: {url}"))?;
-                    match crate::cli::CloudflareTunnel::wait_for_health(&url, 30) {
+                    match crate::cli::CloudflareTunnel::wait_for_health(&url, 60) {
                         Ok(()) => cliclack::log::success("✓ tunnel reachable")?,
                         Err(error) => cliclack::log::warning(format!(
                             "Tunnel URL saved but not reachable yet: {error}"
