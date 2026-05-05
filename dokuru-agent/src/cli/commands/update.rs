@@ -1,42 +1,23 @@
 use super::super::helpers::{
-    ChecksumTool, LATEST_RELEASE_BASE_URL, binary_version, collect_preflight, confirm_action,
-    create_temp_dir, detect_checksum_tool, download_file, ensure_command, install_binary,
-    release_asset_name, resolve_shared_config, restart_service, run_step, service_unit_path,
-    verify_download_checksum,
+    ChecksumTool, binary_version, collect_preflight, confirm_action, create_temp_dir,
+    detect_checksum_tool, download_file, ensure_command, install_binary, normalize_release_tag,
+    release_asset_name_for, release_base_url, resolve_shared_config, restart_service, run_step,
+    service_unit_path, verify_download_checksum,
 };
 use super::super::types::UpdateArgs;
-use super::version::{build_git_sha, fetch_latest_version, is_known_sha, short_sha};
+use super::version::{build_git_sha, fetch_version_manifest, is_known_sha, short_sha};
 use cliclack::{intro, log, note, outro, outro_cancel};
 use eyre::{Result, bail};
 
 pub fn run_update(args: &UpdateArgs) -> Result<()> {
     let config = resolve_shared_config(&args.shared, None)?;
     let preflight = collect_preflight(&config);
+    let release = update_release(args)?;
+    let release_base_url = release_base_url(&release);
 
-    intro("🐳 Dokuru  rolling latest updater")?;
-
-    match fetch_latest_version() {
-        Ok(latest) => {
-            note(
-                "Latest release",
-                format!(
-                    "Local commit:  {}\nLatest commit: {}",
-                    short_sha(build_git_sha()),
-                    short_sha(&latest.git_sha)
-                ),
-            )?;
-            if !args.force && latest.git_sha == build_git_sha() && is_known_sha(build_git_sha()) {
-                outro(format!(
-                    "Already up to date ({})",
-                    short_sha(build_git_sha())
-                ))?;
-                return Ok(());
-            }
-        }
-        Err(error) => note(
-            "Latest release",
-            format!("Unable to check version metadata: {error}. Downloading anyway."),
-        )?,
+    show_update_intro(&release)?;
+    if release_is_current(&release, args.force)? {
+        return Ok(());
     }
 
     if !preflight.running_as_root() {
@@ -46,15 +27,16 @@ pub fn run_update(args: &UpdateArgs) -> Result<()> {
 
     ensure_command("curl")?;
     let checksum_tool = detect_checksum_tool()?;
-    let asset_name = release_asset_name()?;
+    let asset_name = release_asset_name_for(&release)?;
     let temp_dir = create_temp_dir("dokuru-update")?;
-    let binary_path = temp_dir.join(asset_name);
+    let binary_path = temp_dir.join(&asset_name);
     let checksum_path = temp_dir.join("SHA256SUMS");
 
     note(
         "Update plan",
         format!(
-            "Target:  {}\nAsset:   {}\nService: {}",
+            "Release: {}\nTarget:  {}\nAsset:   {}\nService: {}",
+            release,
             config.install_path.display(),
             asset_name,
             config.service_name,
@@ -63,30 +45,27 @@ pub fn run_update(args: &UpdateArgs) -> Result<()> {
 
     if !confirm_action(
         args.shared.yes,
-        &format!("Update Dokuru at {}?", config.install_path.display()),
+        &format!(
+            "Update Dokuru at {} from {release}?",
+            config.install_path.display()
+        ),
     )? {
         outro_cancel("Update cancelled.")?;
         bail!("cancelled");
     }
 
-    run_step("Downloading latest Dokuru binary", || {
-        download_file(
-            &format!("{LATEST_RELEASE_BASE_URL}/{asset_name}"),
-            &binary_path,
-        )
+    run_step("Downloading Dokuru binary", || {
+        download_file(&format!("{release_base_url}/{asset_name}"), &binary_path)
     })?;
-    log::info(format!("→ {LATEST_RELEASE_BASE_URL}/{asset_name}"))?;
+    log::info(format!("→ {release_base_url}/{asset_name}"))?;
 
     run_step("Downloading release checksums", || {
-        download_file(
-            &format!("{LATEST_RELEASE_BASE_URL}/SHA256SUMS"),
-            &checksum_path,
-        )
+        download_file(&format!("{release_base_url}/SHA256SUMS"), &checksum_path)
     })?;
-    log::info(format!("→ {LATEST_RELEASE_BASE_URL}/SHA256SUMS"))?;
+    log::info(format!("→ {release_base_url}/SHA256SUMS"))?;
 
     run_step("Verifying release checksum", || {
-        verify_download_checksum(&checksum_path, &binary_path, asset_name, checksum_tool)
+        verify_download_checksum(&checksum_path, &binary_path, &asset_name, checksum_tool)
     })?;
     let tool_name = match checksum_tool {
         ChecksumTool::Sha256sum => "sha256sum",
@@ -119,8 +98,53 @@ pub fn run_update(args: &UpdateArgs) -> Result<()> {
         })
         .map_or_else(|_| "localhost".to_string(), |a| a.ip().to_string());
     cliclack::log::info(format!("Agent: {host_ip}:{}", config.port))?;
-    outro("Dokuru updated successfully.")?;
+    outro(format!("Dokuru updated from {release} successfully."))?;
     Ok(())
+}
+
+fn update_release(args: &UpdateArgs) -> Result<String> {
+    args.version
+        .as_deref()
+        .map(normalize_release_tag)
+        .transpose()
+        .map(|release| release.unwrap_or_else(|| "latest".to_string()))
+}
+
+fn show_update_intro(release: &str) -> Result<()> {
+    if release == "latest" {
+        intro("🐳 Dokuru rolling latest updater")?;
+    } else {
+        intro(format!("🐳 Dokuru versioned updater ({release})"))?;
+    }
+    Ok(())
+}
+
+fn release_is_current(release: &str, force: bool) -> Result<bool> {
+    match fetch_version_manifest(release) {
+        Ok(latest) => {
+            note(
+                "Release metadata",
+                format!(
+                    "Release:      {}\nLocal commit:  {}\nRemote commit: {}",
+                    latest.release_tag.as_deref().unwrap_or(release),
+                    short_sha(build_git_sha()),
+                    short_sha(&latest.git_sha)
+                ),
+            )?;
+            if !force && latest.git_sha == build_git_sha() && is_known_sha(build_git_sha()) {
+                outro(format!(
+                    "Already up to date ({})",
+                    short_sha(build_git_sha())
+                ))?;
+                return Ok(true);
+            }
+        }
+        Err(error) => note(
+            "Release metadata",
+            format!("Unable to check version metadata: {error}. Downloading anyway."),
+        )?,
+    }
+    Ok(false)
 }
 
 // ─── Uninstall ────────────────────────────────────────────────────────────────

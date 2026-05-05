@@ -9,7 +9,11 @@ INSTALL_PATH="${INSTALL_DIR}/${BINARY_NAME}"
 CONFIG_DIR="${DOKURU_CONFIG_DIR:-/etc/dokuru}"
 SYSTEMD_DIR="${DOKURU_SYSTEMD_DIR:-/etc/systemd/system}"
 SERVICE_NAME="${DOKURU_SERVICE_NAME:-dokuru}"
-RELEASE_BASE_URL="https://github.com/${REPO}/releases/download/latest"
+RELEASE_TAG="${DOKURU_RELEASE:-latest}"
+if [ -n "${DOKURU_VERSION:-}" ]; then
+  RELEASE_TAG="${DOKURU_VERSION}"
+fi
+RELEASE_BASE_URL=""
 
 TMP_DIR=""
 ARCH_LABEL=""
@@ -31,6 +35,25 @@ cleanup() {
   if [ -n "${TMP_DIR}" ] && [ -d "${TMP_DIR}" ]; then
     rm -rf "${TMP_DIR}"
   fi
+}
+
+normalize_release() {
+  local value="$1"
+  if [ -z "${value}" ]; then
+    die "Release tag cannot be empty"
+  fi
+
+  case "${value}" in
+    latest|v*)
+      printf '%s' "${value}"
+      ;;
+    [0-9]*)
+      printf 'v%s' "${value}"
+      ;;
+    *)
+      die "Release must be 'latest' or a version tag like v0.1.0"
+      ;;
+  esac
 }
 
 trap cleanup EXIT
@@ -72,6 +95,7 @@ need_cmd() {
 
 parse_args() {
   while [ "$#" -gt 0 ]; do
+    local option="$1"
     case "$1" in
       -y|--yes)
         YES="1"
@@ -84,10 +108,23 @@ Usage:
   install.sh [options]
 
 Options:
-  -y, --yes     Skip interactive prompts inside dokuru onboard
-  -h, --help    Show this help message
+  -y, --yes                  Skip interactive prompts inside dokuru onboard
+      --latest               Install from the rolling latest channel
+      --version TAG          Install a specific release tag, for example v0.1.0
+      --release TAG          Alias for --version
+  -h, --help                 Show this help message
 EOF
         exit 0
+        ;;
+      --latest)
+        RELEASE_TAG="latest"
+        ;;
+      --version|--release)
+        shift
+        if [ "$#" -eq 0 ]; then
+          die "${option} requires a release tag"
+        fi
+        RELEASE_TAG="$(normalize_release "$1")"
         ;;
       *)
         die "Unknown option: $1"
@@ -121,7 +158,12 @@ detect_platform() {
       ;;
   esac
 
-  BINARY_ASSET="${BINARY_NAME}-linux-${ARCH_LABEL}"
+  if [ "${RELEASE_TAG}" = "latest" ]; then
+    BINARY_ASSET="${BINARY_NAME}-linux-${ARCH_LABEL}"
+  else
+    BINARY_ASSET="${BINARY_NAME}-linux-${ARCH_LABEL}-${RELEASE_TAG}"
+  fi
+  RELEASE_BASE_URL="https://github.com/${REPO}/releases/download/${RELEASE_TAG}"
 }
 
 detect_checksum_tool() {
@@ -143,7 +185,7 @@ print_plan() {
   printf '%bOS:%b linux\n' "${MUTED}" "${RESET}"
   printf '%bArchitecture:%b %s\n' "${MUTED}" "${RESET}" "${ARCH_LABEL}"
   printf '%bInstall method:%b binary release\n' "${MUTED}" "${RESET}"
-  printf '%bRequested channel:%b latest\n' "${MUTED}" "${RESET}"
+  printf '%bRequested release:%b %s\n' "${MUTED}" "${RESET}" "${RELEASE_TAG}"
   printf '%bBinary path:%b %s\n' "${MUTED}" "${RESET}" "${INSTALL_PATH}"
 }
 
@@ -201,13 +243,13 @@ prepare_environment() {
   ok "Detected: linux/${ARCH_LABEL}"
   ok "Checksum tool: ${CHECKSUM_TOOL}"
 
-  if installed_binary_supports_onboard; then
+  if [ "${RELEASE_TAG}" = "latest" ] && installed_binary_supports_onboard; then
     REUSE_INSTALLED="1"
     RUN_BIN="${INSTALL_PATH}"
     ok "Existing Dokuru installation found at ${INSTALL_PATH}"
     note "Skipping binary download and reusing the installed Dokuru CLI"
   else
-    note "No reusable Dokuru installation found; latest release will be installed"
+    note "Dokuru release ${RELEASE_TAG} will be installed"
   fi
 }
 
@@ -358,6 +400,7 @@ run_onboard() {
 
 main() {
   parse_args "$@"
+  RELEASE_TAG="$(normalize_release "${RELEASE_TAG}")"
   setup_ui
   print_banner
   detect_platform

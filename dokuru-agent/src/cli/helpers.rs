@@ -10,8 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 pub const REPO_URL: &str = "https://github.com/rifuki/dokuru";
-pub const LATEST_RELEASE_BASE_URL: &str =
-    "https://github.com/rifuki/dokuru/releases/download/latest";
+pub const RELEASE_DOWNLOAD_BASE_URL: &str = "https://github.com/rifuki/dokuru/releases/download";
 const DOKURU_GROUP: &str = "dokuru";
 
 #[derive(Debug)]
@@ -1016,7 +1015,41 @@ pub fn detect_checksum_tool() -> Result<ChecksumTool> {
     bail!("Neither sha256sum nor shasum is available")
 }
 
-pub fn release_asset_name() -> Result<&'static str> {
+pub fn normalize_release_tag(release: &str) -> Result<String> {
+    let release = release.trim();
+    if release.is_empty() {
+        bail!("release tag cannot be empty");
+    }
+
+    if release == "latest" || release.starts_with('v') {
+        return Ok(release.to_string());
+    }
+
+    if release
+        .chars()
+        .next()
+        .is_some_and(|character| character.is_ascii_digit())
+    {
+        return Ok(format!("v{release}"));
+    }
+
+    bail!("release must be 'latest' or a version tag like v0.1.0")
+}
+
+pub fn release_base_url(release: &str) -> String {
+    format!("{RELEASE_DOWNLOAD_BASE_URL}/{release}")
+}
+
+pub fn release_asset_name_for(release: &str) -> Result<String> {
+    let base_name = release_asset_base_name()?;
+    if release == "latest" {
+        Ok(base_name.to_string())
+    } else {
+        Ok(format!("{base_name}-{release}"))
+    }
+}
+
+fn release_asset_base_name() -> Result<&'static str> {
     match std::env::consts::ARCH {
         "x86_64" => Ok("dokuru-linux-amd64"),
         "aarch64" => Ok("dokuru-linux-arm64"),

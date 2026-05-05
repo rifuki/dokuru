@@ -1058,10 +1058,10 @@ sudo ./target/debug/dokuru serve
 | `build-www.yaml` | Builds the hosted dashboard image. |
 | `release-agent.yaml` | Builds Linux AMD64/ARM64 `dokuru` agent binaries with embedded dashboard assets and publishes installer/checksum release assets. |
 
-Release assets produced for the agent include:
+Release assets produced for the agent include rolling `latest` names and versioned stable names:
 
-- `dokuru-linux-amd64`
-- `dokuru-linux-arm64`
+- `dokuru-linux-amd64` or `dokuru-linux-amd64-vX.Y.Z`
+- `dokuru-linux-arm64` or `dokuru-linux-arm64-vX.Y.Z`
 - `install.sh`
 - `SHA256SUMS`
 - `version.json`

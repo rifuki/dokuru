@@ -165,6 +165,13 @@ jobs:
           }
           EOF
 
+      - name: Prepare installer asset
+        run: |
+          cp dokuru-agent/install.sh install.sh
+          if [[ "${{ steps.release.outputs.type }}" == "version" ]]; then
+            perl -0pi -e 's/DOKURU_RELEASE:-latest/DOKURU_RELEASE:-${{ steps.release.outputs.tag }}/' install.sh
+          fi
+
       - name: Remove previous latest release
         if: steps.release.outputs.type == 'latest'
         env:
@@ -186,9 +193,14 @@ jobs:
 
           ### 📦 Installation
 
-          **Quick install (latest):**
+          **Quick install (this version):**
           ```bash
-          curl -fsSL https://github.com/${{ github.repository }}/releases/download/latest/install.sh | bash
+          curl -fsSL https://github.com/${{ github.repository }}/releases/download/${{ steps.release.outputs.tag }}/install.sh | sudo bash
+          ```
+
+          **Rolling latest:**
+          ```bash
+          curl -fsSL https://github.com/${{ github.repository }}/releases/download/latest/install.sh | sudo bash
           ```
 
           **Install this specific version:**
@@ -240,7 +252,7 @@ jobs:
           ### Install Agent
 
           ```bash
-          curl -fsSL https://github.com/${{ github.repository }}/releases/download/latest/install.sh | bash
+          curl -fsSL https://github.com/${{ github.repository }}/releases/download/latest/install.sh | sudo bash
           ```
 
           ### Direct Downloads
@@ -274,12 +286,12 @@ jobs:
           files: |
             dokuru-linux-*
             SHA256SUMS
-            dokuru-agent/install.sh
+            install.sh
             version.json
           draft: false
           prerelease: ${{ steps.release.outputs.prerelease }}
           make_latest: ${{ steps.release.outputs.type == 'version' }}
-          generate_release_notes: ${{ steps.release.outputs.type == 'version' }}
+          generate_release_notes: false
 
       - name: Ensure latest release is published
         if: steps.release.outputs.type == 'latest'

@@ -66,6 +66,21 @@ pub struct DoctorArgs {
 }
 
 #[derive(Args, Debug, Clone, Default)]
+pub struct VersionArgs {
+    /// Skip checking public release metadata
+    #[arg(long)]
+    pub offline: bool,
+
+    /// Show metadata for a specific release tag, for example v0.1.0
+    #[arg(long = "release", value_name = "TAG")]
+    pub release: Option<String>,
+
+    /// List recent Dokuru agent releases from GitHub
+    #[arg(long)]
+    pub list: bool,
+}
+
+#[derive(Args, Debug, Clone, Default)]
 pub struct UpdateArgs {
     #[command(flatten)]
     pub shared: SharedArgs,
@@ -73,6 +88,10 @@ pub struct UpdateArgs {
     /// Re-download even when the local binary is up to date
     #[arg(long)]
     pub force: bool,
+
+    /// Update to a specific version tag instead of rolling latest, for example v0.1.0
+    #[arg(long = "version", value_name = "TAG")]
+    pub version: Option<String>,
 }
 
 #[derive(Args, Debug, Clone, Default)]

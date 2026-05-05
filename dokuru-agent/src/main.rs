@@ -29,11 +29,7 @@ enum Commands {
     /// Show Dokuru service and Docker status
     Status,
     /// Show local build metadata and latest release metadata
-    Version {
-        /// Skip checking the public latest release
-        #[arg(long)]
-        offline: bool,
-    },
+    Version(cli::VersionArgs),
     /// Manage agent authentication token
     Token {
         #[command(subcommand)]
@@ -50,7 +46,7 @@ enum Commands {
         #[arg(long)]
         service_only: bool,
     },
-    /// Update Dokuru from the rolling latest release
+    /// Update Dokuru from rolling latest or a versioned release
     Update(cli::UpdateArgs),
     /// Remove Dokuru from this host
     Uninstall(cli::UninstallArgs),
@@ -91,7 +87,7 @@ async fn main() -> eyre::Result<()> {
         }
         Commands::Doctor(args) => cli::run_doctor(args.clone())?,
         Commands::Status => cli::run_status()?,
-        Commands::Version { offline } => cli::run_version(*offline),
+        Commands::Version(args) => cli::run_version(args),
         Commands::Token { action } => match action {
             TokenAction::Show(shared) => cli::run_token_show(shared)?,
             TokenAction::Rotate(shared) => cli::run_token_rotate(shared)?,
