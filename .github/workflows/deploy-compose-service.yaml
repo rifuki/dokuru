@@ -68,6 +68,8 @@ jobs:
         github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     environment: production
+    outputs:
+      deployed: ${{ steps.gate.outputs.deploy }}
     env:
       DEPLOY_HOST: ${{ vars.DOKURU_DEPLOY_HOST || secrets.DOKURU_DEPLOY_HOST }}
       DEPLOY_USER: ${{ vars.DOKURU_DEPLOY_USER || secrets.DOKURU_DEPLOY_USER }}
@@ -91,16 +93,44 @@ jobs:
         run: |
           set -Eeuo pipefail
 
+          has_deployed_compose_stack() {
+            local runs run_ids jobs deployed_count
+
+            runs=$(gh api \
+              "/repos/${GITHUB_REPOSITORY}/actions/workflows/deploy-compose-service.yaml/runs?branch=main&event=workflow_run&per_page=20")
+
+            mapfile -t run_ids < <(jq -r \
+              --arg head_sha "${HEAD_SHA}" \
+              --arg run_id "${GITHUB_RUN_ID}" \
+              '.workflow_runs[] | select(.head_sha == $head_sha and (.id | tostring) != $run_id and .status == "completed" and .conclusion == "success") | .id' \
+              <<< "${runs}")
+
+            for run_id in "${run_ids[@]}"; do
+              jobs=$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?per_page=100")
+              deployed_count=$(jq '[.jobs[].steps[]? | select(.name == "Deploy via Docker Compose" and .conclusion == "success")] | length' <<< "${jobs}")
+
+              if [ "${deployed_count}" -gt 0 ]; then
+                printf 'Deploy Compose Stack run %s already deployed %s.\n' "${run_id}" "${HEAD_SHA}"
+                return 0
+              fi
+            done
+
+            return 1
+          }
+
+          if has_deployed_compose_stack; then
+            printf 'deploy=false\n' >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
           case "${TRIGGER_WORKFLOW}" in
             "Build Server Image")
               counterpart_file="build-www.yaml"
               counterpart_name="Build Web Image"
-              coordinator=true
               ;;
             "Build Web Image")
               counterpart_file="build-server.yaml"
               counterpart_name="Build Server Image"
-              coordinator=false
               ;;
             *)
               printf '::error::Unsupported workflow_run trigger: %s\n' "${TRIGGER_WORKFLOW}"
@@ -114,12 +144,10 @@ jobs:
 
             success_count=$(jq '[.workflow_runs[] | select(.head_sha == env.HEAD_SHA and .status == "completed" and .conclusion == "success")] | length' <<< "${runs}")
             failed_count=$(jq '[.workflow_runs[] | select(.head_sha == env.HEAD_SHA and .status == "completed" and (.conclusion == "failure" or .conclusion == "cancelled" or .conclusion == "timed_out"))] | length' <<< "${runs}")
-            active_count=$(jq '[.workflow_runs[] | select(.head_sha == env.HEAD_SHA and .status != "completed")] | length' <<< "${runs}")
 
             if [ "${success_count}" -gt 0 ]; then
-              if [ "${coordinator}" = "false" ]; then
+              if has_deployed_compose_stack; then
                 printf 'deploy=false\n' >> "${GITHUB_OUTPUT}"
-                printf '%s already exists for %s. Its workflow_run deploy will coordinate this SHA.\n' "${counterpart_name}" "${HEAD_SHA}"
                 exit 0
               fi
 
@@ -131,18 +159,6 @@ jobs:
             if [ "${failed_count}" -gt 0 ]; then
               printf '::error::%s failed for %s. Skipping compose deploy.\n' "${counterpart_name}" "${HEAD_SHA}"
               exit 1
-            fi
-
-            if [ "${coordinator}" = "false" ] && [ "${active_count}" -gt 0 ]; then
-              printf 'deploy=false\n' >> "${GITHUB_OUTPUT}"
-              printf '%s is still running for %s. Its workflow_run deploy will coordinate this SHA.\n' "${counterpart_name}" "${HEAD_SHA}"
-              exit 0
-            fi
-
-            if [ "${active_count}" -eq 0 ] && [ "${attempt}" -ge 8 ]; then
-              printf 'deploy=true\n' >> "${GITHUB_OUTPUT}"
-              printf 'No %s run was detected for %s after %s checks. Deploying from %s.\n' "${counterpart_name}" "${HEAD_SHA}" "${attempt}" "${TRIGGER_WORKFLOW}"
-              exit 0
             fi
 
             printf 'Waiting for %s for %s (%s/80).\n' "${counterpart_name}" "${HEAD_SHA}" "${attempt}"
@@ -164,7 +180,7 @@ jobs:
 
           if [ "${IMAGE_DEPLOY:-}" = "false" ]; then
             printf 'deploy=false\n' >> "${GITHUB_OUTPUT}"
-            printf 'Another image workflow will coordinate this compose deploy.\n'
+            printf 'This SHA was already deployed by another compose workflow run.\n'
           elif [ "${FORCE_DEPLOY}" = "true" ] || [ "${auto_deploy}" = "true" ]; then
             printf 'deploy=true\n' >> "${GITHUB_OUTPUT}"
             printf 'Compose deploy gate is open.\n'
@@ -230,7 +246,7 @@ jobs:
   notify:
     name: Notify Status
     needs: deploy
-    if: always() && needs.deploy.result != 'skipped'
+    if: always() && needs.deploy.result != 'skipped' && (needs.deploy.result != 'success' || needs.deploy.outputs.deployed == 'true')
     uses: ./.github/workflows/notify.yaml
     with:
       workflow_name: "Deploy Compose Stack"
