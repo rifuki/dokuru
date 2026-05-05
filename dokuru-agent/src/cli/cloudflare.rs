@@ -165,17 +165,9 @@ WantedBy=multi-user.target
     pub fn wait_for_health(url: &str, timeout_secs: u64) -> Result<()> {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
         let health_url = format!("{}/health", url.trim_end_matches('/'));
-        let client = reqwest::blocking::Client::builder()
-            .timeout(std::time::Duration::from_secs(5))
-            .build()
-            .wrap_err("Failed to create health check client")?;
 
         while std::time::Instant::now() < deadline {
-            if client
-                .get(&health_url)
-                .send()
-                .is_ok_and(|response| response.status().is_success())
-            {
+            if url_is_reachable(&health_url, 10) {
                 return Ok(());
             }
             std::thread::sleep(std::time::Duration::from_secs(2));
@@ -185,6 +177,16 @@ WantedBy=multi-user.target
             "Timed out after {timeout_secs}s waiting for {health_url}"
         ))
     }
+}
+
+fn url_is_reachable(url: &str, timeout_secs: u64) -> bool {
+    let timeout = timeout_secs.to_string();
+    Command::new("curl")
+        .args(["-fsS", "--max-time", &timeout, "-o", "/dev/null", url])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
 }
 
 /// Extract URL from cloudflared output

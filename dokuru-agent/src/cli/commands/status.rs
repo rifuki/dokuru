@@ -5,6 +5,7 @@ use crate::api::{AccessMode, Config as RuntimeConfig};
 use cliclack::{intro, log, note, outro};
 use eyre::Result;
 use std::path::Path;
+use std::process::{Command, Stdio};
 
 pub fn run_status() -> Result<()> {
     let config_dir = default_config_dir();
@@ -181,11 +182,13 @@ fn tunnel_is_reachable(settings: &StatusSettings) -> bool {
 }
 
 fn is_url_reachable(url: &str, timeout_secs: u64) -> bool {
-    reqwest::blocking::Client::new()
-        .get(url)
-        .timeout(std::time::Duration::from_secs(timeout_secs))
-        .send()
-        .is_ok_and(|response| response.status().is_success())
+    let timeout = timeout_secs.to_string();
+    Command::new("curl")
+        .args(["-fsS", "--max-time", &timeout, "-o", "/dev/null", url])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
 }
 
 fn host_ip() -> String {
