@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAgentStore } from "@/stores/use-agent-store";
 import { AUDIT_CANCELLED_MESSAGE, useAuditStore, type AuditProgressLine, type AuditStreamStatus } from "@/stores/use-audit-store";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { agentApi } from "@/lib/api/agent";
 import { agentDirectApi, type AuditResponse, type AuditResult, type FixOutcome } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
@@ -718,9 +718,49 @@ function SectionHeader({ section, total, passed }: { section: string; total: num
 type StatusFilter = "all" | "Pass" | "Fail";
 
 const AUDIT_HISTORY_CACHE_PREFIX = "agent_audit_history_";
+const AUDIT_TERMINAL_UI_PREFIX = "agent_audit_terminal_ui_";
+
+type AuditTerminalUiState = {
+    autoScroll: boolean;
+    logScrollTop: number;
+};
+
+const DEFAULT_AUDIT_TERMINAL_UI_STATE: AuditTerminalUiState = {
+    autoScroll: true,
+    logScrollTop: 0,
+};
 
 function auditHistoryCacheKey(agentId: string) {
     return `${AUDIT_HISTORY_CACHE_PREFIX}${agentId}`;
+}
+
+function auditTerminalUiKey(agentId: string) {
+    return `${AUDIT_TERMINAL_UI_PREFIX}${agentId}`;
+}
+
+function readAuditTerminalUiState(agentId: string): AuditTerminalUiState {
+    try {
+        const raw = sessionStorage.getItem(auditTerminalUiKey(agentId));
+        if (!raw) return DEFAULT_AUDIT_TERMINAL_UI_STATE;
+        const parsed = JSON.parse(raw) as Partial<AuditTerminalUiState>;
+        return {
+            autoScroll: typeof parsed.autoScroll === "boolean" ? parsed.autoScroll : true,
+            logScrollTop: typeof parsed.logScrollTop === "number" && Number.isFinite(parsed.logScrollTop) ? Math.max(0, parsed.logScrollTop) : 0,
+        };
+    } catch {
+        return DEFAULT_AUDIT_TERMINAL_UI_STATE;
+    }
+}
+
+function writeAuditTerminalUiState(agentId: string, state: AuditTerminalUiState) {
+    try {
+        sessionStorage.setItem(auditTerminalUiKey(agentId), JSON.stringify({
+            autoScroll: state.autoScroll,
+            logScrollTop: Math.max(0, Math.round(state.logScrollTop)),
+        }));
+    } catch {
+        // Audit terminal UI memory is best-effort.
+    }
 }
 
 function sortAuditHistory(history: AuditResponse[]) {
@@ -764,6 +804,7 @@ function LatestAuditSkeleton() {
 }
 
 function AuditRunTerminal({
+    agentId,
     total,
     current,
     lines,
@@ -774,6 +815,7 @@ function AuditRunTerminal({
     onOpenResult,
     onCancel,
 }: {
+    agentId: string;
     total: number;
     current: number;
     lines: AuditProgressLine[];
@@ -789,8 +831,25 @@ function AuditRunTerminal({
     const isCancelled = status === "cancelled";
     const pct = total > 0 ? Math.round(((isComplete ? total : current) / total) * 100) : 0;
     const latest = lines.at(-1);
-    const [autoScroll, setAutoScroll] = useState(true);
+    const [autoScroll, setAutoScroll] = useState(() => readAuditTerminalUiState(agentId).autoScroll);
     const logRef = useRef<HTMLDivElement>(null);
+    const autoScrollRef = useRef(autoScroll);
+
+    useEffect(() => {
+        autoScrollRef.current = autoScroll;
+        const log = logRef.current;
+        writeAuditTerminalUiState(agentId, {
+            autoScroll,
+            logScrollTop: log?.scrollTop ?? readAuditTerminalUiState(agentId).logScrollTop,
+        });
+    }, [agentId, autoScroll]);
+
+    useLayoutEffect(() => {
+        const log = logRef.current;
+        if (!log || autoScroll) return;
+        const { logScrollTop } = readAuditTerminalUiState(agentId);
+        log.scrollTo({ top: Math.min(logScrollTop, log.scrollHeight), behavior: "instant" });
+    }, [agentId, autoScroll, lines.length, status]);
 
     useEffect(() => {
         if (!autoScroll) return;
@@ -798,6 +857,20 @@ function AuditRunTerminal({
         if (!log) return;
         log.scrollTo({ top: log.scrollHeight, behavior: "smooth" });
     }, [autoScroll, current, error, lines.length]);
+
+    useEffect(() => () => {
+        const log = logRef.current;
+        writeAuditTerminalUiState(agentId, {
+            autoScroll: autoScrollRef.current,
+            logScrollTop: log?.scrollTop ?? 0,
+        });
+    }, [agentId]);
+
+    const handleLogScroll = () => {
+        const log = logRef.current;
+        if (!log) return;
+        writeAuditTerminalUiState(agentId, { autoScroll: autoScrollRef.current, logScrollTop: log.scrollTop });
+    };
 
     return (
         <div className="flex h-full w-full animate-in flex-col overflow-hidden bg-card text-left fade-in zoom-in-95 duration-500">
@@ -892,7 +965,7 @@ function AuditRunTerminal({
                     </div>
                 </div>
 
-                <div ref={logRef} className="audit-terminal-log min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-zinc-50 p-4 font-mono text-[11px] leading-relaxed text-zinc-800 shadow-inner dark:bg-zinc-950 dark:text-zinc-200">
+                <div ref={logRef} onScroll={handleLogScroll} className="audit-terminal-log min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-zinc-50 p-4 font-mono text-[11px] leading-relaxed text-zinc-800 shadow-inner dark:bg-zinc-950 dark:text-zinc-200">
                     {lines.length === 0 && !error && !isCancelled && (
                         <p className="text-muted-foreground/50">$ connecting to dokuru-agent audit websocket...</p>
                     )}
@@ -1336,6 +1409,7 @@ function AuditPage() {
                         <div className={cn("pointer-events-none absolute inset-0 transition-opacity duration-500", showAuditTerminal ? "opacity-0" : "bg-white/[0.018] opacity-100")} />
                         {showAuditTerminal ? (
                             <AuditRunTerminal
+                                agentId={id}
                                 total={auditTotal}
                                 current={auditCurrent}
                                 lines={auditProgressLines}
@@ -1365,7 +1439,7 @@ function AuditPage() {
                                     }
                                 </Button>
                                 <div className="flex flex-wrap justify-center gap-2 mt-2">
-                                    {["Host Config", "Daemon", "File Perms", "Images", "Namespaces", "Cgroups"].map(t => (
+                                    {["Host Configuration", "Images & Daemon", "Namespace Isolation", "Cgroup Controls", "Runtime Hardening"].map(t => (
                                         <span key={t} className="text-[10px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full">{t}</span>
                                     ))}
                                 </div>
