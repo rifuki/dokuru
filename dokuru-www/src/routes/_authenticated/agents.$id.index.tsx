@@ -261,11 +261,18 @@ function AgentDashboard() {
         if (!agent) return;
         setEditName(agent.name);
         setEditUrl(agent.url);
-        // Auto-fill token in agent mode for visibility
-        setEditToken(agent.token || "");
+        setEditToken("");
         setEditAccessMode(normalizeAgentAccessMode(agent.access_mode));
         setShowToken(false);
         setEditDialogOpen(true);
+    };
+
+    const handleEditDialogOpenChange = (open: boolean) => {
+        setEditDialogOpen(open);
+        if (!open) {
+            setEditToken("");
+            setShowToken(false);
+        }
     };
 
     const handleEditAccessModeChange = (mode: AgentAccessMode) => {
@@ -315,7 +322,7 @@ function AgentDashboard() {
             if (editToken.trim()) setAgentToken(id, editToken.trim());
             updateAgent(updated);
             queryClient.setQueryData(["agent", id], updated);
-            setEditDialogOpen(false);
+            handleEditDialogOpenChange(false);
             toast.success("Agent updated");
             await refreshAll();
         } catch {
@@ -366,7 +373,7 @@ function AgentDashboard() {
                 isSaving={isSaving}
                 isDeleting={isDeleting}
                 onDeleteDialogChange={setDeleteDialogOpen}
-                onEditDialogChange={setEditDialogOpen}
+                onEditDialogChange={handleEditDialogOpenChange}
                 onEditNameChange={setEditName}
                 onEditUrlChange={setEditUrl}
                 onEditTokenChange={setEditToken}
@@ -1454,132 +1461,164 @@ function OfflinePanel({
         : "border-red-500/25 bg-red-500/10 text-red-300";
 
     return (
-        <div className="rounded-3xl border border-dashed bg-card p-6 shadow-sm sm:p-8">
-            <div className="mx-auto flex size-16 items-center justify-center rounded-2xl border bg-muted/30 text-muted-foreground">
-                <Server className="h-8 w-8" />
-            </div>
-            <div className="mt-5 text-center">
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                    <h2 className="text-xl font-bold">Offline Review Mode</h2>
-                    {isAuditHistoryCached ? (
-                        <Badge variant="outline" className="border-amber-400/30 bg-amber-400/10 text-[10px] text-amber-300">Cached</Badge>
-                    ) : null}
-                </div>
-                <p className="mx-auto mt-2 max-w-2xl text-sm text-muted-foreground">
-                    {hasCredential
-                        ? `Dokuru could not reach ${agent.name}. Live Docker inventory is paused, but saved audit reports can still be reviewed.`
-                        : "This direct-mode agent needs a local token before Dokuru can query Docker data. Saved audit reports may still be available."}
-                </p>
-            </div>
-
-            {connectionIssue ? (
-                <div className={cn("mx-auto mt-5 max-w-3xl rounded-2xl border p-4 text-left", issuePanelClass)}>
-                    <div className="flex items-start gap-3">
-                        <div className={cn("mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border", issueIconClass)}>
-                            <AlertTriangle className="h-4 w-4" />
+        <div className="w-full overflow-hidden rounded-xl border border-border/50 bg-card/40 shadow-sm">
+            {/* Header Area */}
+            <div className="border-b border-border/50 bg-muted/20 px-5 py-4 sm:px-6">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-background text-muted-foreground shadow-sm">
+                            <Server className="h-5 w-5 opacity-70" />
                         </div>
-                        <div className="min-w-0 flex-1">
-                            <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                <p className="font-semibold text-foreground">{connectionIssue.title}</p>
-                                <Badge
-                                    variant="outline"
-                                    className={cn(
-                                        "rounded-full px-2 py-0 text-[10px]",
-                                        canAutoRetry
-                                            ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
-                                            : "border-red-500/30 bg-red-500/10 text-red-300",
-                                    )}
-                                >
-                                    {canAutoRetry ? "Retrying" : "Auto-retry paused"}
-                                </Badge>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-base font-semibold tracking-tight text-foreground">Offline Review Mode</h2>
+                                {isAuditHistoryCached ? (
+                                    <Badge variant="outline" className="h-5 border-amber-500/20 bg-amber-500/10 px-1.5 text-[10px] text-amber-500">
+                                        Cached
+                                    </Badge>
+                                ) : null}
                             </div>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                                {connectionIssue.message} <span className="font-medium text-foreground/80">{connectionIssue.action}</span>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                                {hasCredential
+                                    ? `Dokuru could not reach ${agent.name}. Live pages are paused.`
+                                    : "This direct-mode agent needs a local token before Dokuru can query Docker data."}
                             </p>
-                            {connectionIssue.detail ? (
-                                <p className="mt-2 truncate font-mono text-[10px] text-muted-foreground/65" title={connectionIssue.detail}>
-                                    {connectionIssue.detail}
-                                </p>
-                            ) : null}
                         </div>
                     </div>
+                    {/* Global Actions */}
+                    <div className="flex items-center gap-2 self-start sm:self-auto">
+                        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={onRetry}>
+                            <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                            Retry
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8 text-xs" asChild>
+                            <Link to="/agents">
+                                Back
+                                <ArrowUpRight className="ml-1.5 h-3 w-3 opacity-70" />
+                            </Link>
+                        </Button>
+                    </div>
                 </div>
-            ) : null}
+            </div>
 
-            <div className="mx-auto mt-6 max-w-3xl rounded-2xl border bg-background/55 p-4 text-left shadow-sm dark:bg-white/[0.025]">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-semibold">Saved audit access</p>
-                            <Badge variant="outline" className="font-mono text-[10px] bg-muted/10">{auditHistoryCount} reports</Badge>
+            {/* Grid Layout for Content */}
+            <div className="grid gap-px bg-border/50 md:grid-cols-2">
+                {/* Left side: Connection Issue */}
+                <div className="bg-card p-5 sm:p-6">
+                    <div className="mb-4 flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-amber-500/80" />
+                        <h3 className="text-sm font-medium text-foreground">Connection Status</h3>
+                    </div>
+                    
+                    {connectionIssue ? (
+                        <div className={cn("rounded-lg border p-4 shadow-sm", issuePanelClass)}>
+                            <div className="flex items-start gap-3">
+                                <div className={cn("mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md border", issueIconClass)}>
+                                    <AlertTriangle className="h-3.5 w-3.5" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                        <p className="text-sm font-semibold">{connectionIssue.title}</p>
+                                        <Badge
+                                            variant="outline"
+                                            className={cn(
+                                                "h-4 rounded-full px-1.5 text-[9px] uppercase tracking-wider",
+                                                canAutoRetry
+                                                    ? "border-amber-400/30 bg-amber-400/10 text-amber-500"
+                                                    : "border-red-500/30 bg-red-500/10 text-red-500",
+                                            )}
+                                        >
+                                            {canAutoRetry ? "Retrying" : "Auto-retry paused"}
+                                        </Badge>
+                                    </div>
+                                    <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                                        {connectionIssue.message} <span className="font-medium text-foreground">{connectionIssue.action}</span>
+                                    </p>
+                                    {connectionIssue.detail ? (
+                                        <div className="mt-2.5 rounded border border-black/5 bg-black/5 px-2 py-1.5 dark:border-white/5 dark:bg-white/5">
+                                            <p className="truncate font-mono text-[10px] text-muted-foreground" title={connectionIssue.detail}>
+                                                {connectionIssue.detail}
+                                            </p>
+                                        </div>
+                                    ) : null}
+                                </div>
+                            </div>
                         </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                            {latestAudit
-                                ? `Latest report captured ${fmtAuditTimestamp(latestAudit.timestamp)}.`
-                                : isAuditHistoryLoading
-                                    ? "Checking for saved audit reports..."
-                                    : "No saved audit reports were found for this agent yet."}
-                        </p>
+                    ) : (
+                        <div className="flex h-24 items-center justify-center rounded-lg border border-dashed border-border/60">
+                            <p className="text-xs text-muted-foreground">No specific connection issue details available.</p>
+                        </div>
+                    )}
+                    
+                    <p className="mt-4 text-xs text-muted-foreground">
+                        {hasCredential
+                            ? canAutoRetry
+                                ? "Live pages (containers, images, shell) remain unavailable until the agent reconnects."
+                                : "Live pages stay paused until this issue is fixed and the agent is retried."
+                            : "Live pages stay paused until a valid local token is provided."}
+                    </p>
+                </div>
+
+                {/* Right side: Saved Audit Access */}
+                <div className="bg-card p-5 sm:p-6">
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                            <Clock3 className="h-4 w-4 text-emerald-500/80" />
+                            <h3 className="text-sm font-medium text-foreground">Saved Audit Access</h3>
+                        </div>
+                        <Badge variant="secondary" className="h-5 px-1.5 font-mono text-[10px]">
+                            {auditHistoryCount} reports
+                        </Badge>
                     </div>
 
                     {latestAudit ? (
-                        <div className="grid grid-cols-3 gap-2 text-center sm:w-[240px]">
-                            <div className="rounded-xl border bg-card/70 px-3 py-2">
-                                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Score</p>
-                                <p className="mt-1 text-2xl font-black tabular-nums">{latestAudit.summary.score}</p>
+                        <div className="space-y-5">
+                            <div className="flex gap-2 sm:gap-3">
+                                <div className="flex flex-1 flex-col justify-center rounded-lg border bg-background px-3 py-2.5 text-center shadow-sm">
+                                    <p className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground">Score</p>
+                                    <p className="mt-0.5 text-xl font-bold tabular-nums">{latestAudit.summary.score}</p>
+                                </div>
+                                <div className="flex flex-1 flex-col justify-center rounded-lg border border-emerald-500/10 bg-emerald-500/5 px-3 py-2.5 text-center shadow-sm">
+                                    <p className="text-[9px] font-medium uppercase tracking-wider text-emerald-500/80">Pass</p>
+                                    <p className="mt-0.5 text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{latestAudit.summary.passed}</p>
+                                </div>
+                                <div className="flex flex-1 flex-col justify-center rounded-lg border border-rose-500/10 bg-rose-500/5 px-3 py-2.5 text-center shadow-sm">
+                                    <p className="text-[9px] font-medium uppercase tracking-wider text-rose-500/80">Fail</p>
+                                    <p className="mt-0.5 text-xl font-bold tabular-nums text-rose-600 dark:text-rose-400">{latestAudit.summary.failed}</p>
+                                </div>
                             </div>
-                            <div className="rounded-xl border bg-card/70 px-3 py-2">
-                                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Pass</p>
-                                <p className="mt-1 text-2xl font-black tabular-nums text-emerald-500">{latestAudit.summary.passed}</p>
+                            
+                            <div className="flex items-center justify-between rounded-lg border border-border/50 bg-muted/10 p-3">
+                                <p className="text-xs text-muted-foreground">
+                                    Latest report: <span className="font-medium text-foreground">{fmtAuditTimestamp(latestAudit.timestamp)}</span>
+                                </p>
                             </div>
-                            <div className="rounded-xl border bg-card/70 px-3 py-2">
-                                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Fail</p>
-                                <p className="mt-1 text-2xl font-black tabular-nums text-rose-500">{latestAudit.summary.failed}</p>
+
+                            <div className="flex flex-col gap-2 sm:flex-row">
+                                <Button size="sm" className="h-8 flex-1 text-xs" asChild>
+                                    <Link to="/agents/$id/audits/$auditId" params={{ id, auditId: latestAudit.id }} search={{ from: "latest" }}>
+                                        <ShieldCheck className="mr-2 h-3.5 w-3.5" />
+                                        Latest Audit
+                                    </Link>
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-8 flex-1 text-xs" asChild>
+                                    <Link to="/agents/$id/audits" params={{ id }}>
+                                        <Clock3 className="mr-2 h-3.5 w-3.5 opacity-70" />
+                                        Audit History
+                                    </Link>
+                                </Button>
                             </div>
                         </div>
-                    ) : null}
+                    ) : (
+                        <div className="flex h-[188px] flex-col items-center justify-center rounded-lg border border-dashed border-border/60 bg-muted/5 text-center">
+                            <ShieldCheck className="mb-2 h-6 w-6 text-muted-foreground/30" />
+                            <p className="text-xs text-muted-foreground">
+                                {isAuditHistoryLoading ? "Checking for saved audit reports..." : "No saved reports found for this agent."}
+                            </p>
+                        </div>
+                    )}
                 </div>
             </div>
-
-            <div className="mt-6 flex flex-wrap justify-center gap-2">
-                {latestAuditId ? (
-                    <Button asChild>
-                        <Link
-                            to="/agents/$id/audits/$auditId"
-                            params={{ id, auditId: latestAuditId }}
-                            search={{ from: "latest" }}
-                        >
-                            <ShieldCheck className="mr-2 h-4 w-4" />
-                            View Latest Audit
-                        </Link>
-                    </Button>
-                ) : null}
-                <Button variant={latestAuditId ? "outline" : "default"} asChild>
-                    <Link to="/agents/$id/audits" params={{ id }}>
-                        <Clock3 className="mr-2 h-4 w-4" />
-                        Audit History
-                    </Link>
-                </Button>
-                <Button variant="outline" onClick={onRetry}>
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    Retry Connection
-                </Button>
-                <Button variant="ghost" asChild>
-                    <Link to="/agents">
-                        Back to Agents
-                        <ArrowUpRight className="ml-2 h-3.5 w-3.5" />
-                    </Link>
-                </Button>
-            </div>
-
-            <p className="mx-auto mt-4 flex max-w-2xl items-start justify-center gap-2 text-center text-xs text-muted-foreground">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
-                {hasCredential
-                    ? canAutoRetry
-                        ? "Live pages such as containers, stacks, images, events, and shell remain unavailable until the agent reconnects."
-                        : "Live pages stay paused until this connection issue is fixed and the agent is saved or retried manually."
-                    : "Paste the agent token from Edit Agent to restore live Docker data."}
-            </p>
         </div>
     );
 }
