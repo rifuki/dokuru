@@ -38,7 +38,7 @@ import { PILLAR_META, getRulePillar, type SecurityPillar } from "@/lib/audit-pil
 import { userDocumentApi } from "@/lib/api/document";
 import { getOrFetchPdfBlob } from "@/lib/pdf-cache";
 import { LOCAL_AGENT_ID } from "@/lib/local-agent";
-import { fixJobKey, useAuditStore } from "@/stores/use-audit-store";
+import { AUDIT_CANCELLED_MESSAGE, fixJobKey, useAuditStore } from "@/stores/use-audit-store";
 import { FixWizard } from "@/features/audit/components/FixWizard";
 import { FixAllWizard } from "@/features/audit/components/FixAllWizard";
 import { FixHistoryPanel } from "@/features/audit/components/FixHistoryPanel";
@@ -2095,9 +2095,32 @@ function AuditDetailPage() {
       setAuditHistory(id, nextHistory);
       queryClient.setQueryData(["audits", id], nextHistory);
       if (savedAudit.id) queryClient.setQueryData(["audit", id, savedAudit.id], savedAudit);
+      const savedAuditId = savedAudit.id;
+      const toastId = savedAuditId ? `audit-complete-${id}-${savedAuditId}` : `audit-complete-${id}-${Date.now()}`;
+      const toastOptions: NonNullable<Parameters<typeof toast.success>[1]> = {
+        id: toastId,
+        description: "Open the saved audit result.",
+        duration: 12_000,
+      };
+      if (savedAuditId) {
+        toastOptions.action = {
+          label: "Open result",
+          onClick: () => {
+            toast.dismiss(toastId);
+            void navigate({
+              to: "/agents/$id/audits/$auditId",
+              params: { id, auditId: savedAuditId },
+              search: { from: "latest" },
+            });
+          },
+        };
+      }
+      toast.success(`Audit complete - ${savedAudit.summary.score}/100`, toastOptions);
       await queryClient.invalidateQueries({ queryKey: ["audits", id] });
     }).catch((error) => {
-      toast.error(error instanceof Error ? error.message : "Audit failed");
+      const message = error instanceof Error ? error.message : "Audit failed";
+      if (message === AUDIT_CANCELLED_MESSAGE) return;
+      toast.error(message);
     });
   };
 

@@ -161,6 +161,11 @@ function rememberedAuditHubHref(pathname: string) {
   return /^\/agents\/[^/]+\/audit$/.test(pathname) ? pathname : null;
 }
 
+function rememberedResourceIndexHref(pathname: string) {
+  const indexMatch = pathname.match(/^\/agents\/([^/]+)\/(containers|images|networks|volumes)\/?$/);
+  return indexMatch ? `/agents/${indexMatch[1]}/${indexMatch[2]}` : null;
+}
+
 export function AppSidebar() {
   const user = useAuthUser();
   const isAdmin = user?.role === "admin";
@@ -224,16 +229,16 @@ export function AppSidebar() {
   }, [location.pathname]);
 
   useEffect(() => {
-    const auditHubHref = rememberedAuditHubHref(location.pathname);
-    if (!auditHubHref) return;
+    const indexHref = rememberedAuditHubHref(location.pathname) ?? rememberedResourceIndexHref(location.pathname);
+    if (!indexHref) return;
 
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
       setLastDetailHrefByDefaultHref((prev) => {
-        if (!prev[auditHubHref]) return prev;
+        if (!prev[indexHref]) return prev;
         const next = { ...prev };
-        delete next[auditHubHref];
+        delete next[indexHref];
         return next;
       });
     });

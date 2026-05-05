@@ -4,7 +4,7 @@ import { agentDirectApi, type AuditResponse, type AuditResult, type AuditStreamM
 import { LOCAL_AGENT_ID } from "@/lib/local-agent";
 import type { Agent } from "@/types/agent";
 
-export type AuditStreamStatus = "idle" | "running" | "saving" | "complete" | "error";
+export type AuditStreamStatus = "idle" | "running" | "saving" | "complete" | "error" | "cancelled";
 
 export interface AuditProgressLine {
     index: number;
@@ -62,8 +62,11 @@ export function fixJobKey(agentId: string, ruleId: string) {
 
 const auditSockets = new Map<string, WebSocket>();
 const auditRuns = new Map<string, Promise<AuditResponse>>();
+const auditCancels = new Map<string, () => void>();
 const fixSockets = new Map<string, WebSocket>();
 const fixRuns = new Map<string, Promise<FixOutcome>>();
+
+export const AUDIT_CANCELLED_MESSAGE = "Audit cancelled";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -124,6 +127,7 @@ interface AuditState {
     hydrateFixJobFromHistory: (agentId: string, entry: FixHistoryEntry) => void;
     markAuditResultViewed: (agentId: string, auditId: string) => void;
     startAudit: (agent: Agent, token?: string) => Promise<AuditResponse>;
+    cancelAudit: (agentId: string) => void;
     startFixJob: (request: StartFixJobRequest) => Promise<FixOutcome>;
 }
 
@@ -239,6 +243,38 @@ export const useAuditStore = create<AuditState>((set) => ({
             let latestIndex = 0;
             let latestTotal = 0;
 
+            const clearRun = () => {
+                auditRuns.delete(agent.id);
+                auditCancels.delete(agent.id);
+                if (auditSockets.get(agent.id) === socket) auditSockets.delete(agent.id);
+            };
+
+            const cancelRun = () => {
+                if (settled) return;
+                settled = true;
+                try {
+                    socket.close();
+                } catch {
+                    // Closing is best-effort; local state still reflects the cancellation.
+                }
+                clearRun();
+                set((s) => ({
+                    runningAudits: { ...s.runningAudits, [agent.id]: false },
+                    auditStreams: {
+                        ...s.auditStreams,
+                        [agent.id]: {
+                            ...(s.auditStreams[agent.id] ?? createIdleStream()),
+                            status: "cancelled",
+                            error: null,
+                            completedAt: new Date().toISOString(),
+                        },
+                    },
+                }));
+                reject(new Error(AUDIT_CANCELLED_MESSAGE));
+            };
+
+            auditCancels.set(agent.id, cancelRun);
+
             const setStream = (update: Partial<AuditStreamState>) => {
                 set((s) => ({
                     auditStreams: {
@@ -255,8 +291,7 @@ export const useAuditStore = create<AuditState>((set) => ({
                 if (settled) return;
                 settled = true;
                 socket.close();
-                if (auditSockets.get(agent.id) === socket) auditSockets.delete(agent.id);
-                auditRuns.delete(agent.id);
+                clearRun();
                 set((s) => ({
                     runningAudits: { ...s.runningAudits, [agent.id]: false },
                     auditStreams: {
@@ -280,8 +315,7 @@ export const useAuditStore = create<AuditState>((set) => ({
 
                 try {
                     const savedAudit = await agentApi.saveAudit(agent.id, audit);
-                    auditRuns.delete(agent.id);
-                    if (auditSockets.get(agent.id) === socket) auditSockets.delete(agent.id);
+                    clearRun();
                     set((s) => ({
                         runningAudits: { ...s.runningAudits, [agent.id]: false },
                         auditHistories: {
@@ -305,8 +339,7 @@ export const useAuditStore = create<AuditState>((set) => ({
                     }));
                     resolve(savedAudit);
                 } catch (error) {
-                    auditRuns.delete(agent.id);
-                    if (auditSockets.get(agent.id) === socket) auditSockets.delete(agent.id);
+                    clearRun();
                     const message = error instanceof Error ? error.message : "Failed to save audit result";
                     set((s) => ({
                         runningAudits: { ...s.runningAudits, [agent.id]: false },
@@ -333,8 +366,7 @@ export const useAuditStore = create<AuditState>((set) => ({
                     const savedAudit = agent.access_mode === "relay"
                         ? await agentApi.runAudit(agent.id)
                         : await agentApi.saveAudit(agent.id, await agentDirectApi.runAudit(agent.url, token));
-                    auditRuns.delete(agent.id);
-                    if (auditSockets.get(agent.id) === socket) auditSockets.delete(agent.id);
+                    clearRun();
                     set((s) => ({
                         runningAudits: { ...s.runningAudits, [agent.id]: false },
                         auditHistories: {
@@ -359,8 +391,7 @@ export const useAuditStore = create<AuditState>((set) => ({
                     }));
                     resolve(savedAudit);
                 } catch (error) {
-                    auditRuns.delete(agent.id);
-                    if (auditSockets.get(agent.id) === socket) auditSockets.delete(agent.id);
+                    clearRun();
                     const message = error instanceof Error
                         ? `Audit stream reached ${latestIndex}/${latestTotal}, but final report recovery failed: ${error.message}`
                         : "Audit stream reached completion, but final report recovery failed";
@@ -446,6 +477,10 @@ export const useAuditStore = create<AuditState>((set) => ({
 
         auditRuns.set(agent.id, run);
         return run;
+    },
+
+    cancelAudit: (agentId) => {
+        auditCancels.get(agentId)?.();
     },
 
     startFixJob: (request) => {

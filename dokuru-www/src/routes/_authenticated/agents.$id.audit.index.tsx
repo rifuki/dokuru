@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAgentStore } from "@/stores/use-agent-store";
-import { useAuditStore, type AuditProgressLine, type AuditStreamStatus } from "@/stores/use-audit-store";
+import { AUDIT_CANCELLED_MESSAGE, useAuditStore, type AuditProgressLine, type AuditStreamStatus } from "@/stores/use-audit-store";
 import { useEffect, useRef, useState } from "react";
 import { agentApi } from "@/lib/api/agent";
 import { agentDirectApi, type AuditResponse, type AuditResult, type FixOutcome } from "@/lib/api/agent-direct";
@@ -768,7 +768,9 @@ function AuditRunTerminal({
     error,
     status,
     savedAuditId,
+    canCancel,
     onOpenResult,
+    onCancel,
 }: {
     total: number;
     current: number;
@@ -776,10 +778,13 @@ function AuditRunTerminal({
     error: string | null;
     status: AuditStreamStatus;
     savedAuditId?: string;
+    canCancel: boolean;
     onOpenResult: () => void;
+    onCancel: () => void;
 }) {
     const isComplete = status === "complete";
     const isSaving = status === "saving";
+    const isCancelled = status === "cancelled";
     const pct = total > 0 ? Math.round(((isComplete ? total : current) / total) * 100) : 0;
     const latest = lines.at(-1);
     const [autoScroll, setAutoScroll] = useState(true);
@@ -814,6 +819,12 @@ function AuditRunTerminal({
                     {isComplete && savedAuditId && (
                         <Button size="sm" variant="outline" className="audit-result-cta h-8 px-3" onClick={onOpenResult}>
                             <span className="relative z-10">Open Result</span>
+                        </Button>
+                    )}
+                    {canCancel && (
+                        <Button size="sm" variant="outline" className="h-8 px-3 text-muted-foreground hover:text-rose-400" onClick={onCancel}>
+                            <XCircle className="h-4 w-4" />
+                            Cancel Audit
                         </Button>
                     )}
                     <div className="flex items-center gap-2">
@@ -851,6 +862,8 @@ function AuditRunTerminal({
                         <p className="font-mono text-xs text-muted-foreground truncate">
                             {error
                                 ? "audit stream failed"
+                                : isCancelled
+                                ? "audit cancelled"
                                 : isSaving
                                 ? "saving audit result..."
                                 : isComplete
@@ -861,6 +874,8 @@ function AuditRunTerminal({
                         </p>
                         {error ? (
                             <XCircle className="h-4 w-4 text-rose-400 shrink-0" />
+                        ) : isCancelled ? (
+                            <XCircle className="h-4 w-4 text-muted-foreground shrink-0" />
                         ) : isComplete ? (
                             <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
                         ) : (
@@ -869,15 +884,18 @@ function AuditRunTerminal({
                     </div>
                     <div className="h-2 rounded-full bg-muted/50 overflow-hidden">
                         <div
-                            className={cn("h-full rounded-full transition-all duration-500", error ? "bg-rose-500" : "bg-[#2496ED]")}
+                            className={cn("h-full rounded-full transition-all duration-500", error ? "bg-rose-500" : isCancelled ? "bg-muted-foreground" : "bg-[#2496ED]")}
                             style={{ width: `${pct}%` }}
                         />
                     </div>
                 </div>
 
                 <div ref={logRef} className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-zinc-50 p-4 font-mono text-[11px] leading-relaxed text-zinc-800 shadow-inner dark:bg-zinc-950 dark:text-zinc-200">
-                    {lines.length === 0 && !error && (
+                    {lines.length === 0 && !error && !isCancelled && (
                         <p className="text-muted-foreground/50">$ connecting to dokuru-agent audit websocket...</p>
+                    )}
+                    {lines.length === 0 && isCancelled && (
+                        <p className="text-muted-foreground/50">$ audit cancelled by user.</p>
                     )}
                     {lines.map(line => (
                         <div key={`${line.ruleId}-${line.index}`} className="space-y-0.5 border-b border-border/50 py-1.5 last:border-b-0">
@@ -907,7 +925,7 @@ function AuditPage() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const { agentOnlineStatus } = useAgentStore();
-    const { auditHistories, setAuditHistory, startAudit } = useAuditStore();
+    const { auditHistories, setAuditHistory, startAudit, cancelAudit } = useAuditStore();
     const auditStream = useAuditStore((state) => state.auditStreams[id]);
     const isOnline = !!agentOnlineStatus[id];
     const [agent, setAgent] = useState<Agent | null>(null);
@@ -916,6 +934,7 @@ function AuditPage() {
     const [auditData] = useState<AuditResponse | null>(null);
     const auditStreamStatus = auditStream?.status ?? "idle";
     const isRunning = auditStreamStatus === "running" || auditStreamStatus === "saving";
+    const canCancelAudit = auditStreamStatus === "running";
     const auditHistory = auditHistories[id] ?? [];
     const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
     const [sectionFilter, setSectionFilter] = useState<string>("all");
@@ -927,7 +946,7 @@ function AuditPage() {
     const latestAudit = auditHistory[0] ?? auditStream?.savedAudit ?? null;
     const hasAnyAudit = !!latestAudit || !!savedAuditId;
     const showAuditTerminal = auditStreamStatus !== "idle" && (
-        isRunning || auditStreamStatus === "complete" || auditStreamStatus === "error" || auditProgressLines.length > 0
+        isRunning || auditStreamStatus === "complete" || auditStreamStatus === "error" || auditStreamStatus === "cancelled" || auditProgressLines.length > 0
     );
     const [historyLoading, setHistoryLoading] = useState(true);
     const [historyError, setHistoryError] = useState<string | null>(null);
@@ -1045,8 +1064,14 @@ function AuditPage() {
         } catch (error) {
             if (!mountedRef.current) return;
             const message = error instanceof Error ? error.message : "Audit failed";
+            if (message === AUDIT_CANCELLED_MESSAGE) return;
             toast.error(message);
         }
+    };
+
+    const handleCancelAudit = () => {
+        cancelAudit(id);
+        toast(AUDIT_CANCELLED_MESSAGE, { description: "The running audit stream was stopped." });
     };
 
     const openSavedAudit = () => {
@@ -1315,7 +1340,9 @@ function AuditPage() {
                                 error={auditStreamError}
                                 status={auditStreamStatus}
                                 savedAuditId={savedAuditId}
+                                canCancel={canCancelAudit}
                                 onOpenResult={openSavedAudit}
+                                onCancel={handleCancelAudit}
                             />
                         ) : (
                             <div className="relative z-10 flex h-full flex-col items-center justify-center gap-4 text-center">
