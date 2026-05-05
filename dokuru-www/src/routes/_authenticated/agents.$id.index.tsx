@@ -1446,6 +1446,12 @@ function OfflinePanel({
 }) {
     const latestAuditId = latestAudit?.id;
     const canAutoRetry = connectionIssue?.retryable !== false;
+    const issuePanelClass = canAutoRetry
+        ? "border-amber-400/25 bg-amber-400/[0.08]"
+        : "border-red-500/25 bg-red-500/[0.08]";
+    const issueIconClass = canAutoRetry
+        ? "border-amber-400/25 bg-amber-400/10 text-amber-300"
+        : "border-red-500/25 bg-red-500/10 text-red-300";
 
     return (
         <div className="rounded-3xl border border-dashed bg-card p-6 shadow-sm sm:p-8">
@@ -1467,22 +1473,31 @@ function OfflinePanel({
             </div>
 
             {connectionIssue ? (
-                <div className="mx-auto mt-5 max-w-3xl rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4 text-left">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                                <AlertTriangle className="h-4 w-4 text-amber-300" />
-                                <p className="text-sm font-semibold text-foreground">{connectionIssue.title}</p>
-                                {!canAutoRetry ? (
-                                    <Badge variant="outline" className="border-red-500/30 bg-red-500/10 text-[10px] text-red-300">Auto-retry paused</Badge>
-                                ) : (
-                                    <Badge variant="outline" className="border-amber-400/30 bg-amber-400/10 text-[10px] text-amber-200">Retrying</Badge>
-                                )}
+                <div className={cn("mx-auto mt-5 max-w-3xl rounded-2xl border p-4 text-left", issuePanelClass)}>
+                    <div className="flex items-start gap-3">
+                        <div className={cn("mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border", issueIconClass)}>
+                            <AlertTriangle className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                <p className="font-semibold text-foreground">{connectionIssue.title}</p>
+                                <Badge
+                                    variant="outline"
+                                    className={cn(
+                                        "rounded-full px-2 py-0 text-[10px]",
+                                        canAutoRetry
+                                            ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
+                                            : "border-red-500/30 bg-red-500/10 text-red-300",
+                                    )}
+                                >
+                                    {canAutoRetry ? "Retrying" : "Auto-retry paused"}
+                                </Badge>
                             </div>
-                            <p className="mt-1 text-sm text-muted-foreground">{connectionIssue.message}</p>
-                            <p className="mt-2 text-xs font-medium text-foreground/90">{connectionIssue.action}</p>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                                {connectionIssue.message} <span className="font-medium text-foreground/80">{connectionIssue.action}</span>
+                            </p>
                             {connectionIssue.detail ? (
-                                <p className="mt-2 truncate font-mono text-[10px] text-muted-foreground/75" title={connectionIssue.detail}>
+                                <p className="mt-2 truncate font-mono text-[10px] text-muted-foreground/65" title={connectionIssue.detail}>
                                     {connectionIssue.detail}
                                 </p>
                             ) : null}

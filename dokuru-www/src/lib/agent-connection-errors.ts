@@ -76,7 +76,7 @@ export function missingTokenIssue(): AgentConnectionIssue {
     code: "missing_token",
     title: "Token missing",
     message: "Dokuru does not have a token for this agent.",
-    action: "Edit the agent and paste the current token from the host.",
+    action: "Paste the current token in Edit Agent.",
     retryable: false,
     severity: "warning",
   });
@@ -94,8 +94,8 @@ export function classifyAgentConnectionError(error: unknown, context: AgentConne
       return issue({
         code: "invalid_token",
         title: "Invalid token",
-        message: "The agent rejected the saved token.",
-        action: "Edit this agent and paste the latest token. Auto-reconnect is paused until the token changes.",
+        message: "Saved token was rejected.",
+        action: "Update the token. Auto-retry is paused.",
         retryable: false,
         severity: "error",
         detail,
@@ -107,11 +107,11 @@ export function classifyAgentConnectionError(error: unknown, context: AgentConne
         code: isCloudflare ? "cloudflare_access" : "access_denied",
         title: isCloudflare ? "Cloudflare access blocked" : "Access denied",
         message: isCloudflare
-          ? "Cloudflare blocked the request before it reached the Dokuru agent."
-          : "The agent refused this request with HTTP 403.",
+          ? "Cloudflare blocked the request."
+          : "The agent refused this request.",
         action: isCloudflare
-          ? "Check Cloudflare Access, WAF, tunnel ingress rules, or bypass protection for the agent URL."
-          : "Check the token and agent permissions, then save the agent again.",
+          ? "Check Access, WAF, or tunnel rules."
+          : "Check token permissions, then save again.",
         retryable: false,
         severity: "error",
         detail,
@@ -122,8 +122,8 @@ export function classifyAgentConnectionError(error: unknown, context: AgentConne
       return issue({
         code: "wrong_agent_url",
         title: "Wrong agent URL",
-        message: "The URL responded, but the Dokuru agent API endpoint was not found.",
-        action: "Check the agent URL, tunnel hostname, and make sure it points to the Dokuru agent service.",
+        message: "Dokuru agent API was not found.",
+        action: "Check the URL or tunnel ingress.",
         retryable: false,
         severity: "error",
         detail,
@@ -135,11 +135,11 @@ export function classifyAgentConnectionError(error: unknown, context: AgentConne
         code: "cloudflare_tunnel",
         title: isCloudflare ? "Cloudflare tunnel unavailable" : "Origin unavailable",
         message: isCloudflare
-          ? `Cloudflare returned HTTP ${status}, usually because the tunnel or origin service is down.`
-          : `The agent origin returned HTTP ${status}.`,
+          ? `Cloudflare returned HTTP ${status}.`
+          : `Origin returned HTTP ${status}.`,
         action: isCloudflare
-          ? "Check cloudflared, tunnel ingress, and whether the Dokuru agent is running on the host. Dokuru will keep retrying."
-          : "Check the agent service and network path. Dokuru will keep retrying.",
+          ? "Check cloudflared or agent service. Retrying."
+          : "Check agent service or network path. Retrying.",
         retryable: true,
         severity: "warning",
         detail,
@@ -150,8 +150,8 @@ export function classifyAgentConnectionError(error: unknown, context: AgentConne
       return issue({
         code: "agent_error",
         title: "Agent internal error",
-        message: `The agent responded with HTTP ${status}.`,
-        action: "Check the agent logs and Docker daemon health. Dokuru will retry.",
+        message: `Agent returned HTTP ${status}.`,
+        action: "Check agent logs or Docker health. Retrying.",
         retryable: true,
         severity: "warning",
         detail,
@@ -163,11 +163,11 @@ export function classifyAgentConnectionError(error: unknown, context: AgentConne
         code: "connection_timeout",
         title: isCloudflare ? "Cloudflare tunnel timeout" : "Agent timeout",
         message: isCloudflare
-          ? "The Cloudflare tunnel did not return a response in time."
-          : "The agent URL did not return a response in time.",
+          ? "Tunnel timed out."
+          : "Agent timed out.",
         action: isCloudflare
-          ? "Check cloudflared and the origin service. Dokuru will keep retrying."
-          : "Check whether the agent service is running and reachable. Dokuru will keep retrying.",
+          ? "Check cloudflared or agent service. Retrying."
+          : "Check service reachability. Retrying.",
         retryable: true,
         severity: "warning",
         detail,
@@ -179,11 +179,11 @@ export function classifyAgentConnectionError(error: unknown, context: AgentConne
         code: isCloudflare ? "cloudflare_tunnel" : "agent_unreachable",
         title: isCloudflare ? "Cloudflare tunnel unreachable" : "Agent unreachable",
         message: isCloudflare
-          ? "The browser could not reach the tunnel or the tunnel did not expose a valid Dokuru agent response."
-          : "The browser could not reach the agent URL.",
+          ? "Tunnel did not respond."
+          : "Agent URL did not respond.",
         action: isCloudflare
-          ? "Check tunnel status, DNS, TLS, CORS, and whether the agent service is running behind Cloudflare. Dokuru will keep retrying."
-          : "Check the agent service, URL, firewall, DNS, or TLS certificate. Dokuru will keep retrying.",
+          ? "Check cloudflared, DNS/TLS, or agent service. Retrying."
+          : "Check service, URL, firewall, DNS, or TLS. Retrying.",
         retryable: true,
         severity: "warning",
         detail,
@@ -194,8 +194,8 @@ export function classifyAgentConnectionError(error: unknown, context: AgentConne
   return issue({
     code: "unknown",
     title: "Connection check failed",
-    message: "Dokuru could not classify the agent connection failure.",
-    action: "Check the agent logs and URL, then retry the connection.",
+    message: "Connection check failed.",
+    action: "Check agent logs or URL, then retry.",
     retryable: true,
     severity: "warning",
     detail,
@@ -207,7 +207,7 @@ export function dockerUnavailableIssue(message: string): AgentConnectionIssue {
     code: "docker_unavailable",
     title: "Docker unavailable",
     message,
-    action: "Check whether Docker is running and whether the agent can access the Docker socket.",
+    action: "Check Docker and socket access.",
     retryable: true,
     severity: "warning",
   });
@@ -221,8 +221,8 @@ export function classifyWebSocketClose(code: number, reason: string, accessMode?
     return issue({
       code: "invalid_token",
       title: "Invalid token",
-      message: "The WebSocket connection was rejected by the agent.",
-      action: "Edit this agent and paste the latest token. Auto-reconnect is paused until the token changes.",
+      message: "WebSocket token was rejected.",
+      action: "Update the token. Auto-retry is paused.",
       retryable: false,
       severity: "error",
       detail,
@@ -233,8 +233,8 @@ export function classifyWebSocketClose(code: number, reason: string, accessMode?
     return issue({
       code: "access_denied",
       title: "Access denied",
-      message: "The agent denied the WebSocket connection.",
-      action: "Check token permissions and save the agent again.",
+      message: "Agent denied the WebSocket.",
+      action: "Check token permissions, then save again.",
       retryable: false,
       severity: "error",
       detail,
@@ -245,8 +245,8 @@ export function classifyWebSocketClose(code: number, reason: string, accessMode?
     return issue({
       code: "agent_unreachable",
       title: code === 1012 ? "Agent restarting" : "Agent going away",
-      message: "The agent closed the connection while it was going away or restarting.",
-      action: "Wait for the service to come back. Dokuru will keep retrying.",
+      message: "Agent is restarting or going away.",
+      action: "Waiting for service recovery. Retrying.",
       retryable: true,
       severity: "info",
       detail,
@@ -258,11 +258,11 @@ export function classifyWebSocketClose(code: number, reason: string, accessMode?
       code: isCloudflare ? "cloudflare_tunnel" : "agent_unreachable",
       title: isCloudflare ? "Cloudflare WebSocket interrupted" : "WebSocket interrupted",
       message: isCloudflare
-        ? "The tunnel or browser dropped the WebSocket connection."
-        : "The browser lost the WebSocket connection to the agent.",
+        ? "Tunnel dropped the WebSocket."
+        : "WebSocket connection dropped.",
       action: isCloudflare
-        ? "Check cloudflared and tunnel WebSocket support. Dokuru will keep retrying."
-        : "Check network connectivity and whether the agent service is running. Dokuru will keep retrying.",
+        ? "Check cloudflared WebSocket support. Retrying."
+        : "Check network or agent service. Retrying.",
       retryable: true,
       severity: "warning",
       detail,
@@ -273,8 +273,8 @@ export function classifyWebSocketClose(code: number, reason: string, accessMode?
     return issue({
       code: "connection_closed",
       title: "Connection closed",
-      message: "The agent closed the WebSocket connection normally.",
-      action: "Dokuru will reconnect to keep live status updated.",
+      message: "Agent closed the WebSocket.",
+      action: "Reconnecting for live status.",
       retryable: true,
       severity: "info",
       detail,

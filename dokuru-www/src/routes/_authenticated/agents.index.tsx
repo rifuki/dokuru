@@ -89,6 +89,9 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
   const isOffline = !isConnecting && wsOnline === false;
   const connectionTextClass = connectionError?.retryable === false ? "text-red-400/80" : "text-amber-400/85";
   const connectionIconClass = connectionError?.retryable === false ? "text-red-400/70" : "text-amber-400/80";
+  const connectionDetail = [connectionError?.message, connectionError?.action, connectionError?.detail]
+    .filter(Boolean)
+    .join("\n");
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -267,29 +270,23 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
                 </div>
               </div>
             ) : isOffline ? (
-              <div className="mt-3 flex items-start gap-2">
-                <WifiOff className={`mt-0.5 h-3.5 w-3.5 ${connectionIconClass}`} />
-                <div className={`min-w-0 text-[12px] ${connectionTextClass}`}>
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="font-semibold">{connectionError?.title ?? "Unable to connect"}</span>
-                    {connectionError?.retryable === false ? (
-                      <span className="rounded border border-red-500/25 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-300">
-                        Auto-retry paused
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="mt-0.5 text-muted-foreground">
-                    {connectionError?.message ?? "The agent did not respond."}
-                  </p>
-                  {connectionError?.action ? (
-                    <p className="mt-0.5 font-medium">{connectionError.action}</p>
-                  ) : null}
-                  {connectionError?.detail ? (
-                    <p className="mt-1 truncate font-mono text-[10px] text-muted-foreground/70" title={connectionError.detail}>
-                      {connectionError.detail}
-                    </p>
-                  ) : null}
-                </div>
+              <div
+                className="mt-3 flex min-w-0 items-center gap-2 text-[12px] font-medium"
+                title={connectionDetail || undefined}
+              >
+                <WifiOff className={`h-3.5 w-3.5 shrink-0 ${connectionIconClass}`} />
+                <span className={`shrink-0 font-semibold ${connectionTextClass}`}>
+                  {connectionError?.title ?? "Unable to connect"}
+                </span>
+                <span className="h-1 w-1 shrink-0 rounded-full bg-muted-foreground/40" />
+                {connectionError?.retryable === false ? (
+                  <span className="shrink-0 rounded border border-red-500/25 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-300">
+                    Paused
+                  </span>
+                ) : null}
+                <span className="min-w-0 truncate text-muted-foreground">
+                  {connectionError?.message ?? "The agent did not respond."}
+                </span>
               </div>
             ) : (
               <div className="mt-3 inline-flex w-fit items-center gap-2 rounded-[6px] border border-amber-600/25 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 dark:border-amber-400/25 dark:bg-amber-500/10 dark:text-amber-300">
