@@ -563,32 +563,7 @@ function AgentsList() {
         </div>
       </div>
 
-      {isLoading && agents.length === 0 ? (
-        <div className="space-y-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="rounded-[14px] border border-border bg-card p-4 shadow-sm animate-pulse">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex min-w-0 flex-1 gap-4">
-                  <div className="h-14 w-14 rounded-full bg-muted shrink-0" />
-                  <div className="min-w-0 flex-1 space-y-3">
-                    <div className="flex items-center gap-2">
-                      <div className="h-5 w-32 rounded bg-muted" />
-                      <div className="h-5 w-16 rounded bg-muted" />
-                      <div className="h-5 w-20 rounded bg-muted" />
-                    </div>
-                    <div className="flex items-center gap-4 hidden sm:flex">
-                      <div className="h-4 w-24 rounded bg-muted" />
-                      <div className="h-4 w-20 rounded bg-muted" />
-                      <div className="h-4 w-24 rounded bg-muted" />
-                    </div>
-                  </div>
-                </div>
-                <div className="h-9 w-28 rounded-[10px] bg-muted shrink-0" />
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : agents.length === 0 ? (
+      {agents.length === 0 && !isLoading ? (
         <div className="overflow-hidden rounded-2xl border border-dashed border-border bg-card/40 shadow-sm">
           <div className="flex min-h-[360px] flex-col items-center justify-center px-6 py-12 text-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-background/70">
@@ -794,7 +769,30 @@ function AgentsList() {
 
           {/* Agent list */}
           <div className="space-y-3 p-4">
-            {displayAgents.length === 0 ? (
+            {isLoading && agents.length === 0 ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="rounded-[14px] border border-border bg-card p-4 shadow-sm animate-pulse">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex min-w-0 flex-1 gap-4">
+                      <div className="h-14 w-14 rounded-full bg-muted shrink-0" />
+                      <div className="min-w-0 flex-1 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <div className="h-5 w-32 rounded bg-muted" />
+                          <div className="h-5 w-16 rounded bg-muted" />
+                          <div className="h-5 w-20 rounded bg-muted" />
+                        </div>
+                        <div className="flex items-center gap-4 hidden sm:flex">
+                          <div className="h-4 w-24 rounded bg-muted" />
+                          <div className="h-4 w-20 rounded bg-muted" />
+                          <div className="h-4 w-24 rounded bg-muted" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="h-9 w-28 rounded-[10px] bg-muted shrink-0" />
+                  </div>
+                </div>
+              ))
+            ) : displayAgents.length === 0 ? (
               <div className="py-12 text-center">
                 <Search className="w-8 h-8 mx-auto text-muted-foreground/30 mb-3" />
                 <p className="text-sm text-muted-foreground">No agents match your filters.</p>
