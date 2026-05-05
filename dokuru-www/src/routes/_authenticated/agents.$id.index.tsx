@@ -921,13 +921,15 @@ function SignalCard({
     const cardBg = "bg-background/55 hover:border-primary/25 dark:bg-white/[0.025]";
 
     return (
-        <div className={cn("group rounded-[16px] border px-4 py-3.5 shadow-sm transition-colors", cardBg)}>
+        <div className={cn("group flex h-full flex-col justify-between rounded-[16px] border p-4 shadow-sm transition-colors", cardBg)}>
             <div className="flex items-center justify-between gap-3">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</span>
-                <Icon className={cn("h-4 w-4", isNeutral ? "text-muted-foreground" : toneClass.text)} />
+                <div className={cn("flex size-7 items-center justify-center rounded-lg border", isNeutral ? "bg-muted/30 border-transparent" : cn(toneClass.bg, toneClass.border))}>
+                    <Icon className={cn("h-3.5 w-3.5", isNeutral ? "text-muted-foreground" : toneClass.text)} />
+                </div>
             </div>
-            <div className="mt-3 flex items-baseline gap-2">
-                <span className={cn("text-2xl font-semibold leading-none tracking-tight tabular-nums", isNeutral ? "text-foreground" : toneClass.text)}>{value}</span>
+            <div className="mt-6 flex items-baseline gap-2">
+                <span className={cn("text-3xl font-bold leading-none tracking-tight tabular-nums", isNeutral ? "text-foreground" : toneClass.text)}>{value}</span>
                 <span className="text-sm font-medium text-muted-foreground">{detail}</span>
             </div>
         </div>
