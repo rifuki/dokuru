@@ -178,7 +178,7 @@ fn collect_status(settings: &StatusSettings) -> StatusReport {
 fn tunnel_is_reachable(settings: &StatusSettings) -> bool {
     settings.is_cloudflare()
         && settings.access_url.starts_with("https://")
-        && is_url_reachable(&format!("{}/health", settings.access_url), 5)
+        && crate::cli::CloudflareTunnel::is_ready_for_url(&settings.access_url)
 }
 
 fn is_url_reachable(url: &str, timeout_secs: u64) -> bool {

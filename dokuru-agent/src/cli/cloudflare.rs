@@ -161,32 +161,84 @@ WantedBy=multi-user.target
         ))
     }
 
-    /// Poll the public tunnel health endpoint until Cloudflare finishes routing it.
+    /// Poll cloudflared's local readiness until the active tunnel matches `url`.
     pub fn wait_for_health(url: &str, timeout_secs: u64) -> Result<()> {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
-        let health_url = format!("{}/health", url.trim_end_matches('/'));
 
         while std::time::Instant::now() < deadline {
-            if url_is_reachable(&health_url, 10) {
+            if Self::is_ready_for_url(url) {
                 return Ok(());
             }
             std::thread::sleep(std::time::Duration::from_secs(2));
         }
 
         Err(eyre::eyre!(
-            "Timed out after {timeout_secs}s waiting for {health_url}"
+            "Timed out after {timeout_secs}s waiting for cloudflared readiness"
         ))
+    }
+
+    pub fn is_ready_for_url(url: &str) -> bool {
+        Self::ready_connections() > 0
+            && Self::active_url().is_some_and(|active| normalize_url(&active) == normalize_url(url))
+    }
+
+    fn active_url() -> Option<String> {
+        Self::metrics_url().or_else(|| Self::get_tunnel_url_since("24 hours ago").ok())
+    }
+
+    fn metrics_url() -> Option<String> {
+        let body = curl_output("http://127.0.0.1:20241/metrics", 3)?;
+        body.lines().find_map(parse_metrics_hostname)
+    }
+
+    fn ready_connections() -> u64 {
+        let Some(body) = curl_output("http://127.0.0.1:20241/ready", 3) else {
+            return 0;
+        };
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(&body) else {
+            return 0;
+        };
+        let status = value
+            .get("status")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or_default();
+        if status != 200 {
+            return 0;
+        }
+        value
+            .get("readyConnections")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or_default()
     }
 }
 
-fn url_is_reachable(url: &str, timeout_secs: u64) -> bool {
+fn curl_output(url: &str, timeout_secs: u64) -> Option<String> {
     let timeout = timeout_secs.to_string();
-    Command::new("curl")
-        .args(["-fsS", "--max-time", &timeout, "-o", "/dev/null", url])
-        .stdout(Stdio::null())
+    let output = Command::new("curl")
+        .args(["-fsS", "--max-time", &timeout, url])
         .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+fn normalize_url(url: &str) -> String {
+    url.trim_end_matches('/').to_string()
+}
+
+fn parse_metrics_hostname(line: &str) -> Option<String> {
+    let hostname = line
+        .strip_prefix("cloudflared_tunnel_user_hostnames_counts{userHostname=\"")?
+        .split('"')
+        .next()?;
+    if hostname.contains("trycloudflare.com") {
+        Some(hostname.to_string())
+    } else {
+        None
+    }
 }
 
 /// Extract URL from cloudflared output
@@ -230,5 +282,16 @@ mod tests {
 
         let line3 = "No URL here";
         assert_eq!(extract_url(line3), None);
+    }
+
+    #[test]
+    fn test_parse_metrics_hostname() {
+        let line = "cloudflared_tunnel_user_hostnames_counts{userHostname=\"https://abc.trycloudflare.com\"} 1";
+        assert_eq!(
+            parse_metrics_hostname(line),
+            Some("https://abc.trycloudflare.com".to_string())
+        );
+
+        assert_eq!(parse_metrics_hostname("go_goroutines 12"), None);
     }
 }
