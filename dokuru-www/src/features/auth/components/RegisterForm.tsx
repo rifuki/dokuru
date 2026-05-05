@@ -138,9 +138,11 @@ export function RegisterForm() {
 
   return (
     <div className="w-full max-w-100">
-      <div className="flex items-center justify-center gap-2 mb-10">
-        <img src="/favicon.svg" alt="Dokuru" className="w-10 h-10" />
-        <span className="text-2xl font-bold tracking-tight">Dokuru</span>
+      <div className="flex justify-center mb-10">
+        <a href="https://dokuru.rifuki.dev" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+          <img src="/favicon.svg" alt="Dokuru" className="w-10 h-10" />
+          <span className="text-2xl font-bold tracking-tight">Dokuru</span>
+        </a>
       </div>
 
       <div className="space-y-6">
