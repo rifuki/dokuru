@@ -296,6 +296,37 @@
   .compose-code-panel .yaml-value { color: #fde68a; }
   .compose-code-panel .yaml-plain { color: #dbeafe; }
 
+  .audit-terminal-log {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--muted-foreground) 52%, transparent) transparent;
+  }
+
+  .audit-terminal-log::-webkit-scrollbar {
+    width: 0.625rem;
+    height: 0.625rem;
+  }
+
+  .audit-terminal-log::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .audit-terminal-log::-webkit-scrollbar-thumb {
+    min-height: 2.5rem;
+    border: 0.1875rem solid transparent;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--muted-foreground) 48%, transparent);
+    background-clip: padding-box;
+  }
+
+  .audit-terminal-log::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--primary) 68%, transparent);
+    background-clip: padding-box;
+  }
+
+  .audit-terminal-log::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
   html:not(.dark) .audit-fix-sheet {
     background: var(--background) !important;
     border-color: var(--border) !important;
