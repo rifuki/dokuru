@@ -82,17 +82,19 @@ function NotificationsPage() {
         </Button>
       </div>
 
-      <div className="overflow-hidden rounded-lg border bg-card">
+      <div className="flex flex-col gap-3">
         {isLoading ? (
-          <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
+          <div className="flex h-40 items-center justify-center rounded-xl border bg-card text-sm text-muted-foreground shadow-sm">
             Loading notifications...
           </div>
         ) : notifications.length === 0 ? (
-          <div className="flex h-56 flex-col items-center justify-center gap-3 text-center">
-            <Bell className="h-10 w-10 text-muted-foreground/50" />
+          <div className="flex h-56 flex-col items-center justify-center gap-3 rounded-xl border bg-card text-center shadow-sm">
+            <div className="rounded-full bg-muted/50 p-4">
+               <Bell className="h-8 w-8 text-muted-foreground/50" />
+            </div>
             <div>
               <h2 className="font-semibold">No notifications</h2>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground mt-1">
                 Account, agent, and audit events will appear here.
               </p>
             </div>
@@ -125,32 +127,35 @@ function NotificationRow({
       type="button"
       onClick={onOpen}
       className={cn(
-        "flex w-full items-start gap-4 border-b px-4 py-4 text-left transition-colors last:border-b-0 hover:bg-muted/40",
-        unread && "bg-primary/5"
+        "group relative flex w-full items-start gap-4 rounded-xl border p-4 text-left transition-all hover:bg-muted/40 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-primary",
+        unread ? "bg-primary/5 border-primary/20 shadow-sm" : "bg-card shadow-sm"
       )}
     >
+      {unread && (
+          <span className="absolute -left-1.5 -top-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary ring-2 ring-background shadow-sm" />
+      )}
       <span
         className={cn(
-          "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border",
+          "flex h-11 w-11 shrink-0 items-center justify-center rounded-full border shadow-sm transition-colors group-hover:bg-background",
           notificationTone(notification.kind)
         )}
       >
         <NotificationIcon kind={notification.kind} />
       </span>
 
-      <span className="min-w-0 flex-1">
+      <span className="min-w-0 flex-1 pt-0.5">
         <span className="flex flex-wrap items-center gap-2">
-          <span className="font-semibold">{notification.title}</span>
+          <span className={cn("text-base font-semibold", unread ? "text-foreground" : "text-muted-foreground")}>{notification.title}</span>
           {unread && (
-            <Badge variant="secondary" className="bg-primary/15 text-primary border-primary/30">
+            <Badge variant="secondary" className="h-5 px-1.5 text-[10px] bg-primary/15 text-primary border-primary/30">
               New
             </Badge>
           )}
         </span>
-        <span className="mt-1 block text-sm text-muted-foreground">
+        <span className={cn("mt-1 block text-sm", unread ? "text-muted-foreground" : "text-muted-foreground/70")}>
           {notification.message}
         </span>
-        <span className="mt-2 block text-xs text-muted-foreground">
+        <span className="mt-3 block text-xs font-medium text-muted-foreground/60">
           {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
         </span>
       </span>

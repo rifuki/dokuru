@@ -13,7 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, RefreshCw, Container, Box, HardDrive, Search, ChevronDown, Edit, Trash2, Cpu, Server, Cloud, Globe, Link2, Loader2, WifiOff, AlertTriangle, ArrowUp, ArrowDown, ArrowUpRight, X, Check, Copy } from "lucide-react";
+import { Plus, RefreshCw, Container, Box, HardDrive, Search, ChevronDown, Edit, Trash2, Cpu, Cloud, Globe, Link2, Loader2, WifiOff, AlertTriangle, ArrowUp, ArrowDown, ArrowUpRight, X, Check, Copy, MemoryStick } from "lucide-react";
 import { AddAgentModal } from "@/components/agents/AddAgentModal";
 import { EditAgentModal } from "@/components/agents/EditAgentModal";
 import {
@@ -263,7 +263,7 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
                   <span>{info.cpu_count} CPU</span>
                 </div>
                 <div className="flex items-center gap-1.5 sm:pl-3">
-                  <Server className="w-3.5 h-3.5" />
+                  <MemoryStick className="w-3.5 h-3.5" />
                   <span>{(info.memory_total / 1024 / 1024 / 1024).toFixed(0)} GB RAM</span>
                 </div>
               </div>
