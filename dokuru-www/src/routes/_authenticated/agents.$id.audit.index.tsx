@@ -909,7 +909,7 @@ function AuditRunTerminal({
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <Button size="sm" variant="ghost" className="h-8 px-2 text-muted-foreground hover:bg-destructive hover:text-destructive-foreground" onClick={onClear} aria-label="Close terminal">
+                                    <Button size="sm" variant="ghost" className="h-8 px-2 text-muted-foreground hover:bg-destructive dark:hover:bg-destructive hover:text-white dark:hover:text-white transition-colors" onClick={onClear} aria-label="Close terminal">
                                         <X className="h-4 w-4" />
                                     </Button>
                                 </TooltipTrigger>
