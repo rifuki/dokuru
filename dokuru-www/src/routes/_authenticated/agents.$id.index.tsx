@@ -807,7 +807,6 @@ function SecurityOverview({
     }
 
     const band = scoreBand(latestAudit.summary.score);
-    const passRate = latestAudit.summary.total > 0 ? Math.round((latestAudit.summary.passed / latestAudit.summary.total) * 100) : 0;
     const report = auditReport?.report;
     const pillars = report?.pillars ?? [];
     const bandLabel = SCORE_COPY[band];
@@ -886,9 +885,6 @@ function SecurityOverview({
                 <div className="rounded-[18px] border bg-background/55 p-4 shadow-sm dark:bg-white/[0.025]">
                     <div className="flex items-center justify-between gap-3">
                         <h3 className="text-sm font-semibold tracking-tight">Security pillars</h3>
-                        <Badge variant="outline" className="rounded-full border-border/70 bg-card px-2.5 py-1 text-[11px] font-medium text-foreground">
-                            {passRate}% avg
-                        </Badge>
                     </div>
                     {pillars.length > 0 ? (
                         <div className="mt-4 grid gap-2.5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
