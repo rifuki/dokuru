@@ -825,19 +825,51 @@ function SecurityOverview({
             <div className="space-y-4">
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_460px]">
                     <div className="rounded-[18px] border bg-background/55 p-5 shadow-sm dark:bg-white/[0.025]">
-                        <div className="flex flex-wrap items-center gap-5">
-                            <ScoreRing score={latestAudit.summary.score} band={band} />
-                            <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-3">
+                        <div className="space-y-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Audit Score</p>
+                                <div className="flex items-center gap-2">
                                     <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">CIS Benchmark</span>
                                     <Badge variant="outline" className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-medium", scoreBadgeClass)}>
                                         {bandLabel}
                                     </Badge>
                                 </div>
-                                <div className="mt-4 grid grid-cols-3 gap-2">
-                                    <ScoreStat label="Passed" value={latestAudit.summary.passed} className="text-emerald-400" />
-                                    <ScoreStat label="Failed" value={latestAudit.summary.failed} className="text-rose-500" />
-                                    <ScoreStat label="Total" value={latestAudit.summary.total} />
+                            </div>
+                            
+                            <div className="flex items-baseline gap-2">
+                                <span className={cn("text-5xl font-bold tabular-nums",
+                                    latestAudit.summary.score >= 80 ? "text-emerald-500"
+                                    : latestAudit.summary.score >= 60 ? "text-amber-500"
+                                    : "text-rose-500"
+                                )}>
+                                    {latestAudit.summary.score}
+                                </span>
+                                <span className="text-sm text-muted-foreground font-mono">/ 100</span>
+                            </div>
+                            
+                            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                                <div
+                                    className={cn("h-full rounded-full transition-all duration-700",
+                                        latestAudit.summary.score >= 80 ? "bg-emerald-500"
+                                        : latestAudit.summary.score >= 60 ? "bg-amber-500"
+                                        : "bg-rose-500"
+                                    )}
+                                    style={{ width: `${latestAudit.summary.score}%` }}
+                                />
+                            </div>
+                            
+                            <div className="grid grid-cols-3 gap-2">
+                                <div className="flex flex-col items-center py-2.5 rounded-[14px] border bg-card/70 cursor-default select-none">
+                                    <span className="text-xl font-semibold tabular-nums text-primary">{latestAudit.summary.passed}</span>
+                                    <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Passed</span>
+                                </div>
+                                <div className="flex flex-col items-center py-2.5 rounded-[14px] border bg-card/70 cursor-default select-none">
+                                    <span className="text-xl font-semibold tabular-nums text-rose-500">{latestAudit.summary.failed}</span>
+                                    <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Failed</span>
+                                </div>
+                                <div className="flex flex-col items-center py-2.5 rounded-[14px] border bg-card/70 cursor-default select-none">
+                                    <span className="text-xl font-semibold tabular-nums text-foreground">{latestAudit.summary.total}</span>
+                                    <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Total</span>
                                 </div>
                             </div>
                         </div>
@@ -868,15 +900,6 @@ function SecurityOverview({
                 </div>
             </div>
         </SectionCard>
-    );
-}
-
-function ScoreStat({ label, value, className }: { label: string; value: number; className?: string }) {
-    return (
-        <div className="rounded-[14px] border bg-card/70 px-3 py-3 text-center">
-            <span className={cn("text-xl font-semibold tabular-nums", className)}>{value}</span>
-            <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
-        </div>
     );
 }
 
@@ -912,43 +935,6 @@ function SignalCard({
             <div className="mt-3 flex items-baseline gap-2">
                 <span className={cn("text-2xl font-semibold leading-none tracking-tight tabular-nums", isNeutral ? "text-foreground" : toneClass.text)}>{value}</span>
                 <span className="text-sm font-medium text-muted-foreground">{detail}</span>
-            </div>
-        </div>
-    );
-}
-
-function ScoreRing({
-    score,
-    band,
-}: {
-    score: number;
-    band: "healthy" | "warning" | "critical";
-}) {
-    const r = 50;
-    const circ = 2 * Math.PI * r;
-    const offset = circ - (score / 100) * circ;
-    const color = band === "healthy" ? "#10b981" : band === "warning" ? "#f59e0b" : "#f43f5e";
-    const textClass = band === "healthy" ? "text-emerald-400" : band === "warning" ? "text-amber-400" : "text-rose-400";
-
-    return (
-        <div className="relative flex shrink-0 items-center justify-center">
-            <svg width="120" height="120" viewBox="0 0 120 120">
-                <circle cx="60" cy="60" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="10" />
-                <circle
-                    cx="60" cy="60" r={r}
-                    fill="none"
-                    stroke={color}
-                    strokeWidth="10"
-                    strokeLinecap="round"
-                    strokeDasharray={circ}
-                    strokeDashoffset={offset}
-                    transform="rotate(-90 60 60)"
-                    style={{ transition: "stroke-dashoffset 1s ease" }}
-                />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className={cn("text-3xl font-bold tabular-nums leading-none", textClass)}>{score}</span>
-                <span className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">/100</span>
             </div>
         </div>
     );
