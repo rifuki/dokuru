@@ -669,7 +669,7 @@ function ResourceOverview({
             description="Containers, images, networks, and storage reported by this agent."
             action={<Button size="sm" variant="outline" asChild><Link to="/agents/$id/containers" params={{ id }}>Open Inventory</Link></Button>}
         >
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                 <MetricCard
                     icon={ContainerIcon}
                     label="Containers"
@@ -700,6 +700,15 @@ function ResourceOverview({
                     id={id}
                 />
                 <MetricCard
+                    icon={Network}
+                    label="Networks"
+                    value={dockerInfo.networks}
+                    detail="Docker network surfaces"
+                    tone="blue"
+                    to="/agents/$id/networks"
+                    id={id}
+                />
+                <MetricCard
                     icon={HardDrive}
                     label="Volumes"
                     value={dockerInfo.volumes}
@@ -709,12 +718,12 @@ function ResourceOverview({
                     id={id}
                 />
                 <MetricCard
-                    icon={Network}
-                    label="Networks"
-                    value={dockerInfo.networks}
-                    detail="Docker network surfaces"
-                    tone="blue"
-                    to="/agents/$id/networks"
+                    icon={Activity}
+                    label="Events"
+                    value="Live"
+                    detail="System event stream"
+                    tone="zinc"
+                    to="/agents/$id/events"
                     id={id}
                 />
             </div>
@@ -738,7 +747,7 @@ function MetricCard({
     detail: string;
     tone: DashboardTone;
     progress?: number;
-    to: "/agents/$id/containers" | "/agents/$id/stacks" | "/agents/$id/images" | "/agents/$id/networks" | "/agents/$id/volumes";
+    to: "/agents/$id/containers" | "/agents/$id/stacks" | "/agents/$id/images" | "/agents/$id/networks" | "/agents/$id/volumes" | "/agents/$id/events";
     id: string;
 }) {
     const toneClass = toneClasses(tone);
