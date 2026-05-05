@@ -26,6 +26,7 @@ import { useEmailChange } from "@/features/settings/hooks/use-email-change";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { cn, getAvatarUrl } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
+import type { AxiosProgressEvent } from "axios";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -90,13 +91,17 @@ export function ProfileSettings() {
     const avatarUrl = user?.avatar_url;
     const avatarSrc = getAvatarUrl(avatarUrl);
 
-    const handleAvatarUpload = async (file: File) => {
+    const handleAvatarUpload = async (file: File, onUploadProgress?: (progress: number) => void) => {
         const formData = new FormData();
         formData.append('avatar', file);
 
         try {
             const response = await apiClient.post('/users/avatar', formData, {
                 headers: { 'Content-Type': undefined },
+                onUploadProgress: (event: AxiosProgressEvent) => {
+                    if (!event.total || event.total <= 0) return;
+                    onUploadProgress?.((event.loaded / event.total) * 100);
+                },
             });
             const newAvatarUrl = response.data?.data?.avatar_url;
             if (newAvatarUrl && user) {

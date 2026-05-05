@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils";
 interface ImageUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onUpload: (file: File) => Promise<void>;
+  onUpload: (file: File, onUploadProgress?: UploadProgressCallback) => Promise<void>;
   title?: string;
   description?: string;
   maxSizeMB?: number;
@@ -44,6 +44,7 @@ interface ImageUploadModalProps {
 type ModalStatus = 'idle' | 'selecting' | 'preview' | 'uploading' | 'success';
 type UploadPhase = 'processing' | 'uploading';
 type ProcessingProgressCallback = (progress: number) => void;
+type UploadProgressCallback = (progress: number) => void;
 
 const AVATAR_OUTPUT_SIZE = 512;
 const AVATAR_SOURCE_MAX_SIZE_MB = 20;
@@ -53,6 +54,9 @@ const GIF_EXPORT_TYPE = "image/gif";
 const GIF_PALETTE_FORMAT = "rgba4444";
 const GIF_AVATAR_RETRY_SIZES = [384, 320, 256, 192, 160, 128, 96];
 const GIF_AVATAR_COLOR_COUNTS = [256, 128, 64];
+const AVATAR_PROCESSING_DONE_PROGRESS = 70;
+const AVATAR_UPLOAD_START_PROGRESS = 72;
+const GIF_FIRST_PASS_DONE_PROGRESS = 55;
 const SOURCE_CROP_EPSILON = 1;
 
 const blobExtensionByType: Record<string, string> = {
@@ -164,6 +168,30 @@ function isWholeSourceCrop(crop: ReturnType<typeof getAvatarSourceCrop>, width: 
     && crop.y <= SOURCE_CROP_EPSILON
     && Math.abs(crop.width - width) <= SOURCE_CROP_EPSILON
     && Math.abs(crop.height - height) <= SOURCE_CROP_EPSILON;
+}
+
+function getGifAttemptProgressRange(attemptIndex: number, attemptCount: number) {
+  if (attemptCount <= 1) {
+    return {
+      start: 10,
+      end: AVATAR_PROCESSING_DONE_PROGRESS,
+    };
+  }
+
+  if (attemptIndex === 0) {
+    return {
+      start: 10,
+      end: GIF_FIRST_PASS_DONE_PROGRESS,
+    };
+  }
+
+  const retryCount = attemptCount - 1;
+  const retryProgressSpan = AVATAR_PROCESSING_DONE_PROGRESS - GIF_FIRST_PASS_DONE_PROGRESS;
+
+  return {
+    start: GIF_FIRST_PASS_DONE_PROGRESS + ((attemptIndex - 1) / retryCount) * retryProgressSpan,
+    end: GIF_FIRST_PASS_DONE_PROGRESS + (attemptIndex / retryCount) * retryProgressSpan,
+  };
 }
 
 export function ImageUploadModal({
@@ -323,7 +351,7 @@ export function ImageUploadModal({
 
     const extension = blobExtensionByType[blob.type] || "webp";
     const basename = sourceFile.name.replace(/\.[^.]+$/, "") || "avatar";
-    onProcessingProgress(75);
+    onProcessingProgress(AVATAR_PROCESSING_DONE_PROGRESS);
 
     return new File([blob], `${basename}-avatar.${extension}`, {
       type: blob.type || AVATAR_EXPORT_TYPE,
@@ -345,7 +373,7 @@ export function ImageUploadModal({
 
     const basename = sourceFile.name.replace(/\.[^.]+$/, "") || "avatar";
     if (sourceFile.size <= maxSizeBytes && isWholeSourceCrop(sourceCrop, image.naturalWidth, image.naturalHeight)) {
-      onProcessingProgress(75);
+      onProcessingProgress(AVATAR_PROCESSING_DONE_PROGRESS);
       return new File([sourceFile], `${basename}-avatar.gif`, {
         type: sourceFile.type || GIF_EXPORT_TYPE,
         lastModified: Date.now(),
@@ -384,7 +412,12 @@ export function ImageUploadModal({
       throw new Error("Failed to prepare animated GIF");
     }
 
-    const encodeAvatarGif = async (outputSize: number, colorCount: number) => {
+    const encodeAvatarGif = async (
+      outputSize: number,
+      colorCount: number,
+      progressStart: number,
+      progressEnd: number
+    ) => {
       gifCtx.clearRect(0, 0, gifCanvas.width, gifCanvas.height);
       outputCanvas.width = outputSize;
       outputCanvas.height = outputSize;
@@ -436,7 +469,8 @@ export function ImageUploadModal({
 
         previousFrame = frame;
 
-        onProcessingProgress(10 + ((frameIndex + 1) / frames.length) * 60);
+        const frameProgress = (frameIndex + 1) / frames.length;
+        onProcessingProgress(progressStart + frameProgress * (progressEnd - progressStart));
         if (frameIndex % 2 === 0 || frameIndex === frames.length - 1) {
           await waitForPaint();
         }
@@ -446,16 +480,28 @@ export function ImageUploadModal({
       return new Blob([gif.bytes()], { type: GIF_EXPORT_TYPE });
     };
 
-    for (const outputSize of getGifAvatarExportSizes(sourceCrop)) {
-      for (const colorCount of GIF_AVATAR_COLOR_COUNTS) {
-        const blob = await encodeAvatarGif(outputSize, colorCount);
-        if (blob.size <= maxSizeBytes) {
-          onProcessingProgress(75);
-          return new File([blob], `${basename}-avatar.gif`, {
-            type: GIF_EXPORT_TYPE,
-            lastModified: Date.now(),
-          });
-        }
+    const exportAttempts = getGifAvatarExportSizes(sourceCrop).flatMap((outputSize) => (
+      GIF_AVATAR_COLOR_COUNTS.map((colorCount) => ({ outputSize, colorCount }))
+    ));
+
+    for (const [attemptIndex, attempt] of exportAttempts.entries()) {
+      const { start: progressStart, end: progressEnd } = getGifAttemptProgressRange(
+        attemptIndex,
+        exportAttempts.length
+      );
+      const blob = await encodeAvatarGif(
+        attempt.outputSize,
+        attempt.colorCount,
+        progressStart,
+        progressEnd
+      );
+
+      if (blob.size <= maxSizeBytes) {
+        onProcessingProgress(AVATAR_PROCESSING_DONE_PROGRESS);
+        return new File([blob], `${basename}-avatar.gif`, {
+          type: GIF_EXPORT_TYPE,
+          lastModified: Date.now(),
+        });
       }
     }
 
@@ -479,34 +525,32 @@ export function ImageUploadModal({
     setErrorMessage(null);
     await waitForPaint();
 
-    let progressInterval: ReturnType<typeof setInterval> | undefined;
-
     try {
       const uploadFile = isAvatar
-        ? await createAvatarFile(file, (nextProgress) => setProgress(clampProgress(nextProgress)))
+        ? await createAvatarFile(file, (nextProgress) => {
+            setProgress((prev) => Math.max(prev, clampProgress(nextProgress)));
+          })
         : file;
 
       setUploadPhase('uploading');
-      setProgress((prev) => Math.max(prev, isAvatar ? 80 : 0));
+      setProgress((prev) => Math.max(prev, isAvatar ? AVATAR_UPLOAD_START_PROGRESS : 0));
       await waitForPaint();
 
-      // The backend does not expose upload progress here, so keep this as upload UX feedback.
-      progressInterval = setInterval(() => {
-        setProgress(prev => {
-          if (prev < 95) return Math.min(95, prev + (isAvatar ? 3 : 10));
-          return prev;
-        });
-      }, 200);
+      await onUpload(uploadFile, (uploadProgress) => {
+        setProgress((prev) => {
+          const nextProgress = isAvatar
+            ? AVATAR_UPLOAD_START_PROGRESS + (clampProgress(uploadProgress) / 100) * (99 - AVATAR_UPLOAD_START_PROGRESS)
+            : clampProgress(uploadProgress);
 
-      await onUpload(uploadFile);
-      if (progressInterval) clearInterval(progressInterval);
+          return Math.max(prev, clampProgress(nextProgress));
+        });
+      });
       setProgress(100);
       setStatus('success');
       setTimeout(() => {
         handleClose();
       }, 1500);
     } catch (error) {
-      if (progressInterval) clearInterval(progressInterval);
       setErrorMessage(error instanceof Error ? error.message : 'Upload failed');
       setStatus('preview');
     }
