@@ -2,11 +2,11 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { agentApi } from "@/lib/api/agent";
 import type { AuditResponse } from "@/lib/api/agent-direct";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Clock, ChevronRight } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
+import { AuditSummaryCard } from "@/features/audit/components/AuditSummaryCard";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/audits/")({
     component: AuditHistoryPage,
@@ -40,10 +40,6 @@ function AuditHistoryPage() {
         navigate({ to: "/agents/$id/audit", params: { id } });
     };
 
-    const fmtDate = (ts: string) => {
-        try { return new Date(ts).toLocaleString(); } catch { return ts; }
-    };
-
     if (loading) {
         return (
             <div className="max-w-4xl mx-auto w-full py-20 text-center">
@@ -72,67 +68,14 @@ function AuditHistoryPage() {
                     No audit history yet. Run your first audit to get started.
                 </div>
             ) : (
-                <div className="grid gap-3">
-                    {audits.map((audit, idx) => {
-                        const scoreColor = audit.summary.score >= 80 
-                            ? "text-green-500" 
-                            : audit.summary.score >= 60 
-                            ? "text-yellow-500" 
-                            : "text-red-500";
-                        
-                        return (
-                            <button
-                                key={idx}
-                                onClick={() => handleAuditClick(audit)}
-                                className="group flex flex-col gap-4 rounded-xl border bg-card p-4 text-left transition-colors hover:bg-muted/50 sm:flex-row sm:items-center"
-                            >
-                                {/* Score ring */}
-                                <div className="flex-shrink-0">
-                                    <div className="relative w-16 h-16">
-                                        <svg width="64" height="64" viewBox="0 0 64 64">
-                                            <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="4"
-                                                className="text-muted-foreground/10" />
-                                            <circle cx="32" cy="32" r="28" fill="none" 
-                                                stroke={audit.summary.score >= 80 ? "#22c55e" : audit.summary.score >= 60 ? "#f59e0b" : "#ef4444"}
-                                                strokeWidth="4"
-                                                strokeDasharray={`${2 * Math.PI * 28}`}
-                                                strokeDashoffset={`${2 * Math.PI * 28 - (audit.summary.score / 100) * 2 * Math.PI * 28}`}
-                                                strokeLinecap="round" transform="rotate(-90 32 32)"
-                                            />
-                                        </svg>
-                                        <div className="absolute inset-0 flex items-center justify-center">
-                                            <span className={`text-xl font-bold ${scoreColor}`}>{audit.summary.score}</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Info */}
-                                <div className="flex-1 min-w-0">
-                                    <div className="mb-1 flex flex-wrap items-center gap-2">
-                                        <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                                        <span className="text-sm font-medium">{fmtDate(audit.timestamp)}</span>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground truncate mb-2">
-                                        {audit.hostname} • Docker {audit.docker_version} • {audit.total_containers} containers
-                                    </p>
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <Badge variant="outline" className="text-[10px]">
-                                            {audit.summary.passed} passed
-                                        </Badge>
-                                        <Badge variant="outline" className="text-[10px]">
-                                            {audit.summary.failed} failed
-                                        </Badge>
-                                        <Badge variant="outline" className="text-[10px]">
-                                            {audit.summary.total} total
-                                        </Badge>
-                                    </div>
-                                </div>
-
-                                {/* Arrow */}
-                                <ChevronRight className="hidden h-5 w-5 text-muted-foreground transition-colors group-hover:text-foreground sm:block" />
-                            </button>
-                        );
-                    })}
+                <div className="grid gap-4">
+                    {audits.map((audit, idx) => (
+                        <AuditSummaryCard
+                            key={audit.id ?? idx}
+                            audit={audit}
+                            onOpen={() => handleAuditClick(audit)}
+                        />
+                    ))}
                 </div>
             )}
         </div>

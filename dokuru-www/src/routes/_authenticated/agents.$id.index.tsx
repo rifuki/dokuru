@@ -812,7 +812,7 @@ function SecurityOverview({
     const pillars = report?.pillars ?? [];
     const bandLabel = SCORE_COPY[band];
     const scoreBadgeClass = band === "healthy"
-        ? "border-primary/25 bg-primary/5 text-primary"
+        ? "border-emerald-500/25 bg-emerald-500/5 text-emerald-400"
         : band === "warning"
             ? "border-amber-500/25 bg-amber-500/5 text-amber-500"
             : "border-rose-500/25 bg-rose-500/5 text-rose-500";
@@ -835,7 +835,7 @@ function SecurityOverview({
                                     </Badge>
                                 </div>
                                 <div className="mt-4 grid grid-cols-3 gap-2">
-                                    <ScoreStat label="Passed" value={latestAudit.summary.passed} className="text-primary" />
+                                    <ScoreStat label="Passed" value={latestAudit.summary.passed} className="text-emerald-400" />
                                     <ScoreStat label="Failed" value={latestAudit.summary.failed} className="text-rose-500" />
                                     <ScoreStat label="Total" value={latestAudit.summary.total} />
                                 </div>

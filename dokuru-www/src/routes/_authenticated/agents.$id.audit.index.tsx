@@ -23,6 +23,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { AffectedItems } from "@/features/audit/components/AffectedItems";
+import { AuditSummaryCard } from "@/features/audit/components/AuditSummaryCard";
 import { LOCAL_AGENT_ID } from "@/lib/local-agent";
 import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 
@@ -1398,55 +1399,14 @@ function AuditPage() {
                         </div>
 
                         {latestAudit?.id ? (
-                            <Link
-                                to="/agents/$id/audits/$auditId"
-                                params={{ id, auditId: latestAudit.id }}
-                                search={{ from: "latest" }}
-                                className="group flex w-full flex-col gap-4 rounded-xl border bg-card p-4 text-left transition-colors hover:bg-muted/50 sm:flex-row sm:items-center"
-                            >
-                                <div className="flex-shrink-0">
-                                    <div className="relative w-16 h-16">
-                                        <svg width="64" height="64" viewBox="0 0 64 64">
-                                            <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="4"
-                                                className="text-muted-foreground/10" />
-                                            <circle cx="32" cy="32" r="28" fill="none" 
-                                                stroke={latestAudit.summary.score >= 80 ? "#22c55e" : latestAudit.summary.score >= 60 ? "#f59e0b" : "#ef4444"}
-                                                strokeWidth="4"
-                                                strokeDasharray={`${2 * Math.PI * 28}`}
-                                                strokeDashoffset={`${2 * Math.PI * 28 - (latestAudit.summary.score / 100) * 2 * Math.PI * 28}`}
-                                                strokeLinecap="round" transform="rotate(-90 32 32)"
-                                            />
-                                        </svg>
-                                        <div className="absolute inset-0 flex items-center justify-center">
-                                            <span className={`text-xl font-bold ${
-                                                latestAudit.summary.score >= 80 ? "text-green-500" :
-                                                latestAudit.summary.score >= 60 ? "text-yellow-500" : "text-red-500"
-                                            }`}>{latestAudit.summary.score}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <div className="mb-1 flex flex-wrap items-center gap-2">
-                                        <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                                        <span className="text-sm font-medium">{fmtDate(latestAudit.timestamp)}</span>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground truncate mb-2">
-                                        {latestAudit.hostname} • Docker {latestAudit.docker_version} • {latestAudit.total_containers} containers
-                                    </p>
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <Badge variant="outline" className="text-[10px]">
-                                            {latestAudit.summary.passed} passed
-                                        </Badge>
-                                        <Badge variant="outline" className="text-[10px]">
-                                            {latestAudit.summary.failed} failed
-                                        </Badge>
-                                        <Badge variant="outline" className="text-[10px]">
-                                            {latestAudit.summary.total} total
-                                        </Badge>
-                                    </div>
-                                </div>
-                                <ChevronDown className="hidden h-5 w-5 -rotate-90 text-muted-foreground transition-colors group-hover:text-foreground sm:block" />
-                            </Link>
+                            <AuditSummaryCard
+                                audit={latestAudit}
+                                onOpen={() => void navigate({
+                                    to: "/agents/$id/audits/$auditId",
+                                    params: { id, auditId: latestAudit.id! },
+                                    search: { from: "latest" },
+                                })}
+                            />
                         ) : historyLoading ? (
                             <LatestAuditSkeleton />
                         ) : historyError ? (
