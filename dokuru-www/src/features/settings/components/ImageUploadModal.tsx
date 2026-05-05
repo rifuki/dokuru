@@ -54,9 +54,8 @@ const GIF_EXPORT_TYPE = "image/gif";
 const GIF_PALETTE_FORMAT = "rgba4444";
 const GIF_AVATAR_RETRY_SIZES = [384, 320, 256, 192, 160, 128, 96];
 const GIF_AVATAR_COLOR_COUNTS = [256, 128, 64];
-const AVATAR_PROCESSING_DONE_PROGRESS = 70;
-const AVATAR_UPLOAD_START_PROGRESS = 72;
-const GIF_FIRST_PASS_DONE_PROGRESS = 55;
+const AVATAR_PROCESSING_DONE_PROGRESS = 99;
+const GIF_ENCODING_START_PROGRESS = 10;
 const SOURCE_CROP_EPSILON = 1;
 
 const blobExtensionByType: Record<string, string> = {
@@ -163,35 +162,15 @@ function getGifAvatarExportSizes(crop: ReturnType<typeof getAvatarSourceCrop>) {
   return Array.from(new Set(sizes));
 }
 
+function getGifEncodeAttemptWeight(outputSize: number, colorCount: number) {
+  return outputSize * outputSize * Math.log2(Math.max(2, colorCount));
+}
+
 function isWholeSourceCrop(crop: ReturnType<typeof getAvatarSourceCrop>, width: number, height: number) {
   return crop.x <= SOURCE_CROP_EPSILON
     && crop.y <= SOURCE_CROP_EPSILON
     && Math.abs(crop.width - width) <= SOURCE_CROP_EPSILON
     && Math.abs(crop.height - height) <= SOURCE_CROP_EPSILON;
-}
-
-function getGifAttemptProgressRange(attemptIndex: number, attemptCount: number) {
-  if (attemptCount <= 1) {
-    return {
-      start: 10,
-      end: AVATAR_PROCESSING_DONE_PROGRESS,
-    };
-  }
-
-  if (attemptIndex === 0) {
-    return {
-      start: 10,
-      end: GIF_FIRST_PASS_DONE_PROGRESS,
-    };
-  }
-
-  const retryCount = attemptCount - 1;
-  const retryProgressSpan = AVATAR_PROCESSING_DONE_PROGRESS - GIF_FIRST_PASS_DONE_PROGRESS;
-
-  return {
-    start: GIF_FIRST_PASS_DONE_PROGRESS + ((attemptIndex - 1) / retryCount) * retryProgressSpan,
-    end: GIF_FIRST_PASS_DONE_PROGRESS + (attemptIndex / retryCount) * retryProgressSpan,
-  };
 }
 
 export function ImageUploadModal({
@@ -483,12 +462,15 @@ export function ImageUploadModal({
     const exportAttempts = getGifAvatarExportSizes(sourceCrop).flatMap((outputSize) => (
       GIF_AVATAR_COLOR_COUNTS.map((colorCount) => ({ outputSize, colorCount }))
     ));
+    const attemptWeights = exportAttempts.map((attempt) => getGifEncodeAttemptWeight(attempt.outputSize, attempt.colorCount));
+    const totalAttemptWeight = attemptWeights.reduce((total, weight) => total + weight, 0);
+    let completedAttemptWeight = 0;
 
     for (const [attemptIndex, attempt] of exportAttempts.entries()) {
-      const { start: progressStart, end: progressEnd } = getGifAttemptProgressRange(
-        attemptIndex,
-        exportAttempts.length
-      );
+      const progressSpan = AVATAR_PROCESSING_DONE_PROGRESS - GIF_ENCODING_START_PROGRESS;
+      const attemptWeight = attemptWeights[attemptIndex] ?? 0;
+      const progressStart = GIF_ENCODING_START_PROGRESS + (completedAttemptWeight / totalAttemptWeight) * progressSpan;
+      const progressEnd = GIF_ENCODING_START_PROGRESS + ((completedAttemptWeight + attemptWeight) / totalAttemptWeight) * progressSpan;
       const blob = await encodeAvatarGif(
         attempt.outputSize,
         attempt.colorCount,
@@ -503,6 +485,8 @@ export function ImageUploadModal({
           lastModified: Date.now(),
         });
       }
+
+      completedAttemptWeight += attemptWeight;
     }
 
     throw new Error(`Cropped file is still too large. Maximum size: ${maxSizeMB}MB`);
@@ -533,16 +517,12 @@ export function ImageUploadModal({
         : file;
 
       setUploadPhase('uploading');
-      setProgress((prev) => Math.max(prev, isAvatar ? AVATAR_UPLOAD_START_PROGRESS : 0));
+      setProgress(0);
       await waitForPaint();
 
       await onUpload(uploadFile, (uploadProgress) => {
         setProgress((prev) => {
-          const nextProgress = isAvatar
-            ? AVATAR_UPLOAD_START_PROGRESS + (clampProgress(uploadProgress) / 100) * (99 - AVATAR_UPLOAD_START_PROGRESS)
-            : clampProgress(uploadProgress);
-
-          return Math.max(prev, clampProgress(nextProgress));
+          return Math.max(prev, clampProgress(uploadProgress));
         });
       });
       setProgress(100);
