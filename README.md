@@ -134,7 +134,7 @@ sudo dokuru update
 
 ## System Overview
 
-Dokuru has three runtime components that matter for the product path:
+Dokuru's core product path has three runtime components plus one shared library:
 
 | Component | Path | Role |
 | --- | --- | --- |
@@ -142,7 +142,6 @@ Dokuru has three runtime components that matter for the product path:
 | Server | `dokuru-server/` | Rust/Axum control plane. Owns users, JWT sessions, PostgreSQL persistence, Redis token blacklist, stored audit history, notifications, admin APIs, and agent relay. |
 | Web Dashboard | `dokuru-www/` | React/TanStack dashboard. Owns agent onboarding UI, Docker resource pages, audit reports, FixWizard, realtime streams, settings, and admin views. |
 | Shared Core | `dokuru-core/` | Shared audit report DTOs and scoring helpers used by server-side report views. |
-| Landing Site | `dokuru-landing/` | Public marketing and install entrypoint. It redirects `/install` to the agent installer release. |
 
 The important boundary is simple: `dokuru-server` coordinates and persists, `dokuru-www` presents and streams, and `dokuru-agent` performs privileged host work.
 
@@ -155,7 +154,6 @@ flowchart TB
     end
 
     subgraph frontend["Frontend"]
-        landing["dokuru-landing<br/>Leptos WASM"]
         www["dokuru-www<br/>React 19 + TanStack Router"]
     end
 
@@ -173,7 +171,6 @@ flowchart TB
     end
 
     user -->|HTTPS| tls
-    tls --> landing
     tls --> www
     tls --> server
 
@@ -193,7 +190,7 @@ flowchart TB
     classDef dataStore fill:#052e16,stroke:#22c55e,color:#dcfce7
     classDef hostNode fill:#3b160b,stroke:#fb923c,color:#ffedd5
     class user,tls surface
-    class landing,www app
+    class www app
     class server controlPlane
     class pg,redis dataStore
     class agentA,agentB,dockerA,dockerB hostNode
@@ -211,7 +208,6 @@ dokuru/
 |-- dokuru-server/                   Axum backend and relay server
 |-- dokuru-www/                      React dashboard and embedded agent UI
 |-- dokuru-core/                     Shared audit report model
-|-- dokuru-landing/                  Public landing site
 `-- .github/workflows/              CI, GHCR image builds, agent release
 ```
 
@@ -835,7 +831,6 @@ The root `docker-compose.yaml` defines the production services:
 | `dokuru-server-migrate` | One-shot SQLx migration image. |
 | `dokuru-server` | Backend API and relay server. |
 | `dokuru-www` | Static dashboard served by nginx. |
-| `dokuru-landing` | Static landing site served by nginx. |
 
 Production Compose expects a `traefik-public` network and server config mounted at `./dokuru-server/config`.
 
@@ -843,7 +838,7 @@ Production Compose expects a `traefik-public` network and server config mounted 
 docker network create traefik-public
 docker compose up -d dokuru-db dokuru-redis
 docker compose --profile migrate run --rm dokuru-server-migrate
-docker compose up -d dokuru-server dokuru-www dokuru-landing
+docker compose up -d dokuru-server dokuru-www
 ```
 
 ## Configuration
@@ -1047,15 +1042,6 @@ sudo ./target/debug/dokuru onboard --skip-service
 sudo ./target/debug/dokuru serve
 ```
 
-Landing:
-
-```bash
-cd dokuru-landing
-bun install
-bun run dev
-bun run build
-```
-
 ### Testing Notes
 
 - `dokuru-agent` has unit and integration tests for audit types, registry behavior, Docker operations, auth, WebSocket contracts, and API integration.
@@ -1070,7 +1056,6 @@ bun run build
 | `ci.yaml` | Web lint/build, Rust fmt/clippy/test for agent, server, and core crates. |
 | `build-server.yaml` | Builds `dokuru-server` and `dokuru-server-migrate` GHCR images. |
 | `build-www.yaml` | Builds the hosted dashboard image. |
-| `build-landing.yaml` | Builds the landing site image. |
 | `release-agent.yaml` | Builds Linux AMD64/ARM64 `dokuru` agent binaries with embedded dashboard assets and publishes installer/checksum release assets. |
 
 Release assets produced for the agent include:
