@@ -1856,6 +1856,7 @@ function AuditDetailPage() {
     openWizard,
     closeWizard,
     applyFix,
+    cancelFix,
     updateTargetConfig,
   } = useFix({
     agentId: id,
@@ -1876,6 +1877,7 @@ function AuditDetailPage() {
     openFixAll,
     closeFixAll,
     applyAll,
+    cancelApplyAll,
     toggleRule: toggleFixAllRule,
     setAllSelected: setAllFixAllSelected,
     updateCgroupTarget: updateFixAllCgroupTarget,
@@ -2941,6 +2943,7 @@ function AuditDetailPage() {
         containers={containers}
         auditId={auditId}
         onConfirm={() => void applyFix()}
+        onCancelApply={cancelFix}
         onClose={closeWizard}
         onTargetChange={updateTargetConfig}
         onRerunAudit={() => {
@@ -2958,6 +2961,7 @@ function AuditDetailPage() {
         cgroupLoading={fixAllCgroupLoading}
         selectedCgroupRuleIds={fixAllSelectedCgroupRuleIds}
         onConfirm={() => void applyAll()}
+        onCancelApply={cancelApplyAll}
         onClose={closeFixAll}
         onToggleRule={toggleFixAllRule}
         onSetAllSelected={setAllFixAllSelected}

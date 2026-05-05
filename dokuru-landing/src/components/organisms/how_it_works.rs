@@ -1,6 +1,7 @@
 use super::workflow_panels::{
     agent_dashboard_panel, audit_preview_panel, cloud_dashboard_panel, terminal_install_panel,
 };
+use crate::components::atoms::{section_eyebrow::section_eyebrow, IconKind};
 use crate::utils::clipboard::{copy_install_command, reset_copied_after};
 use crate::utils::reveal::reveal_ref;
 use leptos::{html, prelude::*};
@@ -29,10 +30,7 @@ pub(crate) fn how_it_works() -> impl IntoView {
             <div class="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
             <div class="max-w-7xl mx-auto px-6 md:px-10">
                 <div node_ref=heading_ref class="reveal mb-16 flex flex-col items-center text-center">
-                    <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#2496ED]/10 border border-[#2496ED]/20 mb-6">
-                        <span class="w-1.5 h-1.5 rounded-full bg-[#2496ED] animate-pulse" />
-                        <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-[#2496ED] font-medium">"how it works"</span>
-                    </div>
+                    {section_eyebrow(IconKind::History, "/ how it works")}
                     <h2 class="font-heading text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-white leading-[1.1] max-w-3xl">
                         "Three steps from install to audit."
                     </h2>

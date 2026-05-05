@@ -28,7 +28,7 @@ export interface AuditStreamState {
     completedAt?: string;
 }
 
-export type FixJobStatus = "running" | "applied" | "blocked" | "failed";
+export type FixJobStatus = "running" | "applied" | "blocked" | "failed" | "cancelled";
 
 export interface FixJobState {
     agentId: string;
@@ -65,8 +65,10 @@ const auditRuns = new Map<string, Promise<AuditResponse>>();
 const auditCancels = new Map<string, () => void>();
 const fixSockets = new Map<string, WebSocket>();
 const fixRuns = new Map<string, Promise<FixOutcome>>();
+const fixCancels = new Map<string, () => void>();
 
 export const AUDIT_CANCELLED_MESSAGE = "Audit cancelled";
+export const FIX_CANCELLED_MESSAGE = "Fix cancelled by user";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -130,6 +132,7 @@ interface AuditState {
     cancelAudit: (agentId: string) => void;
     clearAuditStream: (agentId: string) => void;
     startFixJob: (request: StartFixJobRequest) => Promise<FixOutcome>;
+    cancelFixJob: (agentId: string, ruleId: string) => void;
 }
 
 export const useAuditStore = create<AuditState>((set) => ({
@@ -546,6 +549,7 @@ export const useAuditStore = create<AuditState>((set) => ({
                 if (settled) return;
                 settled = true;
                 fixRuns.delete(key);
+                fixCancels.delete(key);
                 if (fixSockets.get(key) === socket) fixSockets.delete(key);
                 const status: FixJobStatus = outcome.status === "Applied"
                     ? "applied"
@@ -617,6 +621,7 @@ export const useAuditStore = create<AuditState>((set) => ({
                 };
                 settled = true;
                 fixRuns.delete(key);
+                fixCancels.delete(key);
                 if (fixSockets.get(key) === socket) fixSockets.delete(key);
                 set((s) => ({
                     fixingRules: {
@@ -645,6 +650,55 @@ export const useAuditStore = create<AuditState>((set) => ({
                 }));
                 reject(new Error(message));
             };
+
+            const cancelJob = () => {
+                if (settled) return;
+                const outcome: FixOutcome = {
+                    rule_id: request.ruleId,
+                    status: "Blocked",
+                    message: FIX_CANCELLED_MESSAGE,
+                    requires_restart: false,
+                    requires_elevation: false,
+                };
+                settled = true;
+                try {
+                    socket.close();
+                } catch {
+                    // Closing is best-effort; state below is authoritative for the UI.
+                }
+                fixRuns.delete(key);
+                fixCancels.delete(key);
+                if (fixSockets.get(key) === socket) fixSockets.delete(key);
+                set((s) => ({
+                    fixingRules: {
+                        ...s.fixingRules,
+                        [request.agentId]: { ...s.fixingRules[request.agentId], [request.ruleId]: false },
+                    },
+                    fixOutcomes: {
+                        ...s.fixOutcomes,
+                        [request.agentId]: { ...s.fixOutcomes[request.agentId], [request.ruleId]: outcome },
+                    },
+                    fixJobs: {
+                        ...s.fixJobs,
+                        [key]: {
+                            ...(s.fixJobs[key] ?? {
+                                agentId: request.agentId,
+                                ruleId: request.ruleId,
+                                startedAt,
+                            }),
+                            status: "cancelled",
+                            outcome,
+                            error: FIX_CANCELLED_MESSAGE,
+                            progressEvents: streamEvents,
+                            stepIndex: s.fixJobs[key]?.stepIndex ?? 0,
+                            completedAt: new Date().toISOString(),
+                        },
+                    },
+                }));
+                reject(new Error(FIX_CANCELLED_MESSAGE));
+            };
+
+            fixCancels.set(key, cancelJob);
 
             socket.onmessage = (event) => {
                 try {
@@ -699,5 +753,9 @@ export const useAuditStore = create<AuditState>((set) => ({
 
         fixRuns.set(key, run);
         return run;
+    },
+
+    cancelFixJob: (agentId, ruleId) => {
+        fixCancels.get(fixJobKey(agentId, ruleId))?.();
     },
 }));

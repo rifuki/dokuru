@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { agentApi } from "@/lib/api/agent";
 import { agentDirectApi, type AuditResult, type FixOutcome, type FixPreview, type FixTarget } from "@/lib/api/agent-direct";
-import { fixJobKey, useAuditStore } from "@/stores/use-audit-store";
+import { FIX_CANCELLED_MESSAGE, fixJobKey, useAuditStore } from "@/stores/use-audit-store";
 
 export type WizardStep = "confirm" | "applying" | "result";
 
@@ -235,6 +235,7 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
     const activeJob = useAuditStore((state) => activeRuleId ? state.fixJobs[fixJobKey(agentId, activeRuleId)] : undefined);
 
     const startFixJob = useAuditStore((state) => state.startFixJob);
+    const cancelFixJob = useAuditStore((state) => state.cancelFixJob);
     const queryClient = useQueryClient();
 
     const openWizard = useCallback((result: AuditResult) => {
@@ -371,9 +372,14 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
             setStepIndex(steps.length);
             setOutcome(errOutcome);
             setStep("result");
-            toast.error("Fix failed");
+            toast.error(errOutcome.message === FIX_CANCELLED_MESSAGE ? "Fix cancelled" : "Fix failed");
         }
     }, [activeResult, agentAccessMode, agentId, agentUrl, buildTargets, queryClient, startFixJob, token]);
+
+    const cancelFix = useCallback(() => {
+        if (!activeResult) return;
+        cancelFixJob(agentId, activeResult.rule.id);
+    }, [activeResult, agentId, cancelFixJob]);
 
     const effectiveStep = activeJob
         ? activeJob.status === "running" ? "applying" : "result"
@@ -396,5 +402,6 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
         openWizard,
         closeWizard,
         applyFix,
+        cancelFix,
     };
 }

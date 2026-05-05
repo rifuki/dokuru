@@ -1,3 +1,4 @@
+use crate::components::atoms::{section_eyebrow::section_eyebrow, IconKind};
 use crate::components::molecules::why_card;
 use crate::content::WHY_POINTS;
 use crate::utils::reveal::reveal_ref;
@@ -14,7 +15,7 @@ pub(crate) fn why_dokuru() -> impl IntoView {
             <div class="max-w-7xl mx-auto px-6 md:px-10">
                 <div class="grid lg:grid-cols-12 gap-10">
                     <div node_ref=intro_ref class="reveal lg:col-span-4">
-                        <div class="font-mono text-[11px] uppercase tracking-[0.22em] text-[#2496ED] mb-4">"/ why dokuru"</div>
+                        {section_eyebrow(IconKind::Shield, "/ why dokuru")}
                         <h2 class="font-heading text-3xl md:text-4xl font-bold tracking-tight text-white leading-[1.1]">"Built for practical"<br class="hidden sm:block"/>"Docker security"<br class="hidden sm:block"/>"workflows."</h2>
                         <p class="mt-4 text-zinc-400 text-base md:text-[17px] leading-relaxed max-w-2xl">"Opinionated on scope, honest about coverage, and designed to live inside the audit-fix-review loop your team actually runs."</p>
                         <div node_ref=scope_ref class="reveal mt-8 p-5 rounded-xl border border-white/10 bg-white/[0.02]" style="--motion-delay: 300ms; --motion-duration: 500ms">

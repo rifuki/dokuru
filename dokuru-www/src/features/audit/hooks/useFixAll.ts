@@ -1,10 +1,15 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { agentApi } from "@/lib/api/agent";
 import { agentDirectApi, type AuditResult, type FixOutcome, type FixPreviewTarget, type FixProgress, type FixTarget } from "@/lib/api/agent-direct";
-import { getSuggestedLimits } from "@/features/audit/hooks/useFix";
-import { fixJobKey, useAuditStore } from "@/stores/use-audit-store";
+import {
+    getSuggestedLimits,
+    isImageConfigRecreateRule,
+    isNamespaceIsolationRule,
+    isRuntimeIsolationRule,
+} from "@/features/audit/hooks/useFix";
+import { FIX_CANCELLED_MESSAGE, fixJobKey, useAuditStore } from "@/stores/use-audit-store";
 
 export type FixAllStep = "confirm" | "configure" | "applying" | "result";
 
@@ -13,7 +18,7 @@ export type RuleFixStatus = {
     title: string;
     outcome: FixOutcome | null;
     progressEvents: FixProgress[];
-    state: "pending" | "applying" | "done" | "skipped";
+    state: "pending" | "applying" | "done" | "skipped" | "cancelled";
     selected: boolean;
     highRisk: boolean;
 };
@@ -89,21 +94,33 @@ function mergeCgroupTarget(
     });
 }
 
-function cgroupTargetsForRule(ruleId: string, targets: CgroupTargetConfig[]): FixTarget[] {
+function cgroupTargetsForRule(
+    ruleId: string,
+    targets: CgroupTargetConfig[],
+    currentTargets?: Map<string, FixPreviewTarget>,
+): FixTarget[] {
     if (!isBulkCgroupRule(ruleId)) return [];
 
     return targets
         .filter((target) => target.ruleIds.includes(ruleId))
-        .map((target) => {
+        .flatMap((target) => {
+            const currentTarget = currentTargets?.get(target.key)
+                ?? currentTargets?.get(`name:${target.containerName}`);
+            if (currentTargets && !currentTarget) return [];
+
             const payload: FixTarget = {
-                container_id: target.containerId,
+                container_id: currentTarget?.container_id ?? target.containerId,
                 strategy: target.strategy,
+                container_name: currentTarget?.container_name ?? target.containerName,
+                image: currentTarget?.image ?? target.image,
+                compose_project: currentTarget?.compose_project ?? target.composeProject,
+                compose_service: currentTarget?.compose_service ?? target.composeService,
             };
 
             if (ruleId === "5.11" || ruleId === "5.25") payload.memory = Math.max(MIN_CGROUP_VALUES.memoryMb, target.memoryMb) * 1024 * 1024;
             if (ruleId === "5.12" || ruleId === "5.25") payload.cpu_shares = Math.max(MIN_CGROUP_VALUES.cpuShares, target.cpuShares);
             if (ruleId === "5.29" || ruleId === "5.25") payload.pids_limit = Math.max(MIN_CGROUP_VALUES.pidsLimit, target.pidsLimit);
-            return payload;
+            return [payload];
         });
 }
 
@@ -120,6 +137,47 @@ function invalidCgroupTarget(ruleIds: CgroupRuleId[], targets: CgroupTargetConfi
         }
     }
     return null;
+}
+
+function cancelledOutcome(ruleId: string): FixOutcome {
+    return {
+        rule_id: ruleId,
+        status: "Blocked",
+        message: FIX_CANCELLED_MESSAGE,
+        requires_restart: false,
+        restart_command: undefined,
+        requires_elevation: false,
+    };
+}
+
+function refreshProgress(ruleId: string, status: FixProgress["status"], detail: string): FixProgress {
+    return {
+        rule_id: ruleId,
+        container_name: "dokuru-agent",
+        step: 1,
+        total_steps: 3,
+        action: "refresh_current_targets",
+        status,
+        detail,
+        command: `GET /fix/preview?rule_id=${encodeURIComponent(ruleId)}`,
+    };
+}
+
+function isBulkPreviewTargetRule(ruleId: string) {
+    return isImageConfigRecreateRule(ruleId)
+        || isNamespaceIsolationRule(ruleId)
+        || isRuntimeIsolationRule(ruleId);
+}
+
+function previewTargetsForRule(previewTargets: FixPreviewTarget[]): FixTarget[] {
+    return previewTargets.map((target) => ({
+        container_id: target.container_id,
+        strategy: target.strategy,
+        container_name: target.container_name,
+        image: target.image,
+        compose_project: target.compose_project,
+        compose_service: target.compose_service,
+    }));
 }
 
 interface UseFixAllArgs {
@@ -139,6 +197,9 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
 
     const queryClient = useQueryClient();
     const startFixJob = useAuditStore((state) => state.startFixJob);
+    const cancelFixJob = useAuditStore((state) => state.cancelFixJob);
+    const cancelRequestedRef = useRef(false);
+    const activeRuleRef = useRef<string | null>(null);
 
     const openFixAll = useCallback((rules: AuditResult[]) => {
         setRuleStatuses(rules.map(r => ({
@@ -154,6 +215,8 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
         setCurrentIndex(-1);
         setCgroupTargets([]);
         setCgroupLoading(false);
+        cancelRequestedRef.current = false;
+        activeRuleRef.current = null;
         setOpen(true);
     }, []);
 
@@ -183,6 +246,8 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
 
     const closeFixAll = useCallback(() => {
         setOpen(false);
+        cancelRequestedRef.current = false;
+        activeRuleRef.current = null;
         setTimeout(() => {
             setStep("confirm");
             setCurrentIndex(-1);
@@ -222,6 +287,29 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
         }
     }, [agentAccessMode, agentId, agentUrl, token]);
 
+    const refreshCgroupTargetsForRule = useCallback(async (ruleId: CgroupRuleId) => {
+        const preview = agentAccessMode === "relay"
+            ? await agentApi.previewFix(agentId, ruleId)
+            : await agentDirectApi.previewFix(agentUrl, ruleId, token);
+        const currentTargets = new Map<string, FixPreviewTarget>();
+        for (const target of preview.targets) {
+            currentTargets.set(cgroupTargetKey(target), target);
+            if (target.container_name) currentTargets.set(`name:${target.container_name}`, target);
+        }
+        return cgroupTargetsForRule(
+            ruleId,
+            cgroupTargets,
+            currentTargets,
+        );
+    }, [agentAccessMode, agentId, agentUrl, cgroupTargets, token]);
+
+    const refreshPreviewTargetsForRule = useCallback(async (ruleId: string) => {
+        const preview = agentAccessMode === "relay"
+            ? await agentApi.previewFix(agentId, ruleId)
+            : await agentDirectApi.previewFix(agentUrl, ruleId, token);
+        return previewTargetsForRule(preview.targets);
+    }, [agentAccessMode, agentId, agentUrl, token]);
+
     const applyAll = useCallback(async () => {
         const selectedTotal = ruleStatuses.filter(r => r.selected).length;
         if (selectedTotal === 0) {
@@ -244,6 +332,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
         }
 
         setStep("applying");
+        cancelRequestedRef.current = false;
         const updated: RuleFixStatus[] = ruleStatuses.map(r => ({
             ...r,
             state: r.selected ? "pending" : "skipped",
@@ -252,37 +341,131 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
 
         for (let i = 0; i < updated.length; i++) {
             if (!updated[i].selected) continue;
+            if (cancelRequestedRef.current) {
+                updated[i].outcome = cancelledOutcome(updated[i].ruleId);
+                updated[i].state = "cancelled";
+                continue;
+            }
+            const ruleId = updated[i].ruleId;
 
             setCurrentIndex(appliedIndex);
             updated[i].state = "applying";
             setRuleStatuses([...updated]);
+            activeRuleRef.current = ruleId;
 
             try {
+                let targets = cgroupTargetsForRule(ruleId, cgroupTargets);
+
+                if (isBulkCgroupRule(ruleId)) {
+                    const refreshedTargets = await refreshCgroupTargetsForRule(ruleId);
+                    targets = refreshedTargets;
+                    updated[i].progressEvents = [refreshProgress(
+                        ruleId,
+                        "done",
+                        refreshedTargets.length > 0
+                            ? `Resolved ${refreshedTargets.length} current cgroup target(s) before applying`
+                            : "No current cgroup targets still need this rule; skipped backend apply to avoid defaulting stale targets",
+                    )];
+                    setRuleStatuses([...updated]);
+
+                    if (targets.length === 0) {
+                        updated[i].outcome = {
+                            rule_id: ruleId,
+                            status: "Applied",
+                            message: "No current cgroup targets still need this rule",
+                            requires_restart: false,
+                            restart_command: undefined,
+                            requires_elevation: false,
+                        };
+                        updated[i].state = "done";
+                        setRuleStatuses([...updated]);
+                        activeRuleRef.current = null;
+                        appliedIndex += 1;
+                        continue;
+                    }
+                } else if (isBulkPreviewTargetRule(ruleId)) {
+                    const refreshedTargets = await refreshPreviewTargetsForRule(ruleId);
+                    targets = refreshedTargets;
+                    updated[i].progressEvents = [refreshProgress(
+                        ruleId,
+                        "done",
+                        refreshedTargets.length > 0
+                            ? `Resolved ${refreshedTargets.length} current target(s) before applying`
+                            : "No current targets still need this rule; skipped backend apply to avoid defaulting stale targets",
+                    )];
+                    setRuleStatuses([...updated]);
+
+                    if (targets.length === 0) {
+                        updated[i].outcome = {
+                            rule_id: ruleId,
+                            status: "Applied",
+                            message: "No current targets still need this rule",
+                            requires_restart: false,
+                            restart_command: undefined,
+                            requires_elevation: false,
+                        };
+                        updated[i].state = "done";
+                        setRuleStatuses([...updated]);
+                        activeRuleRef.current = null;
+                        appliedIndex += 1;
+                        continue;
+                    }
+                }
+
+                if (cancelRequestedRef.current) {
+                    throw new Error(FIX_CANCELLED_MESSAGE);
+                }
+
                 updated[i].outcome = await startFixJob({
                     agentId,
                     agentUrl,
                     agentAccessMode,
                     token,
-                    ruleId: updated[i].ruleId,
-                    targets: cgroupTargetsForRule(updated[i].ruleId, cgroupTargets),
+                    ruleId,
+                    targets,
                 });
-                updated[i].progressEvents = useAuditStore.getState().fixJobs[fixJobKey(agentId, updated[i].ruleId)]?.progressEvents ?? [];
+                updated[i].progressEvents = [
+                    ...updated[i].progressEvents,
+                    ...(useAuditStore.getState().fixJobs[fixJobKey(agentId, ruleId)]?.progressEvents ?? []),
+                ];
                 updated[i].state = "done";
-            } catch {
-                updated[i].outcome = {
-                    rule_id: updated[i].ruleId,
-                    status: "Blocked",
-                    message: "Failed to reach agent",
-                    requires_restart: false,
-                    restart_command: undefined,
-                    requires_elevation: false,
-                };
-                updated[i].progressEvents = useAuditStore.getState().fixJobs[fixJobKey(agentId, updated[i].ruleId)]?.progressEvents ?? [];
-                updated[i].state = "done";
+            } catch (error) {
+                const cancelled = cancelRequestedRef.current || (error instanceof Error && error.message === FIX_CANCELLED_MESSAGE);
+                const outcome: FixOutcome = cancelled
+                    ? cancelledOutcome(updated[i].ruleId)
+                    : {
+                        rule_id: ruleId,
+                        status: "Blocked",
+                        message: error instanceof Error ? error.message : "Failed to reach agent",
+                        requires_restart: false,
+                        restart_command: undefined,
+                        requires_elevation: false,
+                    };
+                updated[i].outcome = outcome;
+                updated[i].progressEvents = [
+                    ...updated[i].progressEvents,
+                    ...(useAuditStore.getState().fixJobs[fixJobKey(agentId, ruleId)]?.progressEvents ?? []),
+                    ...((isBulkCgroupRule(ruleId) || isBulkPreviewTargetRule(ruleId)) && !cancelled && updated[i].progressEvents.length === 0
+                        ? [refreshProgress(ruleId, "error", outcome.message)]
+                        : []),
+                ];
+                updated[i].state = cancelled ? "cancelled" : "done";
             }
+            activeRuleRef.current = null;
             setRuleStatuses([...updated]);
             appliedIndex += 1;
+
+            if (cancelRequestedRef.current) {
+                for (let nextIndex = i + 1; nextIndex < updated.length; nextIndex += 1) {
+                    if (!updated[nextIndex].selected) continue;
+                    updated[nextIndex].outcome = cancelledOutcome(updated[nextIndex].ruleId);
+                    updated[nextIndex].state = "cancelled";
+                }
+                break;
+            }
         }
+
+        activeRuleRef.current = null;
 
         setCurrentIndex(selectedTotal);
         setStep("result");
@@ -295,13 +478,22 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
             await queryClient.invalidateQueries({ queryKey: ["fix-history"] });
         }
 
-        if (applied > 0) {
+        if (cancelRequestedRef.current) {
+            toast.error("Fix All cancelled");
+        } else if (applied > 0) {
             toast.success(`Applied ${applied} fix${applied > 1 ? "es" : ""}${blocked > 0 ? `, ${blocked} blocked` : ""}`);
             await queryClient.invalidateQueries({ queryKey: ["agent-audit"] });
         } else {
             toast.error("No fixes could be applied");
         }
-    }, [agentAccessMode, agentId, agentUrl, cgroupTargets, loadCgroupConfig, queryClient, ruleStatuses, startFixJob, step, token]);
+    }, [agentAccessMode, agentId, agentUrl, cgroupTargets, loadCgroupConfig, queryClient, refreshCgroupTargetsForRule, refreshPreviewTargetsForRule, ruleStatuses, startFixJob, step, token]);
+
+    const cancelApplyAll = useCallback(() => {
+        cancelRequestedRef.current = true;
+        if (activeRuleRef.current) {
+            cancelFixJob(agentId, activeRuleRef.current);
+        }
+    }, [agentId, cancelFixJob]);
 
     const selectedCount = ruleStatuses.filter(r => r.selected).length;
     const selectedCgroupRuleIds = selectedCgroupRules(ruleStatuses);
@@ -318,6 +510,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
         openFixAll,
         closeFixAll,
         applyAll,
+        cancelApplyAll,
         toggleRule,
         setAllSelected,
         updateCgroupTarget,

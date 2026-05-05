@@ -811,7 +811,17 @@ function FixStepChecklist({ ruleId, stepIndex, complete = false }: { ruleId: str
     );
 }
 
-function ApplyingStep({ ruleId, stepIndex, progressEvents }: { ruleId: string; stepIndex: number; progressEvents: FixProgress[] }) {
+function ApplyingStep({
+    ruleId,
+    stepIndex,
+    progressEvents,
+    onCancel,
+}: {
+    ruleId: string;
+    stepIndex: number;
+    progressEvents: FixProgress[];
+    onCancel: () => void;
+}) {
     return (
         <div className="flex flex-col gap-4">
             <div className="flex items-center gap-2.5">
@@ -824,8 +834,16 @@ function ApplyingStep({ ruleId, stepIndex, progressEvents }: { ruleId: string; s
             <FixStepChecklist ruleId={ruleId} stepIndex={stepIndex} />
 
             <p className="text-[11px] text-white/30 font-mono text-center">
-                Live progress is streamed from dokuru-agent. You can close this panel or navigate away; the fix continues in the background.
+                Live progress is streamed from dokuru-agent. Cancel closes the stream and asks the agent to stop the active task.
             </p>
+
+            <button
+                type="button"
+                onClick={onCancel}
+                className="inline-flex h-9 items-center justify-center rounded-md border border-rose-500/25 bg-rose-500/10 px-4 text-sm font-semibold text-rose-300 transition-colors hover:bg-rose-500/15 hover:text-rose-200"
+            >
+                Cancel Fix
+            </button>
 
             <ProgressEventsPanel progressEvents={progressEvents} />
         </div>
@@ -996,6 +1014,7 @@ interface FixWizardProps {
     containers: DockerContainer[];
     auditId?: string;
     onConfirm: () => void;
+    onCancelApply: () => void;
     onClose: () => void;
     onRerunAudit: () => void;
     onTargetChange: (containerId: string, patch: Partial<TargetConfig>) => void;
@@ -1003,7 +1022,7 @@ interface FixWizardProps {
 
 export function FixWizard({
     open, step, result, outcome, preview, previewLoading, targetConfig, progressEvents, stepIndex,
-    agentId, containers, auditId, onConfirm, onClose, onRerunAudit, onTargetChange,
+    agentId, containers, auditId, onConfirm, onCancelApply, onClose, onRerunAudit, onTargetChange,
 }: FixWizardProps) {
     if (!result) return null;
     const { rule } = result;
@@ -1055,7 +1074,7 @@ export function FixWizard({
                         />
                     )}
                     {step === "applying" && (
-                        <ApplyingStep ruleId={rule.id} stepIndex={stepIndex} progressEvents={progressEvents} />
+                        <ApplyingStep ruleId={rule.id} stepIndex={stepIndex} progressEvents={progressEvents} onCancel={onCancelApply} />
                     )}
                     {step === "result" && outcome && (
                         <ResultStep

@@ -12,6 +12,7 @@ use axum::{
     },
     response::Response,
 };
+use futures_util::{SinkExt, StreamExt, stream::SplitSink};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, oneshot};
 
@@ -112,12 +113,13 @@ pub async fn stream_fix(
     ws.on_upgrade(move |socket| handle_fix_socket(socket, state, query.payload))
 }
 
-async fn handle_fix_socket(mut socket: WebSocket, state: AppState, payload: String) {
+async fn handle_fix_socket(socket: WebSocket, state: AppState, payload: String) {
+    let (mut sender, mut receiver) = socket.split();
     let request = match serde_json::from_str::<FixRequest>(&payload) {
         Ok(request) => request,
         Err(error) => {
             send_stream_message(
-                &mut socket,
+                &mut sender,
                 &FixStreamMessage::Error {
                     message: format!("Invalid fix request: {error}"),
                 },
@@ -135,7 +137,7 @@ async fn handle_fix_socket(mut socket: WebSocket, state: AppState, payload: Stri
     let docker = state.docker.clone();
     let request_for_task = request.clone();
 
-    tokio::spawn(async move {
+    let fix_task = tokio::spawn(async move {
         let registry = RuleRegistry::new();
         let outcome = registry
             .fix_request_with_progress(&request_for_task, &docker, Some(&progress_tx))
@@ -147,10 +149,19 @@ async fn handle_fix_socket(mut socket: WebSocket, state: AppState, payload: Stri
     let mut progress_events = Vec::new();
     let final_outcome = loop {
         tokio::select! {
+            incoming = receiver.next() => {
+                match incoming {
+                    None | Some(Err(_) | Ok(Message::Close(_))) => {
+                        fix_task.abort();
+                        return;
+                    }
+                    Some(Ok(_)) => {}
+                }
+            }
             progress = progress_rx.recv() => {
                 if let Some(progress) = progress {
                     progress_events.push(progress.clone());
-                    send_stream_message(&mut socket, &FixStreamMessage::Progress { data: progress }).await;
+                    send_stream_message(&mut sender, &FixStreamMessage::Progress { data: progress }).await;
                 }
             }
             outcome = &mut outcome_rx => {
@@ -161,7 +172,7 @@ async fn handle_fix_socket(mut socket: WebSocket, state: AppState, payload: Stri
 
     while let Ok(progress) = progress_rx.try_recv() {
         progress_events.push(progress.clone());
-        send_stream_message(&mut socket, &FixStreamMessage::Progress { data: progress }).await;
+        send_stream_message(&mut sender, &FixStreamMessage::Progress { data: progress }).await;
     }
 
     match final_outcome {
@@ -173,11 +184,11 @@ async fn handle_fix_socket(mut socket: WebSocket, state: AppState, payload: Stri
                 progress_events,
             )
             .await;
-            send_stream_message(&mut socket, &FixStreamMessage::Outcome { data: outcome }).await;
+            send_stream_message(&mut sender, &FixStreamMessage::Outcome { data: outcome }).await;
         }
         Ok(Err(error)) => {
             send_stream_message(
-                &mut socket,
+                &mut sender,
                 &FixStreamMessage::Error {
                     message: error.to_string(),
                 },
@@ -186,7 +197,7 @@ async fn handle_fix_socket(mut socket: WebSocket, state: AppState, payload: Stri
         }
         Err(_) => {
             send_stream_message(
-                &mut socket,
+                &mut sender,
                 &FixStreamMessage::Error {
                     message: "Fix task ended before returning an outcome".to_string(),
                 },
@@ -196,7 +207,10 @@ async fn handle_fix_socket(mut socket: WebSocket, state: AppState, payload: Stri
     }
 }
 
-async fn send_stream_message(socket: &mut WebSocket, message: &FixStreamMessage) {
+async fn send_stream_message(
+    socket: &mut SplitSink<WebSocket, Message>,
+    message: &FixStreamMessage,
+) {
     if let Ok(text) = serde_json::to_string(message) {
         let _ = socket.send(Message::Text(text.into())).await;
     }

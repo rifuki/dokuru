@@ -1,4 +1,4 @@
-use crate::components::atoms::{icon::icon, IconKind};
+use crate::components::atoms::{icon::icon, section_eyebrow::section_eyebrow, IconKind};
 use crate::content::APP_URL;
 use crate::utils::reveal::reveal_ref;
 use leptos::{html, prelude::*};
@@ -19,7 +19,9 @@ pub(crate) fn final_cta() -> impl IntoView {
                     <div class="absolute inset-0 pointer-events-none bg-grid-fine opacity-60"/>
                     <div class="relative p-5 sm:p-10 md:p-16 grid lg:grid-cols-12 gap-10 items-center">
                         <div class="lg:col-span-7">
-                            <div node_ref=label_ref class="reveal font-mono text-[11px] uppercase tracking-[0.22em] text-[#2496ED] mb-4" style="--motion-duration: 500ms">"/ start auditing"</div>
+                            <div node_ref=label_ref class="reveal" style="--motion-duration: 500ms">
+                                {section_eyebrow(IconKind::Terminal, "/ start auditing")}
+                            </div>
                             <h2 node_ref=heading_ref class="reveal font-heading text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight text-white leading-[1.06]" style="--motion-delay: 100ms; --motion-duration: 500ms">"Install the agent."<br class="hidden sm:block"/>"Open its dashboard."</h2>
                             <p node_ref=body_ref class="reveal mt-4 text-zinc-400 text-base md:text-[17px] max-w-xl" style="--motion-delay: 200ms; --motion-duration: 500ms">"Start with one Docker host. Use the hosted app only when you want a shared view across multiple agents."</p>
                             <div node_ref=actions_ref class="reveal mt-8 flex flex-wrap items-center gap-3" style="--motion-delay: 300ms; --motion-duration: 500ms">

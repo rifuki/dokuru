@@ -4118,7 +4118,29 @@ async fn apply_cgroup_target(
     {
         let inspect = match docker.inspect_container(&target.container_id, None).await {
             Ok(inspect) => inspect,
-            Err(error) => return Err(format!("{container_label}: inspect failed: {error}")),
+            Err(error) => {
+                send_progress(
+                    progress,
+                    FixProgress {
+                        rule_id: rule_id.to_string(),
+                        container_name: container_label.clone(),
+                        step: 1,
+                        total_steps: 3,
+                        action: "inspect_current_cgroup".to_string(),
+                        status: "error".to_string(),
+                        detail: Some(
+                            "Failed to inspect current container before cgroup update".to_string(),
+                        ),
+                        command: Some(format!(
+                            "docker inspect {}",
+                            shell_quote(&target.container_id)
+                        )),
+                        stdout: None,
+                        stderr: Some(error.to_string()),
+                    },
+                );
+                return Err(format!("{container_label}: inspect failed: {error}"));
+            }
         };
         let Some(ctx) = compose_context_from_inspect(&inspect) else {
             return Err(format!(
@@ -4238,18 +4260,42 @@ async fn apply_standalone_cgroup_target(
             }
         }
         Err(error) => {
-            emit_progress(
+            send_docker_update_error_progress(
                 progress,
                 rule_id,
+                target,
                 container_label,
-                ProgressStep::new(2, 3),
-                "docker_update",
-                "error",
-                Some(error.to_string()),
+                update_command,
+                error.to_string(),
             );
             Err(format!("{container_label}: update failed: {error}"))
         }
     }
+}
+
+fn send_docker_update_error_progress(
+    progress: Option<&ProgressSender>,
+    rule_id: &str,
+    target: &FixTarget,
+    container_label: &str,
+    update_command: String,
+    stderr: String,
+) {
+    send_progress(
+        progress,
+        FixProgress {
+            rule_id: rule_id.to_string(),
+            container_name: container_label.to_string(),
+            step: 2,
+            total_steps: 3,
+            action: "docker_update".to_string(),
+            status: "error".to_string(),
+            detail: Some(cgroup_update_detail(rule_id, target)),
+            command: Some(update_command),
+            stdout: None,
+            stderr: Some(stderr),
+        },
+    );
 }
 
 async fn apply_compose_cgroup_resource_fix(

@@ -75,6 +75,7 @@ function RuleRow({
 }) {
     const isRecreate = isContainerRecreateRule(rs.ruleId);
     const applied = rs.outcome?.status === "Applied";
+    const cancelled = rs.state === "cancelled";
     const skipped = rs.state === "skipped";
 
     return (
@@ -97,7 +98,7 @@ function RuleRow({
                     )}>{rs.selected && <Check size={10} strokeWidth={3} />}</span>
                     : skipped
                     ? <span className="inline-block w-3 h-3 rounded-full border border-white/10 mt-0.5" />
-                    : rs.state === "done"
+                    : rs.state === "done" || cancelled
                     ? applied
                         ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
                         : <XCircle className="h-3.5 w-3.5 text-rose-400" />
@@ -126,6 +127,8 @@ function RuleRow({
                     "mt-1 truncate text-xs leading-snug",
                     skipped
                         ? "text-white/22"
+                        : cancelled
+                        ? "text-rose-400/80"
                         : rs.state === "done"
                         ? applied ? "text-emerald-400/80" : "text-rose-400/80"
                         : rs.state === "applying" ? "text-white/80"
@@ -133,6 +136,8 @@ function RuleRow({
                 )}>
                     {skipped
                         ? "Skipped by selection"
+                        : cancelled
+                        ? "Cancelled before completion"
                         : rs.state === "done" && rs.outcome
                         ? rs.outcome.message.slice(0, 72)
                         : rs.title}
@@ -140,14 +145,14 @@ function RuleRow({
             </div>
 
             {/* Right badge */}
-            {showOutcome && rs.state === "done" && (
+            {showOutcome && (rs.state === "done" || cancelled) && (
                 <span className={cn(
                     "text-[9px] font-mono uppercase tracking-[0.12em] px-1.5 py-0.5 rounded border shrink-0",
                     applied
                         ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/25"
                         : "text-rose-400 bg-rose-500/10 border-rose-500/25"
                 )}>
-                    {applied ? "applied" : "blocked"}
+                    {applied ? "applied" : cancelled ? "cancelled" : "blocked"}
                 </span>
             )}
             {!showOutcome && rs.state === "pending" && !rs.selected && (
@@ -507,10 +512,11 @@ function ResourceInput({
 // ── Applying step ─────────────────────────────────────────────────────────────
 
 function ApplyingStep({
-    ruleStatuses, currentIndex,
+    ruleStatuses, currentIndex, onCancel,
 }: {
     ruleStatuses: RuleFixStatus[];
     currentIndex: number;
+    onCancel: () => void;
 }) {
     const selected = ruleStatuses.filter(r => r.selected);
     const done = selected.filter(r => r.state === "done").length;
@@ -553,8 +559,16 @@ function ApplyingStep({
             </div>
 
             <p className="text-[11px] text-white/30 font-mono text-center">
-                Do not close this panel while fixes are in progress
+                Fixes run sequentially. Cancel stops the active stream and skips the remaining selected rules.
             </p>
+
+            <button
+                type="button"
+                onClick={onCancel}
+                className="inline-flex h-9 items-center justify-center rounded-md border border-rose-500/25 bg-rose-500/10 px-4 text-sm font-semibold text-rose-300 transition-colors hover:bg-rose-500/15 hover:text-rose-200"
+            >
+                Cancel Fix All
+            </button>
         </div>
     );
 }
@@ -632,6 +646,20 @@ function EvidenceRuleCard({ rs }: { rs: RuleFixStatus }) {
                                 <pre className="mt-1 overflow-x-auto rounded border border-[#2496ED]/12 bg-[#06111a] px-2 py-1.5 text-[10px] text-[#58b8ff]">
                                     <span className="select-none text-white/28">$ </span>{event.command}
                                 </pre>
+                            )}
+                            {(event.stdout || event.stderr) && (
+                                <div className="mt-1 overflow-hidden rounded border border-white/8 bg-black/45">
+                                    {event.stdout && (
+                                        <pre className="whitespace-pre-wrap break-words px-2 py-1.5 text-[10px] text-emerald-300/80">
+                                            <span className="select-none text-white/28">stdout\n</span>{event.stdout}
+                                        </pre>
+                                    )}
+                                    {event.stderr && (
+                                        <pre className="whitespace-pre-wrap break-words border-t border-white/5 px-2 py-1.5 text-[10px] text-rose-300/80">
+                                            <span className="select-none text-white/28">stderr\n</span>{event.stderr}
+                                        </pre>
+                                    )}
+                                </div>
                             )}
                         </div>
                     ))}
@@ -774,6 +802,7 @@ interface FixAllWizardProps {
     cgroupLoading: boolean;
     selectedCgroupRuleIds: CgroupRuleId[];
     onConfirm: () => void;
+    onCancelApply: () => void;
     onClose: () => void;
     onRerunAudit: () => void;
     onToggleRule: (ruleId: string) => void;
@@ -785,7 +814,7 @@ interface FixAllWizardProps {
 export function FixAllWizard({
     open, step, currentIndex, ruleStatuses, selectedCount,
     cgroupTargets, cgroupLoading, selectedCgroupRuleIds,
-    onConfirm, onClose, onRerunAudit, onToggleRule, onSetAllSelected,
+    onConfirm, onCancelApply, onClose, onRerunAudit, onToggleRule, onSetAllSelected,
     onUpdateCgroupTarget, onBackToConfirm,
 }: FixAllWizardProps) {
     const showConfigure = selectedCgroupRuleIds.length > 0 || step === "configure";
@@ -853,7 +882,7 @@ export function FixAllWizard({
                         />
                     )}
                     {step === "applying" && (
-                        <ApplyingStep ruleStatuses={ruleStatuses} currentIndex={currentIndex} />
+                        <ApplyingStep ruleStatuses={ruleStatuses} currentIndex={currentIndex} onCancel={onCancelApply} />
                     )}
                     {step === "result" && (
                         <ResultStep

@@ -1,3 +1,4 @@
+use crate::components::atoms::{section_eyebrow::section_eyebrow, IconKind};
 use crate::components::molecules::feature_card;
 use crate::content::FEATURES;
 use crate::utils::reveal::reveal_ref;
@@ -11,7 +12,7 @@ pub(crate) fn features() -> impl IntoView {
         <section id="features" data-testid="features-section" class="relative py-24 md:py-32 border-t border-white/5">
             <div class="max-w-7xl mx-auto px-6 md:px-10">
                 <div node_ref=heading_ref class="reveal max-w-3xl mb-14">
-                    <div class="font-mono text-[11px] uppercase tracking-[0.22em] text-[#2496ED] mb-4">"/ features"</div>
+                    {section_eyebrow(IconKind::ShieldCheck, "/ features")}
                     <h2 class="font-heading text-3xl md:text-4xl font-bold tracking-tight text-white leading-[1.1]">
                         "A focused toolkit for Docker"
                         <br class="hidden sm:block"/>

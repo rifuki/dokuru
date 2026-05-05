@@ -69,6 +69,10 @@ export interface FixTarget {
   pids_limit?: number;
   strategy?: string;
   user?: string;
+  container_name?: string;
+  image?: string;
+  compose_project?: string;
+  compose_service?: string;
 }
 
 export interface ResourceSuggestion {

@@ -1,3 +1,4 @@
+use crate::components::atoms::{section_eyebrow::section_eyebrow, IconKind};
 use crate::components::molecules::coverage_card;
 use crate::content::COVERAGE_GROUPS;
 use crate::utils::reveal::reveal_ref;
@@ -13,7 +14,7 @@ pub(crate) fn coverage() -> impl IntoView {
             <div class="max-w-7xl mx-auto px-6 md:px-10">
                 <div node_ref=heading_ref class="reveal flex items-end justify-between flex-wrap gap-6 mb-12">
                     <div class="max-w-2xl">
-                        <div class="font-mono text-[11px] uppercase tracking-[0.22em] text-[#2496ED] mb-4">"/ coverage"</div>
+                        {section_eyebrow(IconKind::Gauge, "/ coverage")}
                         <h2 class="font-heading text-3xl md:text-4xl font-bold tracking-tight text-white leading-[1.1]">"Focused CIS-aligned coverage"<br class="hidden sm:block"/>"for Docker isolation."</h2>
                         <p class="mt-4 text-zinc-400 text-base md:text-[17px] leading-relaxed max-w-2xl">"Dokuru implements a selected subset of CIS Docker Benchmark v1.8.0 controls across sections 1–5 — with the strongest focus on controls that directly affect container isolation."</p>
                     </div>

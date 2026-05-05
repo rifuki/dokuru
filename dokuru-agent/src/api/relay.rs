@@ -661,7 +661,7 @@ async fn fix_progress_stream(
     let request_for_task = request.clone();
     let docker_for_task = docker.clone();
 
-    tokio::spawn(async move {
+    let fix_task = tokio::spawn(async move {
         let outcome = registry
             .fix_request_with_progress(&request_for_task, &docker_for_task, Some(&progress_tx))
             .await;
@@ -674,6 +674,7 @@ async fn fix_progress_stream(
         tokio::select! {
             input = input_rx.recv() => {
                 if matches!(input, Some(StreamInput::Close) | None) {
+                    fix_task.abort();
                     return Ok(());
                 }
             }
