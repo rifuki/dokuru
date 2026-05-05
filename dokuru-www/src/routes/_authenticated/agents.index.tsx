@@ -135,11 +135,18 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
     e.stopPropagation();
     setEditName(agent.name);
     setEditUrl(agent.url);
-    // Auto-fill token in agent mode for visibility
-    setEditToken(agent.token || "");
+    setEditToken("");
     setEditAccessMode(normalizeAgentAccessMode(agent.access_mode));
     setShowToken(false);
     setShowEditDialog(true);
+  };
+
+  const handleEditDialogOpenChange = (open: boolean) => {
+    setShowEditDialog(open);
+    if (!open) {
+      setEditToken("");
+      setShowToken(false);
+    }
   };
 
   const handleEditAccessModeChange = (mode: AgentAccessMode) => {
@@ -184,7 +191,7 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
         ? { ...updated, token: newToken }
         : { ...updated, token: agent.token ?? getAgentToken(agent.id) ?? undefined };
       onUpdated(agentWithToken);
-      setShowEditDialog(false);
+      handleEditDialogOpenChange(false);
       toast.success("Agent updated");
     } catch {
       toast.error("Failed to update agent");
@@ -386,7 +393,7 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
 
       <EditAgentModal
         open={showEditDialog}
-        onOpenChange={setShowEditDialog}
+        onOpenChange={handleEditDialogOpenChange}
         name={editName}
         url={editUrl}
         token={editToken}

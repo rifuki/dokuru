@@ -165,7 +165,7 @@ export function EditAgentModal({
 
                             <div className="space-y-1.5">
                                 <Label htmlFor="edit-agent-token" className="text-sm font-medium">
-                                    Agent Token <span className="text-xs text-muted-foreground">(leave blank to keep current)</span>
+                                    Agent Token <span className="text-xs text-muted-foreground">(optional replacement)</span>
                                 </Label>
                                 <div className="relative">
                                     <Input
@@ -173,7 +173,7 @@ export function EditAgentModal({
                                         name="dokuru_agent_secret_edit"
                                         type={showToken ? "text" : "password"}
                                         inputMode="text"
-                                        placeholder="New token (optional)"
+                                        placeholder="Paste new token only"
                                         value={token}
                                         onChange={(event) => onTokenChange(event.target.value.trim())}
                                         disabled={isSaving}
@@ -197,7 +197,7 @@ export function EditAgentModal({
                                     </button>
                                 </div>
                                 <p className="text-xs leading-4 text-muted-foreground">
-                                    Leave empty unless you generated a replacement token on the host.
+                                    Saved token stays hidden. Paste a new token only when rotating or reconnecting.
                                 </p>
                             </div>
                         </div>

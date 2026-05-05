@@ -1451,7 +1451,6 @@ function OfflinePanel({
     connectionIssue: AgentConnectionIssue | null;
     onRetry: () => void;
 }) {
-    const latestAuditId = latestAudit?.id;
     const canAutoRetry = connectionIssue?.retryable !== false;
     const issuePanelClass = canAutoRetry
         ? "border-amber-400/25 bg-amber-400/[0.08]"
@@ -1595,12 +1594,14 @@ function OfflinePanel({
                             </div>
 
                             <div className="flex flex-col gap-2 sm:flex-row">
-                                <Button size="sm" className="h-8 flex-1 text-xs" asChild>
-                                    <Link to="/agents/$id/audits/$auditId" params={{ id, auditId: latestAudit.id }} search={{ from: "latest" }}>
-                                        <ShieldCheck className="mr-2 h-3.5 w-3.5" />
-                                        Latest Audit
-                                    </Link>
-                                </Button>
+                                {latestAudit.id ? (
+                                    <Button size="sm" className="h-8 flex-1 text-xs" asChild>
+                                        <Link to="/agents/$id/audits/$auditId" params={{ id, auditId: latestAudit.id }} search={{ from: "latest" }}>
+                                            <ShieldCheck className="mr-2 h-3.5 w-3.5" />
+                                            Latest Audit
+                                        </Link>
+                                    </Button>
+                                ) : null}
                                 <Button size="sm" variant="outline" className="h-8 flex-1 text-xs" asChild>
                                     <Link to="/agents/$id/audits" params={{ id }}>
                                         <Clock3 className="mr-2 h-3.5 w-3.5 opacity-70" />
