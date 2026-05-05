@@ -187,7 +187,7 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
           </div>
 
           <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden">
+            <div className="flex min-w-0 flex-wrap sm:flex-nowrap items-center gap-2 overflow-hidden">
               <span className="min-w-0 max-w-full truncate text-base font-semibold tracking-tight text-foreground">{agent.name}</span>
               <span
                 className={`inline-flex h-5 shrink-0 items-center justify-center gap-1.5 rounded border px-2 text-[11px] font-semibold uppercase leading-none ${
@@ -564,8 +564,29 @@ function AgentsList() {
       </div>
 
       {isLoading && agents.length === 0 ? (
-        <div className="flex justify-center py-16">
-          <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="rounded-[14px] border border-border bg-card p-4 shadow-sm animate-pulse">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex min-w-0 flex-1 gap-4">
+                  <div className="h-14 w-14 rounded-full bg-muted shrink-0" />
+                  <div className="min-w-0 flex-1 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="h-5 w-32 rounded bg-muted" />
+                      <div className="h-5 w-16 rounded bg-muted" />
+                      <div className="h-5 w-20 rounded bg-muted" />
+                    </div>
+                    <div className="flex items-center gap-4 hidden sm:flex">
+                      <div className="h-4 w-24 rounded bg-muted" />
+                      <div className="h-4 w-20 rounded bg-muted" />
+                      <div className="h-4 w-24 rounded bg-muted" />
+                    </div>
+                  </div>
+                </div>
+                <div className="h-9 w-28 rounded-[10px] bg-muted shrink-0" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : agents.length === 0 ? (
         <div className="overflow-hidden rounded-2xl border border-dashed border-border bg-card/40 shadow-sm">
