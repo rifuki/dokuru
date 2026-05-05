@@ -17,7 +17,7 @@ pub(crate) fn audit_panel(
             </div>
             <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_35%_10%,rgba(36,150,237,0.10),transparent_34%),radial-gradient(circle_at_90%_0%,rgba(16,185,129,0.08),transparent_32%)]"/>
 
-            <div class="relative flex items-center gap-2.5 border-b border-white/10 bg-[#121214]/95 px-3.5 py-3">
+            <div class="relative flex min-w-0 items-center gap-2.5 border-b border-white/10 bg-[#121214]/95 px-3.5 py-3">
                 <div class="flex shrink-0 gap-1.5">
                     <span class="h-2 w-2 rounded-full bg-zinc-700"/><span class="h-2 w-2 rounded-full bg-zinc-700"/><span class="h-2 w-2 rounded-full bg-zinc-700"/>
                 </div>
@@ -26,13 +26,13 @@ pub(crate) fn audit_panel(
                     <span class="mx-2 text-zinc-600">"/"</span>
                     <span class="font-mono text-[#2496ED]">"debian13-2c4g-dokuru-lab"</span>
                 </div>
-                <span class="ml-auto inline-flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-emerald-400">
+                <span class="ml-auto inline-flex shrink-0 items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-emerald-400">
                     <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"/>"live"
                 </span>
             </div>
 
             <div class="relative grid md:grid-cols-[0.82fr_1.18fr] md:divide-x md:divide-white/10">
-                <div class="p-3.5 md:p-4">
+                <div class="p-3.5 sm:p-4">
                     <div class="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-zinc-500">"audit score"</div>
                     <div class="mt-2.5 flex items-end gap-2.5">
                         <div class="font-heading text-[44px] font-black leading-none text-[#2496ED]" data-testid="audit-score-value">"97"</div>
@@ -50,7 +50,7 @@ pub(crate) fn audit_panel(
                     </div>
                 </div>
 
-                <div class="p-3.5 md:p-4">
+                <div class="p-3.5 sm:p-4">
                     <div class="flex items-start justify-between gap-2.5">
                         <div>
                             <div class="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-zinc-500">
@@ -94,7 +94,7 @@ pub(crate) fn audit_panel(
                         set_fixing.set(true);
                         reset_fixing_after(set_fixing);
                     }
-                    class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#2496ED] px-3.5 py-2 text-[13px] font-bold text-white shadow-[0_0_24px_rgba(36,150,237,0.22)] transition-colors hover:bg-[#1C7CBA] sm:shrink-0"
+                    class="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#2496ED] px-3.5 py-2 text-[13px] font-bold text-white shadow-[0_0_24px_rgba(36,150,237,0.22)] transition-colors hover:bg-[#1C7CBA] sm:w-auto sm:shrink-0"
                 >
                     {icon(IconKind::Wrench, 13, "", "2")}
                     "Fix All (8)"

@@ -9,17 +9,17 @@ pub(crate) fn problem() -> impl IntoView {
 
     view! {
         <section id="problem" data-testid="problem-section" class="relative py-24 md:py-32 border-t border-white/5">
-            <div class="max-w-7xl mx-auto px-6 md:px-10">
+            <div class="max-w-7xl mx-auto px-5 md:px-10">
                 <div class="grid lg:grid-cols-12 gap-10">
                     <div node_ref=intro_ref class="reveal lg:col-span-5">
                         {section_eyebrow(IconKind::AlertTriangle, "/ the problem")}
                         <h2 class="font-heading text-3xl md:text-4xl font-bold tracking-tight leading-[1.1] text-white">
                             "Docker misconfigurations"
-                            <br class="hidden sm:block"/>
+                            <br class="hidden sm:block"/><span class="sm:hidden">" "</span>
                             "are " <span class="text-rose-400">"easy to miss"</span> " —"
-                            <br class="hidden sm:block"/>
+                            <br class="hidden sm:block"/><span class="sm:hidden">" "</span>
                             "and expensive to find"
-                            <br class="hidden sm:block"/>
+                            <br class="hidden sm:block"/><span class="sm:hidden">" "</span>
                             "the hard way."
                         </h2>
                         <p class="mt-6 text-zinc-400 leading-relaxed max-w-md">

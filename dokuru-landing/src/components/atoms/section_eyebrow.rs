@@ -4,8 +4,8 @@ use leptos::prelude::*;
 #[must_use]
 pub(crate) fn section_eyebrow(kind: IconKind, label: &'static str) -> impl IntoView {
     view! {
-        <div class="mb-5 flex w-full items-center gap-3">
-            <div class="inline-flex shrink-0 items-center gap-2 font-mono text-[11px] font-medium uppercase tracking-[0.22em] text-[#2496ED]">
+        <div class="mb-5 flex w-full items-center gap-2.5 sm:gap-3">
+            <div class="inline-flex shrink-0 items-center gap-2 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-[#2496ED] sm:text-[11px] sm:tracking-[0.22em]">
                 {icon(kind, 12, "", "2")}
                 <span>{label}</span>
             </div>
@@ -17,9 +17,9 @@ pub(crate) fn section_eyebrow(kind: IconKind, label: &'static str) -> impl IntoV
 #[must_use]
 pub(crate) fn centered_section_eyebrow(kind: IconKind, label: &'static str) -> impl IntoView {
     view! {
-        <div class="mb-5 flex w-full max-w-3xl items-center justify-center gap-3">
+        <div class="mb-5 flex w-full max-w-3xl items-center justify-center gap-2.5 sm:gap-3">
             <div class="h-px flex-1 bg-gradient-to-l from-[#2496ED]/35 via-white/10 to-transparent" />
-            <div class="inline-flex shrink-0 items-center gap-2 font-mono text-[11px] font-medium uppercase tracking-[0.22em] text-[#2496ED]">
+            <div class="inline-flex shrink-0 items-center gap-2 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-[#2496ED] sm:text-[11px] sm:tracking-[0.22em]">
                 {icon(kind, 12, "", "2")}
                 <span>{label}</span>
             </div>

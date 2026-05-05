@@ -22,7 +22,7 @@ pub(crate) fn hero() -> impl IntoView {
                 // Top heavenly glow
                 <div class="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-[400px] bg-[#2496ED]/15 blur-[120px] pointer-events-none rounded-full"/>
 
-                <div class="relative mx-auto w-full max-w-4xl px-6 md:px-10 text-center flex flex-col items-center">
+                <div class="relative mx-auto w-full max-w-4xl px-5 md:px-10 text-center flex flex-col items-center">
 
                     <a href="https://github.com/rifuki/dokuru" target="_blank" rel="noopener noreferrer" class="animate-enter-up mb-8 inline-flex items-center gap-2.5 rounded-full border border-[#2496ED]/20 bg-[#2496ED]/10 px-3 py-1.5 text-sm font-medium text-[#2496ED] transition-colors hover:bg-[#2496ED]/20" style="--motion-delay: 200ms; --motion-duration: 800ms">
                         <span class="flex h-1.5 w-1.5 rounded-full bg-[#2496ED] shadow-[0_0_8px_#2496ED]"/>
@@ -30,7 +30,7 @@ pub(crate) fn hero() -> impl IntoView {
                         {icon(IconKind::ArrowRight, 14, "opacity-70", "2")}
                     </a>
 
-                    <h1 data-testid="hero-headline" class="animate-enter-up font-heading text-5xl font-bold tracking-tight leading-[1.1] text-white sm:text-6xl lg:text-[76px]" style="--motion-delay: 300ms; --motion-duration: 800ms">
+                    <h1 data-testid="hero-headline" class="animate-enter-up font-heading text-[42px] font-bold tracking-tight leading-[1.08] text-white sm:text-6xl lg:text-[76px] lg:leading-[1.1]" style="--motion-delay: 300ms; --motion-duration: 800ms">
                         "Docker security audits,"
                         <br/>
                         "shipped "
@@ -46,12 +46,12 @@ pub(crate) fn hero() -> impl IntoView {
                         " for audits, evidence, and supported fixes — then joins the app when you need multi-host control."
                     </p>
 
-                    <div class="animate-enter-up mt-10 flex flex-wrap items-center justify-center gap-4" style="--motion-delay: 700ms; --motion-duration: 600ms">
-                        <a href="#how-it-works" data-testid="hero-cta-primary" class="group inline-flex items-center gap-2 rounded-xl bg-[#2496ED] px-7 py-3.5 font-medium text-white shadow-[0_0_30px_rgba(36,150,237,0.3)] transition-all hover:bg-[#1C7CBA] hover:shadow-[0_0_40px_rgba(36,150,237,0.4)] active:scale-[0.98]">
+                    <div class="animate-enter-up mt-10 flex w-full flex-wrap items-center justify-center gap-4 sm:w-auto" style="--motion-delay: 700ms; --motion-duration: 600ms">
+                        <a href="#how-it-works" data-testid="hero-cta-primary" class="group inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#2496ED] px-7 py-3.5 font-medium text-white shadow-[0_0_30px_rgba(36,150,237,0.3)] transition-all hover:bg-[#1C7CBA] hover:shadow-[0_0_40px_rgba(36,150,237,0.4)] active:scale-[0.98] sm:w-auto">
                             "Install Agent"
                             {icon(IconKind::ArrowRight, 16, "transition-transform group-hover:translate-x-1", "2")}
                         </a>
-                        <a href=APP_URL target="_blank" rel="noopener noreferrer" data-testid="hero-cta-secondary" class="group inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-7 py-3.5 font-medium text-white backdrop-blur-sm transition-all hover:border-white/20 hover:bg-white/[0.06] active:scale-[0.98]">
+                        <a href=APP_URL target="_blank" rel="noopener noreferrer" data-testid="hero-cta-secondary" class="group inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-7 py-3.5 font-medium text-white backdrop-blur-sm transition-all hover:border-white/20 hover:bg-white/[0.06] active:scale-[0.98] sm:w-auto">
                             {icon(IconKind::Terminal, 16, "text-zinc-400 transition-colors group-hover:text-white", "2")}
                             "Open App"
                         </a>
@@ -79,13 +79,13 @@ pub(crate) fn hero() -> impl IntoView {
                     </div>
                 </div>
             </section>
-            <section id="preview" data-testid="preview-section" class="relative min-h-[100svh] flex flex-col justify-center px-6 pt-24 pb-16 md:px-10 md:pt-32 md:pb-24 overflow-hidden">
-                <div node_ref=preview_heading_ref class="reveal mb-16 text-center z-50 relative" style="--motion-delay: 100ms; --motion-duration: 650ms">
-                    <h2 class="font-heading text-2xl font-bold text-white md:text-4xl">"The complete security workflow"</h2>
+            <section id="preview" data-testid="preview-section" class="relative px-4 py-20 sm:px-6 md:px-10 md:py-28 lg:min-h-[100svh] lg:flex lg:flex-col lg:justify-center lg:py-32 overflow-hidden">
+                <div node_ref=preview_heading_ref class="reveal relative z-50 mx-auto mb-8 max-w-2xl text-center sm:mb-12 lg:mb-16" style="--motion-delay: 100ms; --motion-duration: 650ms">
+                    <h2 class="font-heading text-[28px] font-bold leading-tight text-white md:text-4xl">"The complete security workflow"</h2>
                     <p class="mt-4 text-sm text-zinc-400 md:text-base max-w-2xl mx-auto">"Seamless onboarding, real-time scanning, and 1-click auto-fixes — all orchestrated by a single lightweight agent."</p>
                 </div>
 
-                <div class="relative mx-auto w-full max-w-6xl h-[450px] sm:h-[500px] md:h-[650px] flex items-center justify-center">
+                <div class="relative mx-auto flex h-auto w-full max-w-6xl items-center justify-center lg:h-[650px]">
                     // 1. Onboard Terminal (Background Layer, Top Left)
                     <div node_ref=onboard_ref class="reveal group absolute left-0 lg:-left-4 top-4 hidden lg:block w-[440px] z-10 hover:z-50" data-reveal="right" style="--motion-delay: 180ms; --motion-duration: 650ms">
                         <div class="w-full -rotate-3 opacity-40 transition-all duration-500 group-hover:rotate-0 group-hover:opacity-100 group-hover:scale-105">
@@ -115,7 +115,7 @@ pub(crate) fn hero() -> impl IntoView {
                     </div>
 
                     // 5. Audit Panel (Foreground Layer, Center)
-                    <div node_ref=audit_panel_ref class="reveal relative w-full lg:w-[720px] z-30" style="--motion-delay: 260ms; --motion-duration: 700ms">
+                    <div node_ref=audit_panel_ref class="reveal relative z-30 w-full max-w-[720px]" style="--motion-delay: 260ms; --motion-duration: 700ms">
                         <div class="transition-transform duration-500 hover:scale-[1.02]">
                             <div class="absolute inset-0 scale-90 rounded-full bg-[#2496ED]/15 blur-[120px] pointer-events-none"/>
                             <div class="relative overflow-hidden rounded-2xl border border-white/10 bg-[#050505] shadow-[0_40px_100px_rgba(0,0,0,0.9)] text-left ring-1 ring-white/5 backdrop-blur-xl">
@@ -127,8 +127,8 @@ pub(crate) fn hero() -> impl IntoView {
 
                 // Easter Egg Toast rendered outside transform bounds
                 {move || fixing.get().then(|| view! {
-                    <div class="fixed bottom-6 right-6 animate-enter-up z-[9999] pointer-events-none">
-                        <div class="rounded-xl bg-[#09090B]/95 px-5 py-4 border border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.8)] backdrop-blur-xl flex items-start gap-3 w-[320px]">
+                    <div class="fixed bottom-5 left-4 right-4 animate-enter-up z-[9999] pointer-events-none sm:left-auto sm:right-6">
+                        <div class="mx-auto flex w-full max-w-[320px] items-start gap-3 rounded-xl border border-white/10 bg-[#09090B]/95 px-5 py-4 shadow-[0_20px_40px_rgba(0,0,0,0.8)] backdrop-blur-xl sm:mx-0">
                             <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 mt-0.5">
                                 {icon(IconKind::Check, 16, "", "2")}
                             </div>

@@ -9,7 +9,7 @@ pub(crate) fn footer() -> impl IntoView {
 
     view! {
         <footer data-testid="site-footer" class="relative border-t border-white/10 pt-20 pb-10">
-            <div class="max-w-7xl mx-auto px-6 md:px-10">
+            <div class="max-w-7xl mx-auto px-5 md:px-10">
                 <div class="grid lg:grid-cols-12 gap-10">
                     <div node_ref=brand_ref class="reveal lg:col-span-4">
                         <div class="flex items-center gap-2.5">{dokuru_mark("h-7 w-7")}<span class="font-heading font-black text-white text-lg tracking-tight">"dokuru"</span></div>

@@ -6,7 +6,7 @@ use leptos::prelude::*;
 #[must_use]
 pub(crate) fn landing() -> impl IntoView {
     view! {
-        <div data-testid="landing-root" class="min-h-screen bg-[#050505] text-white selection:bg-[#2496ED]/30">
+        <div data-testid="landing-root" class="min-h-screen overflow-x-hidden bg-[#050505] text-white selection:bg-[#2496ED]/30">
             {header::header()}
             <main>
                 {hero::hero()}
