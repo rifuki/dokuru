@@ -20,7 +20,7 @@ export function useLogin() {
     onSuccess: (data) => {
       login(data.token.access_token, data.user);
       queryClient.invalidateQueries({ queryKey: authKeys.me() });
-      toast.success("Welcome back!");
+      toast.success(`Welcome back, ${data.user.username}!`);
       void navigate({
         to: data.user.role === "admin" ? "/admin" : "/agents",
         replace: true,
