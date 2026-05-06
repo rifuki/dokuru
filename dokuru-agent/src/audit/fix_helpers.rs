@@ -7391,8 +7391,7 @@ pub async fn rollback_plan_for_request(
         {
             return Ok(RollbackPlan {
                 cgroup_targets: Vec::new(),
-                compose_backups: compose_rollback_targets_for_rule(docker, &request.rule_id)
-                    .await?,
+                compose_backups: compose_rollback_targets_for_request(docker, request).await?,
                 container_snapshots: container_rollback_targets_for_request(docker, request)
                     .await?,
             });
@@ -7401,8 +7400,7 @@ pub async fn rollback_plan_for_request(
         if supports_runtime_isolation_fix(&request.rule_id) {
             return Ok(RollbackPlan {
                 cgroup_targets: Vec::new(),
-                compose_backups: compose_rollback_targets_for_rule(docker, &request.rule_id)
-                    .await?,
+                compose_backups: compose_rollback_targets_for_request(docker, request).await?,
                 container_snapshots: container_rollback_targets_for_request(docker, request)
                     .await?,
             });
@@ -7544,6 +7542,45 @@ async fn compose_rollback_targets_for_rule(
             continue;
         }
         targets.push(compose_rollback_target_for_override(&ctx).await?);
+    }
+
+    Ok(targets)
+}
+
+async fn compose_rollback_targets_for_request(
+    docker: &Docker,
+    request: &FixRequest,
+) -> eyre::Result<Vec<ComposeRollbackTarget>> {
+    if request.targets.is_empty() {
+        return compose_rollback_targets_for_rule(docker, &request.rule_id).await;
+    }
+
+    let mut targets = Vec::new();
+    let mut compose_services = HashSet::<String>::new();
+    for target in &request.targets {
+        let inspect = docker.inspect_container(&target.container_id, None).await?;
+        if !container_violates_rule(&inspect, &request.rule_id) {
+            continue;
+        }
+        let Some(ctx) = compose_context_from_inspect(&inspect) else {
+            continue;
+        };
+        let key = format!(
+            "{}:{}",
+            target.strategy.as_deref().unwrap_or_default(),
+            ctx.key()
+        );
+        if !compose_services.insert(key) {
+            continue;
+        }
+
+        if is_dokuru_override_strategy(target.strategy.as_deref()) {
+            targets.push(compose_rollback_target_for_override(&ctx).await?);
+        } else if is_compose_source_strategy(target.strategy.as_deref()) {
+            let compose_path =
+                find_compose_update_path(&ctx, &request.rule_id, Some(target)).await?;
+            targets.push(compose_rollback_target_with_backup(&ctx, compose_path).await?);
+        }
     }
 
     Ok(targets)
@@ -8741,6 +8778,159 @@ services:
             "web_api_latest"
         );
         assert_eq!(safe_container_snapshot_name(""), "container");
+    }
+
+    fn smoke_project_name(prefix: &str) -> String {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system time should be after unix epoch")
+            .as_nanos();
+        format!("dokuru-{prefix}-{}-{nanos}", std::process::id())
+    }
+
+    async fn run_smoke_cmd(cmd: &str, args: &[&str]) -> String {
+        let (stdout, stderr, ok) = run_cmd(cmd, args)
+            .await
+            .unwrap_or_else(|error| panic!("{cmd} {} failed to spawn: {error}", args.join(" ")));
+        assert!(
+            ok,
+            "{cmd} {} failed\nstdout:\n{stdout}\nstderr:\n{stderr}",
+            args.join(" ")
+        );
+        stdout.trim().to_string()
+    }
+
+    async fn remove_smoke_container(name: &str) {
+        let _ = run_cmd("docker", &["rm", "-f", name]).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires Docker; creates a temporary Compose project"]
+    async fn smoke_compose_override_fix_rolls_back_yaml_snapshot() {
+        let docker = Docker::connect_with_local_defaults().unwrap();
+        let project = smoke_project_name("compose-rollback");
+        let dir = std::env::temp_dir().join(project.clone());
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        let compose_path = dir.join("docker-compose.yaml");
+        tokio::fs::write(
+            &compose_path,
+            "services:\n  web:\n    image: alpine:3.20\n    command: [\"sleep\", \"infinity\"]\n",
+        )
+        .await
+        .unwrap();
+
+        let compose = compose_path.to_string_lossy().to_string();
+        run_smoke_cmd(
+            "docker",
+            &["compose", "-f", &compose, "-p", &project, "up", "-d"],
+        )
+        .await;
+        let container_id = run_smoke_cmd(
+            "docker",
+            &["compose", "-f", &compose, "-p", &project, "ps", "-q", "web"],
+        )
+        .await;
+
+        let request = FixRequest {
+            rule_id: "4.6".to_string(),
+            targets: vec![FixTarget {
+                container_id,
+                memory: None,
+                cpu_shares: None,
+                pids_limit: None,
+                strategy: Some(STRATEGY_DOKURU_OVERRIDE.to_string()),
+                user: None,
+            }],
+        };
+        let plan = rollback_plan_for_request(&docker, &request).await.unwrap();
+        assert_eq!(plan.compose_backups.len(), 1);
+        assert!(plan.compose_backups[0].delete_on_rollback);
+        assert!(plan.container_snapshots.is_empty());
+
+        let outcome =
+            apply_image_config_fix_with_progress(&docker, &request.rule_id, &request.targets, None)
+                .await
+                .unwrap();
+        assert_eq!(outcome.status, FixStatus::Applied);
+        let override_path = dir.join("docker-compose.override.yaml");
+        assert!(override_path.exists());
+
+        let mut restored = Vec::new();
+        let mut failed = Vec::new();
+        rollback_compose_targets(&plan.compose_backups, &mut restored, &mut failed).await;
+        assert!(failed.is_empty(), "rollback failed: {failed:?}");
+        assert!(!restored.is_empty());
+        assert!(!override_path.exists());
+
+        run_smoke_cmd(
+            "docker",
+            &["compose", "-f", &compose, "-p", &project, "down", "-v"],
+        )
+        .await;
+        let _ = tokio::fs::remove_dir_all(&dir).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires Docker; creates and recreates a temporary container"]
+    async fn smoke_standalone_recreate_rolls_back_container_snapshot() {
+        let docker = Docker::connect_with_local_defaults().unwrap();
+        let name = smoke_project_name("container-rollback");
+        remove_smoke_container(&name).await;
+        run_smoke_cmd(
+            "docker",
+            &[
+                "run",
+                "-d",
+                "--name",
+                &name,
+                "alpine:3.20",
+                "sleep",
+                "infinity",
+            ],
+        )
+        .await;
+        let container_id = run_smoke_cmd("docker", &["inspect", "-f", "{{.Id}}", &name]).await;
+
+        let request = FixRequest {
+            rule_id: "4.1".to_string(),
+            targets: vec![FixTarget {
+                container_id,
+                memory: None,
+                cpu_shares: None,
+                pids_limit: None,
+                strategy: Some("recreate".to_string()),
+                user: Some(DEFAULT_NON_ROOT_USER.to_string()),
+            }],
+        };
+        let plan = rollback_plan_for_request(&docker, &request).await.unwrap();
+        assert_eq!(plan.container_snapshots.len(), 1);
+        assert!(plan.compose_backups.is_empty());
+
+        let outcome =
+            apply_image_config_fix_with_progress(&docker, &request.rule_id, &request.targets, None)
+                .await
+                .unwrap();
+        assert_eq!(outcome.status, FixStatus::Applied);
+        let user_after_fix =
+            run_smoke_cmd("docker", &["inspect", "-f", "{{.Config.User}}", &name]).await;
+        assert_eq!(user_after_fix, DEFAULT_NON_ROOT_USER);
+
+        let mut restored = Vec::new();
+        let mut failed = Vec::new();
+        rollback_container_targets(
+            &docker,
+            &plan.container_snapshots,
+            &mut restored,
+            &mut failed,
+        )
+        .await;
+        assert!(failed.is_empty(), "rollback failed: {failed:?}");
+        assert!(!restored.is_empty());
+        let user_after_rollback =
+            run_smoke_cmd("docker", &["inspect", "-f", "{{.Config.User}}", &name]).await;
+        assert!(user_after_rollback.is_empty());
+
+        remove_smoke_container(&name).await;
     }
 
     #[test]
