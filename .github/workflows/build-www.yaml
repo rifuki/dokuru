@@ -5,17 +5,11 @@ on:
     branches:
       - main
     paths:
-      - 'dokuru-server/**'
-      - 'dokuru-core/**'
       - 'dokuru-www/**'
-      - 'docker-compose.yaml'
       - '.github/workflows/build-www.yaml'
   pull_request:
     paths:
-      - 'dokuru-server/**'
-      - 'dokuru-core/**'
       - 'dokuru-www/**'
-      - 'docker-compose.yaml'
       - '.github/workflows/build-www.yaml'
   workflow_dispatch:
 
