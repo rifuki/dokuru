@@ -242,9 +242,11 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
                   Docker {info.docker_version}
                 </span>
               )}
-              <span className="min-w-0 basis-full truncate font-mono text-[12px] text-muted-foreground/70 sm:basis-auto sm:flex-1">
-                {agent.url.replace(/^https?:\/\//, '')}
-              </span>
+              {agent.access_mode !== 'relay' && (
+                <span className="min-w-0 basis-full truncate font-mono text-[12px] text-muted-foreground/70 sm:basis-auto sm:flex-1">
+                  {agent.url.replace(/^https?:\/\//, '')}
+                </span>
+              )}
             </div>
 
             {isConnecting && !info ? (
