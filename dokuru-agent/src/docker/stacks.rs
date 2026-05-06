@@ -3,9 +3,9 @@ use axum::{
     extract::{Path, Query},
     http::StatusCode,
     response::{IntoResponse, Json, Response},
-    routing::get,
+    routing::{get, post},
 };
-use bollard::container::ListContainersOptions;
+use bollard::{Docker, container::ListContainersOptions};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path as FsPath, PathBuf};
@@ -53,6 +53,8 @@ where
     Router::new()
         .route("/docker/stacks", get(list_stacks))
         .route("/docker/stacks/{name}", get(get_stack))
+        .route("/docker/stacks/{name}/up", post(compose_up_stack))
+        .route("/docker/stacks/{name}/down", post(compose_down_stack))
         .route(
             "/docker/stacks/{name}/compose",
             get(get_compose_file).put(update_compose_file),
@@ -332,14 +334,59 @@ struct ComposeFileResponse {
 }
 
 #[derive(Debug, Serialize)]
-struct ComposeErrorResponse {
-    error: String,
-    detail: String,
+pub struct ComposeErrorResponse {
+    pub error: String,
+    pub detail: String,
 }
 
 #[derive(Deserialize)]
 struct UpdateComposeFileRequest {
     content: String,
+}
+
+#[derive(Deserialize)]
+struct ComposeUpRequest {
+    #[serde(default = "default_compose_up_detach")]
+    detach: bool,
+    #[serde(default)]
+    force_recreate: bool,
+}
+
+impl Default for ComposeUpRequest {
+    fn default() -> Self {
+        Self {
+            detach: true,
+            force_recreate: false,
+        }
+    }
+}
+
+#[derive(Deserialize, Default)]
+struct ComposeDownRequest {
+    #[serde(default)]
+    volumes: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ComposeActionResponse {
+    pub command: String,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+struct StackComposeCommandContext {
+    working_dir: Option<String>,
+    compose_paths: Vec<PathBuf>,
+}
+
+#[derive(Clone, Copy)]
+pub enum ComposeStackAction {
+    Up { detach: bool, force_recreate: bool },
+    Down { volumes: bool },
+}
+
+const fn default_compose_up_detach() -> bool {
+    true
 }
 
 #[derive(Deserialize, Default)]
@@ -571,6 +618,244 @@ async fn update_compose_file(
     }
 }
 
+async fn compose_up_stack(
+    Path(name): Path<String>,
+    Json(payload): Json<ComposeUpRequest>,
+) -> Response {
+    let docker = match get_docker_client() {
+        Ok(docker) => docker,
+        Err(error) => {
+            return compose_status(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Docker client error",
+                error.to_string(),
+            );
+        }
+    };
+
+    match run_stack_compose_action(
+        &docker,
+        &name,
+        ComposeStackAction::Up {
+            detach: payload.detach,
+            force_recreate: payload.force_recreate,
+        },
+    )
+    .await
+    {
+        Ok(response) => Json(response).into_response(),
+        Err(error) => compose_error(error.error, error.detail),
+    }
+}
+
+async fn compose_down_stack(
+    Path(name): Path<String>,
+    Json(payload): Json<ComposeDownRequest>,
+) -> Response {
+    let docker = match get_docker_client() {
+        Ok(docker) => docker,
+        Err(error) => {
+            return compose_status(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Docker client error",
+                error.to_string(),
+            );
+        }
+    };
+
+    match run_stack_compose_action(
+        &docker,
+        &name,
+        ComposeStackAction::Down {
+            volumes: payload.volumes,
+        },
+    )
+    .await
+    {
+        Ok(response) => Json(response).into_response(),
+        Err(error) => compose_error(error.error, error.detail),
+    }
+}
+
+pub async fn run_stack_compose_action(
+    docker: &Docker,
+    name: &str,
+    action: ComposeStackAction,
+) -> Result<ComposeActionResponse, ComposeErrorResponse> {
+    let context = stack_compose_command_context(docker, name).await?;
+    let args = stack_compose_command_args(name, &context.compose_paths, action);
+    let command_display = compose_command_display(&args);
+
+    let mut command = tokio::process::Command::new("docker");
+    command.args(&args);
+    if let Some(working_dir) = &context.working_dir {
+        command.current_dir(working_dir);
+    }
+
+    let output = command
+        .output()
+        .await
+        .map_err(|error| ComposeErrorResponse {
+            error: "Failed to run docker compose".to_string(),
+            detail: error.to_string(),
+        })?;
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+
+    if !output.status.success() {
+        return Err(ComposeErrorResponse {
+            error: "docker compose command failed".to_string(),
+            detail: if stderr.is_empty() { stdout } else { stderr },
+        });
+    }
+
+    Ok(ComposeActionResponse {
+        command: command_display,
+        stdout,
+        stderr,
+    })
+}
+
+async fn stack_compose_command_context(
+    docker: &Docker,
+    name: &str,
+) -> Result<StackComposeCommandContext, ComposeErrorResponse> {
+    let mut paths = Vec::new();
+    let mut working_dir = None;
+
+    if let Some(entry) = compose_ls()
+        .await
+        .and_then(|list| list.into_iter().find(|entry| entry.name == name))
+    {
+        for path in config_file_paths(Some(&entry.config_files), None) {
+            push_unique_path(&mut paths, path);
+        }
+    }
+
+    match docker
+        .list_containers(Some(ListContainersOptions::<String> {
+            all: true,
+            ..Default::default()
+        }))
+        .await
+    {
+        Ok(containers) => {
+            if let Some((detected_working_dir, config_files)) = containers.iter().find_map(|c| {
+                let labels = c.labels.as_ref()?;
+                if labels.get("com.docker.compose.project")?.as_str() != name {
+                    return None;
+                }
+                Some((
+                    labels
+                        .get("com.docker.compose.project.working_dir")
+                        .cloned(),
+                    labels
+                        .get("com.docker.compose.project.config_files")
+                        .cloned(),
+                ))
+            }) {
+                working_dir = detected_working_dir;
+                for path in config_file_paths(config_files.as_deref(), working_dir.as_deref()) {
+                    push_unique_path(&mut paths, path);
+                }
+
+                if paths.is_empty()
+                    && let Some(working_dir) = &working_dir
+                {
+                    let base = PathBuf::from(working_dir);
+                    for filename in COMPOSE_FILENAMES {
+                        push_unique_path(&mut paths, base.join(filename));
+                    }
+                }
+            } else if paths.is_empty() {
+                return Err(ComposeErrorResponse {
+                    error: "Stack not found".to_string(),
+                    detail: format!("No container found for stack '{name}'"),
+                });
+            }
+        }
+        Err(error) => {
+            if paths.is_empty() {
+                return Err(ComposeErrorResponse {
+                    error: "Failed to list containers".to_string(),
+                    detail: error.to_string(),
+                });
+            }
+        }
+    }
+
+    let compose_paths = existing_compose_paths(paths).await;
+    if compose_paths.is_empty() {
+        return Err(ComposeErrorResponse {
+            error: format!("Could not locate compose files for stack '{name}'"),
+            detail: "The stack has no readable Compose config files in Docker labels or docker compose ls.".to_string(),
+        });
+    }
+
+    Ok(StackComposeCommandContext {
+        working_dir,
+        compose_paths,
+    })
+}
+
+async fn existing_compose_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
+    let mut existing = Vec::new();
+    for path in paths {
+        if tokio::fs::metadata(&path)
+            .await
+            .is_ok_and(|metadata| metadata.is_file())
+        {
+            push_unique_path(&mut existing, path);
+        }
+    }
+    existing
+}
+
+fn stack_compose_command_args(
+    name: &str,
+    compose_paths: &[PathBuf],
+    action: ComposeStackAction,
+) -> Vec<String> {
+    let mut args = Vec::with_capacity(6 + compose_paths.len() * 2);
+    args.push("compose".to_string());
+    for path in compose_paths {
+        args.push("-f".to_string());
+        args.push(path.to_string_lossy().into_owned());
+    }
+    args.push("-p".to_string());
+    args.push(name.to_string());
+
+    match action {
+        ComposeStackAction::Up {
+            detach,
+            force_recreate,
+        } => {
+            args.push("up".to_string());
+            if detach {
+                args.push("--detach".to_string());
+            }
+            if force_recreate {
+                args.push("--force-recreate".to_string());
+            }
+        }
+        ComposeStackAction::Down { volumes } => {
+            args.push("down".to_string());
+            if volumes {
+                args.push("--volumes".to_string());
+            }
+        }
+    }
+
+    args
+}
+
+fn compose_command_display(args: &[String]) -> String {
+    let mut parts = Vec::with_capacity(args.len() + 1);
+    parts.push("docker");
+    parts.extend(args.iter().map(String::as_str));
+    parts.join(" ")
+}
+
 async fn write_compose_content(
     path: &FsPath,
     content: String,
@@ -592,8 +877,9 @@ async fn write_compose_content(
 #[cfg(test)]
 mod tests {
     use super::{
-        DEFAULT_COMPOSE_OVERRIDE_FILENAME, config_files_include_path, requested_compose_path,
-        stack_dokuru_override_path, write_compose_content,
+        ComposeStackAction, DEFAULT_COMPOSE_OVERRIDE_FILENAME, config_files_include_path,
+        requested_compose_path, stack_compose_command_args, stack_dokuru_override_path,
+        write_compose_content,
     };
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -675,5 +961,58 @@ mod tests {
             Some(PathBuf::from("/srv/app/docker-compose.yml")),
         );
         assert_eq!(requested_compose_path("  ", Some("/srv/app")), None);
+    }
+
+    #[test]
+    fn compose_up_command_args_include_selected_options() {
+        let args = stack_compose_command_args(
+            "dokuru-lab",
+            &[PathBuf::from("/srv/app/docker-compose.yml")],
+            ComposeStackAction::Up {
+                detach: true,
+                force_recreate: true,
+            },
+        );
+
+        assert_eq!(
+            args,
+            [
+                "compose",
+                "-f",
+                "/srv/app/docker-compose.yml",
+                "-p",
+                "dokuru-lab",
+                "up",
+                "--detach",
+                "--force-recreate",
+            ]
+        );
+    }
+
+    #[test]
+    fn compose_down_command_args_include_volumes_option() {
+        let args = stack_compose_command_args(
+            "dokuru-lab",
+            &[
+                PathBuf::from("/srv/app/docker-compose.yml"),
+                PathBuf::from("/srv/app/docker-compose.override.yml"),
+            ],
+            ComposeStackAction::Down { volumes: true },
+        );
+
+        assert_eq!(
+            args,
+            [
+                "compose",
+                "-f",
+                "/srv/app/docker-compose.yml",
+                "-f",
+                "/srv/app/docker-compose.override.yml",
+                "-p",
+                "dokuru-lab",
+                "down",
+                "--volumes",
+            ]
+        );
     }
 }

@@ -22,7 +22,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::warn;
 
-use crate::docker::{self, containers::ContainerResponse};
+use crate::docker::{
+    self,
+    containers::ContainerResponse,
+    stacks::{ComposeStackAction, run_stack_compose_action},
+};
 
 const COMPOSE_FILENAMES: &[&str] = &[
     "compose.yaml",
@@ -134,6 +138,33 @@ struct UpdateComposeFileRequest {
     content: String,
 }
 
+#[derive(Deserialize)]
+struct ComposeUpRequest {
+    #[serde(default = "default_compose_up_detach")]
+    detach: bool,
+    #[serde(default)]
+    force_recreate: bool,
+}
+
+impl Default for ComposeUpRequest {
+    fn default() -> Self {
+        Self {
+            detach: true,
+            force_recreate: false,
+        }
+    }
+}
+
+#[derive(Deserialize, Default)]
+struct ComposeDownRequest {
+    #[serde(default)]
+    volumes: bool,
+}
+
+const fn default_compose_up_detach() -> bool {
+    true
+}
+
 #[derive(Debug, Serialize)]
 struct ComposeErrorResponse {
     error: String,
@@ -210,6 +241,12 @@ async fn route(docker: &Docker, payload: &DockerCommandPayload) -> Result<Docker
         }
         ["docker", "stacks", name, "compose"] if method == "PUT" => {
             update_compose_file(docker, name, payload).await
+        }
+        ["docker", "stacks", name, "up"] if method == "POST" => {
+            compose_up_stack(docker, name, payload).await
+        }
+        ["docker", "stacks", name, "down"] if method == "POST" => {
+            compose_down_stack(docker, name, payload).await
         }
 
         _ => Ok(json_response(
@@ -1085,6 +1122,74 @@ async fn update_compose_file(
         Ok(response) => json_ok(response),
         Err(error) => json_status(500, error),
     }
+}
+
+async fn compose_up_stack(
+    docker: &Docker,
+    name: &str,
+    payload: &DockerCommandPayload,
+) -> Result<DockerCommandResponse> {
+    let request = match parse_compose_action_body::<ComposeUpRequest>(payload) {
+        Ok(request) => request,
+        Err(response) => return Ok(response),
+    };
+
+    match run_stack_compose_action(
+        docker,
+        name,
+        ComposeStackAction::Up {
+            detach: request.detach,
+            force_recreate: request.force_recreate,
+        },
+    )
+    .await
+    {
+        Ok(response) => json_ok(response),
+        Err(error) => json_status(422, error),
+    }
+}
+
+async fn compose_down_stack(
+    docker: &Docker,
+    name: &str,
+    payload: &DockerCommandPayload,
+) -> Result<DockerCommandResponse> {
+    let request = match parse_compose_action_body::<ComposeDownRequest>(payload) {
+        Ok(request) => request,
+        Err(response) => return Ok(response),
+    };
+
+    match run_stack_compose_action(
+        docker,
+        name,
+        ComposeStackAction::Down {
+            volumes: request.volumes,
+        },
+    )
+    .await
+    {
+        Ok(response) => json_ok(response),
+        Err(error) => json_status(422, error),
+    }
+}
+
+fn parse_compose_action_body<T>(payload: &DockerCommandPayload) -> Result<T, DockerCommandResponse>
+where
+    T: Default + for<'de> Deserialize<'de>,
+{
+    let Some(body) = payload.body.clone() else {
+        return Ok(T::default());
+    };
+
+    serde_json::from_value::<T>(body).map_err(|error| {
+        json_response(
+            400,
+            serde_json::json!({
+                "error": "Invalid compose action payload",
+                "detail": error.to_string(),
+            }),
+        )
+    })
 }
 
 async fn write_compose_content(

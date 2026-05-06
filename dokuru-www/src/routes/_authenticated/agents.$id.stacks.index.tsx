@@ -18,6 +18,8 @@ import {
   RotateCcw,
   X,
   ListOrdered,
+  Play,
+  Power,
 } from "lucide-react";
 import { canUseDockerAgent, dockerApi, dockerCredential, type Stack, type StackContainer } from "@/services/docker-api";
 import { Input } from "@/components/ui/input";
@@ -29,10 +31,12 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 
@@ -623,6 +627,115 @@ function ContainerRow({
   );
 }
 
+type ComposeActionKind = "up" | "down";
+type ComposeActionSubmit =
+  | { action: "up"; detach: boolean; forceRecreate: boolean }
+  | { action: "down"; volumes: boolean };
+
+function ComposeActionDialog({
+  action,
+  open,
+  isPending,
+  stackName,
+  onOpenChange,
+  onSubmit,
+}: {
+  action: ComposeActionKind;
+  open: boolean;
+  isPending: boolean;
+  stackName: string;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (payload: ComposeActionSubmit) => void;
+}) {
+  const isUp = action === "up";
+  const [detach, setDetach] = useState(true);
+  const [forceRecreate, setForceRecreate] = useState(false);
+  const [volumes, setVolumes] = useState(false);
+
+  const commandPreview = isUp
+    ? `docker compose up${detach ? " -d" : ""}${forceRecreate ? " --force-recreate" : ""}`
+    : `docker compose down${volumes ? " -v" : ""}`;
+
+  function handleSubmit() {
+    if (isUp) {
+      onSubmit({ action: "up", detach, forceRecreate });
+      return;
+    }
+    onSubmit({ action: "down", volumes });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {isUp ? <Play className="h-4 w-4 text-green-500" /> : <Power className="h-4 w-4 text-red-500" />}
+            Compose {isUp ? "Up" : "Down"}
+          </DialogTitle>
+          <DialogDescription>
+            Run Docker Compose {isUp ? "up" : "down"} for <span className="font-mono text-foreground">{stackName}</span> with selected options.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          {isUp ? (
+            <>
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/70 bg-muted/20 p-3 transition-colors hover:bg-muted/35">
+                <Checkbox checked={detach} onCheckedChange={(checked) => setDetach(checked === true)} className="mt-0.5" />
+                <span className="space-y-1 text-sm">
+                  <span className="block font-medium">Detach (-d / --detach)</span>
+                  <span className="block text-xs text-muted-foreground">Run containers in the background. Recommended for long-running services.</span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/70 bg-muted/20 p-3 transition-colors hover:bg-muted/35">
+                <Checkbox checked={forceRecreate} onCheckedChange={(checked) => setForceRecreate(checked === true)} className="mt-0.5" />
+                <span className="space-y-1 text-sm">
+                  <span className="block font-medium">Force recreate (--force-recreate)</span>
+                  <span className="block text-xs text-muted-foreground">Recreate containers even when Compose thinks their configuration is unchanged.</span>
+                </span>
+              </label>
+              {!detach && (
+                <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-300">
+                  Without detach, this request waits until <code className="font-mono">docker compose up</code> exits.
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/70 bg-muted/20 p-3 transition-colors hover:bg-muted/35">
+                <Checkbox checked={volumes} onCheckedChange={(checked) => setVolumes(checked === true)} className="mt-0.5" />
+                <span className="space-y-1 text-sm">
+                  <span className="block font-medium">Remove volumes (-v / --volumes)</span>
+                  <span className="block text-xs text-muted-foreground">Remove named and anonymous volumes declared by this Compose project.</span>
+                </span>
+              </label>
+              {volumes && (
+                <p className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-500">
+                  This can delete persistent application data. Only use it when the stack volumes are safe to remove.
+                </p>
+              )}
+            </>
+          )}
+
+          <div className="rounded-lg border border-border/70 bg-muted/25 px-3 py-2 font-mono text-xs text-muted-foreground">
+            {commandPreview}
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
+            Cancel
+          </Button>
+          <Button variant={isUp ? "default" : "destructive"} onClick={handleSubmit} disabled={isPending}>
+            {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : isUp ? <Play className="h-4 w-4" /> : <Power className="h-4 w-4" />}
+            Run {isUp ? "Up" : "Down"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ---------- Stack card ----------
 
 function StackCard({
@@ -636,8 +749,39 @@ function StackCard({
   agentUrl: string;
   token: string;
 }) {
+  const queryClient = useQueryClient();
   const [composeOpen, setComposeOpen] = useState(false);
   const [selectedComposePath, setSelectedComposePath] = useState<string | null>(null);
+  const [actionDialog, setActionDialog] = useState<ComposeActionKind | null>(null);
+
+  const actionMutation = useMutation({
+    mutationFn: async (payload: ComposeActionSubmit) => {
+      if (payload.action === "up") {
+        const res = await dockerApi.composeUpStack(agentUrl, token, stack.name, {
+          detach: payload.detach,
+          force_recreate: payload.forceRecreate,
+        });
+        return res.data;
+      }
+
+      const res = await dockerApi.composeDownStack(agentUrl, token, stack.name, {
+        volumes: payload.volumes,
+      });
+      return res.data;
+    },
+    onSuccess: (result, payload) => {
+      toast.success(`Compose ${payload.action} completed`, {
+        description: result.command,
+      });
+      setActionDialog(null);
+      void queryClient.invalidateQueries({ queryKey: ["stacks", agentId] });
+      void queryClient.invalidateQueries({ queryKey: ["containers", agentId] });
+      void queryClient.invalidateQueries({ queryKey: ["agent-dashboard", agentId] });
+    },
+    onError: (err, payload) => {
+      toast.error(composeErrorMessage(err, `Failed to run compose ${payload.action}`));
+    },
+  });
 
   const allRunning = stack.running === stack.total;
   const noneRunning = stack.running === 0;
@@ -752,11 +896,34 @@ function StackCard({
             </div>
           </div>
 
-          <div className="flex shrink-0 flex-row items-end gap-2 sm:flex-col sm:gap-1">
-            <span className="text-2xl font-bold tabular-nums leading-none">
-              {stack.total}
-            </span>
-            <span className="text-xs text-muted-foreground">containers</span>
+          <div className="flex shrink-0 flex-col items-stretch gap-3 sm:items-end">
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                size="sm"
+                className="h-8 gap-1.5 px-3 text-xs font-semibold"
+                onClick={() => setActionDialog("up")}
+                disabled={actionMutation.isPending}
+              >
+                <Play className="h-3.5 w-3.5" />
+                Up
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 border-red-500/25 px-3 text-xs font-semibold text-red-500 hover:border-red-500/35 hover:bg-red-500/10 hover:text-red-500"
+                onClick={() => setActionDialog("down")}
+                disabled={actionMutation.isPending}
+              >
+                <Power className="h-3.5 w-3.5" />
+                Down
+              </Button>
+            </div>
+            <div className="flex flex-row items-end gap-2 sm:flex-col sm:gap-1">
+              <span className="text-2xl font-bold tabular-nums leading-none">
+                {stack.total}
+              </span>
+              <span className="text-xs text-muted-foreground">containers</span>
+            </div>
           </div>
         </div>
 
@@ -784,6 +951,16 @@ function StackCard({
           composePath={activeComposePath}
           agentUrl={agentUrl}
           token={token}
+        />
+      )}
+      {actionDialog && (
+        <ComposeActionDialog
+          action={actionDialog}
+          open={!!actionDialog}
+          isPending={actionMutation.isPending}
+          stackName={stack.name}
+          onOpenChange={(open) => !open && setActionDialog(null)}
+          onSubmit={(payload) => actionMutation.mutate(payload)}
         />
       )}
     </>

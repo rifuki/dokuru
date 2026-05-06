@@ -76,6 +76,21 @@ export interface Stack {
   total: number;
 }
 
+export interface ComposeActionResponse {
+  command: string;
+  stdout: string;
+  stderr: string;
+}
+
+export interface ComposeUpOptions {
+  detach: boolean;
+  force_recreate: boolean;
+}
+
+export interface ComposeDownOptions {
+  volumes: boolean;
+}
+
 type DockerAgentLike = {
   id: string;
   token?: string | null;
@@ -179,6 +194,12 @@ export const dockerApi = {
 
   updateStackCompose: (agentUrl: string, token: string, name: string, content: string, path?: string) =>
     dockerRequest<{ path: string; content: string }>(agentUrl, token, "PUT", `/docker/stacks/${encodeURIComponent(name)}/compose`, { path }, { content }),
+
+  composeUpStack: (agentUrl: string, token: string, name: string, options: ComposeUpOptions) =>
+    dockerRequest<ComposeActionResponse>(agentUrl, token, "POST", `/docker/stacks/${encodeURIComponent(name)}/up`, undefined, options),
+
+  composeDownStack: (agentUrl: string, token: string, name: string, options: ComposeDownOptions) =>
+    dockerRequest<ComposeActionResponse>(agentUrl, token, "POST", `/docker/stacks/${encodeURIComponent(name)}/down`, undefined, options),
 
   // Networks
   listNetworks: (agentUrl: string, token: string) =>
