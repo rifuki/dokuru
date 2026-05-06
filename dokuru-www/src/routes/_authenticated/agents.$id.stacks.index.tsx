@@ -783,7 +783,7 @@ function StackCard({
     },
   });
 
-  const allRunning = stack.running === stack.total;
+  const allRunning = stack.total > 0 && stack.running === stack.total;
   const noneRunning = stack.running === 0;
   const runPct = stack.total > 0 ? (stack.running / stack.total) * 100 : 0;
 
@@ -912,7 +912,7 @@ function StackCard({
                 size="sm"
                 className="h-8 gap-1.5 border-red-500/25 px-3 text-xs font-semibold text-red-500 hover:border-red-500/35 hover:bg-red-500/10 hover:text-red-500"
                 onClick={() => setActionDialog("down")}
-                disabled={actionMutation.isPending}
+                disabled={actionMutation.isPending || noneRunning}
               >
                 <Power className="h-3.5 w-3.5" />
                 Down
@@ -937,9 +937,16 @@ function StackCard({
 
         {/* Container rows */}
         <div className="divide-y divide-border/30">
-          {stack.containers.map((c) => (
-            <ContainerRow key={c.id} container={c} agentId={agentId} />
-          ))}
+          {stack.containers.length > 0 ? (
+            stack.containers.map((c) => (
+              <ContainerRow key={c.id} container={c} agentId={agentId} />
+            ))
+          ) : (
+            <div className="flex items-center justify-between gap-3 px-5 py-4 text-sm text-muted-foreground">
+              <span>No containers are currently running for this Compose stack.</span>
+              <span className="hidden font-mono text-xs sm:inline">Use Up to recreate it.</span>
+            </div>
+          )}
         </div>
       </div>
 

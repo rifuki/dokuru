@@ -25,7 +25,7 @@ use tracing::warn;
 use crate::docker::{
     self,
     containers::ContainerResponse,
-    stacks::{ComposeStackAction, run_stack_compose_action},
+    stacks::{ComposeStackAction, collect_stacks, run_stack_compose_action},
 };
 
 const COMPOSE_FILENAMES: &[&str] = &[
@@ -102,29 +102,6 @@ struct VolumeResponse {
     name: String,
     driver: String,
     mountpoint: String,
-}
-
-#[derive(Serialize)]
-struct StackContainer {
-    id: String,
-    name: String,
-    image: String,
-    state: String,
-    status: String,
-    service: String,
-}
-
-#[derive(Serialize)]
-struct StackResponse {
-    name: String,
-    working_dir: Option<String>,
-    config_file: Option<String>,
-    dokuru_override_file: Option<String>,
-    dokuru_override_exists: bool,
-    dokuru_override_active: bool,
-    containers: Vec<StackContainer>,
-    running: usize,
-    total: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -771,94 +748,6 @@ async fn get_stack(docker: &Docker, name: &str) -> Result<DockerCommandResponse>
     )
 }
 
-async fn collect_stacks(docker: &Docker) -> Result<Vec<StackResponse>> {
-    let containers = docker
-        .list_containers(Some(ListContainersOptions::<String> {
-            all: true,
-            ..Default::default()
-        }))
-        .await
-        .wrap_err("Failed to list containers for stacks")?;
-
-    let mut stacks: HashMap<String, StackResponse> = HashMap::new();
-
-    for container in &containers {
-        let Some(labels) = container.labels.as_ref() else {
-            continue;
-        };
-        let Some(project) = labels.get("com.docker.compose.project").cloned() else {
-            continue;
-        };
-
-        let state = container.state.as_deref().unwrap_or("").to_string();
-        let is_running = state == "running";
-        let stack_container = StackContainer {
-            id: container.id.as_deref().unwrap_or("").to_string(),
-            name: container
-                .names
-                .as_deref()
-                .and_then(|names| names.first())
-                .map(|name| name.trim_start_matches('/').to_string())
-                .unwrap_or_default(),
-            image: container.image.as_deref().unwrap_or("").to_string(),
-            state: state.clone(),
-            status: container.status.as_deref().unwrap_or("").to_string(),
-            service: labels
-                .get("com.docker.compose.service")
-                .cloned()
-                .unwrap_or_default(),
-        };
-        let entry = stacks
-            .entry(project.clone())
-            .or_insert_with(|| StackResponse {
-                name: project.clone(),
-                working_dir: labels
-                    .get("com.docker.compose.project.working_dir")
-                    .cloned(),
-                config_file: labels
-                    .get("com.docker.compose.project.config_files")
-                    .cloned(),
-                dokuru_override_file: None,
-                dokuru_override_exists: false,
-                dokuru_override_active: false,
-                containers: Vec::new(),
-                running: 0,
-                total: 0,
-            });
-
-        if is_running {
-            entry.running += 1;
-        }
-        entry.total += 1;
-        entry.containers.push(stack_container);
-    }
-
-    let mut result: Vec<StackResponse> = stacks.into_values().collect();
-    for stack in &mut result {
-        annotate_dokuru_override(stack).await;
-    }
-    result.sort_by(|a, b| a.name.cmp(&b.name));
-    Ok(result)
-}
-
-async fn annotate_dokuru_override(stack: &mut StackResponse) {
-    let Some(path) =
-        stack_dokuru_override_path(stack.working_dir.as_deref(), stack.config_file.as_deref())
-    else {
-        return;
-    };
-
-    stack.dokuru_override_active = config_files_include_path(
-        stack.config_file.as_deref(),
-        stack.working_dir.as_deref(),
-        &path,
-    );
-    stack.dokuru_override_exists = tokio::fs::metadata(&path)
-        .await
-        .is_ok_and(|metadata| metadata.is_file());
-    stack.dokuru_override_file = Some(path.to_string_lossy().to_string());
-}
-
 fn stack_dokuru_override_path(
     working_dir: Option<&str>,
     config_files: Option<&str>,
@@ -896,16 +785,6 @@ fn compose_override_filename(compose_path: Option<&FsPath>) -> String {
     };
 
     format!("{prefix}.override.{extension}")
-}
-
-fn config_files_include_path(
-    config_files: Option<&str>,
-    working_dir: Option<&str>,
-    needle: &FsPath,
-) -> bool {
-    config_file_paths(config_files, working_dir)
-        .iter()
-        .any(|path| path == needle || path.file_name() == needle.file_name())
 }
 
 fn config_file_paths(config_files: Option<&str>, working_dir: Option<&str>) -> Vec<PathBuf> {

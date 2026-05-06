@@ -8,6 +8,7 @@ use axum::{
 use bollard::{Docker, container::ListContainersOptions};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::io::ErrorKind;
 use std::path::{Path as FsPath, PathBuf};
 use tracing::warn;
 
@@ -21,7 +22,9 @@ const COMPOSE_FILENAMES: &[&str] = &[
     "docker-compose.yml",
     "compose.yml",
 ];
+const COMPOSE_SEARCH_DIRS: &[&str] = &["/root/apps"];
 const DEFAULT_COMPOSE_OVERRIDE_FILENAME: &str = "docker-compose.override.yml";
+const STACK_CACHE_FILENAME: &str = "compose-stacks.json";
 
 #[derive(Serialize)]
 pub struct StackContainer {
@@ -46,6 +49,13 @@ pub struct StackResponse {
     pub total: usize,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct StackCacheEntry {
+    pub name: String,
+    pub working_dir: Option<String>,
+    pub config_file: Option<String>,
+}
+
 pub fn routes<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
@@ -63,14 +73,30 @@ where
 
 async fn list_stacks() -> Result<Json<Vec<StackResponse>>, StatusCode> {
     let docker = get_docker_client().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    collect_stacks(&docker)
+        .await
+        .map(Json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
 
+async fn get_stack(Path(name): Path<String>) -> Result<Json<StackResponse>, StatusCode> {
+    let docker = get_docker_client().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    collect_stacks(&docker)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .into_iter()
+        .find(|stack| stack.name == name)
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+pub async fn collect_stacks(docker: &Docker) -> Result<Vec<StackResponse>, bollard::errors::Error> {
     let containers = docker
         .list_containers(Some(ListContainersOptions::<String> {
             all: true,
             ..Default::default()
         }))
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .await?;
 
     let mut stacks: HashMap<String, StackResponse> = HashMap::new();
 
@@ -127,87 +153,276 @@ async fn list_stacks() -> Result<Json<Vec<StackResponse>>, StatusCode> {
         entry.containers.push(sc);
     }
 
+    merge_compose_ls_stacks(&mut stacks).await;
+    merge_cached_stacks(&mut stacks).await;
+    merge_scanned_stacks(&mut stacks).await;
+
     let mut result: Vec<StackResponse> = stacks.into_values().collect();
     for stack in &mut result {
         annotate_dokuru_override(stack).await;
     }
     result.sort_by(|a, b| a.name.cmp(&b.name));
-    Ok(Json(result))
+    write_stack_cache_from_stacks(&result).await;
+    Ok(result)
 }
 
-async fn get_stack(Path(name): Path<String>) -> Result<Json<StackResponse>, StatusCode> {
-    let docker = get_docker_client().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+async fn merge_compose_ls_stacks(stacks: &mut HashMap<String, StackResponse>) {
+    let Some(entries) = compose_ls().await else {
+        return;
+    };
 
-    let containers = docker
-        .list_containers(Some(ListContainersOptions::<String> {
-            all: true,
-            ..Default::default()
-        }))
+    for entry in entries {
+        if stacks.contains_key(&entry.name) || entry.config_files.trim().is_empty() {
+            continue;
+        }
+        stacks.insert(
+            entry.name.clone(),
+            StackResponse {
+                name: entry.name,
+                working_dir: None,
+                config_file: Some(entry.config_files),
+                dokuru_override_file: None,
+                dokuru_override_exists: false,
+                dokuru_override_active: false,
+                containers: Vec::new(),
+                running: 0,
+                total: 0,
+            },
+        );
+    }
+}
+
+async fn merge_cached_stacks(stacks: &mut HashMap<String, StackResponse>) {
+    for entry in read_stack_cache().await {
+        if stacks.contains_key(&entry.name) || !stack_cache_entry_is_usable(&entry).await {
+            continue;
+        }
+        stacks.insert(entry.name.clone(), stack_from_cache_entry(entry));
+    }
+}
+
+async fn merge_scanned_stacks(stacks: &mut HashMap<String, StackResponse>) {
+    for entry in scan_compose_stack_entries().await {
+        if stacks.contains_key(&entry.name) {
+            continue;
+        }
+        stacks.insert(entry.name.clone(), stack_from_cache_entry(entry));
+    }
+}
+
+fn stack_from_cache_entry(entry: StackCacheEntry) -> StackResponse {
+    StackResponse {
+        name: entry.name,
+        working_dir: entry.working_dir,
+        config_file: entry.config_file,
+        dokuru_override_file: None,
+        dokuru_override_exists: false,
+        dokuru_override_active: false,
+        containers: Vec::new(),
+        running: 0,
+        total: 0,
+    }
+}
+
+fn dokuru_data_dir() -> PathBuf {
+    std::env::var("DOKURU_DATA_DIR").map_or_else(
+        |_| {
+            if cfg!(debug_assertions) {
+                std::env::current_dir()
+                    .unwrap_or_else(|_| PathBuf::from("."))
+                    .join(".dokuru")
+            } else {
+                PathBuf::from("/var/lib/dokuru")
+            }
+        },
+        PathBuf::from,
+    )
+}
+
+fn stack_cache_path() -> PathBuf {
+    dokuru_data_dir().join(STACK_CACHE_FILENAME)
+}
+
+async fn read_stack_cache() -> Vec<StackCacheEntry> {
+    let path = stack_cache_path();
+    match tokio::fs::read(&path).await {
+        Ok(json) => match serde_json::from_slice::<Vec<StackCacheEntry>>(&json) {
+            Ok(entries) => entries,
+            Err(error) => {
+                warn!(path = %path.display(), %error, "Failed to parse compose stack cache");
+                Vec::new()
+            }
+        },
+        Err(error) if error.kind() == ErrorKind::NotFound => Vec::new(),
+        Err(error) => {
+            warn!(path = %path.display(), %error, "Failed to read compose stack cache");
+            Vec::new()
+        }
+    }
+}
+
+async fn write_stack_cache(entries: &[StackCacheEntry]) {
+    let path = stack_cache_path();
+    let Some(parent) = path.parent() else {
+        return;
+    };
+    if let Err(error) = tokio::fs::create_dir_all(parent).await {
+        warn!(path = %parent.display(), %error, "Failed to create compose stack cache directory");
+        return;
+    }
+    let json = match serde_json::to_vec_pretty(entries) {
+        Ok(json) => json,
+        Err(error) => {
+            warn!(%error, "Failed to serialize compose stack cache");
+            return;
+        }
+    };
+    if let Err(error) = tokio::fs::write(&path, json).await {
+        warn!(path = %path.display(), %error, "Failed to write compose stack cache");
+    }
+}
+
+async fn write_stack_cache_from_stacks(stacks: &[StackResponse]) {
+    let mut entries = Vec::new();
+    for stack in stacks {
+        if let Some(entry) = stack_cache_entry_from_stack(stack) {
+            entries.push(entry);
+        }
+    }
+    write_stack_cache(&entries).await;
+}
+
+fn stack_cache_entry_from_stack(stack: &StackResponse) -> Option<StackCacheEntry> {
+    if stack.working_dir.is_none() && stack.config_file.is_none() {
+        return None;
+    }
+    Some(StackCacheEntry {
+        name: stack.name.clone(),
+        working_dir: stack.working_dir.clone(),
+        config_file: stack.config_file.clone(),
+    })
+}
+
+pub async fn cached_stack_entry(name: &str) -> Option<StackCacheEntry> {
+    read_stack_cache().await.into_iter().find(|entry| {
+        entry.name == name && (entry.working_dir.is_some() || entry.config_file.is_some())
+    })
+}
+
+async fn scanned_stack_entry(name: &str) -> Option<StackCacheEntry> {
+    scan_compose_stack_entries()
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .into_iter()
+        .find(|entry| entry.name == name)
+}
 
-    let mut stack: Option<StackResponse> = None;
-
-    for c in &containers {
-        let Some(labels) = c.labels.as_ref() else {
+async fn scan_compose_stack_entries() -> Vec<StackCacheEntry> {
+    let mut entries = Vec::new();
+    for base_dir in COMPOSE_SEARCH_DIRS {
+        let Ok(mut dirs) = tokio::fs::read_dir(base_dir).await else {
             continue;
         };
-        let Some(project) = labels.get("com.docker.compose.project") else {
-            continue;
-        };
-        if *project != name {
-            continue;
+
+        loop {
+            let entry = match dirs.next_entry().await {
+                Ok(Some(entry)) => entry,
+                Ok(None) => break,
+                Err(error) => {
+                    warn!(path = %base_dir, %error, "Failed to scan compose stack directory");
+                    break;
+                }
+            };
+
+            let Ok(file_type) = entry.file_type().await else {
+                continue;
+            };
+            if !file_type.is_dir() {
+                continue;
+            }
+
+            let working_dir = entry.path();
+            let Some(compose_path) = first_existing_compose_path(&working_dir).await else {
+                continue;
+            };
+            let Some(name) = working_dir.file_name().and_then(|name| name.to_str()) else {
+                continue;
+            };
+
+            entries.push(StackCacheEntry {
+                name: name.to_string(),
+                working_dir: Some(working_dir.to_string_lossy().into_owned()),
+                config_file: Some(compose_path.to_string_lossy().into_owned()),
+            });
         }
-
-        let state = c.state.as_deref().unwrap_or("").to_string();
-        let is_running = state == "running";
-
-        let sc = StackContainer {
-            id: c.id.as_deref().unwrap_or("").to_string(),
-            name: c
-                .names
-                .as_deref()
-                .and_then(|n| n.first())
-                .map(|n| n.trim_start_matches('/').to_string())
-                .unwrap_or_default(),
-            image: c.image.as_deref().unwrap_or("").to_string(),
-            state: state.clone(),
-            status: c.status.as_deref().unwrap_or("").to_string(),
-            service: labels
-                .get("com.docker.compose.service")
-                .cloned()
-                .unwrap_or_default(),
-        };
-
-        let entry = stack.get_or_insert_with(|| StackResponse {
-            name: name.clone(),
-            working_dir: labels
-                .get("com.docker.compose.project.working_dir")
-                .cloned(),
-            config_file: labels
-                .get("com.docker.compose.project.config_files")
-                .cloned(),
-            dokuru_override_file: None,
-            dokuru_override_exists: false,
-            dokuru_override_active: false,
-            containers: Vec::new(),
-            running: 0,
-            total: 0,
-        });
-
-        if is_running {
-            entry.running += 1;
-        }
-        entry.total += 1;
-        entry.containers.push(sc);
     }
 
-    if let Some(mut stack) = stack {
-        annotate_dokuru_override(&mut stack).await;
-        Ok(Json(stack))
-    } else {
-        Err(StatusCode::NOT_FOUND)
+    entries.sort_by(|left, right| left.name.cmp(&right.name));
+    entries.dedup_by(|left, right| left.name == right.name);
+    entries
+}
+
+async fn first_existing_compose_path(working_dir: &FsPath) -> Option<PathBuf> {
+    for filename in COMPOSE_FILENAMES {
+        let path = working_dir.join(filename);
+        if tokio::fs::metadata(&path)
+            .await
+            .is_ok_and(|metadata| metadata.is_file())
+        {
+            return Some(path);
+        }
     }
+    None
+}
+
+async fn remember_stack_context(name: &str, context: &StackComposeCommandContext) {
+    let config_file = context
+        .compose_paths
+        .iter()
+        .map(|path| path.to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join(",");
+    let mut entries = read_stack_cache().await;
+    entries.retain(|entry| entry.name != name);
+    entries.push(StackCacheEntry {
+        name: name.to_string(),
+        working_dir: context.working_dir.clone(),
+        config_file: if config_file.is_empty() {
+            None
+        } else {
+            Some(config_file)
+        },
+    });
+    entries.sort_by(|left, right| left.name.cmp(&right.name));
+    write_stack_cache(&entries).await;
+}
+
+async fn stack_cache_entry_is_usable(entry: &StackCacheEntry) -> bool {
+    for path in config_file_paths(entry.config_file.as_deref(), entry.working_dir.as_deref()) {
+        if tokio::fs::metadata(&path)
+            .await
+            .is_ok_and(|metadata| metadata.is_file())
+        {
+            return true;
+        }
+    }
+
+    if let Some(working_dir) = entry
+        .working_dir
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
+        let base = PathBuf::from(working_dir);
+        for filename in COMPOSE_FILENAMES {
+            if tokio::fs::metadata(base.join(filename))
+                .await
+                .is_ok_and(|metadata| metadata.is_file())
+            {
+                return true;
+            }
+        }
+    }
+
+    false
 }
 
 async fn annotate_dokuru_override(stack: &mut StackResponse) {
@@ -498,6 +713,9 @@ async fn compose_file_candidates(
     });
 
     let Some((working_dir, config_files)) = labels else {
+        if let Some(working_dir) = saved_compose_file_candidates(name, &mut paths).await {
+            return Ok((paths, working_dir));
+        }
         if !paths.is_empty() {
             return Ok((paths, None));
         }
@@ -524,6 +742,48 @@ async fn compose_file_candidates(
     }
 
     Ok((paths, working_dir))
+}
+
+async fn saved_compose_file_candidates(
+    name: &str,
+    paths: &mut Vec<PathBuf>,
+) -> Option<Option<String>> {
+    if let Some(entry) = cached_stack_entry(name).await {
+        let working_dir = push_stack_entry_compose_paths(paths, &entry);
+        if !paths.is_empty() {
+            return Some(working_dir);
+        }
+    }
+
+    if let Some(entry) = scanned_stack_entry(name).await {
+        let working_dir = push_stack_entry_compose_paths(paths, &entry);
+        if !paths.is_empty() {
+            return Some(working_dir);
+        }
+    }
+
+    None
+}
+
+fn push_stack_entry_compose_paths(
+    paths: &mut Vec<PathBuf>,
+    entry: &StackCacheEntry,
+) -> Option<String> {
+    for path in config_file_paths(entry.config_file.as_deref(), entry.working_dir.as_deref()) {
+        push_unique_path(paths, path);
+    }
+    if let Some(working_dir) = &entry.working_dir {
+        let base = PathBuf::from(working_dir);
+        for filename in COMPOSE_FILENAMES {
+            push_unique_path(paths, base.join(filename));
+        }
+    }
+    if let Some(path) =
+        stack_dokuru_override_path(entry.working_dir.as_deref(), entry.config_file.as_deref())
+    {
+        push_unique_path(paths, path);
+    }
+    entry.working_dir.clone()
 }
 
 async fn resolve_compose_file(
@@ -683,6 +943,7 @@ pub async fn run_stack_compose_action(
     action: ComposeStackAction,
 ) -> Result<ComposeActionResponse, ComposeErrorResponse> {
     let context = stack_compose_command_context(docker, name).await?;
+    remember_stack_context(name, &context).await;
     let args = stack_compose_command_args(name, &context.compose_paths, action);
     let command_display = compose_command_display(&args);
 
@@ -767,11 +1028,6 @@ async fn stack_compose_command_context(
                         push_unique_path(&mut paths, base.join(filename));
                     }
                 }
-            } else if paths.is_empty() {
-                return Err(ComposeErrorResponse {
-                    error: "Stack not found".to_string(),
-                    detail: format!("No container found for stack '{name}'"),
-                });
             }
         }
         Err(error) => {
@@ -782,6 +1038,37 @@ async fn stack_compose_command_context(
                 });
             }
         }
+    }
+
+    if let Some(entry) = cached_stack_entry(name).await {
+        if working_dir.is_none() {
+            working_dir.clone_from(&entry.working_dir);
+        }
+        for path in config_file_paths(entry.config_file.as_deref(), working_dir.as_deref()) {
+            push_unique_path(&mut paths, path);
+        }
+        if let Some(working_dir) = &working_dir {
+            let base = PathBuf::from(working_dir);
+            for filename in COMPOSE_FILENAMES {
+                push_unique_path(&mut paths, base.join(filename));
+            }
+        }
+    }
+
+    if let Some(entry) = scanned_stack_entry(name).await {
+        if working_dir.is_none() {
+            working_dir.clone_from(&entry.working_dir);
+        }
+        for path in config_file_paths(entry.config_file.as_deref(), working_dir.as_deref()) {
+            push_unique_path(&mut paths, path);
+        }
+    }
+
+    if paths.is_empty() {
+        return Err(ComposeErrorResponse {
+            error: "Stack not found".to_string(),
+            detail: format!("No Compose metadata found for stack '{name}'"),
+        });
     }
 
     let compose_paths = existing_compose_paths(paths).await;
