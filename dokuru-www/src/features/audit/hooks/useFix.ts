@@ -217,7 +217,16 @@ export type TargetConfig = {
     cpuShares: number;
     pidsLimit: number;
     strategy: "docker_update" | "compose_update" | "dokuru_override" | "dockerfile_update" | "recreate";
+    user?: string;
 };
+
+function suggestedNonRootUser(user?: string) {
+    return user && /^([1-9]\d*):(\d+)$/.test(user) ? user : "1000:1000";
+}
+
+function finalStepIndexFromJob(agentId: string, ruleId: string, fallback: number) {
+    return useAuditStore.getState().fixJobs[fixJobKey(agentId, ruleId)]?.stepIndex ?? fallback;
+}
 
 function normalizePreviewStrategy(ruleId: string, strategy: string, canCompose: boolean): TargetConfig["strategy"] {
     if (strategy === "docker_update" || strategy === "compose_update" || strategy === "dokuru_override" || strategy === "dockerfile_update" || strategy === "recreate") {
@@ -304,6 +313,7 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token, auditTimesta
                             cpuShares: target.suggestion?.cpu_shares ?? fallback.cpuShares,
                             pidsLimit: target.suggestion?.pids_limit ?? fallback.pidsLimit,
                             strategy: normalizePreviewStrategy(result.rule.id, target.strategy, Boolean(target.compose_project && target.compose_service)),
+                            user: result.rule.id === "4.1" ? suggestedNonRootUser(target.suggested_user) : undefined,
                         };
                     })(),
                 ])));
@@ -348,6 +358,7 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token, auditTimesta
                 base.cpu_shares = config?.cpuShares ?? fallback.cpuShares;
                 base.pids_limit = config?.pidsLimit ?? fallback.pidsLimit;
             }
+            if (ruleId === "4.1") base.user = suggestedNonRootUser(config?.user ?? target.suggested_user);
             return base;
         });
     }, [preview, targetConfig]);
@@ -370,7 +381,7 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token, auditTimesta
                 ruleId: rule.id,
                 targets,
             });
-            setStepIndex(steps.length);
+            setStepIndex(finalStepIndexFromJob(agentId, rule.id, fixOutcome.status === "Applied" ? steps.length : 0));
             setOutcome(fixOutcome);
             setStep("result");
             await queryClient.invalidateQueries({ queryKey: ["fix-history"] });
@@ -393,7 +404,7 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token, auditTimesta
                 requires_restart: false,
                 requires_elevation: false,
             };
-            setStepIndex(steps.length);
+            setStepIndex(finalStepIndexFromJob(agentId, rule.id, 0));
             setOutcome(errOutcome);
             setStep("result");
             if (shouldShowRouteFixToast(agentId)) {

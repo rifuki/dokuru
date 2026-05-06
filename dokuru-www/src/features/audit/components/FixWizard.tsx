@@ -177,6 +177,10 @@ function valueMeta(ruleId: string) {
     return { label: "Limit", unit: "PIDs", key: "pidsLimit" as const, min: 50 };
 }
 
+function isValidNonRootUser(user?: string) {
+    return /^([1-9]\d*):(\d+)$/.test(user ?? "");
+}
+
 function ApplyModePicker({
     value,
     canCompose,
@@ -383,6 +387,7 @@ function ConfirmStep({
     const isRecreate = isContainerRecreateRule(rule.id);
     const isCgroup = isCgroupRule(rule.id);
     const isImageConfig = isImageConfigRecreateRule(rule.id);
+    const isNonRootUserRule = rule.id === "4.1";
     const isNamespace = isNamespaceIsolationRule(rule.id);
     const isRuntimeIsolation = isRuntimeIsolationRule(rule.id);
     const isDaemonDefault = rule.id === "2.15";
@@ -396,7 +401,11 @@ function ConfirmStep({
         const value = config[meta.key] ?? 0;
         return value < meta.min;
     });
-    const applyDisabled = previewLoading || hasInvalidValues;
+    const hasInvalidUsers = isNonRootUserRule && targets.some(target => {
+        const user = targetConfig[target.container_id]?.user ?? target.suggested_user;
+        return !isValidNonRootUser(user);
+    });
+    const applyDisabled = previewLoading || hasInvalidValues || hasInvalidUsers;
 
     return (
         <div className="flex flex-col gap-5">
@@ -523,6 +532,8 @@ function ConfirmStep({
                                 : dockerfileSnippet(rule.id, [target])
                                   ? "Dockerfile not detected from Compose build"
                                   : IMAGE_CONFIG_MODE_OPTIONS[0].title;
+                            const selectedUser = config?.user ?? target.suggested_user ?? "1000:1000";
+                            const selectedUserValid = isValidNonRootUser(selectedUser);
 
                             return (
                                 <div
@@ -596,6 +607,27 @@ function ConfirmStep({
                                         ) : (
                                             <StaticModePanel strategy="recreate" />
                                         )
+                                    )}
+
+                                    {isNonRootUserRule && config && (
+                                        <label className="audit-fix-target-value text-[10px] text-white/35">
+                                            <span className="audit-fix-target-value-label uppercase tracking-[0.12em]">Run as <span className="text-white/20">UID:GID</span></span>
+                                            <input
+                                                value={selectedUser}
+                                                onChange={(e) => onTargetChange(target.container_id, { user: e.target.value })}
+                                                className={cn(
+                                                    "audit-fix-number-input h-9 w-full rounded-md border bg-black/30 px-3 text-right text-[13px] font-semibold outline-none transition-colors focus:bg-black/45",
+                                                    selectedUserValid
+                                                        ? "border-white/10 text-white/85 focus:border-[#2496ED]/60"
+                                                        : "border-red-500/60 text-red-400 focus:border-red-500/80"
+                                                )}
+                                            />
+                                            <span className={cn("text-[9px]", selectedUserValid ? "text-[#2496ED]/58" : "text-red-400/80")}>
+                                                {selectedUserValid
+                                                    ? target.suggested_user_source ?? "inferred by agent"
+                                                    : "Use non-root numeric UID:GID, e.g. 1000:1000"}
+                                            </span>
+                                        </label>
                                     )}
 
                                     {isCgroup && config && (
@@ -765,8 +797,12 @@ function progressModeLabel(progressEvents: FixProgress[]) {
     return "Live";
 }
 
-function FixStepChecklist({ ruleId, stepIndex, complete = false }: { ruleId: string; stepIndex: number; complete?: boolean }) {
+type FixChecklistState = "running" | "applied" | "blocked" | "guided";
+
+function FixStepChecklist({ ruleId, stepIndex, state = "running" }: { ruleId: string; stepIndex: number; state?: FixChecklistState }) {
     const steps = getFixSteps(ruleId);
+    const complete = state === "applied";
+    const blockedIndex = Math.min(Math.max(stepIndex, 0), Math.max(steps.length - 1, 0));
 
     return (
         <div className="rounded-lg border border-white/8 bg-[#050507] overflow-hidden">
@@ -782,14 +818,16 @@ function FixStepChecklist({ ruleId, stepIndex, complete = false }: { ruleId: str
             <div className="p-4 space-y-2.5">
                 {steps.map((s, i) => {
                     const done = complete || i < stepIndex;
-                    const active = !complete && i === stepIndex;
-                    const pending = !complete && i > stepIndex;
+                    const blocked = state === "blocked" && i === blockedIndex;
+                    const active = state === "running" && i === stepIndex;
+                    const pending = !complete && !blocked && !active && i >= stepIndex;
                     return (
                         <div
                             key={i}
                             className={cn(
                                 "flex items-start gap-3 text-xs font-mono transition-all duration-300",
                                 done && "text-emerald-400",
+                                blocked && "text-rose-400",
                                 active && "text-white",
                                 pending && "text-white/20"
                             )}
@@ -797,6 +835,8 @@ function FixStepChecklist({ ruleId, stepIndex, complete = false }: { ruleId: str
                             <span className="shrink-0 w-4 text-center mt-px">
                                 {done
                                     ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                                    : blocked
+                                    ? <XCircle className="h-3.5 w-3.5 text-rose-400" />
                                     : active
                                     ? <Loader2 className="h-3.5 w-3.5 text-[#2496ED] animate-spin" />
                                     : <span className="inline-block w-3.5 h-3.5 rounded-full border border-white/10" />
@@ -831,7 +871,7 @@ function ApplyingStep({
                 </span>
             </div>
 
-            <FixStepChecklist ruleId={ruleId} stepIndex={stepIndex} />
+            <FixStepChecklist ruleId={ruleId} stepIndex={stepIndex} state="running" />
 
             <p className="text-[11px] text-white/30 font-mono text-center">
                 Live progress is streamed from dokuru-agent. Cancel closes the stream and asks the agent to stop the active task.
@@ -897,7 +937,11 @@ function ResultStep({
                                 isApplied ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-300" : isBlocked ? "border-rose-400/20 bg-rose-500/10 text-rose-300" : "border-amber-400/20 bg-amber-500/10 text-amber-300"
                             )}>{outcome.status}</span>
                         </div>
-                        <p className="mt-1 text-xs leading-relaxed text-white/48">Rule {result.rule.id} finished on the agent. Review the affected targets and terminal transcript before re-running the audit.</p>
+                        <p className="mt-1 text-xs leading-relaxed text-white/48">
+                            {isApplied
+                                ? `Rule ${result.rule.id} finished on the agent. Re-run the audit to verify the score.`
+                                : outcome.message}
+                        </p>
                     </div>
                 </div>
 
@@ -917,7 +961,7 @@ function ResultStep({
                 </div>
             </div>
 
-            <FixStepChecklist ruleId={result.rule.id} stepIndex={stepIndex} complete={isApplied} />
+            <FixStepChecklist ruleId={result.rule.id} stepIndex={stepIndex} state={isApplied ? "applied" : isBlocked ? "blocked" : "guided"} />
 
             {/* Flags */}
             {(outcome.requires_elevation || outcome.requires_restart) && (

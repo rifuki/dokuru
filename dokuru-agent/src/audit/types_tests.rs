@@ -353,6 +353,8 @@ mod tests {
             image: "nginx:alpine".to_string(),
             was_running: true,
             snapshot_path: "/var/lib/dokuru/container-snapshots/web.test.json".to_string(),
+            original_user: Some("root/default".to_string()),
+            snapshot_note: Some("Full Docker inspect and create config captured".to_string()),
         };
 
         let json = serde_json::to_string(&target).unwrap();

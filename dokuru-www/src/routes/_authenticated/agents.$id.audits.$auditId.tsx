@@ -611,7 +611,7 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
   const isPartialAppliedOutcome = isCurrentFixJob
     && fixJob?.status === "applied"
     && !isFullyAppliedOutcome(currentJobOutcome ?? currentStoredOutcome);
-  const isFixBlocked = isCurrentFixJob && (fixJob?.status === "blocked" || fixJob?.status === "failed" || storedOutcome?.status === "Blocked" || isPartialAppliedOutcome);
+  const isFixBlocked = isCurrentFixJob && (fixJob?.status === "blocked" || fixJob?.status === "failed" || currentStoredOutcome?.status === "Blocked" || isPartialAppliedOutcome);
   const tabs = [
     { id: "overview" as const, label: "Overview", show: true },
     { id: "fix" as const, label: "Fix", show: hasFix },
@@ -677,18 +677,18 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
                 e.stopPropagation();
                 if (appliedFixEntry) {
                   useAuditStore.getState().setFixOutcome(agentId, rule.id, appliedFixEntry.outcome);
-                } else if (!isFixed && storedOutcome) {
+                } else if (!isFixed && storedOutcome && !isFixBlocked) {
                   useAuditStore.getState().setFixOutcome(agentId, rule.id, null);
                 }
                 onOpenWizard(result);
               }}
               className={cn(
                 "inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-md text-white transition-all shadow-sm",
-                isFixed ? "bg-emerald-600 hover:bg-emerald-700" : "bg-[#2496ED] hover:bg-[#1d7ac7]",
+                isFixed ? "bg-emerald-600 hover:bg-emerald-700" : isFixBlocked ? "bg-amber-600 hover:bg-amber-700" : "bg-[#2496ED] hover:bg-[#1d7ac7]",
               )}
             >
-              {isFixing ? <Loader2 className="h-3 w-3 animate-spin" /> : isFixed ? <ShieldCheck className="h-3 w-3" /> : <Wrench className="h-3 w-3" />}
-              {isFixing ? "View Progress" : isFixed ? "View Result" : "Apply Fix"}
+              {isFixing ? <Loader2 className="h-3 w-3 animate-spin" /> : isFixed ? <ShieldCheck className="h-3 w-3" /> : isFixBlocked ? <AlertTriangle className="h-3 w-3" /> : <Wrench className="h-3 w-3" />}
+              {isFixing ? "View Progress" : isFixed || isFixBlocked ? "View Result" : "Apply Fix"}
             </button>
           )}
           <button onClick={() => onOpenChange(!open)} className="p-1 hover:bg-muted/40 rounded transition-colors">

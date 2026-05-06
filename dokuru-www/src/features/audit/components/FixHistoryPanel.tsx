@@ -232,7 +232,11 @@ export function FixHistoryPanel({
                                                     {entry.container_rollback_targets?.slice(0, 4).map((target) => (
                                                         <div key={`${target.container_id}:${target.snapshot_path}`} className="flex flex-col gap-1 text-xs font-mono text-white/45 sm:flex-row sm:items-center sm:justify-between">
                                                             <span className="truncate text-white/65">{target.container_name || target.container_id.slice(0, 12)}</span>
-                                                            <span>{target.was_running ? "full inspect snapshot · running" : "full inspect snapshot · stopped"}</span>
+                                                            <span>
+                                                                {target.snapshot_note ?? "full inspect snapshot"}
+                                                                {target.original_user ? ` · was ${target.original_user}` : ""}
+                                                                {target.was_running ? " · running" : " · stopped"}
+                                                            </span>
                                                         </div>
                                                     ))}
                                                 </div>

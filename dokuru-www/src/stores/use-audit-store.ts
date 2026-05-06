@@ -133,6 +133,19 @@ function isFullyAppliedOutcome(outcome: FixOutcome) {
     return outcome.status === "Applied" && !/\bFailed\s+\d+:/i.test(outcome.message);
 }
 
+function finalFixStepIndex(status: FixJobStatus, events: FixProgress[]) {
+    if (status === "applied") return Number.MAX_SAFE_INTEGER;
+
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+        if (events[index].status === "error") return Math.max(0, events[index].step - 1);
+    }
+
+    const completedStep = events.reduce((max, event) => (
+        event.status === "done" ? Math.max(max, event.step) : max
+    ), 0);
+    return Math.max(0, completedStep);
+}
+
 const createIdleStream = (): AuditStreamState => ({
     status: "idle",
     total: 0,
@@ -625,7 +638,7 @@ export const useAuditStore = create<AuditState>((set) => ({
                             outcome,
                             error: status === "applied" ? undefined : outcome.message,
                             progressEvents: events,
-                            stepIndex: Number.MAX_SAFE_INTEGER,
+                            stepIndex: finalFixStepIndex(status, events),
                             completedAt: new Date().toISOString(),
                         },
                     },
@@ -693,6 +706,7 @@ export const useAuditStore = create<AuditState>((set) => ({
                             outcome,
                             error: message,
                             progressEvents: streamEvents,
+                            stepIndex: finalFixStepIndex("failed", streamEvents),
                             completedAt: new Date().toISOString(),
                         },
                     },

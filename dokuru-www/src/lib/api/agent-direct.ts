@@ -94,6 +94,8 @@ export interface FixPreviewTarget {
   compose_service?: string;
   dockerfile_path?: string;
   dockerfile_context?: string;
+  suggested_user?: string;
+  suggested_user_source?: string;
 }
 
 export interface FixPreview {
@@ -139,6 +141,8 @@ export interface FixHistoryEntry {
     image: string;
     was_running: boolean;
     snapshot_path: string;
+    original_user?: string;
+    snapshot_note?: string;
   }>;
   progress_events?: FixProgress[];
   rollback_note?: string;

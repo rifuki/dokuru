@@ -7,11 +7,13 @@ use crate::audit::types::{
 use bollard::{
     Docker,
     container::{
-        Config, CreateContainerOptions, ListContainersOptions, RemoveContainerOptions,
+        Config, CreateContainerOptions, ListContainersOptions, LogOutput, RemoveContainerOptions,
         StartContainerOptions, StopContainerOptions, UpdateContainerOptions,
     },
+    exec::{CreateExecOptions, StartExecOptions, StartExecResults},
     models::{ContainerInspectResponse, ContainerSummary, HealthConfig, MountPointTypeEnum},
 };
+use futures::StreamExt;
 use serde_yaml::{Mapping as YamlMapping, Value as YamlValue};
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write as _;
@@ -1956,6 +1958,21 @@ fn inspect_image_name(inspect: &ContainerInspectResponse) -> String {
         .to_lowercase()
 }
 
+#[derive(Debug, Clone)]
+struct NonRootUserSelection {
+    user: String,
+    source: String,
+}
+
+fn uid_gid_user(uid: u32, gid: u32) -> String {
+    format!("{uid}:{gid}")
+}
+
+fn normalize_non_root_user(value: &str) -> Option<String> {
+    let (uid, gid) = parse_user_spec_uid_gid(value)?;
+    (uid != 0).then(|| uid_gid_user(uid, gid))
+}
+
 fn known_image_non_root_user(inspect: &ContainerInspectResponse) -> Option<&'static str> {
     let image = inspect_image_name(inspect);
     if image.contains("postgres") {
@@ -1968,127 +1985,330 @@ fn known_image_non_root_user(inspect: &ContainerInspectResponse) -> Option<&'sta
     if image.contains("caddy") {
         return Some("1000:1000");
     }
+    if image.contains("node") {
+        return Some("1000:1000");
+    }
+    if image.contains("nginx") {
+        return Some("101:101");
+    }
+    if image.contains("mysql")
+        || image.contains("mariadb")
+        || image.contains("mongo")
+        || image.contains("rabbitmq")
+        || image.contains("redis")
+    {
+        return Some("999:999");
+    }
 
     None
 }
 
-fn image_uses_root_entrypoint_with_writable_state(inspect: &ContainerInspectResponse) -> bool {
-    let image = inspect_image_name(inspect);
-    [
-        "caddy", "mariadb", "mongo", "mysql", "postgres", "rabbitmq", "redis",
-    ]
-    .into_iter()
-    .any(|name| image.contains(name))
-}
-
-fn has_docker_socket_mount(inspect: &ContainerInspectResponse) -> bool {
-    inspect.mounts.as_ref().is_some_and(|mounts| {
-        mounts.iter().any(|mount| {
-            [mount.source.as_deref(), mount.destination.as_deref()]
-                .into_iter()
-                .flatten()
-                .any(|path| path == "/var/run/docker.sock" || path == "/run/docker.sock")
-        })
+fn known_image_non_root_selection(
+    inspect: &ContainerInspectResponse,
+) -> Option<NonRootUserSelection> {
+    known_image_non_root_user(inspect).map(|user| NonRootUserSelection {
+        user: user.to_string(),
+        source: format!("image default for {}", inspect_image_name(inspect)),
     })
 }
 
-fn selected_non_root_user(inspect: &ContainerInspectResponse) -> String {
-    if let Some(user) = inspect
+fn current_config_non_root_selection(
+    inspect: &ContainerInspectResponse,
+) -> Option<NonRootUserSelection> {
+    inspect
         .config
         .as_ref()
         .and_then(|config| config.user.as_deref())
-        .filter(|user| !user_spec_is_root(user))
-    {
-        return user.to_string();
-    }
-
-    known_image_non_root_user(inspect)
-        .unwrap_or(DEFAULT_NON_ROOT_USER)
-        .to_string()
+        .and_then(normalize_non_root_user)
+        .map(|user| NonRootUserSelection {
+            user,
+            source: "current container config".to_string(),
+        })
 }
 
-fn explicit_target_non_root_user(target: &FixTarget) -> Option<&str> {
-    target
-        .user
-        .as_deref()
-        .filter(|user| !user_spec_is_root(user))
+fn is_docker_socket_path(path: &str) -> bool {
+    path == "/var/run/docker.sock" || path == "/run/docker.sock"
 }
 
-fn selected_non_root_user_for_target(
+fn docker_socket_mount_source(inspect: &ContainerInspectResponse) -> Option<&str> {
+    inspect.mounts.as_ref()?.iter().find_map(|mount| {
+        let source = mount.source.as_deref();
+        let destination = mount.destination.as_deref();
+        let has_socket = [source, destination]
+            .into_iter()
+            .flatten()
+            .any(is_docker_socket_path);
+        has_socket.then_some(source.or(destination)).flatten()
+    })
+}
+
+fn docker_socket_non_root_selection(
     inspect: &ContainerInspectResponse,
-    target: &FixTarget,
-) -> String {
-    explicit_target_non_root_user(target).map_or_else(
-        || selected_non_root_user(inspect),
-        std::string::ToString::to_string,
-    )
+) -> Option<NonRootUserSelection> {
+    let socket_path = docker_socket_mount_source(inspect)?;
+    let gid = std::fs::metadata(socket_path).ok()?.gid();
+    Some(NonRootUserSelection {
+        user: uid_gid_user(1000, gid),
+        source: format!("Docker socket group {gid}"),
+    })
 }
 
-fn writable_mounts_summary(inspect: &ContainerInspectResponse) -> Option<String> {
-    let mounts = inspect.mounts.as_ref()?;
-    let mut volumes = 0usize;
-    let mut binds = 0usize;
+fn explicit_target_non_root_user(target: &FixTarget) -> Option<String> {
+    target.user.as_deref().and_then(normalize_non_root_user)
+}
 
+fn explicit_target_non_root_selection(target: &FixTarget) -> Option<NonRootUserSelection> {
+    explicit_target_non_root_user(target).map(|user| NonRootUserSelection {
+        user,
+        source: "selected by request".to_string(),
+    })
+}
+
+fn mounted_owner_non_root_selection(
+    inspect: &ContainerInspectResponse,
+) -> Option<NonRootUserSelection> {
+    let mounts = inspect.mounts.as_ref()?;
     for mount in mounts {
         if mount.rw == Some(false) {
             continue;
         }
-
-        match mount.typ {
-            Some(MountPointTypeEnum::VOLUME) => volumes += 1,
-            Some(MountPointTypeEnum::BIND) => binds += 1,
-            _ => {}
+        let Some(source) = mount.source.as_deref().filter(|source| !source.is_empty()) else {
+            continue;
+        };
+        if !Path::new(source).is_absolute() || is_docker_socket_path(source) {
+            continue;
         }
-    }
-
-    let mut parts = Vec::new();
-    if volumes > 0 {
-        parts.push(format!("{volumes} writable Docker volume(s)"));
-    }
-    if binds > 0 {
-        parts.push(format!("{binds} writable bind mount(s)"));
-    }
-
-    (!parts.is_empty()).then(|| parts.join(" and "))
-}
-
-fn rule_41_manual_non_root_reason(
-    inspect: &ContainerInspectResponse,
-    target: &FixTarget,
-) -> Option<String> {
-    if has_docker_socket_mount(inspect) {
-        return Some(
-            "container mounts the Docker socket; choose a purpose-built non-root user/group manually before applying rule 4.1"
-                .to_string(),
-        );
-    }
-
-    let mount_summary = writable_mounts_summary(inspect)?;
-    if explicit_target_non_root_user(target).is_some() {
-        return None;
-    }
-
-    if image_uses_root_entrypoint_with_writable_state(inspect) {
-        return Some(format!(
-            "container uses an image with root-entrypoint-managed writable state ({mount_summary}); rebuild it with a non-root USER or choose the service UID/GID explicitly after validating volume ownership"
-        ));
-    }
-
-    if known_image_non_root_user(inspect).is_none() {
-        return Some(format!(
-            "container has {mount_summary}, but Dokuru cannot infer the app-specific non-root UID/GID safely; choose the UID/GID manually before applying rule 4.1"
-        ));
+        if matches!(mount.typ, Some(MountPointTypeEnum::BIND)) && !is_safe_userns_bind_path(source)
+        {
+            continue;
+        }
+        let Ok(metadata) = std::fs::metadata(source) else {
+            continue;
+        };
+        let (uid, gid) = container_uid_gid_from_host_owner(source, &metadata);
+        if uid == 0 || uid == 65_534 {
+            continue;
+        }
+        return Some(NonRootUserSelection {
+            user: uid_gid_user(uid, gid),
+            source: format!("writable mount owner {uid}:{gid}"),
+        });
     }
 
     None
+}
+
+fn container_uid_gid_from_host_owner(path: &str, metadata: &std::fs::Metadata) -> (u32, u32) {
+    let uid = metadata.uid();
+    let gid = metadata.gid();
+    if let Some(base) =
+        userns_remap_base_from_volume_path(path).or_else(configured_userns_remap_base)
+        && uid >= base.0
+        && gid >= base.1
+    {
+        return (uid - base.0, gid - base.1);
+    }
+
+    (uid, gid)
+}
+
+#[derive(Debug)]
+struct PasswdUser {
+    name: String,
+    uid: u32,
+    gid: u32,
+}
+
+fn parse_passwd_users(raw: &str) -> Vec<PasswdUser> {
+    raw.lines()
+        .filter_map(|line| {
+            let mut parts = line.split(':');
+            let name = parts.next()?.to_string();
+            let _password = parts.next()?;
+            let uid = parts.next()?.parse().ok()?;
+            let gid = parts.next()?.parse().ok()?;
+            Some(PasswdUser { name, uid, gid })
+        })
+        .collect()
+}
+
+fn passwd_user_score(user: &PasswdUser, image: &str) -> Option<u8> {
+    if user.uid == 0 || user.uid == 65_534 {
+        return None;
+    }
+
+    let name = user.name.to_lowercase();
+    let image_match = image.contains(&name)
+        || (image.contains("mariadb") && name == "mysql")
+        || (image.contains("mongo") && matches!(name.as_str(), "mongo" | "mongodb"));
+    if image_match {
+        return Some(0);
+    }
+
+    if matches!(
+        name.as_str(),
+        "app"
+            | "appuser"
+            | "caddy"
+            | "mysql"
+            | "nginx"
+            | "node"
+            | "postgres"
+            | "redis"
+            | "rabbitmq"
+            | "www-data"
+            | "mongo"
+            | "mongodb"
+    ) {
+        return Some(1);
+    }
+
+    if user.uid >= 1000 && !name.starts_with('_') && !name.starts_with("systemd-") {
+        return Some(2);
+    }
+
+    None
+}
+
+async fn exec_container_stdout(
+    docker: &Docker,
+    container_id: &str,
+    cmd: Vec<String>,
+) -> Option<String> {
+    let exec = docker
+        .create_exec(
+            container_id,
+            CreateExecOptions::<String> {
+                attach_stdout: Some(true),
+                attach_stderr: Some(true),
+                tty: Some(false),
+                cmd: Some(cmd),
+                ..Default::default()
+            },
+        )
+        .await
+        .ok()?;
+    let StartExecResults::Attached { mut output, .. } = docker
+        .start_exec(
+            &exec.id,
+            Some(StartExecOptions {
+                detach: false,
+                tty: false,
+                output_capacity: None,
+            }),
+        )
+        .await
+        .ok()?
+    else {
+        return None;
+    };
+
+    let mut stdout = String::new();
+    while let Some(item) = output.next().await {
+        match item.ok()? {
+            LogOutput::StdOut { message } | LogOutput::Console { message } => {
+                stdout.push_str(&String::from_utf8_lossy(&message));
+            }
+            LogOutput::StdErr { .. } | LogOutput::StdIn { .. } => {}
+        }
+    }
+
+    docker
+        .inspect_exec(&exec.id)
+        .await
+        .ok()
+        .and_then(|info| (info.exit_code == Some(0)).then_some(stdout))
+}
+
+async fn container_passwd_non_root_selection(
+    docker: &Docker,
+    container_id: &str,
+    inspect: &ContainerInspectResponse,
+) -> Option<NonRootUserSelection> {
+    let passwd = if let Some(output) = exec_container_stdout(
+        docker,
+        container_id,
+        vec!["cat".to_string(), "/etc/passwd".to_string()],
+    )
+    .await
+    {
+        output
+    } else {
+        exec_container_stdout(
+            docker,
+            container_id,
+            vec![
+                "/bin/sh".to_string(),
+                "-c".to_string(),
+                "cat /etc/passwd".to_string(),
+            ],
+        )
+        .await?
+    };
+    let image = inspect_image_name(inspect);
+    let user = parse_passwd_users(&passwd)
+        .into_iter()
+        .filter_map(|user| passwd_user_score(&user, &image).map(|score| (score, user)))
+        .min_by_key(|(score, user)| (*score, user.uid))
+        .map(|(_, user)| user)?;
+
+    Some(NonRootUserSelection {
+        user: uid_gid_user(user.uid, user.gid),
+        source: format!("container passwd user {}", user.name),
+    })
+}
+
+async fn selected_non_root_user_for_target(
+    docker: &Docker,
+    container_id: &str,
+    inspect: &ContainerInspectResponse,
+    target: &FixTarget,
+) -> NonRootUserSelection {
+    if let Some(selection) = explicit_target_non_root_selection(target)
+        .or_else(|| current_config_non_root_selection(inspect))
+        .or_else(|| docker_socket_non_root_selection(inspect))
+        .or_else(|| mounted_owner_non_root_selection(inspect))
+    {
+        return selection;
+    }
+
+    if let Some(selection) =
+        container_passwd_non_root_selection(docker, container_id, inspect).await
+    {
+        return selection;
+    }
+
+    if let Some(selection) = known_image_non_root_selection(inspect) {
+        return selection;
+    }
+
+    NonRootUserSelection {
+        user: DEFAULT_NON_ROOT_USER.to_string(),
+        source: "Dokuru safe default after no image/mount/passwd signal".to_string(),
+    }
+}
+
+#[cfg(test)]
+fn selected_non_root_user_without_exec(
+    inspect: &ContainerInspectResponse,
+    target: &FixTarget,
+) -> NonRootUserSelection {
+    explicit_target_non_root_selection(target)
+        .or_else(|| current_config_non_root_selection(inspect))
+        .or_else(|| docker_socket_non_root_selection(inspect))
+        .or_else(|| mounted_owner_non_root_selection(inspect))
+        .or_else(|| known_image_non_root_selection(inspect))
+        .unwrap_or_else(|| NonRootUserSelection {
+            user: DEFAULT_NON_ROOT_USER.to_string(),
+            source: "Dokuru safe default after no image/mount signal".to_string(),
+        })
 }
 
 fn target_user_or_default(target: Option<&FixTarget>) -> String {
     target
         .and_then(|target| target.user.as_deref())
-        .filter(|user| !user_spec_is_root(user))
-        .unwrap_or(DEFAULT_NON_ROOT_USER)
-        .to_string()
+        .and_then(normalize_non_root_user)
+        .unwrap_or_else(|| DEFAULT_NON_ROOT_USER.to_string())
 }
 
 async fn snapshot_all_containers(docker: &Docker) -> Vec<ContainerSnapshot> {
@@ -3206,6 +3426,20 @@ pub async fn preview_fix(docker: &Docker, rule_id: &str) -> eyre::Result<FixPrev
         }
 
         let mut target = preview_target_from_inspect(id, &inspect, rule_id);
+        if rule_id == "4.1" {
+            let fix_target = FixTarget {
+                container_id: id.to_string(),
+                memory: None,
+                cpu_shares: None,
+                pids_limit: None,
+                strategy: Some(target.strategy.clone()),
+                user: None,
+            };
+            let selection =
+                selected_non_root_user_for_target(docker, id, &inspect, &fix_target).await;
+            target.suggested_user = Some(selection.user);
+            target.suggested_user_source = Some(selection.source);
+        }
         if supports_image_config_fix(rule_id)
             && let Some(ctx) = compose_context_from_inspect(&inspect)
             && let Some(source) = detect_dockerfile_source(&ctx).await
@@ -3276,6 +3510,8 @@ fn preview_target_from_inspect(
         compose_service: compose.as_ref().map(|ctx| ctx.service.clone()),
         dockerfile_path: None,
         dockerfile_context: None,
+        suggested_user: None,
+        suggested_user_source: None,
     }
 }
 
@@ -3560,14 +3796,22 @@ async fn default_image_config_targets(
         } else {
             "recreate"
         };
-        targets.push(FixTarget {
+        let mut target = FixTarget {
             container_id: id.to_string(),
             memory: None,
             cpu_shares: None,
             pids_limit: None,
             strategy: Some(strategy.to_string()),
             user: None,
-        });
+        };
+        if rule_id == "4.1" {
+            target.user = Some(
+                selected_non_root_user_for_target(docker, id, &inspect, &target)
+                    .await
+                    .user,
+            );
+        }
+        targets.push(target);
     }
 
     Ok(targets)
@@ -3601,38 +3845,28 @@ async fn apply_image_config_target(
     );
 
     if is_dockerfile_source_strategy(target.strategy.as_deref()) {
-        let Some(ctx) = compose_context_from_inspect(&inspect) else {
-            return Err(format!(
-                "{container_label}: Dockerfile strategy requested but container has no Compose metadata"
-            ));
-        };
-        let dedupe_key = format!("dockerfile:{}", ctx.key());
-        if !compose_services.insert(dedupe_key) {
-            return Ok(None);
-        }
-        return apply_dockerfile_source_fix(rule_id, &ctx, progress)
-            .await
-            .map(|source| {
-                Some(format!(
-                    "{}:{} (dockerfile {})",
-                    ctx.project,
-                    ctx.service,
-                    source.path.display()
-                ))
-            })
-            .map_err(|error| format!("{container_label}: Dockerfile fix failed: {error}"));
+        return apply_dockerfile_image_config_target(
+            rule_id,
+            &inspect,
+            &container_label,
+            progress,
+            compose_services,
+        )
+        .await;
     }
 
-    if rule_id == "4.1"
-        && let Some(reason) = rule_41_manual_non_root_reason(&inspect, target)
-    {
-        return Err(format!("{container_label}: {reason}"));
-    }
+    let non_root_selection = if rule_id == "4.1" {
+        Some(
+            selected_non_root_user_for_target(docker, &target.container_id, &inspect, target).await,
+        )
+    } else {
+        None
+    };
+    let non_root_user = non_root_selection
+        .as_ref()
+        .map(|selection| selection.user.as_str());
 
-    let non_root_user =
-        (rule_id == "4.1").then(|| selected_non_root_user_for_target(&inspect, target));
-
-    if let Some(user) = non_root_user.as_deref() {
+    if let Some(user) = non_root_user {
         prepare_non_root_mount_permissions(rule_id, &container_label, &inspect, user, progress)
             .await
             .map_err(|error| {
@@ -3652,10 +3886,10 @@ async fn apply_image_config_target(
             return Ok(None);
         }
         let mut compose_target = target.clone();
-        if let Some(user) = non_root_user.as_ref() {
-            compose_target.user = Some(user.clone());
+        if let Some(selection) = non_root_selection.as_ref() {
+            compose_target.user = Some(selection.user.clone());
         }
-        let compose_target = non_root_user.as_ref().map(|_| &compose_target);
+        let compose_target = non_root_selection.as_ref().map(|_| &compose_target);
         let result = if is_dokuru_override_strategy(target.strategy.as_deref()) {
             apply_compose_service_override_fix(docker, rule_id, &ctx, compose_target, progress)
                 .await
@@ -3680,13 +3914,43 @@ async fn apply_image_config_target(
         &target.container_id,
         inspect,
         rule_id,
-        non_root_user.as_deref(),
+        non_root_user,
         progress,
         &container_label,
     ))
     .await
     .map(|()| Some(container_label))
     .map_err(|error| format!("{}: {error}", target.container_id))
+}
+
+async fn apply_dockerfile_image_config_target(
+    rule_id: &str,
+    inspect: &ContainerInspectResponse,
+    container_label: &str,
+    progress: Option<&ProgressSender>,
+    compose_services: &mut HashSet<String>,
+) -> Result<Option<String>, String> {
+    let Some(ctx) = compose_context_from_inspect(inspect) else {
+        return Err(format!(
+            "{container_label}: Dockerfile strategy requested but container has no Compose metadata"
+        ));
+    };
+    let dedupe_key = format!("dockerfile:{}", ctx.key());
+    if !compose_services.insert(dedupe_key) {
+        return Ok(None);
+    }
+
+    apply_dockerfile_source_fix(rule_id, &ctx, progress)
+        .await
+        .map(|source| {
+            Some(format!(
+                "{}:{} (dockerfile {})",
+                ctx.project,
+                ctx.service,
+                source.path.display()
+            ))
+        })
+        .map_err(|error| format!("{container_label}: Dockerfile fix failed: {error}"))
 }
 
 struct DockerfileUpdateResult {
@@ -4065,8 +4329,7 @@ fn finish_non_root_mount_migration(
 }
 
 fn parse_uid_gid(value: &str) -> Option<(u32, u32)> {
-    let (uid, gid) = value.split_once(':')?;
-    Some((uid.parse().ok()?, gid.parse().ok()?))
+    parse_user_spec_uid_gid(value).filter(|(uid, _)| *uid != 0)
 }
 
 fn non_root_mount_actions(inspect: &ContainerInspectResponse) -> Vec<NonRootMountAction> {
@@ -4156,7 +4419,7 @@ async fn recreate_with_image_config(
             label: label.to_string(),
             create_config,
             save_detail: "Saved container config before image config recreate".to_string(),
-            recreate_detail: Some(image_config_recreate_detail(rule_id).to_string()),
+            recreate_detail: Some(image_config_recreate_detail(rule_id, non_root_user)),
             done_detail: image_config_done_detail(rule_id).to_string(),
         },
     )
@@ -4185,11 +4448,14 @@ fn image_config_violation_detail(rule_id: &str) -> &'static str {
     }
 }
 
-fn image_config_recreate_detail(rule_id: &str) -> &'static str {
+fn image_config_recreate_detail(rule_id: &str, non_root_user: Option<&str>) -> String {
     match rule_id {
-        "4.1" => "Set container user to 1000:1000",
-        "4.6" => "Add default container healthcheck",
-        _ => "Apply image config remediation",
+        "4.1" => format!(
+            "Set container user to {}",
+            non_root_user.unwrap_or(DEFAULT_NON_ROOT_USER)
+        ),
+        "4.6" => "Add default container healthcheck".to_string(),
+        _ => "Apply image config remediation".to_string(),
     }
 }
 
@@ -5143,6 +5409,25 @@ async fn recreate_container(
     docker
         .start_container(&created.start_target, None::<StartContainerOptions<String>>)
         .await?;
+    let inspect = docker
+        .inspect_container(&created.start_target, None)
+        .await?;
+    if container_violates_rule(&inspect, rule_id) {
+        emit_progress(
+            progress,
+            rule_id,
+            &created.label,
+            ProgressStep::new(6, 6),
+            "verify_isolation",
+            "error",
+            Some(format!(
+                "Container still violates rule {rule_id} after recreate"
+            )),
+        );
+        return Err(eyre::eyre!(
+            "container still violates rule {rule_id} after recreate"
+        ));
+    }
     emit_progress(
         progress,
         rule_id,
@@ -7196,6 +7481,10 @@ fn container_violates_rule(inspect: &ContainerInspectResponse, rule_id: &str) ->
 #[derive(serde::Serialize, serde::Deserialize)]
 struct ContainerCreateRollbackSnapshot {
     captured_at: String,
+    #[serde(default)]
+    rule_id: Option<String>,
+    #[serde(default)]
+    original_user: Option<String>,
     inspect: serde_json::Value,
     create_config: serde_json::Value,
 }
@@ -7263,6 +7552,7 @@ fn create_config_from_inspect(inspect: &ContainerInspectResponse) -> eyre::Resul
 async fn container_rollback_target_from_inspect(
     id: &str,
     inspect: &ContainerInspectResponse,
+    rule_id: &str,
 ) -> eyre::Result<ContainerRollbackTarget> {
     let name = container_inspect_name(inspect, id);
     let image = inspect
@@ -7275,9 +7565,17 @@ async fn container_rollback_target_from_inspect(
         .as_ref()
         .and_then(|state| state.running)
         .unwrap_or(false);
+    let original_user = inspect
+        .config
+        .as_ref()
+        .and_then(|config| config.user.clone())
+        .filter(|user| !user.trim().is_empty())
+        .unwrap_or_else(|| "root/default".to_string());
     let create_config = serde_json::to_value(create_config_from_inspect(inspect)?)?;
     let snapshot = ContainerCreateRollbackSnapshot {
         captured_at: chrono::Utc::now().to_rfc3339(),
+        rule_id: Some(rule_id.to_string()),
+        original_user: Some(original_user.clone()),
         inspect: serde_json::to_value(inspect)?,
         create_config,
     };
@@ -7290,6 +7588,10 @@ async fn container_rollback_target_from_inspect(
         image,
         was_running,
         snapshot_path: snapshot_path.to_string_lossy().to_string(),
+        original_user: Some(original_user),
+        snapshot_note: Some(format!(
+            "Full Docker inspect and create config captured before rule {rule_id} recreate"
+        )),
     })
 }
 
@@ -7371,8 +7673,14 @@ async fn container_rollback_targets_for_request(
         if !seen.insert(key) {
             continue;
         }
-        snapshots
-            .push(container_rollback_target_from_inspect(&target.container_id, &inspect).await?);
+        snapshots.push(
+            container_rollback_target_from_inspect(
+                &target.container_id,
+                &inspect,
+                &request.rule_id,
+            )
+            .await?,
+        );
     }
 
     Ok(snapshots)
@@ -8298,21 +8606,25 @@ services:
     }
 
     #[test]
-    fn rule_41_blocks_stateful_root_entrypoint_without_explicit_user() {
-        let inspect = inspect_with_writable_volume("postgres:16-alpine");
+    fn rule_41_defaults_stateful_unknown_images_to_standard_non_root_user() {
+        let inspect = inspect_with_writable_volume("custom-app:latest");
         let target = rule_41_target(None);
 
-        let reason = rule_41_manual_non_root_reason(&inspect, &target).unwrap();
-
-        assert!(reason.contains("root-entrypoint-managed writable state"));
+        assert_eq!(
+            selected_non_root_user_without_exec(&inspect, &target).user,
+            DEFAULT_NON_ROOT_USER
+        );
     }
 
     #[test]
-    fn rule_41_allows_stateful_volume_when_user_is_explicit() {
+    fn rule_41_prefers_explicit_non_root_user() {
         let inspect = inspect_with_writable_volume("postgres:16-alpine");
         let target = rule_41_target(Some("70:70"));
 
-        assert!(rule_41_manual_non_root_reason(&inspect, &target).is_none());
+        assert_eq!(
+            selected_non_root_user_without_exec(&inspect, &target).user,
+            "70:70"
+        );
     }
 
     #[test]

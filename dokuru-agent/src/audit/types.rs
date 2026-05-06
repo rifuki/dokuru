@@ -180,6 +180,10 @@ pub struct FixPreviewTarget {
     pub dockerfile_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub dockerfile_context: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub suggested_user: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub suggested_user_source: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -232,6 +236,10 @@ pub struct ContainerRollbackTarget {
     pub image: String,
     pub was_running: bool,
     pub snapshot_path: String,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub original_user: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub snapshot_note: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

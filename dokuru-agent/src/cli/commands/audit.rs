@@ -469,7 +469,10 @@ fn fix_target_from_preview(
             .strategy
             .clone()
             .or_else(|| Some(target.strategy.clone())),
-        user: overrides.user.clone(),
+        user: overrides
+            .user
+            .clone()
+            .or_else(|| target.suggested_user.clone()),
     }
 }
 
@@ -523,6 +526,16 @@ fn print_preview(preview: &FixPreview) {
                 println!(
                     "    suggested memory={} cpu_shares={} pids_limit={}",
                     suggestion.memory, suggestion.cpu_shares, suggestion.pids_limit
+                );
+            }
+            if let Some(user) = &target.suggested_user {
+                println!(
+                    "    suggested user={} ({})",
+                    user,
+                    target
+                        .suggested_user_source
+                        .as_deref()
+                        .unwrap_or("inferred")
                 );
             }
         }
@@ -680,6 +693,8 @@ mod tests {
             compose_service: None,
             dockerfile_path: None,
             dockerfile_context: None,
+            suggested_user: None,
+            suggested_user_source: None,
         }
     }
 

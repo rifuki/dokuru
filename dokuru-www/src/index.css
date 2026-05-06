@@ -546,7 +546,8 @@
     grid-template-areas:
       "identity"
       "source"
-      "mode";
+      "mode"
+      "value";
     grid-template-columns: minmax(0, 1fr);
     gap: 0.75rem;
     padding: 0.875rem;
@@ -563,7 +564,8 @@
     .audit-fix-target-row.audit-fix-target-row-namespace {
       grid-template-areas:
         "identity source"
-        "mode mode";
+        "mode mode"
+        "value value";
       grid-template-columns: minmax(0, 1fr) minmax(150px, 190px);
       gap: 0.75rem 1rem;
     }
@@ -572,7 +574,9 @@
   @container (min-width: 700px) {
     .audit-fix-target-row.audit-fix-target-row-image,
     .audit-fix-target-row.audit-fix-target-row-namespace {
-      grid-template-areas: "identity source mode";
+      grid-template-areas:
+        "identity source mode"
+        "value value value";
       grid-template-columns: minmax(0, 1fr) minmax(120px, 150px) minmax(252px, 290px);
       gap: 0.75rem 1rem;
     }

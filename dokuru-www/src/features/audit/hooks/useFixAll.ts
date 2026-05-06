@@ -174,7 +174,7 @@ function isBulkPreviewTargetRule(ruleId: string) {
         || isRuntimeIsolationRule(ruleId);
 }
 
-function previewTargetsForRule(previewTargets: FixPreviewTarget[]): FixTarget[] {
+function previewTargetsForRule(ruleId: string, previewTargets: FixPreviewTarget[]): FixTarget[] {
     return previewTargets.map((target) => ({
         container_id: target.container_id,
         strategy: target.strategy,
@@ -182,6 +182,7 @@ function previewTargetsForRule(previewTargets: FixPreviewTarget[]): FixTarget[] 
         image: target.image,
         compose_project: target.compose_project,
         compose_service: target.compose_service,
+        user: ruleId === "4.1" ? target.suggested_user : undefined,
     }));
 }
 
@@ -312,7 +313,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
         const preview = agentAccessMode === "relay"
             ? await agentApi.previewFix(agentId, ruleId)
             : await agentDirectApi.previewFix(agentUrl, ruleId, token);
-        return previewTargetsForRule(preview.targets);
+        return previewTargetsForRule(ruleId, preview.targets);
     }, [agentAccessMode, agentId, agentUrl, token]);
 
     const applyAll = useCallback(async () => {
