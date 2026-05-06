@@ -1,6 +1,6 @@
 use super::super::helpers::{
     ChecksumTool, binary_version, collect_preflight, confirm_action, create_temp_dir,
-    detect_checksum_tool, download_file, ensure_command, install_binary, normalize_release_tag,
+    detect_checksum_tool, download_file, install_binary, normalize_release_tag,
     release_asset_name_for, release_base_url, resolve_shared_config, restart_service, run_step,
     service_unit_path, verify_download_checksum,
 };
@@ -25,7 +25,6 @@ pub fn run_update(args: &UpdateArgs) -> Result<()> {
         bail!("root privileges required");
     }
 
-    ensure_command("curl")?;
     let checksum_tool = detect_checksum_tool()?;
     let asset_name = release_asset_name_for(&release)?;
     let temp_dir = create_temp_dir("dokuru-update")?;

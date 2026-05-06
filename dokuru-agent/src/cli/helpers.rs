@@ -2,16 +2,19 @@ use super::types::{SetupArgs, SetupMode, SharedArgs};
 use crate::api::{AuthConfig, Config as RuntimeConfig, DockerConfig, ServerConfig, config_path_in};
 use cliclack::{confirm, input, note, select, spinner};
 use eyre::{Result, WrapErr, bail};
+use reqwest::blocking::Client;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{IsTerminal, stderr};
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::Duration;
 
 pub const REPO_URL: &str = "https://github.com/rifuki/dokuru";
 pub const RELEASE_DOWNLOAD_BASE_URL: &str = "https://github.com/rifuki/dokuru/releases/download";
 const DOKURU_GROUP: &str = "dokuru";
+const DOWNLOAD_ATTEMPTS: u8 = 5;
 
 #[derive(Debug)]
 pub struct InstallerConfig {
@@ -999,14 +1002,6 @@ pub fn remove_dir_if_present(path: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn ensure_command(program: &str) -> Result<()> {
-    if command_exists(program) {
-        Ok(())
-    } else {
-        bail!("Required command '{}' not found", program);
-    }
-}
-
 pub fn detect_checksum_tool() -> Result<ChecksumTool> {
     if command_exists("sha256sum") {
         return Ok(ChecksumTool::Sha256sum);
@@ -1078,26 +1073,66 @@ pub fn create_temp_dir(prefix: &str) -> Result<PathBuf> {
 }
 
 pub fn download_file(url: &str, output: &Path) -> Result<()> {
-    let status = Command::new("curl")
-        .args([
-            "--fail",
-            "--silent",
-            "--show-error",
-            "--location",
-            "--retry",
-            "3",
-            "--retry-delay",
-            "1",
-        ])
-        .arg("-o")
-        .arg(output)
-        .arg(url)
-        .status()
-        .wrap_err("Failed to execute curl")?;
-    if !status.success() {
-        bail!("curl failed while downloading {}", url);
+    let client = Client::builder()
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_mins(3))
+        .user_agent(format!("dokuru/{}", env!("CARGO_PKG_VERSION")))
+        .build()
+        .wrap_err("Failed to build HTTP client")?;
+    let partial = partial_download_path(output);
+    let mut last_error = String::new();
+
+    for attempt in 1..=DOWNLOAD_ATTEMPTS {
+        let _ = fs::remove_file(&partial);
+        match download_file_once(&client, url, &partial, output) {
+            Ok(()) => return Ok(()),
+            Err(error) => {
+                last_error = error.to_string();
+                if attempt < DOWNLOAD_ATTEMPTS {
+                    std::thread::sleep(Duration::from_secs(u64::from(attempt)));
+                }
+            }
+        }
     }
-    Ok(())
+
+    let _ = fs::remove_file(&partial);
+    bail!(
+        "failed to download {} after {} attempt(s): {}",
+        url,
+        DOWNLOAD_ATTEMPTS,
+        last_error
+    );
+}
+
+fn download_file_once(client: &Client, url: &str, partial: &Path, output: &Path) -> Result<()> {
+    let mut response = client
+        .get(url)
+        .send()
+        .wrap_err_with(|| format!("Failed to request {url}"))?
+        .error_for_status()
+        .wrap_err_with(|| format!("Download returned an error status for {url}"))?;
+    let mut file = fs::File::create(partial)
+        .wrap_err_with(|| format!("Failed to create {}", partial.display()))?;
+    let bytes = std::io::copy(&mut response, &mut file)
+        .wrap_err_with(|| format!("Failed to write {}", partial.display()))?;
+
+    if bytes == 0 {
+        bail!("downloaded empty response from {url}");
+    }
+
+    file.sync_all()
+        .wrap_err_with(|| format!("Failed to sync {}", partial.display()))?;
+    fs::rename(partial, output).wrap_err_with(|| {
+        format!(
+            "Failed to move {} to {}",
+            partial.display(),
+            output.display()
+        )
+    })
+}
+
+fn partial_download_path(output: &Path) -> PathBuf {
+    output.with_extension("part")
 }
 
 pub fn verify_download_checksum(
