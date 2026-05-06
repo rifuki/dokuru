@@ -11,6 +11,7 @@ import {
   type AuditResponse,
   type AuditResult,
   type FixHistoryEntry,
+  type FixOutcome,
 } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
 import { canUseDockerAgent, dockerApi, dockerCredential, type Container as DockerContainer } from "@/services/docker-api";
@@ -594,16 +595,23 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
   const hasFix = status === "Fail" && !!(rule.remediation || remediation_guide || affected.length > 0 || remediation_kind === "auto");
   const hasDebug = !!(audit_command || raw_output !== undefined || command_stderr || typeof command_exit_code === "number" || (references && references.length > 0));
   const isCurrentFixJob = isFixJobAfterAudit(fixJob, auditTimestamp ? { timestamp: auditTimestamp } : null);
-  const hasAppliedOutcome = storedOutcome?.status === "Applied" || appliedFixEntry?.outcome.status === "Applied";
+  const currentStoredOutcome = isCurrentFixJob ? storedOutcome : null;
+  const currentJobOutcome = isCurrentFixJob ? fixJob?.outcome : null;
+  const hasAppliedOutcome = isFullyAppliedOutcome(currentStoredOutcome)
+    || isFullyAppliedOutcome(currentJobOutcome)
+    || isFullyAppliedOutcome(appliedFixEntry?.outcome);
   const isFixing = !hasAppliedOutcome && isCurrentFixJob && fixJob?.status === "running";
-  const isFixed = hasAppliedOutcome || (isCurrentFixJob && fixJob?.status === "applied");
+  const isFixed = hasAppliedOutcome;
   const isStaleFixed = isFixed && status === "Fail";
   const statusTone = isStaleFixed ? {
     borderLeft: "border-l-emerald-500/70",
     cardTone: "border-border bg-card/95 hover:bg-muted/[0.08]",
     icon: "text-emerald-400",
   } : ruleStatusTone(status);
-  const isFixBlocked = isCurrentFixJob && (fixJob?.status === "blocked" || fixJob?.status === "failed" || storedOutcome?.status === "Blocked");
+  const isPartialAppliedOutcome = isCurrentFixJob
+    && fixJob?.status === "applied"
+    && !isFullyAppliedOutcome(currentJobOutcome ?? currentStoredOutcome);
+  const isFixBlocked = isCurrentFixJob && (fixJob?.status === "blocked" || fixJob?.status === "failed" || storedOutcome?.status === "Blocked" || isPartialAppliedOutcome);
   const tabs = [
     { id: "overview" as const, label: "Overview", show: true },
     { id: "fix" as const, label: "Fix", show: hasFix },
@@ -1279,12 +1287,16 @@ function isFixJobAfterAudit(job: { completedAt?: string; startedAt?: string } | 
   return isTimestampAfter(job?.completedAt ?? job?.startedAt, audit?.timestamp);
 }
 
+function isFullyAppliedOutcome(outcome?: FixOutcome | null) {
+  return outcome?.status === "Applied" && !/\bFailed\s+\d+:/i.test(outcome.message);
+}
+
 function latestAppliedFixesAfterAudit(history: FixHistoryEntry[], audit?: AuditResponse | null) {
   const latest = new Map<string, FixHistoryEntry>();
   const sorted = [...history].sort((a, b) => (Date.parse(b.timestamp) || 0) - (Date.parse(a.timestamp) || 0));
   for (const entry of sorted) {
     const ruleId = entry.request.rule_id;
-    if (latest.has(ruleId) || entry.outcome.status !== "Applied" || !isAfterAudit(entry, audit)) continue;
+    if (latest.has(ruleId) || !isFullyAppliedOutcome(entry.outcome) || !isAfterAudit(entry, audit)) continue;
     latest.set(ruleId, entry);
   }
   return latest;
@@ -1295,7 +1307,7 @@ function projectedScoreFromFixes(audit: AuditResponse, results: AuditResult[], f
   const total = audit.summary.total || results.length;
   const projectedPassed = Math.min(total, audit.summary.passed + fixedFailedResults.length);
   const projectedFailed = Math.max(0, audit.summary.failed - fixedFailedResults.length);
-  const projectedScore = total > 0 ? Math.round((projectedPassed / total) * 100) : audit.summary.score;
+  const projectedScore = total > 0 ? Math.floor((projectedPassed * 100) / total) : audit.summary.score;
 
   return {
     fixedCount: fixedFailedResults.length,
@@ -1623,7 +1635,7 @@ function buildAuditDocumentHtml({
         <div>
           <div class="score-track"><div class="score-fill"></div></div>
           <div class="projected">
-            <span>${projectedScore ? `Projected after applied fixes: <strong>~${escapeHtml(projectedScore)}/100</strong>` : "No post-audit fixes included in this report."}</span>
+            <span>${projectedScore ? `Projected after fully applied fixes: <strong>~${escapeHtml(projectedScore)}/100</strong>` : "No post-audit fixes included in this report."}</span>
             <span>${escapeHtml(audit.summary.total)} rules audited</span>
           </div>
         </div>
@@ -1644,7 +1656,7 @@ function buildAuditDocumentHtml({
           <tbody>
             <tr><th>Host</th><td>${escapeHtml(audit.hostname)}</td><th>Agent</th><td>${escapeHtml(agent?.name ?? "Unknown")}</td></tr>
             <tr><th>Audit ID</th><td>${escapeHtml(audit.id ?? "unsaved")}</td><th>Generated</th><td>${escapeHtml(formatDocumentDate(generatedAt))}</td></tr>
-            <tr><th>Previous score</th><td>${escapeHtml(previousAudit ? `${previousAudit.summary.score}/100` : "Not available")}</td><th>Rerun estimate</th><td>${projectedScore ? `~${escapeHtml(projectedScore)}/100` : "No post-audit fixes"}</td></tr>
+            <tr><th>Previous score</th><td>${escapeHtml(previousAudit ? `${previousAudit.summary.score}/100` : "Not available")}</td><th>Rerun estimate</th><td>${projectedScore ? `~${escapeHtml(projectedScore)}/100` : "No fully applied post-audit fixes"}</td></tr>
           </tbody>
         </table>
       </section>
@@ -1863,6 +1875,7 @@ function AuditDetailPage() {
     agentUrl: agent?.url ?? "",
     agentAccessMode: agent?.access_mode,
     token,
+    auditTimestamp: auditData?.timestamp,
   });
 
   const {
@@ -2511,7 +2524,7 @@ function AuditDetailPage() {
                     )}
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    These checks were fixed after this audit. Blue segments show the estimated pass gain if rerun confirms them.
+                    These checks were fully fixed after this audit. Blue segments estimate the pass gain if rerun confirms them and no unrelated checks regress.
                   </p>
                 </div>
                 <Button

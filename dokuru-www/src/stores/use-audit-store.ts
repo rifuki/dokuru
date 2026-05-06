@@ -85,6 +85,10 @@ function isFixHistoryEntryForRun(entry: FixHistoryEntry, request: StartFixJobReq
     return entryTime >= startedTime - 30_000;
 }
 
+function isFullyAppliedOutcome(outcome: FixOutcome) {
+    return outcome.status === "Applied" && !/\bFailed\s+\d+:/i.test(outcome.message);
+}
+
 const createIdleStream = (): AuditStreamState => ({
     status: "idle",
     total: 0,
@@ -183,7 +187,7 @@ export const useAuditStore = create<AuditState>((set) => ({
                 }
             }
 
-            const status: FixJobStatus = entry.outcome.status === "Applied"
+            const status: FixJobStatus = isFullyAppliedOutcome(entry.outcome)
                 ? "applied"
                 : entry.outcome.status === "Blocked"
                 ? "blocked"
@@ -551,7 +555,7 @@ export const useAuditStore = create<AuditState>((set) => ({
                 fixRuns.delete(key);
                 fixCancels.delete(key);
                 if (fixSockets.get(key) === socket) fixSockets.delete(key);
-                const status: FixJobStatus = outcome.status === "Applied"
+                const status: FixJobStatus = isFullyAppliedOutcome(outcome)
                     ? "applied"
                     : outcome.status === "Blocked"
                     ? "blocked"

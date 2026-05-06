@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { agentApi } from "@/lib/api/agent";
 import { agentDirectApi, type AuditResult, type FixOutcome, type FixPreview, type FixTarget } from "@/lib/api/agent-direct";
-import { FIX_CANCELLED_MESSAGE, fixJobKey, useAuditStore } from "@/stores/use-audit-store";
+import { FIX_CANCELLED_MESSAGE, fixJobKey, useAuditStore, type FixJobState } from "@/stores/use-audit-store";
 
 export type WizardStep = "confirm" | "applying" | "result";
 
@@ -204,6 +204,7 @@ interface UseFixArgs {
     agentUrl: string;
     agentAccessMode?: string;
     token?: string;
+    auditTimestamp?: string;
 }
 
 export type TargetConfig = {
@@ -222,7 +223,20 @@ function normalizePreviewStrategy(ruleId: string, strategy: string, canCompose: 
     return canCompose ? "dokuru_override" : "docker_update";
 }
 
-export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs) {
+function isTimestampAfter(value?: string, reference?: string) {
+    if (!value || !reference) return false;
+    const valueTime = Date.parse(value);
+    const referenceTime = Date.parse(reference);
+    return Number.isFinite(valueTime) && Number.isFinite(referenceTime) && valueTime > referenceTime;
+}
+
+function isFixJobCurrentForAudit(job: FixJobState | undefined, auditTimestamp?: string) {
+    if (!job) return false;
+    if (job.status === "running" || !auditTimestamp) return true;
+    return isTimestampAfter(job.completedAt ?? job.startedAt, auditTimestamp);
+}
+
+export function useFix({ agentId, agentUrl, agentAccessMode, token, auditTimestamp }: UseFixArgs) {
     const [open, setOpen] = useState(false);
     const [step, setStep] = useState<WizardStep>("confirm");
     const [outcome, setOutcome] = useState<FixOutcome | null>(null);
@@ -242,12 +256,13 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
         const state = useAuditStore.getState();
         const existingJob = state.fixJobs[fixJobKey(agentId, result.rule.id)];
         const existingOutcome = state.fixOutcomes[agentId]?.[result.rule.id];
+        const existingJobIsCurrent = isFixJobCurrentForAudit(existingJob, auditTimestamp);
         setActiveResult(result);
         setPreview(null);
         setTargetConfig({});
         setOpen(true);
 
-        if (existingJob) {
+        if (existingJob && existingJobIsCurrent) {
             setStep(existingJob.status === "running" ? "applying" : "result");
             setOutcome(existingJob.outcome ?? null);
             setStepIndex(existingJob.stepIndex);
@@ -255,7 +270,7 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
             return;
         }
 
-        if (existingOutcome) {
+        if (existingOutcome && (!existingJob || existingJobIsCurrent)) {
             setStep("result");
             setOutcome(existingOutcome);
             setStepIndex(Number.MAX_SAFE_INTEGER);
@@ -290,7 +305,7 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token }: UseFixArgs
             })
             .catch(() => toast.error(`Failed to load fix preview for rule ${result.rule.id}`))
             .finally(() => setPreviewLoading(false));
-    }, [agentAccessMode, agentId, agentUrl, token]);
+    }, [agentAccessMode, agentId, agentUrl, auditTimestamp, token]);
 
     const updateTargetConfig = useCallback((containerId: string, patch: Partial<TargetConfig>) => {
         setTargetConfig((current) => ({

@@ -3413,10 +3413,10 @@ fn fix_outcome(
 
     FixOutcome {
         rule_id: rule_id.to_string(),
-        status: if updated.is_empty() && !failed.is_empty() {
-            FixStatus::Blocked
-        } else {
+        status: if failed.is_empty() {
             FixStatus::Applied
+        } else {
+            FixStatus::Blocked
         },
         message,
         requires_restart: false,
@@ -8052,6 +8052,21 @@ pub fn ensure_audit_rule(rule_line: &str) -> eyre::Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fix_outcome_blocks_partial_failures() {
+        let outcome = fix_outcome(
+            "4.1",
+            &["fixed-container".to_string()],
+            &["still-root: verification failed".to_string()],
+            "No containers needed updates",
+            "Updated non-root user config for 1 container(s)".to_string(),
+        );
+
+        assert_eq!(outcome.status, FixStatus::Blocked);
+        assert!(outcome.message.contains("fixed-container"));
+        assert!(outcome.message.contains("Failed 1"));
+    }
 
     #[test]
     fn parse_vgs_output_accepts_comma_and_decimal_bytes() {
