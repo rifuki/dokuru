@@ -124,6 +124,15 @@ export interface FixHistoryEntry {
   outcome: FixOutcome;
   rollback_supported: boolean;
   rollback_targets: FixTarget[];
+  compose_rollback_targets?: Array<{
+    project: string;
+    service: string;
+    compose_path: string;
+    backup_path?: string;
+    delete_on_rollback: boolean;
+    working_dir?: string;
+    config_files?: string;
+  }>;
   progress_events?: FixProgress[];
   rollback_note?: string;
 }

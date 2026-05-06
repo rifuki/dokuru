@@ -6401,7 +6401,7 @@ async fn prepare_dokuru_compose_override(
     target: Option<&FixTarget>,
 ) -> eyre::Result<DokuruComposeOverride> {
     let mut compose_paths = resolve_compose_files(ctx).await?;
-    let override_path = dokuru_compose_override_path(ctx, &compose_paths)?;
+    let override_path = dokuru_compose_override_path(ctx, &compose_paths);
     let existing = match tokio::fs::read_to_string(&override_path).await {
         Ok(content) => Some(content),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
@@ -6418,24 +6418,17 @@ async fn prepare_dokuru_compose_override(
     })
 }
 
-fn dokuru_compose_override_path(
-    ctx: &ComposeContext,
-    compose_paths: &[PathBuf],
-) -> eyre::Result<PathBuf> {
+fn dokuru_compose_override_path(ctx: &ComposeContext, compose_paths: &[PathBuf]) -> PathBuf {
     let filename = compose_override_filename(compose_paths.first().map(PathBuf::as_path));
     if let Some(working_dir) = &ctx.working_dir {
-        return Ok(working_dir.join(filename));
+        return working_dir.join(filename);
     }
 
     if let Some(parent) = compose_paths.first().and_then(|path| path.parent()) {
-        return Ok(parent.join(filename));
+        parent.join(filename)
+    } else {
+        PathBuf::from(filename)
     }
-
-    Err(eyre::eyre!(
-        "could not determine Dokuru override path for {}:{}",
-        ctx.project,
-        ctx.service
-    ))
 }
 
 fn compose_override_filename(compose_path: Option<&Path>) -> String {
@@ -7415,7 +7408,7 @@ async fn compose_rollback_target_for_override(
     ctx: &ComposeContext,
 ) -> eyre::Result<ComposeRollbackTarget> {
     let compose_paths = resolve_compose_files(ctx).await?;
-    let override_path = dokuru_compose_override_path(ctx, &compose_paths)?;
+    let override_path = dokuru_compose_override_path(ctx, &compose_paths);
     let backup_path = match tokio::fs::metadata(&override_path).await {
         Ok(metadata) if metadata.is_file() => {
             let backup_path = compose_rollback_backup_path(&override_path);
@@ -8383,6 +8376,26 @@ services:
         assert_eq!(
             compose_override_filename(Some(Path::new("/srv/app/compose.yml"))),
             "compose.override.yml"
+        );
+    }
+
+    #[test]
+    fn dokuru_compose_override_path_stays_in_app_working_dir() {
+        let ctx = ComposeContext {
+            project: "dokuru-lab".to_string(),
+            service: "victim-secrets".to_string(),
+            working_dir: Some(PathBuf::from("/srv/dokuru-lab")),
+            config_files: Some("/srv/dokuru-lab/docker-compose.yaml".to_string()),
+        };
+
+        let path = dokuru_compose_override_path(
+            &ctx,
+            &[PathBuf::from("/srv/dokuru-lab/docker-compose.yaml")],
+        );
+
+        assert_eq!(
+            path,
+            PathBuf::from("/srv/dokuru-lab/docker-compose.override.yaml")
         );
     }
 

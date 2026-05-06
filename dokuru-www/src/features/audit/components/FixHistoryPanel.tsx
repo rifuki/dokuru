@@ -130,7 +130,7 @@ export function FixHistoryPanel({
                         <div>
                             <h3 className="text-base font-bold tracking-tight">Fix History & Rollback</h3>
                             <p className="text-sm text-muted-foreground">
-                                Agent-side remediation log. Cgroup fixes can be rolled back to the captured previous limits.
+                                Agent-side remediation log. Rollback restores captured cgroup values or Compose snapshots.
                             </p>
                         </div>
                     </div>
@@ -206,6 +206,22 @@ export function FixHistoryPanel({
                                                 </div>
                                             </div>
                                         )}
+
+                                        {(entry.compose_rollback_targets?.length ?? 0) > 0 && (
+                                            <div className="rounded-lg border border-white/8 bg-white/[0.02] p-3">
+                                                <p className="mb-2 text-[10px] font-mono uppercase tracking-[0.16em] text-white/35">
+                                                    Compose snapshots
+                                                </p>
+                                                <div className="grid gap-1.5">
+                                                    {entry.compose_rollback_targets?.slice(0, 4).map((target) => (
+                                                        <div key={`${target.project}:${target.service}:${target.compose_path}`} className="flex flex-col gap-1 text-xs font-mono text-white/45 sm:flex-row sm:items-center sm:justify-between">
+                                                            <span className="truncate text-white/65">{target.project}:{target.service}</span>
+                                                            <span>{target.backup_path ? "file snapshot captured" : target.delete_on_rollback ? "delete created override" : "snapshot unavailable"}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="flex flex-col gap-2 lg:items-end">
@@ -241,7 +257,9 @@ export function FixHistoryPanel({
                             Rollback Fix {confirmEntry?.request.rule_id}
                         </AlertDialogTitle>
                         <AlertDialogDescription>
-                            This will restore the cgroup resource limits captured before the fix was applied. Re-run audit after rollback to verify the result.
+                            {confirmEntry?.compose_rollback_targets?.length
+                                ? "This will restore the captured Compose YAML snapshot or remove a Dokuru-created override, then recreate the affected service. Re-run audit after rollback to verify the result."
+                                : "This will restore the cgroup resource limits captured before the fix was applied. Re-run audit after rollback to verify the result."}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
