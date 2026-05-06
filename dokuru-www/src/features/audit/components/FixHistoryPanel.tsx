@@ -162,8 +162,8 @@ export function FixHistoryPanel({
                             const rollingBack = rollingBackId === entry.id;
 
                             return (
-                                <div key={entry.id} className="grid gap-4 px-5 py-4 md:grid-cols-[1fr_auto] md:items-center">
-                                    <div className="min-w-0 space-y-3">
+                                <div key={entry.id} className="flex flex-col gap-3 px-5 py-4">
+                                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                                         <div className="flex flex-wrap items-center gap-2">
                                             <span className="rounded border border-border bg-muted/30 px-2 py-1 font-mono text-xs font-black text-muted-foreground">
                                                 {entry.request.rule_id}
@@ -177,16 +177,34 @@ export function FixHistoryPanel({
                                                 {formatTime(entry.timestamp)}
                                             </span>
                                             {entry.rollback_supported ? (
-                                                <span className="rounded border border-[#2496ED]/25 bg-[#2496ED]/10 px-2 py-1 text-xs font-bold text-[#2496ED]">
+                                                <span className="inline-flex items-center gap-1.5 rounded border border-border bg-muted/30 px-2 py-1 text-xs font-bold text-muted-foreground">
+                                                    <RotateCcw className="h-3 w-3" />
                                                     rollback ready
                                                 </span>
                                             ) : (
-                                                <span className="rounded border border-white/10 bg-white/[0.03] px-2 py-1 text-xs font-bold text-muted-foreground">
+                                                <span className="inline-flex items-center gap-1.5 rounded border border-border/50 bg-muted/10 px-2 py-1 text-xs font-bold text-muted-foreground/50">
                                                     no rollback
                                                 </span>
                                             )}
                                         </div>
 
+                                        <div className="flex-shrink-0">
+                                            {entry.rollback_supported && (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => setConfirmEntry(entry)}
+                                                    disabled={rollingBack}
+                                                    className="h-8 gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground shadow-sm transition-all"
+                                                >
+                                                    {rollingBack ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                                                    Rollback
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3">
                                         <p className="text-sm font-medium leading-snug text-foreground/90">
                                             {entry.outcome.message}
                                         </p>
@@ -242,23 +260,10 @@ export function FixHistoryPanel({
                                                 </div>
                                             </div>
                                         ) : null}
-                                    </div>
 
-                                    <div className="flex flex-col gap-2 md:items-end">
-                                        {entry.rollback_supported ? (
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setConfirmEntry(entry)}
-                                                disabled={rollingBack}
-                                                className="border-amber-500/30 bg-amber-500/5 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300"
-                                            >
-                                                {rollingBack ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-                                                Rollback
-                                            </Button>
-                                        ) : (
-                                            <p className="max-w-56 text-xs text-muted-foreground md:text-right">
-                                                {entry.rollback_note ?? "Rollback is currently available only for captured cgroup resource updates."}
+                                        {!entry.rollback_supported && entry.rollback_note && (
+                                            <p className="text-xs text-muted-foreground/70">
+                                                {entry.rollback_note}
                                             </p>
                                         )}
                                     </div>
