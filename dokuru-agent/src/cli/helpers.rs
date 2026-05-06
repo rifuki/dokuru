@@ -533,6 +533,9 @@ fn current_access_mode_value(config: &InstallerConfig) -> &'static str {
 fn configure_cloudflare_access(config: &InstallerConfig) -> Result<()> {
     use crate::cli::CloudflareTunnel;
 
+    update_config_access_mode(config, crate::api::AccessMode::Cloudflare, "")?;
+    restart_agent_service(config)?;
+
     if !CloudflareTunnel::is_installed() {
         let spinner = cliclack::spinner();
         spinner.start("Installing cloudflared...");

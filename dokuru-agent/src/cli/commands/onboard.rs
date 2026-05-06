@@ -69,6 +69,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
 
     install_runtime_files(mode, &config, &source_binary)?;
     let credentials = write_runtime_config(mode, &config)?;
+    persist_pre_service_access_mode(mode, &config, access)?;
 
     if apply_service(mode, &config, &preflight)? == ServiceOutcome::Finished {
         return Ok(());
@@ -76,6 +77,7 @@ pub fn run(mode: SetupMode, args: SetupArgs) -> Result<()> {
 
     let access_url = resolve_access_url(mode, access, &config)?;
     persist_access_mode(mode, &config, access, &access_url)?;
+    restart_after_final_access_persist(mode, &config)?;
     show_next_steps(&config, &credentials, access, &access_url)?;
     outro("Dokuru is ready.")?;
 
@@ -476,7 +478,7 @@ fn start_service(config: &InstallerConfig) -> Result<ServiceOutcome> {
         restart_service(&config.service_name)
     }) {
         Ok(()) => {
-            log_terminal_info(format!("→ systemctl start {}", config.service_name))?;
+            log_terminal_info(format!("→ systemctl restart {}", config.service_name))?;
             if stderr().is_terminal() {
                 cliclack::log::success("✓ Active and running")?;
             }
@@ -552,6 +554,35 @@ fn direct_access_url(port: u16) -> String {
         local_ip()
     };
     format!("http://{host}:{port}")
+}
+
+fn initial_access_url(access: AccessChoice, config: &InstallerConfig) -> String {
+    match access {
+        AccessChoice::Cloudflare | AccessChoice::Domain => String::new(),
+        AccessChoice::Direct => direct_access_url(config.port),
+        AccessChoice::Relay => "wss://api.dokuru.rifuki.dev/ws/agent".to_string(),
+    }
+}
+
+fn persist_pre_service_access_mode(
+    mode: SetupMode,
+    config: &InstallerConfig,
+    access: AccessChoice,
+) -> Result<()> {
+    if mode == SetupMode::Onboard {
+        update_config_access_mode(config, access.mode(), &initial_access_url(access, config))?;
+    }
+    Ok(())
+}
+
+fn restart_after_final_access_persist(mode: SetupMode, config: &InstallerConfig) -> Result<()> {
+    if mode == SetupMode::Onboard && !config.skip_service && service_unit_path(config).exists() {
+        run_step("Reloading final access configuration", || {
+            restart_service(&config.service_name)
+        })?;
+        log_terminal_info(format!("→ systemctl restart {}", config.service_name))?;
+    }
+    Ok(())
 }
 
 fn is_cloud_environment() -> bool {

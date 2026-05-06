@@ -17,6 +17,11 @@ pub struct UpdateAgentParams<'a> {
 pub trait AgentRepository: Send + Sync {
     async fn create(&self, pool: &PgPool, agent: &Agent) -> Result<Agent>;
     async fn find_by_id(&self, pool: &PgPool, id: Uuid) -> Result<Option<Agent>>;
+    async fn find_latest_by_token_hash(
+        &self,
+        pool: &PgPool,
+        token_hash: &str,
+    ) -> Result<Option<Agent>>;
     async fn find_by_user_id(&self, pool: &PgPool, user_id: Uuid) -> Result<Vec<Agent>>;
     async fn update(
         &self,
@@ -74,6 +79,27 @@ impl AgentRepository for AgentRepositoryImpl {
             ",
         )
         .bind(id)
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(agent)
+    }
+
+    async fn find_latest_by_token_hash(
+        &self,
+        pool: &PgPool,
+        token_hash: &str,
+    ) -> Result<Option<Agent>> {
+        let agent = sqlx::query_as::<_, Agent>(
+            r"
+            SELECT *
+            FROM agents
+            WHERE token_hash = $1
+            ORDER BY updated_at DESC, created_at DESC, id DESC
+            LIMIT 1
+            ",
+        )
+        .bind(token_hash)
         .fetch_optional(pool)
         .await?;
 

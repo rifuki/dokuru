@@ -16,4 +16,4 @@ pub use dto::{AgentResponse, CreateAgentDto, UpdateAgentDto};
 pub use entity::Agent;
 pub use repository::{AgentRepository, AgentRepositoryImpl};
 pub use routes::agent_routes;
-pub use service::AgentService;
+pub use service::{AgentService, DUPLICATE_AGENT_TOKEN_MESSAGE};

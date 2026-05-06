@@ -235,6 +235,29 @@ fn find_connection(registry: &AgentRegistry, agent_id: Uuid) -> Option<AgentConn
         .find_map(|entry| (entry.agent_id == agent_id).then(|| entry.clone()))
 }
 
+#[must_use]
+pub fn rebind_connection_token(registry: &AgentRegistry, token: &str, agent_id: Uuid) -> bool {
+    let Some(mut connection) = registry.get_mut(token) else {
+        return false;
+    };
+
+    connection.agent_id = agent_id;
+    true
+}
+
+#[must_use]
+pub fn unbind_connection_token(registry: &AgentRegistry, token: &str, agent_id: Uuid) -> bool {
+    let Some(connection) = registry.get(token) else {
+        return false;
+    };
+    if connection.agent_id != agent_id {
+        return false;
+    }
+    drop(connection);
+
+    registry.remove(token).is_some()
+}
+
 async fn close_socket_with_error(mut socket: WebSocket, error: String) {
     let _ = socket.send(Message::Text(error.into())).await;
     let _ = socket.close().await;
@@ -336,18 +359,24 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     let registry = state.agent_registry.clone();
     let pending = Arc::new(DashMap::new());
     let streams = Arc::new(DashMap::new());
+    let connection_tx = tx.clone();
     register_agent_connection(
         &state,
         &registry,
         agent_id,
         &token,
-        tx.clone(),
+        connection_tx.clone(),
         pending.clone(),
         streams.clone(),
     )
     .await;
 
-    let heartbeat_task = spawn_heartbeat(state.db.pool().clone(), agent_id);
+    let heartbeat_task = spawn_heartbeat(
+        state.db.pool().clone(),
+        registry.clone(),
+        token.clone(),
+        connection_tx.clone(),
+    );
     let mut send_task = spawn_agent_sender(sender, rx);
     let mut recv_task = spawn_agent_receiver(receiver, tx, pending, streams);
 
@@ -362,7 +391,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         },
     }
 
-    unregister_agent_connection(&state, &registry, agent_id, &token);
+    unregister_agent_connection(&state, &registry, agent_id, &token, &connection_tx);
 }
 
 async fn authenticate_socket(
@@ -493,16 +522,37 @@ fn unregister_agent_connection(
     registry: &AgentRegistry,
     agent_id: Uuid,
     token: &str,
+    tx: &mpsc::UnboundedSender<String>,
 ) {
+    let Some(connection) = registry.get(token) else {
+        info!("Agent {} disconnected", agent_id);
+        return;
+    };
+    if !connection.tx.same_channel(tx) {
+        return;
+    }
+    let disconnected_agent_id = connection.agent_id;
+    drop(connection);
+
     registry.remove(token);
-    info!("Agent {} disconnected", agent_id);
-    state.ws_manager.broadcast_agent_disconnected(agent_id);
+    info!("Agent {} disconnected", disconnected_agent_id);
+    state
+        .ws_manager
+        .broadcast_agent_disconnected(disconnected_agent_id);
 }
 
-fn spawn_heartbeat(db_pool: sqlx::PgPool, agent_id: Uuid) -> JoinHandle<()> {
+fn spawn_heartbeat(
+    db_pool: sqlx::PgPool,
+    registry: AgentRegistry,
+    token: String,
+    tx: mpsc::UnboundedSender<String>,
+) -> JoinHandle<()> {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+            let Some(agent_id) = current_agent_id_for_connection(&registry, &token, &tx) else {
+                break;
+            };
             let result = sqlx::query!(
                 "UPDATE agents SET last_seen = NOW() WHERE id = $1",
                 agent_id
@@ -515,6 +565,18 @@ fn spawn_heartbeat(db_pool: sqlx::PgPool, agent_id: Uuid) -> JoinHandle<()> {
             }
         }
     })
+}
+
+fn current_agent_id_for_connection(
+    registry: &AgentRegistry,
+    token: &str,
+    tx: &mpsc::UnboundedSender<String>,
+) -> Option<Uuid> {
+    let connection = registry.get(token)?;
+    connection
+        .tx
+        .same_channel(tx)
+        .then_some(connection.agent_id)
 }
 
 fn spawn_agent_sender(
@@ -597,10 +659,18 @@ fn handle_agent_message(
 /// Authenticate agent by token
 async fn authenticate_agent(state: &AppState, token: &str) -> Option<(Uuid, String)> {
     // Query database for agent with this token (runtime query)
-    let result = sqlx::query_as::<_, (Uuid,)>("SELECT id FROM agents WHERE token_hash = $1")
-        .bind(hash_token(token))
-        .fetch_optional(state.db.pool())
-        .await;
+    let result = sqlx::query_as::<_, (Uuid,)>(
+        r"
+        SELECT id
+        FROM agents
+        WHERE token_hash = $1
+        ORDER BY updated_at DESC, created_at DESC, id DESC
+        LIMIT 1
+        ",
+    )
+    .bind(hash_token(token))
+    .fetch_optional(state.db.pool())
+    .await;
 
     match result {
         Ok(Some((id,))) => Some((id, token.to_string())),
@@ -640,5 +710,83 @@ mod tests {
 
         assert_eq!(hash.len(), 64);
         assert!(hash.chars().all(|ch| ch.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn rebind_connection_token_moves_existing_socket_to_new_agent() {
+        let registry = Arc::new(DashMap::new());
+        let old_agent_id = Uuid::new_v4();
+        let new_agent_id = Uuid::new_v4();
+        let token = "agent-token";
+        let (tx, _rx) = mpsc::unbounded_channel();
+
+        registry.insert(
+            token.to_string(),
+            AgentConnection {
+                agent_id: old_agent_id,
+                token: token.to_string(),
+                tx,
+                pending: Arc::new(DashMap::new()),
+                streams: Arc::new(DashMap::new()),
+            },
+        );
+
+        assert!(rebind_connection_token(&registry, token, new_agent_id));
+        assert_eq!(registry.get(token).unwrap().agent_id, new_agent_id);
+    }
+
+    #[test]
+    fn rebind_connection_token_returns_false_for_missing_token() {
+        let registry = Arc::new(DashMap::new());
+
+        assert!(!rebind_connection_token(
+            &registry,
+            "missing-token",
+            Uuid::new_v4()
+        ));
+    }
+
+    #[test]
+    fn unbind_connection_token_removes_matching_agent() {
+        let registry = Arc::new(DashMap::new());
+        let agent_id = Uuid::new_v4();
+        let token = "agent-token";
+        let (tx, _rx) = mpsc::unbounded_channel();
+
+        registry.insert(
+            token.to_string(),
+            AgentConnection {
+                agent_id,
+                token: token.to_string(),
+                tx,
+                pending: Arc::new(DashMap::new()),
+                streams: Arc::new(DashMap::new()),
+            },
+        );
+
+        assert!(unbind_connection_token(&registry, token, agent_id));
+        assert!(!registry.contains_key(token));
+    }
+
+    #[test]
+    fn unbind_connection_token_keeps_different_agent() {
+        let registry = Arc::new(DashMap::new());
+        let agent_id = Uuid::new_v4();
+        let token = "agent-token";
+        let (tx, _rx) = mpsc::unbounded_channel();
+
+        registry.insert(
+            token.to_string(),
+            AgentConnection {
+                agent_id,
+                token: token.to_string(),
+                tx,
+                pending: Arc::new(DashMap::new()),
+                streams: Arc::new(DashMap::new()),
+            },
+        );
+
+        assert!(!unbind_connection_token(&registry, token, Uuid::new_v4()));
+        assert!(registry.contains_key(token));
     }
 }
