@@ -8,6 +8,8 @@ interface EmailCheckResponse {
   reason?: string;
 }
 
+const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
 export function useEmailAvailability(email: string) {
   const [debouncedEmail, setDebouncedEmail] = useState(email);
 
@@ -30,7 +32,7 @@ export function useEmailAvailability(email: string) {
       });
       return data.data;
     },
-    enabled: debouncedEmail.length > 0 && debouncedEmail.includes("@"),
+    enabled: isValidEmail(debouncedEmail),
     staleTime: 30000,
     retry: false,
   });

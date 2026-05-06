@@ -37,6 +37,8 @@ export function RegisterForm() {
   const emailTypingTimerRef = useRef<number | null>(null);
   const register = useRegister();
 
+  const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+
   // Live username availability check with debounce
   const usernameCheck = useUsernameAvailability(username);
 
@@ -74,7 +76,7 @@ export function RegisterForm() {
       clearTimeout(emailTypingTimerRef.current);
     }
 
-    if (value.includes("@")) {
+    if (isValidEmail(value)) {
       setIsTypingEmail(true);
       // Reset after debounce time
       emailTypingTimerRef.current = setTimeout(() => {
@@ -131,7 +133,7 @@ export function RegisterForm() {
     username.length >= 3 && !usernameCheck.isLoading && usernameCheck.data;
 
   const showEmailStatus =
-    email.includes('@') && !emailCheck.isLoading && emailCheck.data;
+    isValidEmail(email) && !emailCheck.isLoading && emailCheck.data;
 
   const passwordToggleClass =
     "absolute right-3 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center text-muted-foreground transition-colors hover:text-foreground";
@@ -207,7 +209,7 @@ export function RegisterForm() {
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2">
                 {/* Show loading spinner while typing or checking */}
-                {(isTypingEmail || emailCheck.isLoading) && email.includes('@') && (
+                {(isTypingEmail || emailCheck.isLoading) && isValidEmail(email) && (
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 )}
                 {/* Show checkmark if available */}
