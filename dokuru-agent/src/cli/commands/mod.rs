@@ -1,3 +1,4 @@
+mod audit;
 mod config;
 mod configure;
 mod doctor;
@@ -10,6 +11,7 @@ mod uninstall;
 mod update;
 mod version;
 
+pub use audit::run_audit;
 pub use config::run_config_show;
 pub use configure::run_configure;
 pub use doctor::run_doctor;

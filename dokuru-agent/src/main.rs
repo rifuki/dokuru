@@ -28,6 +28,11 @@ enum Commands {
     Doctor(cli::DoctorArgs),
     /// Show Dokuru service and Docker status
     Status,
+    /// Run audits and apply/rollback remediation from the local agent
+    Audit {
+        #[command(subcommand)]
+        action: cli::AuditAction,
+    },
     /// Show local build metadata and latest release metadata
     Version(cli::VersionArgs),
     /// Manage agent authentication token
@@ -87,6 +92,7 @@ async fn main() -> eyre::Result<()> {
         }
         Commands::Doctor(args) => cli::run_doctor(args.clone())?,
         Commands::Status => cli::run_status()?,
+        Commands::Audit { action } => cli::run_audit(action).await?,
         Commands::Version(args) => cli::run_version(args),
         Commands::Token { action } => match action {
             TokenAction::Show(shared) => cli::run_token_show(shared)?,
