@@ -1,7 +1,8 @@
 /// Shared helpers for `fix_fn` implementations
 use crate::audit::types::{
-    ComposeRollbackTarget, FixHistoryEntry, FixOutcome, FixPreview, FixPreviewTarget, FixProgress,
-    FixRequest, FixStatus, FixTarget, ResourceSuggestion, RollbackRequest,
+    ComposeRollbackTarget, ContainerRollbackTarget, FixHistoryEntry, FixOutcome, FixPreview,
+    FixPreviewTarget, FixProgress, FixRequest, FixStatus, FixTarget, ResourceSuggestion,
+    RollbackRequest,
 };
 use bollard::{
     Docker,
@@ -14,7 +15,7 @@ use bollard::{
 use serde_yaml::{Mapping as YamlMapping, Value as YamlValue};
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write as _;
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::LazyLock;
@@ -28,7 +29,8 @@ pub type ProgressSender = mpsc::UnboundedSender<FixProgress>;
 #[derive(Default)]
 pub struct RollbackPlan {
     pub cgroup_targets: Vec<FixTarget>,
-    pub compose_targets: Vec<ComposeRollbackTarget>,
+    pub compose_backups: Vec<ComposeRollbackTarget>,
+    pub container_snapshots: Vec<ContainerRollbackTarget>,
 }
 
 static FIX_HISTORY: LazyLock<RwLock<Vec<FixHistoryEntry>>> =
@@ -73,23 +75,22 @@ async fn read_persisted_fix_history() -> Vec<FixHistoryEntry> {
 
 async fn write_persisted_fix_history(history: &[FixHistoryEntry]) {
     let path = fix_history_path();
-    let Some(dir) = path.parent() else {
-        return;
-    };
-    if let Err(error) = tokio::fs::create_dir_all(dir).await {
-        tracing::warn!(path = %dir.display(), %error, "Failed to create fix history directory");
-        return;
-    }
-    let json = match serde_json::to_vec_pretty(history) {
-        Ok(json) => json,
-        Err(error) => {
-            tracing::warn!(%error, "Failed to serialize fix history");
-            return;
-        }
-    };
-    if let Err(error) = tokio::fs::write(&path, json).await {
+    if let Err(error) = write_secure_json_file(&path, history).await {
         tracing::warn!(path = %path.display(), %error, "Failed to write fix history");
     }
+}
+
+async fn write_secure_json_file<T: serde::Serialize + Sync + ?Sized>(
+    path: &Path,
+    value: &T,
+) -> eyre::Result<()> {
+    if let Some(dir) = path.parent() {
+        tokio::fs::create_dir_all(dir).await?;
+    }
+    let json = serde_json::to_vec_pretty(value)?;
+    tokio::fs::write(path, json).await?;
+    tokio::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).await?;
+    Ok(())
 }
 
 async fn fix_history_snapshot() -> Vec<FixHistoryEntry> {
@@ -130,6 +131,7 @@ const STRATEGY_DOCKER_UPDATE: &str = "docker_update";
 const STRATEGY_DOCKERFILE_UPDATE: &str = "dockerfile_update";
 const DEFAULT_COMPOSE_OVERRIDE_FILENAME: &str = "docker-compose.override.yml";
 const COMPOSE_BACKUP_DIR: &str = "compose-backups";
+const CONTAINER_SNAPSHOT_DIR: &str = "container-snapshots";
 const COMPOSE_FILENAMES: &[&str] = &[
     "compose.yaml",
     "docker-compose.yaml",
@@ -7191,6 +7193,191 @@ fn container_violates_rule(inspect: &ContainerInspectResponse, rule_id: &str) ->
     }
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+struct ContainerCreateRollbackSnapshot {
+    captured_at: String,
+    inspect: serde_json::Value,
+    create_config: serde_json::Value,
+}
+
+fn supports_container_snapshot_rollback(rule_id: &str) -> bool {
+    supports_image_config_fix(rule_id)
+        || supports_namespace_fix(rule_id)
+        || supports_privileged_fix(rule_id)
+        || supports_runtime_isolation_fix(rule_id)
+}
+
+fn container_snapshot_dir() -> PathBuf {
+    dokuru_data_dir().join(CONTAINER_SNAPSHOT_DIR)
+}
+
+fn safe_container_snapshot_name(value: &str) -> String {
+    let safe = value
+        .trim_start_matches('/')
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.') {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+
+    if safe.is_empty() {
+        "container".to_string()
+    } else {
+        safe
+    }
+}
+
+fn container_snapshot_path(name: &str) -> PathBuf {
+    let timestamp = chrono::Utc::now().format("%Y%m%d%H%M%S");
+    container_snapshot_dir().join(format!(
+        "{}.{}.{}.json",
+        safe_container_snapshot_name(name),
+        timestamp,
+        Uuid::new_v4()
+    ))
+}
+
+fn container_inspect_name(inspect: &ContainerInspectResponse, fallback_id: &str) -> String {
+    inspect
+        .name
+        .as_deref()
+        .map(|name| name.trim_start_matches('/'))
+        .filter(|name| !name.is_empty())
+        .map_or_else(|| short_id(fallback_id), str::to_string)
+}
+
+fn create_config_from_inspect(inspect: &ContainerInspectResponse) -> eyre::Result<Config<String>> {
+    let container_config = inspect
+        .config
+        .clone()
+        .ok_or_else(|| eyre::eyre!("missing container config"))?;
+    let mut create_config: Config<String> = container_config.into();
+    create_config.host_config = Some(inspect.host_config.clone().unwrap_or_default());
+    Ok(create_config)
+}
+
+async fn container_rollback_target_from_inspect(
+    id: &str,
+    inspect: &ContainerInspectResponse,
+) -> eyre::Result<ContainerRollbackTarget> {
+    let name = container_inspect_name(inspect, id);
+    let image = inspect
+        .config
+        .as_ref()
+        .and_then(|config| config.image.clone())
+        .unwrap_or_default();
+    let was_running = inspect
+        .state
+        .as_ref()
+        .and_then(|state| state.running)
+        .unwrap_or(false);
+    let create_config = serde_json::to_value(create_config_from_inspect(inspect)?)?;
+    let snapshot = ContainerCreateRollbackSnapshot {
+        captured_at: chrono::Utc::now().to_rfc3339(),
+        inspect: serde_json::to_value(inspect)?,
+        create_config,
+    };
+    let snapshot_path = container_snapshot_path(&name);
+    write_secure_json_file(&snapshot_path, &snapshot).await?;
+
+    Ok(ContainerRollbackTarget {
+        container_id: id.to_string(),
+        container_name: name,
+        image,
+        was_running,
+        snapshot_path: snapshot_path.to_string_lossy().to_string(),
+    })
+}
+
+fn should_capture_container_rollback_target(
+    inspect: &ContainerInspectResponse,
+    target: &FixTarget,
+) -> bool {
+    if compose_context_from_inspect(inspect).is_none() {
+        return true;
+    }
+
+    let strategy = target.strategy.as_deref();
+    !is_dokuru_override_strategy(strategy)
+        && !is_compose_source_strategy(strategy)
+        && !is_dockerfile_source_strategy(strategy)
+}
+
+async fn default_container_snapshot_targets(
+    docker: &Docker,
+    rule_id: &str,
+) -> eyre::Result<Vec<FixTarget>> {
+    let containers = docker.list_containers::<String>(None).await?;
+    let mut targets = Vec::new();
+
+    for container in &containers {
+        let Some(id) = container.id.as_deref() else {
+            continue;
+        };
+        let inspect = docker.inspect_container(id, None).await?;
+        if !container_violates_rule(&inspect, rule_id) {
+            continue;
+        }
+        let strategy = if compose_context_from_inspect(&inspect).is_some() {
+            STRATEGY_DOKURU_OVERRIDE
+        } else {
+            "recreate"
+        };
+        targets.push(FixTarget {
+            container_id: id.to_string(),
+            memory: None,
+            cpu_shares: None,
+            pids_limit: None,
+            strategy: Some(strategy.to_string()),
+            user: None,
+        });
+    }
+
+    Ok(targets)
+}
+
+async fn container_rollback_targets_for_request(
+    docker: &Docker,
+    request: &FixRequest,
+) -> eyre::Result<Vec<ContainerRollbackTarget>> {
+    if !supports_container_snapshot_rollback(&request.rule_id) {
+        return Ok(Vec::new());
+    }
+
+    let targets = if request.targets.is_empty() {
+        default_container_snapshot_targets(docker, &request.rule_id).await?
+    } else {
+        request.targets.clone()
+    };
+
+    let mut snapshots = Vec::new();
+    let mut seen = HashSet::<String>::new();
+    for target in targets {
+        let inspect = docker.inspect_container(&target.container_id, None).await?;
+        if !container_violates_rule(&inspect, &request.rule_id)
+            || !should_capture_container_rollback_target(&inspect, &target)
+        {
+            continue;
+        }
+        let key = inspect
+            .name
+            .as_deref()
+            .filter(|name| !name.is_empty())
+            .map_or_else(|| target.container_id.clone(), str::to_string);
+        if !seen.insert(key) {
+            continue;
+        }
+        snapshots
+            .push(container_rollback_target_from_inspect(&target.container_id, &inspect).await?);
+    }
+
+    Ok(snapshots)
+}
+
 pub async fn rollback_plan_for_request(
     docker: &Docker,
     request: &FixRequest,
@@ -7204,7 +7391,9 @@ pub async fn rollback_plan_for_request(
         {
             return Ok(RollbackPlan {
                 cgroup_targets: Vec::new(),
-                compose_targets: compose_rollback_targets_for_rule(docker, &request.rule_id)
+                compose_backups: compose_rollback_targets_for_rule(docker, &request.rule_id)
+                    .await?,
+                container_snapshots: container_rollback_targets_for_request(docker, request)
                     .await?,
             });
         }
@@ -7212,7 +7401,9 @@ pub async fn rollback_plan_for_request(
         if supports_runtime_isolation_fix(&request.rule_id) {
             return Ok(RollbackPlan {
                 cgroup_targets: Vec::new(),
-                compose_targets: compose_rollback_targets_for_rule(docker, &request.rule_id)
+                compose_backups: compose_rollback_targets_for_rule(docker, &request.rule_id)
+                    .await?,
+                container_snapshots: container_rollback_targets_for_request(docker, request)
                     .await?,
             });
         }
@@ -7230,7 +7421,8 @@ async fn namespace_rollback_plan(
     if request.targets.is_empty() {
         return Ok(RollbackPlan {
             cgroup_targets: Vec::new(),
-            compose_targets: compose_rollback_targets_for_rule(docker, &request.rule_id).await?,
+            compose_backups: compose_rollback_targets_for_rule(docker, &request.rule_id).await?,
+            container_snapshots: container_rollback_targets_for_request(docker, request).await?,
         });
     }
 
@@ -7266,7 +7458,8 @@ async fn namespace_rollback_plan(
 
     Ok(RollbackPlan {
         cgroup_targets: Vec::new(),
-        compose_targets,
+        compose_backups: compose_targets,
+        container_snapshots: container_rollback_targets_for_request(docker, request).await?,
     })
 }
 
@@ -7323,7 +7516,8 @@ async fn cgroup_rollback_plan(docker: &Docker, request: &FixRequest) -> eyre::Re
 
     Ok(RollbackPlan {
         cgroup_targets,
-        compose_targets,
+        compose_backups: compose_targets,
+        container_snapshots: Vec::new(),
     })
 }
 
@@ -7451,17 +7645,23 @@ pub async fn record_fix_history(
 ) -> FixHistoryEntry {
     let RollbackPlan {
         cgroup_targets: rollback_targets,
-        compose_targets,
+        compose_backups,
+        container_snapshots: container_rollback_targets,
     } = rollback_plan;
-    let compose_rollback_targets = compose_targets;
+    let compose_rollback_targets = compose_backups;
     let has_compose_rollback = compose_rollback_targets
         .iter()
         .any(|target| target.backup_path.is_some() || target.delete_on_rollback);
+    let has_container_rollback = !container_rollback_targets.is_empty();
     let rollback_supported = outcome.status == FixStatus::Applied
-        && (!rollback_targets.is_empty() || has_compose_rollback);
+        && (!rollback_targets.is_empty() || has_compose_rollback || has_container_rollback);
     let rollback_note = rollback_supported.then(|| {
-        if has_compose_rollback {
+        if has_compose_rollback && has_container_rollback {
+            "Rollback restores backed up Compose YAML and full standalone container snapshots".to_string()
+        } else if has_compose_rollback {
             "Rollback restores backed up Compose YAML or removes Dokuru override files, then recreates services".to_string()
+        } else if has_container_rollback {
+            "Rollback recreates standalone containers from captured Docker inspect snapshots".to_string()
         } else {
             "Rollback restores previous cgroup resource limits".to_string()
         }
@@ -7474,6 +7674,7 @@ pub async fn record_fix_history(
         rollback_supported,
         rollback_targets,
         compose_rollback_targets,
+        container_rollback_targets,
         progress_events,
         rollback_note,
     };
@@ -7515,11 +7716,13 @@ pub async fn rollback_fix(docker: &Docker, request: &RollbackRequest) -> eyre::R
     };
 
     if !entry.rollback_supported
-        || (entry.rollback_targets.is_empty() && entry.compose_rollback_targets.is_empty())
+        || (entry.rollback_targets.is_empty()
+            && entry.compose_rollback_targets.is_empty()
+            && entry.container_rollback_targets.is_empty())
     {
         return Ok(blocked(
             &entry.request.rule_id,
-            "Rollback is only supported when previous cgroup limits or Compose backups were captured",
+            "Rollback is only supported when previous cgroup limits, Compose backups, or container snapshots were captured",
         ));
     }
 
@@ -7527,6 +7730,13 @@ pub async fn rollback_fix(docker: &Docker, request: &RollbackRequest) -> eyre::R
     let mut failed = Vec::new();
 
     rollback_compose_targets(&entry.compose_rollback_targets, &mut restored, &mut failed).await;
+    rollback_container_targets(
+        docker,
+        &entry.container_rollback_targets,
+        &mut restored,
+        &mut failed,
+    )
+    .await;
 
     for target in &entry.rollback_targets {
         let options = UpdateContainerOptions::<String> {
@@ -7635,6 +7845,131 @@ async fn rollback_compose_targets(
             )),
         }
     }
+}
+
+async fn rollback_container_targets(
+    docker: &Docker,
+    targets: &[ContainerRollbackTarget],
+    restored: &mut Vec<String>,
+    failed: &mut Vec<String>,
+) {
+    for target in targets {
+        let label = format!("{} (container snapshot)", target.container_name);
+        match rollback_container_target(docker, target).await {
+            Ok(()) => restored.push(label),
+            Err(error) => failed.push(format!("{label}: {error}")),
+        }
+    }
+}
+
+async fn rollback_container_target(
+    docker: &Docker,
+    target: &ContainerRollbackTarget,
+) -> eyre::Result<()> {
+    let snapshot = read_container_create_snapshot(&target.snapshot_path).await?;
+    let create_config = serde_json::from_value::<Config<String>>(snapshot.create_config.clone())?;
+
+    remove_container_if_present(docker, &target.container_id).await?;
+    if !target.container_name.is_empty() && target.container_name != target.container_id {
+        remove_container_if_present(docker, &target.container_name).await?;
+    }
+
+    let opts = (!target.container_name.is_empty()).then(|| CreateContainerOptions {
+        name: target.container_name.clone(),
+        platform: None,
+    });
+    let created = docker.create_container(opts, create_config).await?;
+    let container_ref = if target.container_name.is_empty() {
+        created.id.as_str()
+    } else {
+        target.container_name.as_str()
+    };
+    restore_container_networks(container_ref, &snapshot).await?;
+
+    if target.was_running {
+        docker
+            .start_container(container_ref, None::<StartContainerOptions<String>>)
+            .await?;
+    }
+
+    Ok(())
+}
+
+async fn read_container_create_snapshot(
+    path: &str,
+) -> eyre::Result<ContainerCreateRollbackSnapshot> {
+    let json = tokio::fs::read(path).await?;
+    Ok(serde_json::from_slice(&json)?)
+}
+
+async fn remove_container_if_present(docker: &Docker, reference: &str) -> eyre::Result<()> {
+    if reference.is_empty() || docker.inspect_container(reference, None).await.is_err() {
+        return Ok(());
+    }
+
+    let _ = docker
+        .stop_container(reference, Some(StopContainerOptions { t: 10 }))
+        .await;
+    docker
+        .remove_container(
+            reference,
+            Some(RemoveContainerOptions {
+                v: false,
+                force: true,
+                link: false,
+            }),
+        )
+        .await?;
+    Ok(())
+}
+
+async fn restore_container_networks(
+    container_name: &str,
+    snapshot: &ContainerCreateRollbackSnapshot,
+) -> eyre::Result<()> {
+    let Some(networks) = snapshot
+        .inspect
+        .pointer("/NetworkSettings/Networks")
+        .and_then(serde_json::Value::as_object)
+    else {
+        return Ok(());
+    };
+
+    for (network, settings) in networks {
+        if network.is_empty() || matches!(network.as_str(), "host" | "none") {
+            continue;
+        }
+        let mut owned_args = vec!["network".to_string(), "connect".to_string()];
+        if let Some(aliases) = settings
+            .get("Aliases")
+            .and_then(serde_json::Value::as_array)
+        {
+            for alias in aliases.iter().filter_map(serde_json::Value::as_str) {
+                if !alias.is_empty() && alias != container_name {
+                    owned_args.push("--alias".to_string());
+                    owned_args.push(alias.to_string());
+                }
+            }
+        }
+        owned_args.push(network.clone());
+        owned_args.push(container_name.to_string());
+        let args = owned_args.iter().map(String::as_str).collect::<Vec<_>>();
+
+        match run_cmd("docker", &args).await {
+            Ok((_, _, true)) => {}
+            Ok((_, stderr, false)) if stderr.contains("already exists") => {}
+            Ok((_, stderr, false)) if stderr.contains("is already connected") => {}
+            Ok((_, stderr, false)) => {
+                return Err(eyre::eyre!(
+                    "failed to restore network {network}: {}",
+                    stderr.trim()
+                ));
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+
+    Ok(())
 }
 
 /// Merge a key into /etc/docker/daemon.json, creating the file if needed.
@@ -8397,6 +8732,15 @@ services:
             path,
             PathBuf::from("/srv/dokuru-lab/docker-compose.override.yaml")
         );
+    }
+
+    #[test]
+    fn safe_container_snapshot_name_removes_path_separators() {
+        assert_eq!(
+            safe_container_snapshot_name("/web/api:latest"),
+            "web_api_latest"
+        );
+        assert_eq!(safe_container_snapshot_name(""), "container");
     }
 
     #[test]

@@ -133,6 +133,13 @@ export interface FixHistoryEntry {
     working_dir?: string;
     config_files?: string;
   }>;
+  container_rollback_targets?: Array<{
+    container_id: string;
+    container_name: string;
+    image: string;
+    was_running: boolean;
+    snapshot_path: string;
+  }>;
   progress_events?: FixProgress[];
   rollback_note?: string;
 }

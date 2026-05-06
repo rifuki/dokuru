@@ -203,6 +203,8 @@ pub struct FixHistoryEntry {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub compose_rollback_targets: Vec<ComposeRollbackTarget>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub container_rollback_targets: Vec<ContainerRollbackTarget>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub progress_events: Vec<FixProgress>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rollback_note: Option<String>,
@@ -221,6 +223,15 @@ pub struct ComposeRollbackTarget {
     pub working_dir: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub config_files: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ContainerRollbackTarget {
+    pub container_id: String,
+    pub container_name: String,
+    pub image: String,
+    pub was_running: bool,
+    pub snapshot_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

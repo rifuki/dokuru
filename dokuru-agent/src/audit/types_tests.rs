@@ -344,4 +344,20 @@ mod tests {
 
         assert_eq!(decoded, target);
     }
+
+    #[test]
+    fn test_container_rollback_target_round_trip() {
+        let target = ContainerRollbackTarget {
+            container_id: "abc123".to_string(),
+            container_name: "web".to_string(),
+            image: "nginx:alpine".to_string(),
+            was_running: true,
+            snapshot_path: "/var/lib/dokuru/container-snapshots/web.test.json".to_string(),
+        };
+
+        let json = serde_json::to_string(&target).unwrap();
+        let decoded = serde_json::from_str::<ContainerRollbackTarget>(&json).unwrap();
+
+        assert_eq!(decoded, target);
+    }
 }
