@@ -820,7 +820,7 @@ export function FixAllWizard({
     const showConfigure = selectedCgroupRuleIds.length > 0 || step === "configure";
 
     return (
-        <Sheet open={open} onOpenChange={(v) => { if (!v && step !== "applying") onClose(); }}>
+        <Sheet open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
             <ResizableSheetContent
                 side="right"
                 showCloseButton={false}
@@ -830,8 +830,7 @@ export function FixAllWizard({
                 className="bg-background border-l"
             >
                 <SheetClose
-                    disabled={step === "applying"}
-                    className="absolute right-5 top-5 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/55 transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white disabled:pointer-events-none disabled:opacity-30"
+                    className="absolute right-5 top-5 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/55 transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
                 >
                     <X className="h-4 w-4" />
                     <span className="sr-only">Close</span>

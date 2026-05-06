@@ -208,22 +208,28 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
     const activeRuleRef = useRef<string | null>(null);
 
     const openFixAll = useCallback((rules: AuditResult[]) => {
-        setRuleStatuses(rules.map(r => ({
-            ruleId: r.rule.id,
-            title: r.rule.title,
-            outcome: null,
-            progressEvents: [],
-            state: "pending",
-            selected: !HIGH_RISK_AUTO_FIX_RULES.has(r.rule.id),
-            highRisk: HIGH_RISK_AUTO_FIX_RULES.has(r.rule.id),
-        })));
-        setStep("confirm");
-        setCurrentIndex(-1);
-        setCgroupTargets([]);
-        setCgroupLoading(false);
-        cancelRequestedRef.current = false;
-        activeRuleRef.current = null;
-        setOpen(true);
+        setStep((currentStep) => {
+            if (currentStep === "applying" || currentStep === "result") {
+                setOpen(true);
+                return currentStep;
+            }
+            setRuleStatuses(rules.map(r => ({
+                ruleId: r.rule.id,
+                title: r.rule.title,
+                outcome: null,
+                progressEvents: [],
+                state: "pending",
+                selected: !HIGH_RISK_AUTO_FIX_RULES.has(r.rule.id),
+                highRisk: HIGH_RISK_AUTO_FIX_RULES.has(r.rule.id),
+            })));
+            setCurrentIndex(-1);
+            setCgroupTargets([]);
+            setCgroupLoading(false);
+            cancelRequestedRef.current = false;
+            activeRuleRef.current = null;
+            setOpen(true);
+            return "confirm";
+        });
     }, []);
 
     const toggleRule = useCallback((ruleId: string) => {
@@ -252,15 +258,25 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
 
     const closeFixAll = useCallback(() => {
         setOpen(false);
-        cancelRequestedRef.current = false;
-        activeRuleRef.current = null;
-        setTimeout(() => {
-            setStep("confirm");
-            setCurrentIndex(-1);
-            setRuleStatuses([]);
-            setCgroupTargets([]);
-            setCgroupLoading(false);
-        }, 300);
+        setStep((currentStep) => {
+            if (currentStep !== "applying" && currentStep !== "result") {
+                cancelRequestedRef.current = false;
+                activeRuleRef.current = null;
+                setTimeout(() => {
+                    setStep((s) => {
+                        if (s !== "applying" && s !== "result") {
+                            setCurrentIndex(-1);
+                            setRuleStatuses([]);
+                            setCgroupTargets([]);
+                            setCgroupLoading(false);
+                            return "confirm";
+                        }
+                        return s;
+                    });
+                }, 300);
+            }
+            return currentStep;
+        });
     }, []);
 
     const loadCgroupConfig = useCallback(async (ruleIds: CgroupRuleId[]) => {
