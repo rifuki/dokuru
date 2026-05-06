@@ -162,7 +162,7 @@ export function FixHistoryPanel({
                             const rollingBack = rollingBackId === entry.id;
 
                             return (
-                                <div key={entry.id} className="grid gap-4 px-5 py-4 lg:grid-cols-[1fr_auto] lg:items-center">
+                                <div key={entry.id} className="grid gap-4 px-5 py-4 md:grid-cols-[1fr_auto] md:items-center">
                                     <div className="min-w-0 space-y-3">
                                         <div className="flex flex-wrap items-center gap-2">
                                             <span className="rounded border border-border bg-muted/30 px-2 py-1 font-mono text-xs font-black text-muted-foreground">
@@ -191,47 +191,47 @@ export function FixHistoryPanel({
                                             {entry.outcome.message}
                                         </p>
 
-                                        {entry.rollback_targets.length > 0 && (
-                                            <div className="rounded-lg border border-white/8 bg-white/[0.02] p-3">
-                                                <p className="mb-2 text-[10px] font-mono uppercase tracking-[0.16em] text-white/35">
+                                        {entry.rollback_targets.length > 0 ? (
+                                            <div className="rounded-lg border border-border bg-muted/30 p-3">
+                                                <p className="mb-2 text-[10px] font-mono uppercase tracking-[0.16em] text-muted-foreground">
                                                     Rollback targets
                                                 </p>
                                                 <div className="grid gap-1.5">
                                                     {entry.rollback_targets.slice(0, 4).map((target) => (
-                                                        <div key={target.container_id} className="flex flex-col gap-1 text-xs font-mono text-white/45 sm:flex-row sm:items-center sm:justify-between">
-                                                            <span className="truncate text-white/65">{target.container_id.slice(0, 12)}</span>
+                                                        <div key={target.container_id} className="flex flex-col gap-1 text-xs font-mono text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                                                            <span className="truncate text-foreground/80">{target.container_id.slice(0, 12)}</span>
                                                             <span>{formatTarget(target)}</span>
                                                         </div>
                                                     ))}
                                                 </div>
                                             </div>
-                                        )}
+                                        ) : null}
 
-                                        {(entry.compose_rollback_targets?.length ?? 0) > 0 && (
-                                            <div className="rounded-lg border border-white/8 bg-white/[0.02] p-3">
-                                                <p className="mb-2 text-[10px] font-mono uppercase tracking-[0.16em] text-white/35">
+                                        {(entry.compose_rollback_targets?.length ?? 0) > 0 ? (
+                                            <div className="rounded-lg border border-border bg-muted/30 p-3">
+                                                <p className="mb-2 text-[10px] font-mono uppercase tracking-[0.16em] text-muted-foreground">
                                                     Compose snapshots
                                                 </p>
                                                 <div className="grid gap-1.5">
                                                     {entry.compose_rollback_targets?.slice(0, 4).map((target) => (
-                                                        <div key={`${target.project}:${target.service}:${target.compose_path}`} className="flex flex-col gap-1 text-xs font-mono text-white/45 sm:flex-row sm:items-center sm:justify-between">
-                                                            <span className="truncate text-white/65">{target.project}:{target.service}</span>
+                                                        <div key={`${target.project}:${target.service}:${target.compose_path}`} className="flex flex-col gap-1 text-xs font-mono text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                                                            <span className="truncate text-foreground/80">{target.project}:{target.service}</span>
                                                             <span>{target.backup_path ? "file snapshot captured" : target.delete_on_rollback ? "delete created override" : "snapshot unavailable"}</span>
                                                         </div>
                                                     ))}
                                                 </div>
                                             </div>
-                                        )}
+                                        ) : null}
 
-                                        {(entry.container_rollback_targets?.length ?? 0) > 0 && (
-                                            <div className="rounded-lg border border-white/8 bg-white/[0.02] p-3">
-                                                <p className="mb-2 text-[10px] font-mono uppercase tracking-[0.16em] text-white/35">
+                                        {(entry.container_rollback_targets?.length ?? 0) > 0 ? (
+                                            <div className="rounded-lg border border-border bg-muted/30 p-3">
+                                                <p className="mb-2 text-[10px] font-mono uppercase tracking-[0.16em] text-muted-foreground">
                                                     Container snapshots
                                                 </p>
                                                 <div className="grid gap-1.5">
                                                     {entry.container_rollback_targets?.slice(0, 4).map((target) => (
-                                                        <div key={`${target.container_id}:${target.snapshot_path}`} className="flex flex-col gap-1 text-xs font-mono text-white/45 sm:flex-row sm:items-center sm:justify-between">
-                                                            <span className="truncate text-white/65">{target.container_name || target.container_id.slice(0, 12)}</span>
+                                                        <div key={`${target.container_id}:${target.snapshot_path}`} className="flex flex-col gap-1 text-xs font-mono text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                                                            <span className="truncate text-foreground/80">{target.container_name || target.container_id.slice(0, 12)}</span>
                                                             <span>
                                                                 {target.snapshot_note ?? "full inspect snapshot"}
                                                                 {target.original_user ? ` · was ${target.original_user}` : ""}
@@ -241,10 +241,10 @@ export function FixHistoryPanel({
                                                     ))}
                                                 </div>
                                             </div>
-                                        )}
+                                        ) : null}
                                     </div>
 
-                                    <div className="flex flex-col gap-2 lg:items-end">
+                                    <div className="flex flex-col gap-2 md:items-end">
                                         {entry.rollback_supported ? (
                                             <Button
                                                 variant="outline"
@@ -257,7 +257,7 @@ export function FixHistoryPanel({
                                                 Rollback
                                             </Button>
                                         ) : (
-                                            <p className="max-w-56 text-xs text-muted-foreground lg:text-right">
+                                            <p className="max-w-56 text-xs text-muted-foreground md:text-right">
                                                 {entry.rollback_note ?? "Rollback is currently available only for captured cgroup resource updates."}
                                             </p>
                                         )}
