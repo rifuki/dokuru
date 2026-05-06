@@ -144,10 +144,10 @@ impl Section4 {
   RUN groupadd -r appuser && useradd -r -g appuser appuser
   USER appuser
 
-Dokuru auto-fix uses the runtime/Compose equivalent so the CIS audit passes without rebuilding:
+Dokuru auto-fix uses the runtime/Compose equivalent so the CIS audit passes without rebuilding when the target is safe to change automatically:
   user: "1000:1000"
 
-This recreates affected containers. If the app needs root-owned files, adjust file ownership or choose an app-specific UID/GID."#.into(),
+This recreates affected containers. For persistent official images or writable mounts, Dokuru may block auto-fix so you can rebuild with a non-root USER or choose the app-specific UID/GID after validating volume ownership."#.into(),
             requires_restart: true,
             requires_elevation: false,
             references: vec![

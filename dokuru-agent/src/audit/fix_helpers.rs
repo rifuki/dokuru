@@ -1963,8 +1963,20 @@ fn known_image_non_root_user(inspect: &ContainerInspectResponse) -> Option<&'sta
             "999:999"
         });
     }
+    if image.contains("caddy") {
+        return Some("1000:1000");
+    }
 
     None
+}
+
+fn image_uses_root_entrypoint_with_writable_state(inspect: &ContainerInspectResponse) -> bool {
+    let image = inspect_image_name(inspect);
+    [
+        "caddy", "mariadb", "mongo", "mysql", "postgres", "rabbitmq", "redis",
+    ]
+    .into_iter()
+    .any(|name| image.contains(name))
 }
 
 fn has_docker_socket_mount(inspect: &ContainerInspectResponse) -> bool {
@@ -1991,6 +2003,82 @@ fn selected_non_root_user(inspect: &ContainerInspectResponse) -> String {
     known_image_non_root_user(inspect)
         .unwrap_or(DEFAULT_NON_ROOT_USER)
         .to_string()
+}
+
+fn explicit_target_non_root_user(target: &FixTarget) -> Option<&str> {
+    target
+        .user
+        .as_deref()
+        .filter(|user| !user_spec_is_root(user))
+}
+
+fn selected_non_root_user_for_target(
+    inspect: &ContainerInspectResponse,
+    target: &FixTarget,
+) -> String {
+    explicit_target_non_root_user(target).map_or_else(
+        || selected_non_root_user(inspect),
+        std::string::ToString::to_string,
+    )
+}
+
+fn writable_mounts_summary(inspect: &ContainerInspectResponse) -> Option<String> {
+    let mounts = inspect.mounts.as_ref()?;
+    let mut volumes = 0usize;
+    let mut binds = 0usize;
+
+    for mount in mounts {
+        if mount.rw == Some(false) {
+            continue;
+        }
+
+        match mount.typ {
+            Some(MountPointTypeEnum::VOLUME) => volumes += 1,
+            Some(MountPointTypeEnum::BIND) => binds += 1,
+            _ => {}
+        }
+    }
+
+    let mut parts = Vec::new();
+    if volumes > 0 {
+        parts.push(format!("{volumes} writable Docker volume(s)"));
+    }
+    if binds > 0 {
+        parts.push(format!("{binds} writable bind mount(s)"));
+    }
+
+    (!parts.is_empty()).then(|| parts.join(" and "))
+}
+
+fn rule_41_manual_non_root_reason(
+    inspect: &ContainerInspectResponse,
+    target: &FixTarget,
+) -> Option<String> {
+    if has_docker_socket_mount(inspect) {
+        return Some(
+            "container mounts the Docker socket; choose a purpose-built non-root user/group manually before applying rule 4.1"
+                .to_string(),
+        );
+    }
+
+    let mount_summary = writable_mounts_summary(inspect)?;
+    if explicit_target_non_root_user(target).is_some() {
+        return None;
+    }
+
+    if image_uses_root_entrypoint_with_writable_state(inspect) {
+        return Some(format!(
+            "container uses an image with root-entrypoint-managed writable state ({mount_summary}); rebuild it with a non-root USER or choose the service UID/GID explicitly after validating volume ownership"
+        ));
+    }
+
+    if known_image_non_root_user(inspect).is_none() {
+        return Some(format!(
+            "container has {mount_summary}, but Dokuru cannot infer the app-specific non-root UID/GID safely; choose the UID/GID manually before applying rule 4.1"
+        ));
+    }
+
+    None
 }
 
 fn target_user_or_default(target: Option<&FixTarget>) -> String {
@@ -2150,6 +2238,55 @@ fn dockremap_uid_gid() -> (u32, u32) {
     let uid = subid_start("/etc/subuid", "dockremap").unwrap_or(100_000);
     let gid = subid_start("/etc/subgid", "dockremap").unwrap_or(uid);
     (uid, gid)
+}
+
+fn parse_userns_remap_component(component: &str) -> Option<(u32, u32)> {
+    let (uid, gid) = component.split_once('.')?;
+    let uid = uid.parse().ok()?;
+    let gid = gid.parse().ok()?;
+
+    (uid >= 65_536 && gid >= 65_536).then_some((uid, gid))
+}
+
+fn userns_remap_base_from_volume_path(path: &str) -> Option<(u32, u32)> {
+    let components = Path::new(path)
+        .components()
+        .filter_map(|component| component.as_os_str().to_str())
+        .collect::<Vec<_>>();
+
+    components.windows(2).find_map(|window| {
+        (window[1] == "volumes")
+            .then(|| parse_userns_remap_component(window[0]))
+            .flatten()
+    })
+}
+
+fn configured_userns_remap_base() -> Option<(u32, u32)> {
+    let daemon_json = std::fs::read_to_string("/etc/docker/daemon.json").ok()?;
+    let value = serde_json::from_str::<serde_json::Value>(&daemon_json).ok()?;
+    let remap = value.get("userns-remap")?.as_str()?.trim();
+    if remap.is_empty() || matches!(remap, "host" | "disabled") {
+        return None;
+    }
+
+    let (user, group) = remap.split_once(':').unwrap_or((remap, remap));
+    let user = if user == "default" { "dockremap" } else { user };
+    let group = if group == "default" {
+        "dockremap"
+    } else {
+        group
+    };
+    let uid = subid_start("/etc/subuid", user).unwrap_or(100_000);
+    let gid = subid_start("/etc/subgid", group).unwrap_or(uid);
+
+    Some((uid, gid))
+}
+
+fn add_container_uid_gid_to_userns_base(base: (u32, u32), uid: u32, gid: u32) -> (u32, u32) {
+    (
+        base.0.checked_add(uid).unwrap_or(base.0),
+        base.1.checked_add(gid).unwrap_or(base.1),
+    )
 }
 
 fn is_safe_userns_bind_path(path: &str) -> bool {
@@ -3484,13 +3621,14 @@ async fn apply_image_config_target(
             .map_err(|error| format!("{container_label}: Dockerfile fix failed: {error}"));
     }
 
-    if rule_id == "4.1" && has_docker_socket_mount(&inspect) {
-        return Err(format!(
-            "{container_label}: container mounts the Docker socket; choose a purpose-built non-root user/group manually before applying rule 4.1"
-        ));
+    if rule_id == "4.1"
+        && let Some(reason) = rule_41_manual_non_root_reason(&inspect, target)
+    {
+        return Err(format!("{container_label}: {reason}"));
     }
 
-    let non_root_user = (rule_id == "4.1").then(|| selected_non_root_user(&inspect));
+    let non_root_user =
+        (rule_id == "4.1").then(|| selected_non_root_user_for_target(&inspect, target));
 
     if let Some(user) = non_root_user.as_deref() {
         prepare_non_root_mount_permissions(rule_id, &container_label, &inspect, user, progress)
@@ -3828,7 +3966,7 @@ async fn migrate_non_root_mount_actions(
     uid: u32,
     gid: u32,
 ) -> UsernsRecoveryResult {
-    let owner = format!("{uid}:{gid}");
+    let userns_base = non_root_mount_userns_remap_base(actions);
     let mut summary = UsernsRecoveryResult::default();
 
     for action in actions {
@@ -3836,11 +3974,13 @@ async fn migrate_non_root_mount_actions(
             summary.skipped += 1;
             continue;
         };
+        let owner_ids = non_root_mount_host_uid_gid(action, userns_base, uid, gid);
+        let owner = format!("{}:{}", owner_ids.0, owner_ids.1);
 
         let action_result = match action.kind {
             NonRootMountKind::Volume => chown_path(&action.path, &metadata, &owner).await,
             NonRootMountKind::Bind => {
-                recover_bind_mount_access(&action.path, &metadata, uid, gid).await
+                recover_bind_mount_access(&action.path, &metadata, owner_ids.0, owner_ids.1).await
             }
         };
 
@@ -3856,6 +3996,32 @@ async fn migrate_non_root_mount_actions(
     }
 
     summary
+}
+
+fn non_root_mount_userns_remap_base(actions: &[NonRootMountAction]) -> Option<(u32, u32)> {
+    actions
+        .iter()
+        .filter(|action| matches!(action.kind, NonRootMountKind::Volume))
+        .find_map(|action| userns_remap_base_from_volume_path(&action.path))
+        .or_else(configured_userns_remap_base)
+}
+
+fn non_root_mount_host_uid_gid(
+    action: &NonRootMountAction,
+    userns_base: Option<(u32, u32)>,
+    uid: u32,
+    gid: u32,
+) -> (u32, u32) {
+    let base = match action.kind {
+        NonRootMountKind::Volume => {
+            userns_remap_base_from_volume_path(&action.path).or(userns_base)
+        }
+        NonRootMountKind::Bind => userns_base,
+    };
+
+    base.map_or((uid, gid), |base| {
+        add_container_uid_gid_to_userns_base(base, uid, gid)
+    })
 }
 
 fn finish_non_root_mount_migration(
@@ -7719,6 +7885,75 @@ services:
         let rendered = upsert_dokuru_override_content(None, "db", "4.1", Some(&target)).unwrap();
 
         assert_eq!(rendered, expected);
+    }
+
+    fn rule_41_target(user: Option<&str>) -> FixTarget {
+        FixTarget {
+            container_id: "abc".to_string(),
+            memory: None,
+            cpu_shares: None,
+            pids_limit: None,
+            strategy: Some(STRATEGY_DOKURU_OVERRIDE.to_string()),
+            user: user.map(str::to_string),
+        }
+    }
+
+    fn inspect_with_writable_volume(image: &str) -> ContainerInspectResponse {
+        serde_json::from_value(serde_json::json!({
+            "Config": {
+                "Image": image,
+                "User": ""
+            },
+            "Mounts": [
+                {
+                    "Type": "volume",
+                    "Name": "data",
+                    "Source": "/var/lib/docker/100000.100000/volumes/data/_data",
+                    "Destination": "/data",
+                    "RW": true
+                }
+            ]
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn rule_41_blocks_stateful_root_entrypoint_without_explicit_user() {
+        let inspect = inspect_with_writable_volume("postgres:16-alpine");
+        let target = rule_41_target(None);
+
+        let reason = rule_41_manual_non_root_reason(&inspect, &target).unwrap();
+
+        assert!(reason.contains("root-entrypoint-managed writable state"));
+    }
+
+    #[test]
+    fn rule_41_allows_stateful_volume_when_user_is_explicit() {
+        let inspect = inspect_with_writable_volume("postgres:16-alpine");
+        let target = rule_41_target(Some("70:70"));
+
+        assert!(rule_41_manual_non_root_reason(&inspect, &target).is_none());
+    }
+
+    #[test]
+    fn non_root_mount_host_uid_gid_maps_userns_volume_owner() {
+        let action = NonRootMountAction {
+            path: "/var/lib/docker/100000.100000/volumes/postgres/_data".to_string(),
+            kind: NonRootMountKind::Volume,
+        };
+
+        assert_eq!(
+            non_root_mount_host_uid_gid(&action, None, 70, 70),
+            (100_070, 100_070)
+        );
+    }
+
+    #[test]
+    fn userns_remap_base_from_volume_path_rejects_small_numeric_components() {
+        assert_eq!(
+            userns_remap_base_from_volume_path("/srv/1.2/volumes/app"),
+            None
+        );
     }
 
     #[test]
