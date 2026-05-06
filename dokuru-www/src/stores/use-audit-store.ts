@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { toast } from "sonner";
 import { agentApi } from "@/lib/api/agent";
 import { agentDirectApi, type AuditResponse, type AuditResult, type AuditStreamMessage, type FixHistoryEntry, type FixOutcome, type FixProgress, type FixTarget } from "@/lib/api/agent-direct";
 import { LOCAL_AGENT_ID } from "@/lib/local-agent";
@@ -58,6 +59,49 @@ type FixStreamMessage =
 
 export function fixJobKey(agentId: string, ruleId: string) {
     return `${agentId}:${ruleId}`;
+}
+
+export function isAgentAuditWorkspacePath(pathname: string, agentId: string) {
+    const auditHref = `/agents/${agentId}/audit`;
+    const auditHistoryHref = `/agents/${agentId}/audits`;
+    return (
+        pathname === auditHref ||
+        pathname.startsWith(`${auditHref}/`) ||
+        pathname === auditHistoryHref ||
+        pathname.startsWith(`${auditHistoryHref}/`)
+    );
+}
+
+function shouldShowGlobalFixToast(agentId: string) {
+    if (typeof window === "undefined") return false;
+    return !isAgentAuditWorkspacePath(window.location.pathname, agentId);
+}
+
+function fixToastDescription(message?: string) {
+    if (!message) return undefined;
+    return message.length > 140 ? `${message.slice(0, 137)}...` : message;
+}
+
+function notifyFixJob(request: StartFixJobRequest, status: FixJobStatus, outcome?: FixOutcome, message?: string) {
+    if (!shouldShowGlobalFixToast(request.agentId)) return;
+
+    const toastId = `fix-job-${request.agentId}-${request.ruleId}`;
+    const description = fixToastDescription(message ?? outcome?.message);
+
+    if (status === "applied") {
+        toast.success(`Fix applied - rule ${request.ruleId}`, { id: toastId, description });
+        return;
+    }
+
+    if (status === "cancelled") {
+        toast.warning(`Fix cancelled - rule ${request.ruleId}`, { id: toastId, description });
+        return;
+    }
+
+    toast.error(`${status === "blocked" ? "Fix blocked" : "Fix failed"} - rule ${request.ruleId}`, {
+        id: toastId,
+        description,
+    });
 }
 
 const auditSockets = new Map<string, WebSocket>();
@@ -586,6 +630,7 @@ export const useAuditStore = create<AuditState>((set) => ({
                         },
                     },
                 }));
+                notifyFixJob(request, status, outcome);
                 resolve(outcome);
             };
 
@@ -652,6 +697,7 @@ export const useAuditStore = create<AuditState>((set) => ({
                         },
                     },
                 }));
+                notifyFixJob(request, "failed", outcome, message);
                 reject(new Error(message));
             };
 
@@ -699,6 +745,7 @@ export const useAuditStore = create<AuditState>((set) => ({
                         },
                     },
                 }));
+                notifyFixJob(request, "cancelled", outcome, FIX_CANCELLED_MESSAGE);
                 reject(new Error(FIX_CANCELLED_MESSAGE));
             };
 

@@ -46,7 +46,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useAuthUser } from "@/stores/use-auth-store";
-import { useAuditStore, type AuditStreamState, type FixJobState } from "@/stores/use-audit-store";
+import { isAgentAuditWorkspacePath, useAuditStore, type AuditStreamState, type FixJobState } from "@/stores/use-audit-store";
 import { useAgentStore } from "@/stores/use-agent-store";
 import { useRealtimeAgents } from "@/hooks/useRealtimeAgents";
 import { useAgentConnections } from "@/hooks/useAgentConnections";
@@ -55,6 +55,15 @@ import { IS_LOCAL_AGENT_MODE } from "@/lib/env";
 import { markSidebarNavigation } from "@/lib/sidebar-navigation";
 
 const AGENT_NAV_MEMORY_KEY = "dokuru_agent_nav_memory";
+const RECENT_FIX_STATUS_MS = 5 * 60 * 1000;
+
+type SidebarStatus = {
+  label: string;
+  title: string;
+  className: string;
+  indicatorClassName?: string;
+  isRunning?: boolean;
+};
 
 function readRememberedAgentNavTargets(): Record<string, string> {
   if (typeof window === "undefined") return {};
@@ -89,7 +98,7 @@ function writeRememberedAgentNavTargets(targets: Record<string, string>) {
   }
 }
 
-function auditSidebarStatus(stream?: AuditStreamState) {
+function auditSidebarStatus(stream?: AuditStreamState): SidebarStatus | null {
   if (!stream) return null;
 
   if (stream.status === "running") {
@@ -98,6 +107,7 @@ function auditSidebarStatus(stream?: AuditStreamState) {
       label: stream.total > 0 ? `${pct}%` : "Live",
       title: stream.total > 0 ? `Audit running (${stream.current}/${stream.total})` : "Audit running",
       className: "border-[#2496ED]/30 bg-[#2496ED]/10 text-[#2496ED]",
+      isRunning: true,
     };
   }
 
@@ -106,6 +116,7 @@ function auditSidebarStatus(stream?: AuditStreamState) {
       label: "Saving",
       title: "Audit complete, saving result",
       className: "border-amber-400/30 bg-amber-400/10 text-amber-300",
+      isRunning: true,
     };
   }
 
@@ -128,33 +139,84 @@ function auditSidebarStatus(stream?: AuditStreamState) {
   return null;
 }
 
-function fixSidebarStatus(agentId: string, fixJobs: Record<string, FixJobState>) {
+function isRecentCompletedFixJob(job: FixJobState, now: number) {
+  if (job.status === "running" || !job.completedAt) return false;
+  const completedAt = Date.parse(job.completedAt);
+  return Number.isFinite(completedAt) && now - completedAt <= RECENT_FIX_STATUS_MS;
+}
+
+function fixStatusLabel(status: FixJobState["status"]) {
+  if (status === "applied") return "Fixed";
+  if (status === "blocked") return "Blocked";
+  if (status === "failed") return "Failed";
+  if (status === "cancelled") return "Cancelled";
+  return "Fixing";
+}
+
+function completedFixClassName(status: FixJobState["status"]) {
+  if (status === "applied") return "border-emerald-400/30 bg-emerald-400/10 text-emerald-300";
+  if (status === "blocked") return "border-amber-400/30 bg-amber-400/10 text-amber-300";
+  if (status === "failed") return "border-rose-400/30 bg-rose-400/10 text-rose-300";
+  return "border-muted-foreground/25 bg-muted-foreground/10 text-muted-foreground";
+}
+
+function completedFixIndicatorClassName(status: FixJobState["status"]) {
+  if (status === "applied") return "bg-emerald-400";
+  if (status === "blocked") return "bg-amber-400";
+  if (status === "failed") return "bg-rose-400";
+  return "bg-muted-foreground";
+}
+
+function fixSidebarStatus(agentId: string, fixJobs: Record<string, FixJobState>, now: number): SidebarStatus | null {
   let runningCount = 0;
-  let latestJob: FixJobState | null = null;
+  let latestRunningJob: FixJobState | null = null;
+  let latestCompletedJob: FixJobState | null = null;
 
   for (const job of Object.values(fixJobs)) {
-    if (job.agentId !== agentId || job.status !== "running") continue;
-    runningCount += 1;
+    if (job.agentId !== agentId) continue;
 
-    if (!latestJob || Date.parse(job.startedAt) >= Date.parse(latestJob.startedAt)) {
-      latestJob = job;
+    if (job.status === "running") {
+      runningCount += 1;
+      if (!latestRunningJob || Date.parse(job.startedAt) >= Date.parse(latestRunningJob.startedAt)) {
+        latestRunningJob = job;
+      }
+      continue;
+    }
+
+    const completedAt = Date.parse(job.completedAt ?? "");
+    const latestCompletedAt = Date.parse(latestCompletedJob?.completedAt ?? "");
+    if (isRecentCompletedFixJob(job, now) && (!latestCompletedJob || completedAt >= latestCompletedAt)) {
+      latestCompletedJob = job;
     }
   }
 
-  if (!latestJob) return null;
+  if (latestRunningJob) {
+    const latestEvent = latestRunningJob.progressEvents.at(-1);
+    const totalSteps = latestEvent?.total_steps ?? 0;
+    const currentStep = latestEvent?.step ?? latestRunningJob.stepIndex + 1;
+    const pct = totalSteps > 0 ? Math.min(99, Math.max(1, Math.round((currentStep / totalSteps) * 100))) : null;
+    const currentAction = latestEvent?.detail || latestEvent?.action;
 
-  const latestEvent = latestJob.progressEvents.at(-1);
-  const totalSteps = latestEvent?.total_steps ?? 0;
-  const currentStep = latestEvent?.step ?? latestJob.stepIndex + 1;
-  const pct = totalSteps > 0 ? Math.min(99, Math.max(1, Math.round((currentStep / totalSteps) * 100))) : null;
-  const currentAction = latestEvent?.detail || latestEvent?.action;
+    return {
+      label: runningCount > 1 ? `${runningCount} fixes` : "Fixing",
+      title: currentAction
+        ? `Fixing rule ${latestRunningJob.ruleId}${pct ? ` (${pct}%)` : ""}: ${currentAction}`
+        : `Fixing rule ${latestRunningJob.ruleId}`,
+      className: "border-[#2496ED]/35 bg-[#2496ED]/10 text-[#2496ED]",
+      indicatorClassName: "animate-pulse bg-[#2496ED]",
+      isRunning: true,
+    };
+  }
 
+  if (!latestCompletedJob) return null;
+
+  const label = fixStatusLabel(latestCompletedJob.status);
+  const message = latestCompletedJob.error ?? latestCompletedJob.outcome?.message;
   return {
-    label: runningCount > 1 ? `${runningCount} fixes` : "Fixing",
-    title: currentAction
-      ? `Fixing rule ${latestJob.ruleId}${pct ? ` (${pct}%)` : ""}: ${currentAction}`
-      : `Fixing rule ${latestJob.ruleId}`,
-    className: "border-[#2496ED]/35 bg-[#2496ED]/10 text-[#2496ED]",
+    label,
+    title: message ? `${label} rule ${latestCompletedJob.ruleId}: ${message}` : `${label} rule ${latestCompletedJob.ruleId}`,
+    className: completedFixClassName(latestCompletedJob.status),
+    indicatorClassName: completedFixIndicatorClassName(latestCompletedJob.status),
   };
 }
 
@@ -200,17 +262,6 @@ function isAuditNavHref(href: string) {
   return /^\/agents\/[^/]+\/audit$/.test(href);
 }
 
-function isAgentAuditPath(pathname: string, agentId: string) {
-  const auditHref = `/agents/${agentId}/audit`;
-  const auditHistoryHref = `/agents/${agentId}/audits`;
-  return (
-    pathname === auditHref ||
-    pathname.startsWith(`${auditHref}/`) ||
-    pathname === auditHistoryHref ||
-    pathname.startsWith(`${auditHistoryHref}/`)
-  );
-}
-
 function rememberedResourceIndexHref(pathname: string) {
   const indexMatch = pathname.match(/^\/agents\/([^/]+)\/(containers|images|networks|volumes)\/?$/);
   return indexMatch ? `/agents/${indexMatch[1]}/${indexMatch[2]}` : null;
@@ -229,7 +280,9 @@ export function AppSidebar() {
   const isIconMode = sidebarState === "collapsed";
   const [openAgents, setOpenAgents] = useState<Record<string, boolean>>({});
   const [lastDetailHrefByDefaultHref, setLastDetailHrefByDefaultHref] = useState<Record<string, string>>(() => readRememberedAgentNavTargets());
+  const [fixStatusNow, setFixStatusNow] = useState(() => Date.now());
   const notifiedAuditIdsRef = useRef<Set<string>>(new Set());
+  const hasVisibleCompletedFixJob = Object.values(fixJobs).some((job) => isRecentCompletedFixJob(job, fixStatusNow));
 
   // Backend WS: relay agents + server-level events (agent:connected / agent:disconnected)
   useRealtimeAgents();
@@ -238,6 +291,13 @@ export function AppSidebar() {
   // online/offline detection. Marks agent offline the instant the WS closes,
   // then reconnects with exponential backoff (2s → 4s → … → 30s).
   useAgentConnections(isAdmin ? [] : agents);
+
+  useEffect(() => {
+    if (!hasVisibleCompletedFixJob) return;
+
+    const timer = window.setInterval(() => setFixStatusNow(Date.now()), 15_000);
+    return () => window.clearInterval(timer);
+  }, [hasVisibleCompletedFixJob]);
 
   useEffect(() => {
     if (!isAdmin) fetchAgents();
@@ -309,7 +369,7 @@ export function AppSidebar() {
       if (notifiedAuditIdsRef.current.has(savedAudit.id)) continue;
 
       notifiedAuditIdsRef.current.add(savedAudit.id);
-      if (isAgentAuditPath(location.pathname, agentId)) continue;
+      if (isAgentAuditWorkspacePath(location.pathname, agentId)) continue;
 
       const toastId = `audit-complete-${agentId}-${savedAudit.id}`;
       toast.success(`Audit complete - ${savedAudit.summary.score}/100`, {
@@ -338,7 +398,7 @@ export function AppSidebar() {
     if (/^\/agents\/[^/]+$/.test(href)) return location.pathname === href;
     const auditMatch = href.match(/^\/agents\/([^/]+)\/audit$/);
     if (auditMatch) {
-      return isAgentAuditPath(location.pathname, auditMatch[1]);
+      return isAgentAuditWorkspacePath(location.pathname, auditMatch[1]);
     }
     if (href.startsWith("/agents/")) {
       return location.pathname === href || location.pathname.startsWith(`${href}/`);
@@ -472,7 +532,7 @@ export function AppSidebar() {
                 const isConnecting = !!agentConnectingStatus[agent.id];
                 const isOnline = agentOnlineStatus[agent.id] === true;
                 const isOffline = !isConnecting && agentOnlineStatus[agent.id] === false;
-                const agentFixStatus = fixSidebarStatus(agent.id, fixJobs);
+                const agentFixStatus = fixSidebarStatus(agent.id, fixJobs, fixStatusNow);
                 const AgentIcon = isOnline || isConnecting ? Bot : BotOff;
                 const iconColor = isConnecting
                   ? "animate-pulse text-muted-foreground/45"
@@ -509,7 +569,7 @@ export function AppSidebar() {
                             >
                               <AgentIcon className={`size-5 ${iconColor}`} />
                               {agentFixStatus && (
-                                <span className="absolute right-1 top-1 size-1.5 rounded-full bg-[#2496ED] ring-2 ring-sidebar animate-pulse" />
+                                <span className={`absolute right-1 top-1 size-1.5 rounded-full ring-2 ring-sidebar ${agentFixStatus.indicatorClassName ?? "bg-[#2496ED]"}`} />
                               )}
                             </SidebarMenuButton>
                           ) : (
@@ -543,7 +603,7 @@ export function AppSidebar() {
                                 const completedAuditViewed = !!completedAuditId && viewedAuditResults[agent.id] === completedAuditId;
                                 const auditStatus = isCurrentAuditPage || completedAuditViewed ? null : auditSidebarStatus(auditStream);
                                 const fixStatus = isAuditItem ? agentFixStatus : null;
-                                const navStatus = fixStatus ?? auditStatus;
+                                const navStatus = fixStatus?.isRunning || !auditStatus?.isRunning ? fixStatus ?? auditStatus : auditStatus;
                                 const active = isActive(item.href);
                                 const disabled = item.requiresOnline && !isOnline;
                                 const targetHref = getAgentNavTarget(item.href, active);
@@ -595,7 +655,7 @@ export function AppSidebar() {
                                     <span className="min-w-0 flex-1 truncate">{item.title}</span>
                                     {navStatus && (
                                       <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold leading-none ${navStatus.className}`}>
-                                        {fixStatus && <Loader2 className="size-3 animate-spin" />}
+                                        {fixStatus?.isRunning && <Loader2 className="size-3 animate-spin" />}
                                         {navStatus.label}
                                       </span>
                                     )}

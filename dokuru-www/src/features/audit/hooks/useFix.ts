@@ -3,9 +3,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { agentApi } from "@/lib/api/agent";
 import { agentDirectApi, type AuditResult, type FixOutcome, type FixPreview, type FixTarget } from "@/lib/api/agent-direct";
-import { FIX_CANCELLED_MESSAGE, fixJobKey, useAuditStore, type FixJobState } from "@/stores/use-audit-store";
+import { FIX_CANCELLED_MESSAGE, fixJobKey, isAgentAuditWorkspacePath, useAuditStore, type FixJobState } from "@/stores/use-audit-store";
 
 export type WizardStep = "confirm" | "applying" | "result";
+
+function shouldShowRouteFixToast(agentId: string) {
+    if (typeof window === "undefined") return false;
+    return isAgentAuditWorkspacePath(window.location.pathname, agentId);
+}
 
 export function getFixSteps(ruleId: string): string[] {
     if (ruleId === "4.1") return [
@@ -371,10 +376,14 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token, auditTimesta
             await queryClient.invalidateQueries({ queryKey: ["fix-history"] });
 
             if (fixOutcome.status === "Applied") {
-                toast.success(`Fix applied — rule ${rule.id}`);
+                if (shouldShowRouteFixToast(agentId)) {
+                    toast.success(`Fix applied - rule ${rule.id}`);
+                }
                 await queryClient.invalidateQueries({ queryKey: ["agent-audit"] });
             } else if (fixOutcome.status === "Blocked") {
-                toast.error(`${rule.id}: ${fixOutcome.message.slice(0, 80)}`);
+                if (shouldShowRouteFixToast(agentId)) {
+                    toast.error(`${rule.id}: ${fixOutcome.message.slice(0, 80)}`);
+                }
             }
         } catch (error) {
             const errOutcome: FixOutcome = {
@@ -387,7 +396,9 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token, auditTimesta
             setStepIndex(steps.length);
             setOutcome(errOutcome);
             setStep("result");
-            toast.error(errOutcome.message === FIX_CANCELLED_MESSAGE ? "Fix cancelled" : "Fix failed");
+            if (shouldShowRouteFixToast(agentId)) {
+                toast.error(errOutcome.message === FIX_CANCELLED_MESSAGE ? "Fix cancelled" : "Fix failed");
+            }
         }
     }, [activeResult, agentAccessMode, agentId, agentUrl, buildTargets, queryClient, startFixJob, token]);
 

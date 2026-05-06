@@ -9,7 +9,12 @@ import {
     isNamespaceIsolationRule,
     isRuntimeIsolationRule,
 } from "@/features/audit/hooks/useFix";
-import { FIX_CANCELLED_MESSAGE, fixJobKey, useAuditStore } from "@/stores/use-audit-store";
+import { FIX_CANCELLED_MESSAGE, fixJobKey, isAgentAuditWorkspacePath, useAuditStore } from "@/stores/use-audit-store";
+
+function shouldShowRouteFixToast(agentId: string) {
+    if (typeof window === "undefined") return false;
+    return isAgentAuditWorkspacePath(window.location.pathname, agentId);
+}
 
 export type FixAllStep = "confirm" | "configure" | "applying" | "result";
 
@@ -478,13 +483,21 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
             await queryClient.invalidateQueries({ queryKey: ["fix-history"] });
         }
 
+        const showRouteToast = shouldShowRouteFixToast(agentId);
+
         if (cancelRequestedRef.current) {
-            toast.error("Fix All cancelled");
+            if (showRouteToast) {
+                toast.error("Fix All cancelled");
+            }
         } else if (applied > 0) {
-            toast.success(`Applied ${applied} fix${applied > 1 ? "es" : ""}${blocked > 0 ? `, ${blocked} blocked` : ""}`);
+            if (showRouteToast) {
+                toast.success(`Applied ${applied} fix${applied > 1 ? "es" : ""}${blocked > 0 ? `, ${blocked} blocked` : ""}`);
+            }
             await queryClient.invalidateQueries({ queryKey: ["agent-audit"] });
         } else {
-            toast.error("No fixes could be applied");
+            if (showRouteToast) {
+                toast.error("No fixes could be applied");
+            }
         }
     }, [agentAccessMode, agentId, agentUrl, cgroupTargets, loadCgroupConfig, queryClient, refreshCgroupTargetsForRule, refreshPreviewTargetsForRule, ruleStatuses, startFixJob, step, token]);
 
