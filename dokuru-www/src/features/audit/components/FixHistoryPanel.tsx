@@ -177,13 +177,12 @@ export function FixHistoryPanel({
                                                 {formatTime(entry.timestamp)}
                                             </span>
                                             {entry.rollback_supported ? (
-                                                <span className="inline-flex items-center gap-1.5 rounded border border-border bg-muted/30 px-2 py-1 text-xs font-bold text-muted-foreground">
-                                                    <RotateCcw className="h-3 w-3" />
-                                                    rollback ready
+                                                <span className="inline-flex items-center rounded border border-border bg-muted/10 px-2 py-1 text-xs font-medium text-muted-foreground/80">
+                                                    snapshot captured
                                                 </span>
                                             ) : (
-                                                <span className="inline-flex items-center gap-1.5 rounded border border-border/50 bg-muted/10 px-2 py-1 text-xs font-bold text-muted-foreground/50">
-                                                    no rollback
+                                                <span className="inline-flex items-center rounded border border-border/50 bg-muted/5 px-2 py-1 text-xs font-medium text-muted-foreground/40">
+                                                    no snapshot
                                                 </span>
                                             )}
                                         </div>
@@ -191,11 +190,11 @@ export function FixHistoryPanel({
                                         <div className="flex-shrink-0">
                                             {entry.rollback_supported && (
                                                 <Button
-                                                    variant="outline"
+                                                    variant="secondary"
                                                     size="sm"
                                                     onClick={() => setConfirmEntry(entry)}
                                                     disabled={rollingBack}
-                                                    className="h-8 gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground shadow-sm transition-all"
+                                                    className="h-8 gap-1.5 px-3 text-xs font-bold shadow-sm transition-all hover:bg-primary hover:text-primary-foreground"
                                                 >
                                                     {rollingBack ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
                                                     Rollback
