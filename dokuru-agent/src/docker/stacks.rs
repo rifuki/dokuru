@@ -73,7 +73,10 @@ where
         .route("/docker/stacks/{name}", get(get_stack))
         .route("/docker/stacks/{name}/up", post(compose_up_stack))
         .route("/docker/stacks/{name}/down", post(compose_down_stack))
-        .route("/docker/stacks/{name}/up/stream", get(compose_up_stack_stream))
+        .route(
+            "/docker/stacks/{name}/up/stream",
+            get(compose_up_stack_stream),
+        )
         .route(
             "/docker/stacks/{name}/down/stream",
             get(compose_down_stack_stream),
