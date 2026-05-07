@@ -1,5 +1,6 @@
 import axios, { type AxiosPromise } from "axios";
 import { apiClient } from "@/lib/api";
+import { wsApiUrl } from "@/lib/api/api-config";
 import { LOCAL_AGENT_ID } from "@/lib/local-agent";
 import { getAgentToken } from "@/stores/use-agent-store";
 
@@ -77,10 +78,34 @@ export interface Stack {
 }
 
 export interface ComposeActionResponse {
+  success?: boolean;
+  exit_code?: number | null;
   command: string;
   stdout: string;
   stderr: string;
+  stack?: ComposeActionStatus | null;
 }
+
+export interface ComposeActionStatus {
+  name: string;
+  running: number;
+  total: number;
+  status: "running" | "stopped" | "partial" | string;
+}
+
+export type ComposeActionStreamEvent =
+  | { type: "started"; command: string }
+  | { type: "output"; stream: "stdout" | "stderr"; data: string }
+  | {
+      type: "complete";
+      success: boolean;
+      exit_code: number | null;
+      command: string;
+      stdout: string;
+      stderr: string;
+      stack: ComposeActionStatus | null;
+    }
+  | { type: "error"; error: string; detail: string };
 
 export interface ComposeUpOptions {
   detach: boolean;
@@ -98,6 +123,7 @@ type DockerAgentLike = {
 };
 
 type DockerQuery = Record<string, string | number | boolean | undefined>;
+const COMPOSE_ACTION_TIMEOUT_MS = 180_000;
 
 export function dockerCredential(agent: DockerAgentLike | null | undefined) {
   if (!agent) return "";
@@ -108,6 +134,35 @@ export function canUseDockerAgent(agent: DockerAgentLike | null | undefined) {
   return agent?.id === LOCAL_AGENT_ID || !!dockerCredential(agent);
 }
 
+export function composeActionStreamUrl(
+  agentUrl: string,
+  credential: string,
+  name: string,
+  payload: ComposeActionSubmitOptions,
+  accessToken: string | null,
+) {
+  const params = new URLSearchParams();
+  if (payload.action === "up") {
+    params.set("detach", String(payload.detach));
+    params.set("force_recreate", String(payload.force_recreate));
+  } else {
+    params.set("volumes", String(payload.volumes));
+  }
+
+  if (agentUrl === "relay") {
+    if (!accessToken) return null;
+    params.set("access_token", accessToken);
+    return `${wsApiUrl}/agents/${credential}/docker/stacks/${encodeURIComponent(name)}/${payload.action}/stream?${params.toString()}`;
+  }
+
+  params.set("token", credential);
+  return `${agentUrl.replace(/^http/, "ws")}/docker/stacks/${encodeURIComponent(name)}/${payload.action}/stream?${params.toString()}`;
+}
+
+export type ComposeActionSubmitOptions =
+  | { action: "up"; detach: boolean; force_recreate: boolean }
+  | { action: "down"; volumes: boolean };
+
 function dockerRequest<T>(
   agentUrl: string,
   credential: string,
@@ -115,6 +170,7 @@ function dockerRequest<T>(
   path: string,
   params?: DockerQuery,
   data?: unknown,
+  timeout?: number,
 ): AxiosPromise<T> {
   if (agentUrl === "relay") {
     return apiClient.request<T>({
@@ -122,6 +178,7 @@ function dockerRequest<T>(
       url: `/agents/${credential}${path}`,
       params,
       data,
+      timeout,
     });
   }
 
@@ -131,6 +188,7 @@ function dockerRequest<T>(
     params,
     data,
     headers: { Authorization: `Bearer ${credential}` },
+    timeout,
   });
 }
 
@@ -196,10 +254,10 @@ export const dockerApi = {
     dockerRequest<{ path: string; content: string }>(agentUrl, token, "PUT", `/docker/stacks/${encodeURIComponent(name)}/compose`, { path }, { content }),
 
   composeUpStack: (agentUrl: string, token: string, name: string, options: ComposeUpOptions) =>
-    dockerRequest<ComposeActionResponse>(agentUrl, token, "POST", `/docker/stacks/${encodeURIComponent(name)}/up`, undefined, options),
+    dockerRequest<ComposeActionResponse>(agentUrl, token, "POST", `/docker/stacks/${encodeURIComponent(name)}/up`, undefined, options, COMPOSE_ACTION_TIMEOUT_MS),
 
   composeDownStack: (agentUrl: string, token: string, name: string, options: ComposeDownOptions) =>
-    dockerRequest<ComposeActionResponse>(agentUrl, token, "POST", `/docker/stacks/${encodeURIComponent(name)}/down`, undefined, options),
+    dockerRequest<ComposeActionResponse>(agentUrl, token, "POST", `/docker/stacks/${encodeURIComponent(name)}/down`, undefined, options, COMPOSE_ACTION_TIMEOUT_MS),
 
   // Networks
   listNetworks: (agentUrl: string, token: string) =>

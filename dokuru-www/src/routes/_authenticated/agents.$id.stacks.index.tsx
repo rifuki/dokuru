@@ -21,7 +21,15 @@ import {
   Play,
   Power,
 } from "lucide-react";
-import { canUseDockerAgent, dockerApi, dockerCredential, type Stack, type StackContainer } from "@/services/docker-api";
+import {
+  canUseDockerAgent,
+  composeActionStreamUrl,
+  dockerApi,
+  dockerCredential,
+  type ComposeActionStreamEvent,
+  type Stack,
+  type StackContainer,
+} from "@/services/docker-api";
 import { Input } from "@/components/ui/input";
 import { agentApi } from "@/lib/api/agent";
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
@@ -39,6 +47,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
+import { useAuthStore } from "@/stores/use-auth-store";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/stacks/")({
   component: StacksPage,
@@ -65,8 +74,10 @@ function stateDot(state: string) {
 }
 
 function composeErrorMessage(error: unknown, fallback: string) {
-  const data = (error as { response?: { data?: { error?: string; detail?: string } } })?.response?.data;
+  const direct = error as { error?: string; detail?: string; message?: string; details?: string | null };
+  const data = (error as { response?: { data?: { error?: string; detail?: string; message?: string; details?: string | null } } })?.response?.data ?? direct;
   if (data?.error) return data.detail ? `${data.error}: ${data.detail}` : data.error;
+  if (data?.message) return data.details ? `${data.message}: ${data.details}` : data.message;
   return fallback;
 }
 
@@ -631,11 +642,31 @@ type ComposeActionKind = "up" | "down";
 type ComposeActionSubmit =
   | { action: "up"; detach: boolean; forceRecreate: boolean }
   | { action: "down"; volumes: boolean };
+type ComposeTerminalStream = "meta" | "stdout" | "stderr";
+type ComposeTerminalChunk = { id: number; stream: ComposeTerminalStream; data: string };
+type ComposeActionRun = {
+  isRunning: boolean;
+  chunks: ComposeTerminalChunk[];
+  command: string;
+  final: Extract<ComposeActionStreamEvent, { type: "complete" }> | null;
+  error: string | null;
+};
+
+function initialComposeActionRun(): ComposeActionRun {
+  return {
+    isRunning: false,
+    chunks: [],
+    command: "",
+    final: null,
+    error: null,
+  };
+}
 
 function ComposeActionDialog({
   action,
   open,
   isPending,
+  run,
   stackName,
   onOpenChange,
   onSubmit,
@@ -643,6 +674,7 @@ function ComposeActionDialog({
   action: ComposeActionKind;
   open: boolean;
   isPending: boolean;
+  run: ComposeActionRun;
   stackName: string;
   onOpenChange: (open: boolean) => void;
   onSubmit: (payload: ComposeActionSubmit) => void;
@@ -666,7 +698,7 @@ function ComposeActionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {isUp ? <Play className="h-4 w-4 text-green-500" /> : <Power className="h-4 w-4 text-red-500" />}
@@ -720,6 +752,44 @@ function ComposeActionDialog({
           <div className="rounded-lg border border-border/70 bg-muted/25 px-3 py-2 font-mono text-xs text-muted-foreground">
             {commandPreview}
           </div>
+
+          {(run.chunks.length > 0 || run.final || run.error) && (
+            <div className="overflow-hidden rounded-lg border border-border/70 bg-black/90 text-xs shadow-inner">
+              <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 text-[11px] uppercase tracking-[0.18em] text-white/50">
+                <span>Live Terminal Evidence</span>
+                <span className={cn(
+                  "rounded-full px-2 py-0.5 normal-case tracking-normal",
+                  run.isRunning
+                    ? "bg-cyan-500/15 text-cyan-200"
+                    : run.final?.success
+                    ? "bg-green-500/15 text-green-200"
+                    : "bg-red-500/15 text-red-200"
+                )}>
+                  {run.isRunning ? "running" : run.final?.success ? "success" : "failed"}
+                </span>
+              </div>
+              <div className="max-h-64 overflow-auto p-3 font-mono leading-relaxed text-white/80">
+                {run.chunks.map((chunk) => (
+                  <pre
+                    key={chunk.id}
+                    className={cn(
+                      "whitespace-pre-wrap break-words",
+                      chunk.stream === "stderr" && "text-red-200",
+                      chunk.stream === "meta" && "text-cyan-200"
+                    )}
+                  >
+                    {chunk.data}
+                  </pre>
+                ))}
+                {run.final && (
+                  <pre className={cn("whitespace-pre-wrap break-words", run.final.success ? "text-green-200" : "text-red-200")}>
+                    {`\nexit_code=${run.final.exit_code ?? "unknown"} success=${String(run.final.success)}${run.final.stack ? ` status=${run.final.stack.status} running=${run.final.stack.running}/${run.final.stack.total}` : ""}\n`}
+                  </pre>
+                )}
+                {run.error && <pre className="whitespace-pre-wrap break-words text-red-200">{`\n${run.error}\n`}</pre>}
+              </div>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
@@ -753,35 +823,109 @@ function StackCard({
   const [composeOpen, setComposeOpen] = useState(false);
   const [selectedComposePath, setSelectedComposePath] = useState<string | null>(null);
   const [actionDialog, setActionDialog] = useState<ComposeActionKind | null>(null);
+  const [actionRun, setActionRun] = useState<ComposeActionRun>(() => initialComposeActionRun());
+  const actionSocketRef = useRef<WebSocket | null>(null);
+  const nextChunkIdRef = useRef(1);
+  const accessToken = useAuthStore((state) => state.accessToken);
 
-  const actionMutation = useMutation({
-    mutationFn: async (payload: ComposeActionSubmit) => {
-      if (payload.action === "up") {
-        const res = await dockerApi.composeUpStack(agentUrl, token, stack.name, {
-          detach: payload.detach,
-          force_recreate: payload.forceRecreate,
-        });
-        return res.data;
+  useEffect(() => () => {
+    actionSocketRef.current?.close();
+  }, []);
+
+  function appendComposeChunk(stream: ComposeTerminalStream, data: string) {
+    const normalized = data.replace(/\r/g, "\n");
+    setActionRun((current) => ({
+      ...current,
+      chunks: [
+        ...current.chunks,
+        { id: nextChunkIdRef.current++, stream, data: normalized },
+      ].slice(-300),
+    }));
+  }
+
+  function openComposeAction(action: ComposeActionKind) {
+    actionSocketRef.current?.close();
+    nextChunkIdRef.current = 1;
+    setActionRun(initialComposeActionRun());
+    setActionDialog(action);
+  }
+
+  function finishComposeAction(event: Extract<ComposeActionStreamEvent, { type: "complete" }>) {
+    setActionRun((current) => ({ ...current, isRunning: false, final: event }));
+    void queryClient.invalidateQueries({ queryKey: ["stacks", agentId] });
+    void queryClient.invalidateQueries({ queryKey: ["containers", agentId] });
+    void queryClient.invalidateQueries({ queryKey: ["agent-dashboard", agentId] });
+    if (event.success) {
+      toast.success("Compose action completed", { description: event.command });
+    } else {
+      toast.error("Compose action failed", { description: `exit_code=${event.exit_code ?? "unknown"}` });
+    }
+  }
+
+  function startComposeAction(payload: ComposeActionSubmit) {
+    actionSocketRef.current?.close();
+    nextChunkIdRef.current = 1;
+    setActionRun({ ...initialComposeActionRun(), isRunning: true });
+
+    const streamUrl = composeActionStreamUrl(
+      agentUrl,
+      token,
+      stack.name,
+      payload.action === "up"
+        ? { action: "up", detach: payload.detach, force_recreate: payload.forceRecreate }
+        : { action: "down", volumes: payload.volumes },
+      accessToken,
+    );
+
+    if (!streamUrl) {
+      const message = "Compose stream credentials are missing";
+      setActionRun((current) => ({ ...current, isRunning: false, error: message }));
+      toast.error(message);
+      return;
+    }
+
+    const socket = new WebSocket(streamUrl);
+    actionSocketRef.current = socket;
+    appendComposeChunk("meta", `connecting ${payload.action} stream...\n`);
+
+    socket.onmessage = (message) => {
+      try {
+        const event = JSON.parse(String(message.data)) as ComposeActionStreamEvent;
+        if (event.type === "started") {
+          setActionRun((current) => ({ ...current, command: event.command }));
+          appendComposeChunk("meta", `$ ${event.command}\n`);
+        } else if (event.type === "output") {
+          appendComposeChunk(event.stream, event.data);
+        } else if (event.type === "complete") {
+          finishComposeAction(event);
+          socket.close();
+        } else if (event.type === "error") {
+          const detail = event.detail ? `${event.error}: ${event.detail}` : event.error;
+          setActionRun((current) => ({ ...current, isRunning: false, error: detail }));
+          appendComposeChunk("stderr", `${detail}\n`);
+          toast.error(event.error, { description: event.detail });
+        }
+      } catch {
+        appendComposeChunk("stdout", String(message.data));
       }
+    };
 
-      const res = await dockerApi.composeDownStack(agentUrl, token, stack.name, {
-        volumes: payload.volumes,
-      });
-      return res.data;
-    },
-    onSuccess: (result, payload) => {
-      toast.success(`Compose ${payload.action} completed`, {
-        description: result.command,
-      });
-      setActionDialog(null);
-      void queryClient.invalidateQueries({ queryKey: ["stacks", agentId] });
-      void queryClient.invalidateQueries({ queryKey: ["containers", agentId] });
-      void queryClient.invalidateQueries({ queryKey: ["agent-dashboard", agentId] });
-    },
-    onError: (err, payload) => {
-      toast.error(composeErrorMessage(err, `Failed to run compose ${payload.action}`));
-    },
-  });
+    socket.onerror = () => {
+      const message = "Compose stream connection failed";
+      setActionRun((current) => ({ ...current, isRunning: false, error: message }));
+      toast.error(message);
+    };
+
+    socket.onclose = () => {
+      if (actionSocketRef.current === socket) {
+        actionSocketRef.current = null;
+        setActionRun((current) => {
+          if (!current.isRunning || current.final || current.error) return current;
+          return { ...current, isRunning: false, error: "Compose stream closed before completion" };
+        });
+      }
+    };
+  }
 
   const allRunning = stack.total > 0 && stack.running === stack.total;
   const noneRunning = stack.running === 0;
@@ -901,8 +1045,8 @@ function StackCard({
               <Button
                 size="sm"
                 className="h-8 gap-1.5 px-3 text-xs font-semibold"
-                onClick={() => setActionDialog("up")}
-                disabled={actionMutation.isPending}
+                onClick={() => openComposeAction("up")}
+                disabled={actionRun.isRunning}
               >
                 <Play className="h-3.5 w-3.5" />
                 Up
@@ -911,8 +1055,8 @@ function StackCard({
                 variant="outline"
                 size="sm"
                 className="h-8 gap-1.5 border-red-500/25 px-3 text-xs font-semibold text-red-500 hover:border-red-500/35 hover:bg-red-500/10 hover:text-red-500"
-                onClick={() => setActionDialog("down")}
-                disabled={actionMutation.isPending || noneRunning}
+                onClick={() => openComposeAction("down")}
+                disabled={actionRun.isRunning || noneRunning}
               >
                 <Power className="h-3.5 w-3.5" />
                 Down
@@ -964,10 +1108,11 @@ function StackCard({
         <ComposeActionDialog
           action={actionDialog}
           open={!!actionDialog}
-          isPending={actionMutation.isPending}
+          isPending={actionRun.isRunning}
+          run={actionRun}
           stackName={stack.name}
-          onOpenChange={(open) => !open && setActionDialog(null)}
-          onSubmit={(payload) => actionMutation.mutate(payload)}
+          onOpenChange={(open) => !open && !actionRun.isRunning && setActionDialog(null)}
+          onSubmit={startComposeAction}
         />
       )}
     </>

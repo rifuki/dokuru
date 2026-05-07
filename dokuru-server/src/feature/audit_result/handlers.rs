@@ -389,6 +389,13 @@ pub struct RelayExecQuery {
     shell: Option<String>,
 }
 
+#[derive(serde::Deserialize)]
+pub struct RelayComposeActionQuery {
+    detach: Option<bool>,
+    force_recreate: Option<bool>,
+    volumes: Option<bool>,
+}
+
 /// # Errors
 ///
 /// Returns an error if the underlying operation fails.
@@ -492,6 +499,46 @@ pub async fn relay_docker_events_ws(
             agent.id,
             "docker_events",
             serde_json::json!({}),
+            relay::RelayStreamMode::Text,
+        )
+    })
+}
+
+pub async fn relay_compose_action_stream_ws(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path((agent_id, name, action)): Path<(Uuid, String, String)>,
+    Query(query): Query<RelayComposeActionQuery>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    if action != "up" && action != "down" {
+        return ApiError::default()
+            .with_code(StatusCode::BAD_REQUEST)
+            .with_message("Unknown compose action")
+            .into_response();
+    }
+
+    let agent = match require_relay_agent(&state, auth_user.user_id, agent_id).await {
+        Ok(agent) => agent,
+        Err(error) => return error.into_response(),
+    };
+
+    let payload = serde_json::json!({
+        "name": name,
+        "action": action,
+        "detach": query.detach.unwrap_or(true),
+        "force_recreate": query.force_recreate.unwrap_or(false),
+        "volumes": query.volumes.unwrap_or(false),
+    });
+    let registry = state.agent_registry.clone();
+
+    ws.on_upgrade(move |socket: WebSocket| {
+        relay::proxy_stream_to_websocket(
+            socket,
+            registry,
+            agent.id,
+            "compose_action",
+            payload,
             relay::RelayStreamMode::Text,
         )
     })

@@ -1,6 +1,9 @@
 use axum::{
     Router,
-    extract::{Path, Query},
+    extract::{
+        Path, Query,
+        ws::{Message, WebSocket, WebSocketUpgrade},
+    },
     http::StatusCode,
     response::{IntoResponse, Json, Response},
     routing::{get, post},
@@ -10,6 +13,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::path::{Path as FsPath, PathBuf};
+use std::process::Stdio;
+use tokio::{
+    io::{AsyncRead, AsyncReadExt},
+    sync::mpsc,
+};
 use tracing::warn;
 
 use super::get_docker_client;
@@ -65,6 +73,11 @@ where
         .route("/docker/stacks/{name}", get(get_stack))
         .route("/docker/stacks/{name}/up", post(compose_up_stack))
         .route("/docker/stacks/{name}/down", post(compose_down_stack))
+        .route("/docker/stacks/{name}/up/stream", get(compose_up_stack_stream))
+        .route(
+            "/docker/stacks/{name}/down/stream",
+            get(compose_down_stack_stream),
+        )
         .route(
             "/docker/stacks/{name}/compose",
             get(get_compose_file).put(update_compose_file),
@@ -582,11 +595,56 @@ struct ComposeDownRequest {
     volumes: bool,
 }
 
+#[derive(Deserialize)]
+struct ComposeActionStreamQuery {
+    #[serde(default = "default_compose_up_detach")]
+    detach: bool,
+    #[serde(default)]
+    force_recreate: bool,
+    #[serde(default)]
+    volumes: bool,
+}
+
 #[derive(Debug, Serialize)]
 pub struct ComposeActionResponse {
+    pub success: bool,
+    pub exit_code: Option<i32>,
     pub command: String,
     pub stdout: String,
     pub stderr: String,
+    pub stack: Option<ComposeStackActionStatus>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ComposeStackActionStatus {
+    pub name: String,
+    pub running: usize,
+    pub total: usize,
+    pub status: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ComposeActionStreamEvent {
+    Started {
+        command: String,
+    },
+    Output {
+        stream: &'static str,
+        data: String,
+    },
+    Complete {
+        success: bool,
+        exit_code: Option<i32>,
+        command: String,
+        stdout: String,
+        stderr: String,
+        stack: Option<ComposeStackActionStatus>,
+    },
+    Error {
+        error: String,
+        detail: String,
+    },
 }
 
 struct StackComposeCommandContext {
@@ -937,6 +995,72 @@ async fn compose_down_stack(
     }
 }
 
+async fn compose_up_stack_stream(
+    Path(name): Path<String>,
+    Query(query): Query<ComposeActionStreamQuery>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    let docker = match get_docker_client() {
+        Ok(docker) => docker,
+        Err(error) => {
+            return compose_status(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Docker client error",
+                error.to_string(),
+            );
+        }
+    };
+    let action = ComposeStackAction::Up {
+        detach: query.detach,
+        force_recreate: query.force_recreate,
+    };
+
+    ws.on_upgrade(move |socket| stream_compose_action_ws(socket, docker, name, action))
+}
+
+async fn compose_down_stack_stream(
+    Path(name): Path<String>,
+    Query(query): Query<ComposeActionStreamQuery>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    let docker = match get_docker_client() {
+        Ok(docker) => docker,
+        Err(error) => {
+            return compose_status(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Docker client error",
+                error.to_string(),
+            );
+        }
+    };
+    let action = ComposeStackAction::Down {
+        volumes: query.volumes,
+    };
+
+    ws.on_upgrade(move |socket| stream_compose_action_ws(socket, docker, name, action))
+}
+
+async fn stream_compose_action_ws(
+    mut socket: WebSocket,
+    docker: Docker,
+    name: String,
+    action: ComposeStackAction,
+) {
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    tokio::spawn(stream_stack_compose_action(docker, name, action, tx));
+
+    while let Some(event) = rx.recv().await {
+        let Ok(text) = serde_json::to_string(&event) else {
+            continue;
+        };
+        if socket.send(Message::Text(text.into())).await.is_err() {
+            break;
+        }
+    }
+
+    let _ = socket.close().await;
+}
+
 pub async fn run_stack_compose_action(
     docker: &Docker,
     name: &str,
@@ -970,11 +1094,158 @@ pub async fn run_stack_compose_action(
         });
     }
 
+    let stack = compose_stack_action_status(docker, name).await;
+
     Ok(ComposeActionResponse {
+        success: true,
+        exit_code: output.status.code(),
         command: command_display,
         stdout,
         stderr,
+        stack,
     })
+}
+
+pub async fn stream_stack_compose_action(
+    docker: Docker,
+    name: String,
+    action: ComposeStackAction,
+    event_tx: mpsc::UnboundedSender<ComposeActionStreamEvent>,
+) {
+    if let Err(error) =
+        stream_stack_compose_action_inner(&docker, &name, action, event_tx.clone()).await
+    {
+        let _ = event_tx.send(ComposeActionStreamEvent::Error {
+            error: error.error,
+            detail: error.detail,
+        });
+    }
+}
+
+async fn stream_stack_compose_action_inner(
+    docker: &Docker,
+    name: &str,
+    action: ComposeStackAction,
+    event_tx: mpsc::UnboundedSender<ComposeActionStreamEvent>,
+) -> Result<(), ComposeErrorResponse> {
+    let context = stack_compose_command_context(docker, name).await?;
+    remember_stack_context(name, &context).await;
+    let args = stack_compose_command_args(name, &context.compose_paths, action);
+    let command_display = compose_command_display(&args);
+
+    let _ = event_tx.send(ComposeActionStreamEvent::Started {
+        command: command_display.clone(),
+    });
+
+    let mut command = tokio::process::Command::new("docker");
+    command
+        .args(&args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if let Some(working_dir) = &context.working_dir {
+        command.current_dir(working_dir);
+    }
+
+    let mut child = command.spawn().map_err(|error| ComposeErrorResponse {
+        error: "Failed to run docker compose".to_string(),
+        detail: error.to_string(),
+    })?;
+
+    let stdout_task = child
+        .stdout
+        .take()
+        .map(|stdout| tokio::spawn(read_compose_output(stdout, "stdout", event_tx.clone())));
+    let stderr_task = child
+        .stderr
+        .take()
+        .map(|stderr| tokio::spawn(read_compose_output(stderr, "stderr", event_tx.clone())));
+
+    let status = child.wait().await.map_err(|error| ComposeErrorResponse {
+        error: "Failed to wait for docker compose".to_string(),
+        detail: error.to_string(),
+    })?;
+    let stdout = join_compose_output(stdout_task).await;
+    let stderr = join_compose_output(stderr_task).await;
+    let stack = compose_stack_action_status(docker, name).await;
+
+    let _ = event_tx.send(ComposeActionStreamEvent::Complete {
+        success: status.success(),
+        exit_code: status.code(),
+        command: command_display,
+        stdout,
+        stderr,
+        stack,
+    });
+
+    Ok(())
+}
+
+async fn read_compose_output<R>(
+    mut reader: R,
+    stream: &'static str,
+    event_tx: mpsc::UnboundedSender<ComposeActionStreamEvent>,
+) -> String
+where
+    R: AsyncRead + Unpin,
+{
+    let mut output = String::new();
+    let mut buffer = [0_u8; 4096];
+
+    loop {
+        match reader.read(&mut buffer).await {
+            Ok(0) => break,
+            Ok(bytes_read) => {
+                let chunk = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
+                output.push_str(&chunk);
+                let _ = event_tx.send(ComposeActionStreamEvent::Output {
+                    stream,
+                    data: chunk,
+                });
+            }
+            Err(error) => {
+                let _ = event_tx.send(ComposeActionStreamEvent::Output {
+                    stream: "stderr",
+                    data: format!("Failed to read {stream}: {error}\n"),
+                });
+                break;
+            }
+        }
+    }
+
+    output
+}
+
+async fn join_compose_output(task: Option<tokio::task::JoinHandle<String>>) -> String {
+    match task {
+        Some(task) => task.await.unwrap_or_default(),
+        None => String::new(),
+    }
+}
+
+async fn compose_stack_action_status(
+    docker: &Docker,
+    name: &str,
+) -> Option<ComposeStackActionStatus> {
+    collect_stacks(docker)
+        .await
+        .ok()?
+        .into_iter()
+        .find(|stack| stack.name == name)
+        .map(|stack| {
+            let status = if stack.total > 0 && stack.running == stack.total {
+                "running"
+            } else if stack.running == 0 {
+                "stopped"
+            } else {
+                "partial"
+            };
+            ComposeStackActionStatus {
+                name: stack.name,
+                running: stack.running,
+                total: stack.total,
+                status: status.to_string(),
+            }
+        })
 }
 
 async fn stack_compose_command_context(

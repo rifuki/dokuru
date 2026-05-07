@@ -29,6 +29,7 @@ use crate::{
         AuditReport, AuditSummary, CheckResult, CheckStatus, FixOutcome, FixProgress, FixRequest,
         RollbackRequest, RuleDefinition, RuleRegistry, fix_helpers,
     },
+    docker::stacks::{ComposeStackAction, stream_stack_compose_action},
     host_shell,
 };
 
@@ -103,6 +104,22 @@ struct HostShellStreamPayload {
     rows: Option<u16>,
     cols: Option<u16>,
     shell: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ComposeActionStreamPayload {
+    name: String,
+    action: String,
+    #[serde(default = "default_compose_stream_detach")]
+    detach: bool,
+    #[serde(default)]
+    force_recreate: bool,
+    #[serde(default)]
+    volumes: bool,
+}
+
+const fn default_compose_stream_detach() -> bool {
+    true
 }
 
 /// Start relay mode - connect to server via WebSocket
@@ -353,6 +370,7 @@ async fn execute_stream(
         "docker_exec" => docker_exec_stream(payload, input_rx, tx, id).await,
         "host_shell" => host_shell_stream(payload, input_rx, tx, id).await,
         "docker_events" => docker_events_stream(input_rx, tx, id).await,
+        "compose_action" => compose_action_stream(payload, input_rx, tx, id).await,
         "fix_progress" => fix_progress_stream(payload, input_rx, tx, id).await,
         "audit_progress" => audit_progress_stream(input_rx, tx, id).await,
         _ => Err(eyre::eyre!("Unknown stream: {stream}")),
@@ -724,6 +742,56 @@ async fn fix_progress_stream(
                 message: "Fix task ended before returning an outcome".to_string(),
             })?,
         )?,
+    }
+
+    Ok(())
+}
+
+async fn compose_action_stream(
+    payload: serde_json::Value,
+    mut input_rx: mpsc::UnboundedReceiver<StreamInput>,
+    tx: &mpsc::UnboundedSender<Message>,
+    id: &str,
+) -> Result<()> {
+    let payload = serde_json::from_value::<ComposeActionStreamPayload>(payload)
+        .wrap_err("Invalid compose action stream payload")?;
+    let action = match payload.action.as_str() {
+        "up" => ComposeStackAction::Up {
+            detach: payload.detach,
+            force_recreate: payload.force_recreate,
+        },
+        "down" => ComposeStackAction::Down {
+            volumes: payload.volumes,
+        },
+        action => return Err(eyre::eyre!("Unknown compose action: {action}")),
+    };
+
+    let docker = crate::docker::get_docker_client()?;
+    let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+    let _runner = tokio::spawn(stream_stack_compose_action(
+        docker,
+        payload.name,
+        action,
+        event_tx,
+    ));
+
+    loop {
+        tokio::select! {
+            input = input_rx.recv() => {
+                match input {
+                    Some(StreamInput::Close) | None => {
+                        break;
+                    }
+                    Some(StreamInput::Data(_)) => {}
+                }
+            }
+            event = event_rx.recv() => {
+                let Some(event) = event else {
+                    break;
+                };
+                send_stream_data(tx, id, serde_json::to_vec(&event)?)?;
+            }
+        }
     }
 
     Ok(())
