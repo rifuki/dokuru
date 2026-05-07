@@ -9,6 +9,7 @@ use axum::{
     routing::{get, post},
 };
 use bollard::{Docker, container::ListContainersOptions};
+use futures_util::SinkExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::ErrorKind;
