@@ -596,7 +596,7 @@ function ContainerRow({
       to="/agents/$id/containers/$containerId"
       params={{ id: agentId, containerId: container.id }}
       search={{ from: "stacks" }}
-      className="group/row flex items-center gap-3 px-5 py-3 hover:bg-muted/40 transition-colors cursor-pointer"
+      className="group/row flex cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/40 sm:px-5"
     >
       <div className="relative flex items-center justify-center w-7 h-7 rounded-lg bg-muted/60 shrink-0 group-hover/row:bg-muted transition-colors">
         <Container className="h-3.5 w-3.5 text-muted-foreground" />
@@ -817,6 +817,7 @@ function StackCard({
   const [composeOpen, setComposeOpen] = useState(false);
   const [selectedComposePath, setSelectedComposePath] = useState<string | null>(null);
   const [actionDialog, setActionDialog] = useState<ComposeActionKind | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const [actionRun, setActionRun] = useState<ComposeActionRun>(() => initialComposeActionRun());
   const actionSocketRef = useRef<WebSocket | null>(null);
   const nextChunkIdRef = useRef(1);
@@ -880,13 +881,12 @@ function StackCard({
 
     const socket = new WebSocket(streamUrl);
     actionSocketRef.current = socket;
-    appendComposeChunk("meta", `connecting ${payload.action} stream...\n`);
 
     socket.onmessage = (message) => {
       try {
         const event = JSON.parse(String(message.data)) as ComposeActionStreamEvent;
         if (event.type === "started") {
-          appendComposeChunk("meta", `${payload.action} stream started\n`);
+          appendComposeChunk("meta", `$ ${event.command}\n`);
         } else if (event.type === "output") {
           appendComposeChunk(event.stream, event.data);
         } else if (event.type === "complete") {
@@ -947,6 +947,9 @@ function StackCard({
     : "bg-yellow-500";
   const composeFiles = stackComposeFiles(stack);
   const activeComposePath = selectedComposePath ?? composeFiles[0] ?? null;
+  const hasContainers = stack.containers.length > 0;
+  const containerLabel = `${stack.total} container${stack.total === 1 ? "" : "s"}`;
+  const hasOverride = stack.dokuru_override_active || stack.dokuru_override_exists;
 
   function openComposeFile(path: string) {
     setSelectedComposePath(path);
@@ -955,86 +958,111 @@ function StackCard({
 
   return (
     <>
-      <div className="group border border-border/60 rounded-2xl bg-card hover:border-border hover:shadow-lg hover:shadow-black/5 transition-all duration-300 overflow-hidden">
-        {/* Header */}
-        <div className="flex flex-col gap-4 border-b border-border/40 bg-gradient-to-r from-muted/30 to-transparent px-4 py-4 sm:flex-row sm:items-center sm:px-6">
-          <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-cyan-500/10 text-cyan-400 group-hover:bg-cyan-500/15 transition-colors shrink-0 border border-cyan-500/20">
-            <SquareStack className="h-5 w-5" />
-          </div>
+      <div className="group overflow-hidden rounded-2xl border border-border/60 bg-card transition-all duration-300 hover:border-border hover:shadow-lg hover:shadow-black/5">
+        <div className="bg-gradient-to-r from-muted/30 to-transparent px-4 py-3 sm:px-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <div className="flex min-w-0 flex-1 items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-500/20 bg-cyan-500/10 text-cyan-400 transition-colors group-hover:bg-cyan-500/15">
+                <SquareStack className="h-5 w-5" />
+              </div>
 
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <span className="min-w-0 truncate text-base font-semibold tracking-tight">{stack.name}</span>
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full border",
-                  statusClass,
-                )}
-              >
-                <span
-                  className={cn(
-                    "h-1.5 w-1.5 rounded-full bg-current",
-                    allRunning && "animate-pulse",
-                  )}
-                />
-                {statusLabel}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground flex-wrap">
-              <span className="flex items-center gap-1.5">
-                <Activity className="h-3 w-3" />
-                <span>
-                  <span className="text-foreground font-medium">{stack.running}</span>
-                  /{stack.total} running
-                </span>
-              </span>
-              {stack.working_dir && (
-                <span className="flex items-center gap-1.5 truncate">
-                  <FolderOpen className="h-3 w-3 shrink-0" />
-                  <span className="truncate font-mono">{stack.working_dir}</span>
-                </span>
-              )}
-              {composeFiles.map((path) => {
-                const isOverride = isOverrideComposeFile(path);
-                return (
-                  <button
-                    key={path}
-                    title={path}
-                    onClick={() => openComposeFile(path)}
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="min-w-0 truncate text-base font-semibold tracking-tight">{stack.name}</span>
+                  <span
                     className={cn(
-                      "flex items-center gap-1.5 transition-colors group/compose",
-                      isOverride ? "text-cyan-400/90 hover:text-cyan-300" : "hover:text-foreground",
+                      "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium",
+                      statusClass,
                     )}
                   >
-                    {isOverride ? (
-                      <FileCode2 className="h-3 w-3 shrink-0 transition-colors" />
-                    ) : (
-                      <FileText className="h-3 w-3 shrink-0 group-hover/compose:text-cyan-400 transition-colors" />
-                    )}
-                    <span className="font-mono group-hover/compose:text-cyan-400 transition-colors underline underline-offset-2 decoration-dashed">
-                      {composeFileName(path)}
+                    <span
+                      className={cn(
+                        "h-1.5 w-1.5 rounded-full bg-current",
+                        allRunning && "animate-pulse",
+                      )}
+                    />
+                    {statusLabel}
+                  </span>
+                </div>
+
+                <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Activity className="h-3 w-3" />
+                    <span>
+                      <span className="font-medium text-foreground">{stack.running}</span>
+                      /{stack.total} running
                     </span>
-                  </button>
-                );
-              })}
-              {stack.dokuru_override_file && (
-                <span
-                  title={stack.dokuru_override_file}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium",
-                    overrideClass,
+                  </span>
+                  {stack.working_dir && (
+                    <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
+                      <FolderOpen className="h-3 w-3 shrink-0" />
+                      <span className="truncate font-mono">{stack.working_dir}</span>
+                    </span>
                   )}
+                </div>
+
+                <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+                  {composeFiles.map((path) => {
+                    const isOverride = isOverrideComposeFile(path);
+                    return (
+                      <button
+                        key={path}
+                        title={path}
+                        onClick={() => openComposeFile(path)}
+                        className={cn(
+                          "inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] transition-colors group/compose",
+                          isOverride
+                            ? "border-cyan-500/25 bg-cyan-500/10 text-cyan-300 hover:border-cyan-500/40 hover:bg-cyan-500/15"
+                            : "border-border/70 bg-muted/20 text-muted-foreground hover:border-cyan-500/30 hover:text-foreground",
+                        )}
+                      >
+                        {isOverride ? (
+                          <FileCode2 className="h-3 w-3 shrink-0" />
+                        ) : (
+                          <FileText className="h-3 w-3 shrink-0" />
+                        )}
+                        <span className="uppercase tracking-[0.14em] text-muted-foreground/80">
+                          {isOverride ? "override" : "base"}
+                        </span>
+                        <span className="max-w-[14rem] truncate font-mono underline decoration-dashed underline-offset-2 group-hover/compose:text-cyan-300 sm:max-w-[20rem]">
+                          {composeFileName(path)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {!hasOverride && (
+                    <span
+                      title={stack.dokuru_override_file ?? undefined}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                        overrideClass,
+                      )}
+                    >
+                      <FileCode2 className="h-3 w-3 shrink-0" />
+                      {overrideLabel}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
+              {hasContainers ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1.5 rounded-full border border-border/60 bg-muted/20 px-2.5 text-xs font-semibold text-muted-foreground hover:text-foreground"
+                  onClick={() => setExpanded((current) => !current)}
+                  aria-expanded={expanded}
                 >
-                  <FileCode2 className="h-3 w-3 shrink-0" />
-                  {overrideLabel}
+                  <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-90")} />
+                  {expanded ? "Hide" : "Show"} {containerLabel}
+                </Button>
+              ) : (
+                <span className="inline-flex h-8 items-center rounded-full border border-border/60 bg-muted/20 px-2.5 text-xs font-semibold text-muted-foreground">
+                  {containerLabel}
                 </span>
               )}
-            </div>
-          </div>
-
-          <div className="flex shrink-0 flex-col items-stretch gap-3 sm:items-end">
-            <div className="flex flex-wrap justify-end gap-2">
               <Button
                 size="sm"
                 className="h-8 gap-1.5 px-3 text-xs font-semibold"
@@ -1055,16 +1083,9 @@ function StackCard({
                 Down
               </Button>
             </div>
-            <div className="flex flex-row items-end gap-2 sm:flex-col sm:gap-1">
-              <span className="text-2xl font-bold tabular-nums leading-none">
-                {stack.total}
-              </span>
-              <span className="text-xs text-muted-foreground">containers</span>
-            </div>
           </div>
         </div>
 
-        {/* Progress bar */}
         <div className="h-0.5 bg-muted/40">
           <div
             className={cn("h-full transition-all duration-700", barClass)}
@@ -1072,19 +1093,13 @@ function StackCard({
           />
         </div>
 
-        {/* Container rows */}
-        <div className="divide-y divide-border/30">
-          {stack.containers.length > 0 ? (
-            stack.containers.map((c) => (
+        {expanded && hasContainers && (
+          <div className="divide-y divide-border/30">
+            {stack.containers.map((c) => (
               <ContainerRow key={c.id} container={c} agentId={agentId} />
-            ))
-          ) : (
-            <div className="flex items-center justify-between gap-3 px-5 py-4 text-sm text-muted-foreground">
-              <span>No containers are currently running for this Compose stack.</span>
-              <span className="hidden font-mono text-xs sm:inline">Use Up to recreate it.</span>
-            </div>
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {activeComposePath && (
@@ -1173,42 +1188,41 @@ function StacksPage() {
         </div>
       </PageHeader>
 
-      <div className="space-y-5">
-
-      {/* Content */}
-      {isLoading ? (
-        <div className="space-y-4">
-          {[1, 2].map((i) => (
-            <div key={i} className="rounded-2xl border bg-card animate-pulse h-44" />
-          ))}
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="rounded-2xl border-2 border-dashed border-border/50 bg-muted/10 p-20 text-center">
-          <div className="flex justify-center mb-5">
-            <div className="h-16 w-16 rounded-2xl bg-muted/50 flex items-center justify-center border border-border/50">
-              <SquareStack className="h-8 w-8 text-muted-foreground/50" />
-            </div>
+      <div className="space-y-3">
+        {/* Content */}
+        {isLoading ? (
+          <div className="space-y-4">
+            {[1, 2].map((i) => (
+              <div key={i} className="h-28 animate-pulse rounded-2xl border bg-card" />
+            ))}
           </div>
-          <h3 className="text-lg font-semibold mb-1.5">No stacks found</h3>
-          <p className="text-muted-foreground text-sm">
-            {search
-              ? "No stacks match your search."
-              : "No Docker Compose stacks are running on this agent."}
-          </p>
-        </div>
-      ) : (
-        <>
-          {filtered.map((stack) => (
-            <StackCard
-              key={stack.name}
-              stack={stack}
-              agentId={id}
-              agentUrl={agent?.url ?? ""}
-              token={dockerCredential(agent)}
-            />
-          ))}
-        </>
-      )}
+        ) : filtered.length === 0 ? (
+          <div className="rounded-2xl border-2 border-dashed border-border/50 bg-muted/10 p-20 text-center">
+            <div className="flex justify-center mb-5">
+              <div className="h-16 w-16 rounded-2xl bg-muted/50 flex items-center justify-center border border-border/50">
+                <SquareStack className="h-8 w-8 text-muted-foreground/50" />
+              </div>
+            </div>
+            <h3 className="text-lg font-semibold mb-1.5">No stacks found</h3>
+            <p className="text-muted-foreground text-sm">
+              {search
+                ? "No stacks match your search."
+                : "No Docker Compose stacks are running on this agent."}
+            </p>
+          </div>
+        ) : (
+          <>
+            {filtered.map((stack) => (
+              <StackCard
+                key={stack.name}
+                stack={stack}
+                agentId={id}
+                agentUrl={agent?.url ?? ""}
+                token={dockerCredential(agent)}
+              />
+            ))}
+          </>
+        )}
       </div>
     </div>
   );
