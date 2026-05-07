@@ -683,10 +683,14 @@ function ComposeActionDialog({
   const [detach, setDetach] = useState(true);
   const [forceRecreate, setForceRecreate] = useState(false);
   const [volumes, setVolumes] = useState(false);
+  const terminalRef = useRef<HTMLDivElement>(null);
+  const completed = run.final?.success === true;
 
-  const commandPreview = isUp
-    ? `docker compose up${detach ? " -d" : ""}${forceRecreate ? " --force-recreate" : ""}`
-    : `docker compose down${volumes ? " -v" : ""}`;
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+    terminal.scrollTop = terminal.scrollHeight;
+  }, [run.chunks.length, run.final, run.error]);
 
   function handleSubmit() {
     if (isUp) {
@@ -749,10 +753,6 @@ function ComposeActionDialog({
             </>
           )}
 
-          <div className="rounded-lg border border-border/70 bg-muted/25 px-3 py-2 font-mono text-xs text-muted-foreground">
-            {commandPreview}
-          </div>
-
           {(run.chunks.length > 0 || run.final || run.error) && (
             <div className="overflow-hidden rounded-lg border border-border/70 bg-black/90 text-xs shadow-inner">
               <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 text-[11px] uppercase tracking-[0.18em] text-white/50">
@@ -768,7 +768,10 @@ function ComposeActionDialog({
                   {run.isRunning ? "running" : run.final?.success ? "success" : "failed"}
                 </span>
               </div>
-              <div className="max-h-64 overflow-auto p-3 font-mono leading-relaxed text-white/80">
+              <div
+                ref={terminalRef}
+                className="compose-terminal-scrollbar h-72 overflow-x-auto overflow-y-auto overscroll-contain p-3 font-mono leading-relaxed text-white/80"
+              >
                 {run.chunks.map((chunk) => (
                   <pre
                     key={chunk.id}
@@ -794,11 +797,19 @@ function ComposeActionDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
-            Cancel
+            {completed ? "Close" : "Cancel"}
           </Button>
-          <Button variant={isUp ? "default" : "destructive"} onClick={handleSubmit} disabled={isPending}>
-            {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : isUp ? <Play className="h-4 w-4" /> : <Power className="h-4 w-4" />}
-            Run {isUp ? "Up" : "Down"}
+          <Button variant={completed ? "secondary" : isUp ? "default" : "destructive"} onClick={handleSubmit} disabled={isPending || completed}>
+            {isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : completed ? (
+              <Check className="h-4 w-4" />
+            ) : isUp ? (
+              <Play className="h-4 w-4" />
+            ) : (
+              <Power className="h-4 w-4" />
+            )}
+            {completed ? "Completed" : `Run ${isUp ? "Up" : "Down"}`}
           </Button>
         </DialogFooter>
       </DialogContent>

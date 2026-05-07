@@ -243,6 +243,31 @@
 }
 
 @layer components {
+  .compose-terminal-scrollbar {
+    scrollbar-color: rgba(34, 211, 238, 0.36) rgba(255, 255, 255, 0.05);
+    scrollbar-width: thin;
+  }
+
+  .compose-terminal-scrollbar::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+
+  .compose-terminal-scrollbar::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 999px;
+  }
+
+  .compose-terminal-scrollbar::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(34, 211, 238, 0.5), rgba(14, 165, 233, 0.32));
+    border: 2px solid rgba(0, 0, 0, 0.9);
+    border-radius: 999px;
+  }
+
+  .compose-terminal-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(125, 211, 252, 0.78), rgba(34, 211, 238, 0.52));
+  }
+
   [data-slot="skeleton"]::before {
     content: "";
     position: absolute;
