@@ -461,7 +461,7 @@ function ComposeDialog({
             <div className="flex items-center gap-2 border-b border-white/8 bg-[#070b12] px-4 py-2 font-mono text-[11px] text-slate-400">
               <Save className="h-3.5 w-3.5 text-cyan-300" />
               <span className="text-slate-300">Save writes the compose file.</span>
-              <span className="hidden text-slate-500 sm:inline">Run <code className="rounded bg-white/5 px-1 py-0.5 text-slate-300">docker compose up -d</code> when ready to apply.</span>
+              <span className="hidden text-slate-500 sm:inline">Use Compose Up when ready to apply.</span>
             </div>
           )}
           <div className="compose-code-panel flex-1 overflow-auto [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-2 [&::-webkit-scrollbar-thumb]:border-transparent [&::-webkit-scrollbar-thumb]:bg-slate-700/70 hover:[&::-webkit-scrollbar-thumb]:bg-slate-600/80">
@@ -640,14 +640,13 @@ function ContainerRow({
 
 type ComposeActionKind = "up" | "down";
 type ComposeActionSubmit =
-  | { action: "up"; detach: boolean; forceRecreate: boolean }
+  | { action: "up"; forceRecreate: boolean }
   | { action: "down"; volumes: boolean };
 type ComposeTerminalStream = "meta" | "stdout" | "stderr";
 type ComposeTerminalChunk = { id: number; stream: ComposeTerminalStream; data: string };
 type ComposeActionRun = {
   isRunning: boolean;
   chunks: ComposeTerminalChunk[];
-  command: string;
   final: Extract<ComposeActionStreamEvent, { type: "complete" }> | null;
   error: string | null;
 };
@@ -656,7 +655,6 @@ function initialComposeActionRun(): ComposeActionRun {
   return {
     isRunning: false,
     chunks: [],
-    command: "",
     final: null,
     error: null,
   };
@@ -680,7 +678,6 @@ function ComposeActionDialog({
   onSubmit: (payload: ComposeActionSubmit) => void;
 }) {
   const isUp = action === "up";
-  const [detach, setDetach] = useState(true);
   const [forceRecreate, setForceRecreate] = useState(false);
   const [volumes, setVolumes] = useState(false);
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -694,7 +691,7 @@ function ComposeActionDialog({
 
   function handleSubmit() {
     if (isUp) {
-      onSubmit({ action: "up", detach, forceRecreate });
+      onSubmit({ action: "up", forceRecreate });
       return;
     }
     onSubmit({ action: "down", volumes });
@@ -715,27 +712,13 @@ function ComposeActionDialog({
 
         <div className="space-y-3">
           {isUp ? (
-            <>
-              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/70 bg-muted/20 p-3 transition-colors hover:bg-muted/35">
-                <Checkbox checked={detach} onCheckedChange={(checked) => setDetach(checked === true)} className="mt-0.5" />
-                <span className="space-y-1 text-sm">
-                  <span className="block font-medium">Detach (-d / --detach)</span>
-                  <span className="block text-xs text-muted-foreground">Run containers in the background. Recommended for long-running services.</span>
-                </span>
-              </label>
-              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/70 bg-muted/20 p-3 transition-colors hover:bg-muted/35">
-                <Checkbox checked={forceRecreate} onCheckedChange={(checked) => setForceRecreate(checked === true)} className="mt-0.5" />
-                <span className="space-y-1 text-sm">
-                  <span className="block font-medium">Force recreate (--force-recreate)</span>
-                  <span className="block text-xs text-muted-foreground">Recreate containers even when Compose thinks their configuration is unchanged.</span>
-                </span>
-              </label>
-              {!detach && (
-                <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-300">
-                  Without detach, this request waits until <code className="font-mono">docker compose up</code> exits.
-                </p>
-              )}
-            </>
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/70 bg-muted/20 p-3 transition-colors hover:bg-muted/35">
+              <Checkbox checked={forceRecreate} onCheckedChange={(checked) => setForceRecreate(checked === true)} className="mt-0.5" />
+              <span className="space-y-1 text-sm">
+                <span className="block font-medium">Force recreate (--force-recreate)</span>
+                <span className="block text-xs text-muted-foreground">Recreate containers even when Compose thinks their configuration is unchanged.</span>
+              </span>
+            </label>
           ) : (
             <>
               <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/70 bg-muted/20 p-3 transition-colors hover:bg-muted/35">
@@ -867,7 +850,7 @@ function StackCard({
     void queryClient.invalidateQueries({ queryKey: ["containers", agentId] });
     void queryClient.invalidateQueries({ queryKey: ["agent-dashboard", agentId] });
     if (event.success) {
-      toast.success("Compose action completed", { description: event.command });
+      toast.success("Compose action completed");
     } else {
       toast.error("Compose action failed", { description: `exit_code=${event.exit_code ?? "unknown"}` });
     }
@@ -883,7 +866,7 @@ function StackCard({
       token,
       stack.name,
       payload.action === "up"
-        ? { action: "up", detach: payload.detach, force_recreate: payload.forceRecreate }
+        ? { action: "up", detach: true, force_recreate: payload.forceRecreate }
         : { action: "down", volumes: payload.volumes },
       accessToken,
     );
@@ -903,8 +886,7 @@ function StackCard({
       try {
         const event = JSON.parse(String(message.data)) as ComposeActionStreamEvent;
         if (event.type === "started") {
-          setActionRun((current) => ({ ...current, command: event.command }));
-          appendComposeChunk("meta", `$ ${event.command}\n`);
+          appendComposeChunk("meta", `${payload.action} stream started\n`);
         } else if (event.type === "output") {
           appendComposeChunk(event.stream, event.data);
         } else if (event.type === "complete") {
