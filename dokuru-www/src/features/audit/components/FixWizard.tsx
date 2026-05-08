@@ -718,6 +718,92 @@ function ConfirmStep({
 
 // ── Step 2: Applying ──────────────────────────────────────────────────────────
 
+function ProgressEventRow({ event, isError }: { event: FixProgress; isError: boolean }) {
+    const [expanded, setExpanded] = useState(isError);
+    const hasExtras = Boolean(event.command || event.stdout || event.stderr || (event.detail && event.detail.length > 50));
+
+    const tone = event.status === "done"
+        ? "text-emerald-400"
+        : event.status === "error"
+        ? "text-rose-400 font-bold"
+        : "text-[#2496ED]";
+
+    return (
+        <div className={cn(
+            "group flex flex-col border-b border-white/5 py-2.5 last:border-b-0 first:pt-0 last:pb-0 transition-colors",
+            isError && "bg-rose-500/[0.02] -mx-3 px-3 border-y border-y-rose-500/10 first:border-t-0"
+        )}>
+            <div 
+                className={cn("grid grid-cols-[82px_minmax(0,1fr)_auto] gap-2 items-start transition-colors", hasExtras && "cursor-pointer hover:bg-white/[0.03] rounded-md -my-1 py-1 -mx-2 px-2")}
+                onClick={() => hasExtras && setExpanded(e => !e)}
+            >
+                <span className={cn("pt-0.5 text-[10px] uppercase tracking-[0.08em]", tone)}>{event.status}</span>
+                <div className="flex min-w-0 flex-wrap items-start gap-x-1.5 gap-y-1 text-white/52 sm:flex-nowrap">
+                    <span className="truncate font-semibold text-white/80">{event.container_name}</span>
+                    <ArrowRight className="mt-1 h-3 w-3 shrink-0 text-white/20 hidden sm:block" />
+                    <span className="shrink-0 text-[#2496ED]/80 font-medium">{event.action}</span>
+                    {event.detail && (
+                        <span className={cn(
+                            "text-white/40", 
+                            isError && "text-rose-300/80", 
+                            !expanded ? "truncate max-w-[150px] sm:max-w-full" : "break-words w-full sm:w-auto"
+                        )}>
+                            {event.detail}
+                        </span>
+                    )}
+                </div>
+                {hasExtras && (
+                    <button className="pt-0.5 text-white/30 group-hover:text-white/60">
+                        <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-90")} />
+                    </button>
+                )}
+            </div>
+
+            {expanded && hasExtras && (
+                <div className="mt-3 ml-[90px] min-w-0 space-y-2.5 pb-1 pr-1">
+                    {event.command && (
+                        <div className="group/cmd relative">
+                            <pre className="overflow-x-auto rounded-lg border border-[#2496ED]/20 bg-[#06111a] px-3 py-2.5 text-[10px] text-[#58b8ff] shadow-inner">
+                                <span className="select-none text-[#2496ED]/40">$ </span>{event.command}
+                            </pre>
+                            <div className="absolute top-1.5 right-1.5 opacity-0 transition-opacity group-hover/cmd:opacity-100">
+                                <CopyButton text={event.command} />
+                            </div>
+                        </div>
+                    )}
+                    {(event.stdout || event.stderr) && (
+                        <div className={cn(
+                            "overflow-hidden rounded-lg border shadow-inner",
+                            isError ? "border-rose-500/20 bg-[#1a0505]" : "border-white/8 bg-black/45"
+                        )}>
+                            {event.stdout && (
+                                <div className="group/out relative border-b border-white/5 last:border-0">
+                                    <pre className="whitespace-pre-wrap break-words px-3 py-2.5 text-[10px] text-emerald-300/80">
+                                        {event.stdout}
+                                    </pre>
+                                    <div className="absolute top-1.5 right-1.5 opacity-0 transition-opacity group-hover/out:opacity-100">
+                                        <CopyButton text={event.stdout} />
+                                    </div>
+                                </div>
+                            )}
+                            {event.stderr && (
+                                <div className="group/err relative">
+                                    <pre className="whitespace-pre-wrap break-words px-3 py-2.5 text-[10px] text-rose-300/90 font-medium">
+                                        {event.stderr}
+                                    </pre>
+                                    <div className="absolute top-1.5 right-1.5 opacity-0 transition-opacity group-hover/err:opacity-100">
+                                        <CopyButton text={event.stderr} />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
 function ProgressEventsPanel({
     progressEvents,
     title = "live terminal transcript",
@@ -725,63 +811,58 @@ function ProgressEventsPanel({
     progressEvents: FixProgress[];
     title?: string;
 }) {
+    const [filterError, setFilterError] = useState(false);
+
     if (progressEvents.length === 0) return null;
 
+    const hasErrors = progressEvents.some(e => e.status === "error");
+    const displayedEvents = filterError ? progressEvents.filter(e => e.status === "error") : progressEvents;
+
     return (
-        <div className="overflow-hidden rounded-xl border border-white/10 bg-[#030507]">
+        <div className="overflow-hidden rounded-xl border border-white/10 bg-[#030507] shadow-xl">
             <div className="flex items-center gap-2 border-b border-white/8 bg-white/[0.025] px-3 py-2.5">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 shrink-0">
                     <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f56]" />
                     <span className="h-2.5 w-2.5 rounded-full bg-[#ffbd2e]" />
                     <span className="h-2.5 w-2.5 rounded-full bg-[#27c93f]" />
                 </div>
-                <Terminal className="ml-1 h-3.5 w-3.5 text-[#2496ED]" />
-                <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/42">{title}</span>
-                <span className="ml-auto rounded border border-white/8 bg-white/[0.03] px-1.5 py-0.5 font-mono text-[9px] text-white/35">
-                    {progressEvents.length} events
-                </span>
+                <Terminal className="ml-1 h-3.5 w-3.5 text-[#2496ED] shrink-0" />
+                <span className="min-w-0 truncate font-mono text-[10px] uppercase tracking-[0.16em] text-white/42">{title}</span>
+                <div className="ml-auto flex shrink-0 items-center gap-2">
+                    {hasErrors && (
+                        <button
+                            type="button"
+                            onClick={() => setFilterError(f => !f)}
+                            className={cn(
+                                "flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider transition-all",
+                                filterError
+                                    ? "border-rose-500/40 bg-rose-500/15 text-rose-300 shadow-[0_0_10px_rgba(244,63,94,0.15)]"
+                                    : "border-white/8 bg-white/[0.03] text-white/40 hover:bg-white/[0.08] hover:text-white/60"
+                            )}
+                        >
+                            <ShieldAlert className="h-2.5 w-2.5" />
+                            Errors Only
+                        </button>
+                    )}
+                    <span className="rounded border border-white/8 bg-white/[0.03] px-1.5 py-0.5 font-mono text-[9px] text-white/35">
+                        {displayedEvents.length} {filterError ? "errors" : "events"}
+                    </span>
+                </div>
             </div>
-            <div className="max-h-72 overflow-y-auto p-3 font-mono text-[11px] leading-relaxed">
-                {progressEvents.map((event, i) => {
-                    const tone = event.status === "done"
-                        ? "text-emerald-400"
-                        : event.status === "error"
-                        ? "text-rose-400"
-                        : "text-[#2496ED]";
-
-                    return (
-                        <div key={`${event.container_name}-${event.action}-${event.step}-${i}`} className="grid grid-cols-[82px_minmax(0,1fr)] gap-2 border-b border-white/5 py-2 last:border-b-0 first:pt-0 last:pb-0">
-                            <span className={cn("pt-0.5 text-[10px] uppercase tracking-[0.08em]", tone)}>{event.status}</span>
-                            <div className="min-w-0 space-y-1.5">
-                                <div className="flex min-w-0 items-center gap-1.5 text-white/52">
-                                    <span className="truncate font-semibold text-white/75">{event.container_name}</span>
-                                    <ArrowRight className="h-3 w-3 shrink-0 text-white/16" />
-                                    <span className="shrink-0 text-white/38">{event.action}</span>
-                                    {event.detail && <span className="truncate text-white/28">{event.detail}</span>}
-                                </div>
-                                {event.command && (
-                                    <pre className="overflow-x-auto rounded-lg border border-[#2496ED]/15 bg-[#06111a] px-3 py-2 text-[10px] text-[#58b8ff]">
-                                        <span className="select-none text-white/28">$ </span>{event.command}
-                                    </pre>
-                                )}
-                                {(event.stdout || event.stderr) && (
-                                    <div className="overflow-hidden rounded-lg border border-white/8 bg-black/45">
-                                        {event.stdout && (
-                                            <pre className="whitespace-pre-wrap break-words px-3 py-2 text-[10px] text-emerald-300/80">
-                                                <span className="select-none text-white/28">stdout\n</span>{event.stdout}
-                                            </pre>
-                                        )}
-                                        {event.stderr && (
-                                            <pre className="whitespace-pre-wrap break-words border-t border-white/5 px-3 py-2 text-[10px] text-rose-300/80">
-                                                <span className="select-none text-white/28">stderr\n</span>{event.stderr}
-                                            </pre>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    );
-                })}
+            <div className="max-h-[300px] overflow-y-auto p-3 font-mono text-[11px] leading-relaxed [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10">
+                {displayedEvents.length === 0 ? (
+                    <div className="flex items-center justify-center py-6 text-emerald-400/60 text-[10px] uppercase tracking-widest">
+                        <CheckCircle2 className="mr-2 h-3.5 w-3.5" /> No errors found
+                    </div>
+                ) : (
+                    displayedEvents.map((event, i) => (
+                        <ProgressEventRow 
+                            key={`${event.container_name}-${event.action}-${event.step}-${i}`} 
+                            event={event} 
+                            isError={event.status === "error"} 
+                        />
+                    ))
+                )}
             </div>
         </div>
     );
