@@ -179,29 +179,29 @@ function ContainerActionEvidence({
   }
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 w-[min(92vw,560px)] overflow-hidden rounded-2xl border border-white/10 bg-black/95 text-white shadow-2xl shadow-black/50 backdrop-blur">
-      <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+    <div className="fixed bottom-6 right-6 z-50 w-[min(92vw,560px)] overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-2xl shadow-black/20">
+      <div className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/15 text-cyan-200">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <Terminal className="h-4 w-4" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold">Container Action Evidence</span>
+              <span className="text-sm font-semibold">Action Evidence</span>
               <span
                 className={cn(
-                  "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                  "rounded-full px-2 py-0.5 text-[11px] font-medium border",
                   hasRunning
-                    ? "bg-cyan-500/15 text-cyan-200"
+                    ? "border-primary/20 bg-primary/10 text-primary"
                     : failures > 0
-                    ? "bg-red-500/15 text-red-200"
-                    : "bg-emerald-500/15 text-emerald-200",
+                    ? "border-destructive/20 bg-destructive/10 text-destructive"
+                    : "border-emerald-500/20 bg-emerald-500/10 text-emerald-500",
                 )}
               >
                 {hasRunning ? "running" : failures > 0 ? `${failures} failed` : "idle"}
               </span>
             </div>
-            <p className="truncate text-xs text-white/45">
+            <p className="truncate text-xs text-muted-foreground">
               {activeRun ? `${actionLabel(activeRun.action)} ${activeRun.containerName}` : "No actions yet"}
             </p>
           </div>
@@ -211,7 +211,7 @@ function ContainerActionEvidence({
             type="button"
             size="sm"
             variant="ghost"
-            className="h-8 px-2 text-xs text-white/55 hover:bg-white/10 hover:text-white"
+            className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
             onClick={onClear}
             disabled={runs.length === 0 || hasRunning}
           >
@@ -221,7 +221,7 @@ function ContainerActionEvidence({
             type="button"
             size="icon"
             variant="ghost"
-            className="h-8 w-8 text-white/55 hover:bg-white/10 hover:text-white"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
             onClick={() => onOpenChange(false)}
           >
             <X className="h-4 w-4" />
@@ -230,61 +230,63 @@ function ContainerActionEvidence({
         </div>
       </div>
 
-      <div ref={terminalRef} className="compose-terminal-scrollbar max-h-96 overflow-y-auto p-3 font-mono text-xs leading-relaxed">
+      <div ref={terminalRef} className="compose-terminal-scrollbar max-h-[400px] overflow-y-auto p-4 font-mono text-[11px] leading-relaxed">
         {runs.length === 0 ? (
-          <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-8 text-center font-sans text-sm text-white/55">
+          <div className="rounded-xl border border-dashed border-border bg-muted/20 px-3 py-10 text-center font-sans text-sm text-muted-foreground">
             Run start, stop, restart, or delete to capture terminal evidence here.
           </div>
         ) : (
-          runs.map((run) => (
-            <div key={run.id} className="mb-3 overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] last:mb-0">
-              <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 font-sans text-xs">
-                <span className="truncate font-semibold text-white/80">
-                  {actionLabel(run.action)} {run.containerName}
-                </span>
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px]",
-                    run.isRunning
-                      ? "bg-cyan-500/15 text-cyan-200"
-                      : run.final?.success
-                      ? "bg-emerald-500/15 text-emerald-200"
-                      : "bg-red-500/15 text-red-200",
-                  )}
-                >
-                  {run.isRunning ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : run.final?.success ? (
-                    <CheckCircle2 className="h-3 w-3" />
-                  ) : (
-                    <AlertCircle className="h-3 w-3" />
-                  )}
-                  {run.isRunning ? "running" : run.final?.success ? "success" : "failed"}
-                </span>
-              </div>
-              <div className="px-3 py-2">
-                {run.chunks.map((chunk) => (
-                  <pre
-                    key={chunk.id}
+          <div className="space-y-4">
+            {runs.map((run) => (
+              <div key={run.id} className="overflow-hidden rounded-xl border border-border bg-muted/10">
+                <div className="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-2 font-sans text-xs">
+                  <span className="truncate font-medium text-foreground">
+                    {actionLabel(run.action)} {run.containerName}
+                  </span>
+                  <span
                     className={cn(
-                      "whitespace-pre-wrap break-words",
-                      chunk.stream === "stderr" && "text-red-200",
-                      chunk.stream === "meta" && "text-cyan-200",
-                      chunk.stream === "stdout" && "text-white/80",
+                      "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium",
+                      run.isRunning
+                        ? "text-primary"
+                        : run.final?.success
+                        ? "text-emerald-500"
+                        : "text-destructive",
                     )}
                   >
-                    {chunk.data}
-                  </pre>
-                ))}
-                {run.final && (
-                  <pre className={cn("whitespace-pre-wrap break-words", run.final.success ? "text-emerald-200" : "text-red-200")}>
-                    {`exit_code=${run.final.exit_code ?? "unknown"} success=${String(run.final.success)} exists=${String(run.final.status.exists)}${run.final.status.state ? ` state=${run.final.status.state}` : ""}${run.final.status.status ? ` status=${run.final.status.status}` : ""}\n`}
-                  </pre>
-                )}
-                {run.error && <pre className="whitespace-pre-wrap break-words text-red-200">{`${run.error}\n`}</pre>}
+                    {run.isRunning ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : run.final?.success ? (
+                      <CheckCircle2 className="h-3 w-3" />
+                    ) : (
+                      <AlertCircle className="h-3 w-3" />
+                    )}
+                    {run.isRunning ? "running" : run.final?.success ? "success" : "failed"}
+                  </span>
+                </div>
+                <div className="px-3 py-3 overflow-x-auto">
+                  {run.chunks.map((chunk) => (
+                    <pre
+                      key={chunk.id}
+                      className={cn(
+                        "whitespace-pre-wrap break-words",
+                        chunk.stream === "stderr" && "text-destructive",
+                        chunk.stream === "meta" && "text-muted-foreground select-none",
+                        chunk.stream === "stdout" && "text-foreground/80",
+                      )}
+                    >
+                      {chunk.data}
+                    </pre>
+                  ))}
+                  {run.final && (
+                    <pre className={cn("whitespace-pre-wrap break-words mt-1", run.final.success ? "text-emerald-500/80" : "text-destructive/80")}>
+                      {`exit_code=${run.final.exit_code ?? "unknown"} success=${String(run.final.success)} exists=${String(run.final.status.exists)}${run.final.status.state ? ` state=${run.final.status.state}` : ""}${run.final.status.status ? ` status=${run.final.status.status}` : ""}\n`}
+                    </pre>
+                  )}
+                  {run.error && <pre className="whitespace-pre-wrap break-words text-destructive mt-1">{`${run.error}\n`}</pre>}
+                </div>
               </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
     </div>
