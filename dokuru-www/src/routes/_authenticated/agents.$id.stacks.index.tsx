@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Layers,
   Container,
@@ -22,10 +22,8 @@ import {
 } from "lucide-react";
 import {
   canUseDockerAgent,
-  composeActionStreamUrl,
   dockerApi,
   dockerCredential,
-  type ComposeActionStreamEvent,
   type Stack,
   type StackContainer,
 } from "@/services/docker-api";
@@ -732,7 +730,6 @@ function StackCard({
   agentUrl: string;
   token: string;
 }) {
-  const queryClient = useQueryClient();
   const [composeOpen, setComposeOpen] = useState(false);
   const [selectedComposePath, setSelectedComposePath] = useState<string | null>(null);
   const [actionDialog, setActionDialog] = useState<"up" | "down" | null>(null);
@@ -751,7 +748,6 @@ function StackCard({
 
   const allRunning = stack.total > 0 && stack.running === stack.total;
   const noneRunning = stack.running === 0;
-  const runPct = stack.total > 0 ? (stack.running / stack.total) * 100 : 0;
 
   const statusLabel = allRunning ? "running" : noneRunning ? "stopped" : "partial";
   const statusClass = allRunning
@@ -769,11 +765,6 @@ function StackCard({
     : stack.dokuru_override_exists
     ? "border-amber-500/25 bg-amber-500/10 text-amber-400"
     : "border-border bg-muted/30 text-muted-foreground";
-  const barClass = allRunning
-    ? "bg-green-500"
-    : noneRunning
-    ? "bg-gray-500"
-    : "bg-yellow-500";
   const composeFiles = stackComposeFiles(stack);
   const activeComposePath = selectedComposePath ?? composeFiles[0] ?? null;
   const hasContainers = stack.containers.length > 0;
