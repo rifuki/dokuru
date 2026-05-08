@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Play,
   SquareIcon,
@@ -10,8 +10,20 @@ import {
   Search,
   ExternalLink,
   Loader2,
+  Terminal,
+  X,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
-import { canUseDockerAgent, dockerApi, dockerCredential, type Container } from "@/services/docker-api";
+import {
+  canUseDockerAgent,
+  containerActionStreamUrl,
+  dockerApi,
+  dockerCredential,
+  type Container,
+  type ContainerActionKind,
+  type ContainerActionStreamEvent,
+} from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -39,9 +51,38 @@ import { ContainerTabPanel } from "@/components/containers/ContainerTabs";
 import { PageHeader } from "@/components/ui/page-header";
 import { containerUiKey, useContainerUiStore, type ContainerTab } from "@/stores/use-container-ui-store";
 import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useAuthStore } from "@/stores/use-auth-store";
+import { cn } from "@/lib/utils";
 
 const EMPTY_EXPANDED_CONTAINERS: Record<string, boolean> = {};
+
+type ContainerEvidenceStream = "meta" | "stdout" | "stderr";
+type ContainerEvidenceChunk = { id: number; stream: ContainerEvidenceStream; data: string };
+type ContainerEvidenceRun = {
+  id: number;
+  action: ContainerActionKind;
+  containerId: string;
+  containerName: string;
+  isRunning: boolean;
+  chunks: ContainerEvidenceChunk[];
+  final: Extract<ContainerActionStreamEvent, { type: "complete" }> | null;
+  error: string | null;
+  startedAt: Date;
+};
+
+function containerName(container: Container) {
+  return container.names[0]?.replace("/", "") || container.id.slice(0, 12);
+}
+
+function actionLabel(action: ContainerActionKind) {
+  switch (action) {
+    case "start": return "Start";
+    case "stop": return "Stop";
+    case "restart": return "Restart";
+    case "delete": return "Delete";
+  }
+}
 
 export const Route = createFileRoute("/_authenticated/agents/$id/containers/")({
   component: ContainersPage,
@@ -85,6 +126,165 @@ function ContainerRowsSkeleton() {
   );
 }
 
+function ContainerActionEvidence({
+  runs,
+  open,
+  onOpenChange,
+  onClear,
+}: {
+  runs: ContainerEvidenceRun[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onClear: () => void;
+}) {
+  const terminalRef = useRef<HTMLDivElement>(null);
+  const activeRun = runs.find((run) => run.isRunning) ?? runs[0];
+  const hasRunning = runs.some((run) => run.isRunning);
+  const failures = runs.filter((run) => run.error || run.final?.success === false).length;
+
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+    terminal.scrollTop = terminal.scrollHeight;
+  }, [runs]);
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => onOpenChange(true)}
+        className="fixed right-0 top-1/2 z-50 flex -translate-y-1/2 items-center gap-2 rounded-l-2xl border border-r-0 border-white/10 bg-black/95 px-3 py-4 text-white shadow-2xl shadow-black/40 backdrop-blur transition hover:border-cyan-400/40 hover:text-cyan-100"
+      >
+        <Terminal className="h-4 w-4" />
+        <span className="text-[11px] font-semibold uppercase tracking-[0.24em] [writing-mode:vertical-rl]">
+          terminal
+        </span>
+        <span
+          className={cn(
+            "h-2.5 w-2.5 rounded-full",
+            hasRunning ? "animate-pulse bg-emerald-400" : failures > 0 ? "bg-red-400" : "bg-cyan-400",
+          )}
+        />
+        <span className="rounded-full bg-cyan-500 px-2 py-0.5 text-xs font-bold text-white">
+          {runs.length}
+        </span>
+      </button>
+    );
+  }
+
+  return (
+    <div className="fixed bottom-5 right-5 z-50 w-[min(92vw,560px)] overflow-hidden rounded-2xl border border-white/10 bg-black/95 text-white shadow-2xl shadow-black/50 backdrop-blur">
+      <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/15 text-cyan-200">
+            <Terminal className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold">Container Action Evidence</span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                  hasRunning
+                    ? "bg-cyan-500/15 text-cyan-200"
+                    : failures > 0
+                    ? "bg-red-500/15 text-red-200"
+                    : "bg-emerald-500/15 text-emerald-200",
+                )}
+              >
+                {hasRunning ? "running" : failures > 0 ? `${failures} failed` : "idle"}
+              </span>
+            </div>
+            <p className="truncate text-xs text-white/45">
+              {activeRun ? `${actionLabel(activeRun.action)} ${activeRun.containerName}` : "No actions yet"}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-8 px-2 text-xs text-white/55 hover:bg-white/10 hover:text-white"
+            onClick={onClear}
+            disabled={runs.length === 0 || hasRunning}
+          >
+            Clear
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 text-white/55 hover:bg-white/10 hover:text-white"
+            onClick={() => onOpenChange(false)}
+          >
+            <X className="h-4 w-4" />
+            <span className="sr-only">Close evidence</span>
+          </Button>
+        </div>
+      </div>
+
+      <div ref={terminalRef} className="compose-terminal-scrollbar max-h-96 overflow-y-auto p-3 font-mono text-xs leading-relaxed">
+        {runs.length === 0 ? (
+          <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-8 text-center font-sans text-sm text-white/55">
+            Run start, stop, restart, or delete to capture terminal evidence here.
+          </div>
+        ) : (
+          runs.map((run) => (
+            <div key={run.id} className="mb-3 overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] last:mb-0">
+              <div className="flex items-center justify-between border-b border-white/10 px-3 py-2 font-sans text-xs">
+                <span className="truncate font-semibold text-white/80">
+                  {actionLabel(run.action)} {run.containerName}
+                </span>
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px]",
+                    run.isRunning
+                      ? "bg-cyan-500/15 text-cyan-200"
+                      : run.final?.success
+                      ? "bg-emerald-500/15 text-emerald-200"
+                      : "bg-red-500/15 text-red-200",
+                  )}
+                >
+                  {run.isRunning ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : run.final?.success ? (
+                    <CheckCircle2 className="h-3 w-3" />
+                  ) : (
+                    <AlertCircle className="h-3 w-3" />
+                  )}
+                  {run.isRunning ? "running" : run.final?.success ? "success" : "failed"}
+                </span>
+              </div>
+              <div className="px-3 py-2">
+                {run.chunks.map((chunk) => (
+                  <pre
+                    key={chunk.id}
+                    className={cn(
+                      "whitespace-pre-wrap break-words",
+                      chunk.stream === "stderr" && "text-red-200",
+                      chunk.stream === "meta" && "text-cyan-200",
+                      chunk.stream === "stdout" && "text-white/80",
+                    )}
+                  >
+                    {chunk.data}
+                  </pre>
+                ))}
+                {run.final && (
+                  <pre className={cn("whitespace-pre-wrap break-words", run.final.success ? "text-emerald-200" : "text-red-200")}>
+                    {`exit_code=${run.final.exit_code ?? "unknown"} success=${String(run.final.success)} exists=${String(run.final.status.exists)}${run.final.status.state ? ` state=${run.final.status.state}` : ""}${run.final.status.status ? ` status=${run.final.status.status}` : ""}\n`}
+                  </pre>
+                )}
+                {run.error && <pre className="whitespace-pre-wrap break-words text-red-200">{`${run.error}\n`}</pre>}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ContainerRow({
   container,
   agentUrl,
@@ -102,6 +302,7 @@ function ContainerRow({
   stopPendingId,
   restartPendingId,
   removePendingId,
+  actionPending,
   suppressExpandAnimation,
 }: {
   container: Container;
@@ -120,12 +321,13 @@ function ContainerRow({
   stopPendingId: string | undefined;
   restartPendingId: string | undefined;
   removePendingId: string | undefined;
+  actionPending: boolean;
   suppressExpandAnimation: boolean;
 }) {
   const isRunning = container.state.toLowerCase() === "running";
-  const name = container.names[0]?.replace("/", "") || container.id.slice(0, 12);
+  const name = containerName(container);
 
-  const isThisPending = [startPendingId, stopPendingId, restartPendingId, removePendingId].includes(container.id);
+  const isThisPending = actionPending || [startPendingId, stopPendingId, restartPendingId, removePendingId].includes(container.id);
   const isStarting    = startPendingId   === container.id;
   const isStopping    = stopPendingId    === container.id;
   const isRestarting  = restartPendingId === container.id;
@@ -268,6 +470,7 @@ function ContainerRow({
 function ContainersPage() {
   const { id } = Route.useParams();
   const queryClient = useQueryClient();
+  const accessToken = useAuthStore((state) => state.accessToken);
   const showAll = useContainerUiStore((state) => state.showAllByAgent[id] ?? true);
   const search = useContainerUiStore((state) => state.searchByAgent[id] ?? "");
   const expandedContainers = useContainerUiStore((state) => state.expandedByAgent[id] ?? EMPTY_EXPANDED_CONTAINERS);
@@ -298,10 +501,19 @@ function ContainersPage() {
   const [localExpandedContainers, setLocalExpandedContainers] = useState<Record<string, boolean>>({});
   const [localActiveTabs, setLocalActiveTabs] = useState<Record<string, ContainerTab>>({});
   const [containerToRemove, setContainerToRemove] = useState<Container | null>(null);
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [evidenceRuns, setEvidenceRuns] = useState<ContainerEvidenceRun[]>([]);
+  const actionSocketRef = useRef<WebSocket | null>(null);
+  const nextRunIdRef = useRef(1);
+  const nextChunkIdRef = useRef(1);
   const shouldRestoreContainerUi = scrollMemory.restoreFromSidebar;
   const shouldHideForScrollRestore = scrollMemory.isRestoring && hasExpandedContainerToRestore;
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["containers", id] });
+
+  useEffect(() => () => {
+    actionSocketRef.current?.close();
+  }, []);
 
   const handleContainerExpandedChange = (containerId: string, expanded: boolean) => {
     const key = containerUiKey(id, containerId);
@@ -315,52 +527,111 @@ function ContainersPage() {
     setLocalActiveTabs((prev) => ({ ...prev, [key]: tab }));
   };
 
-  const startMutation = useMutation({
-    mutationFn: (cid: string) => {
-      const credential = dockerCredential(agent);
-      if (!agent || !credential) throw new Error();
-      return dockerApi.startContainer(agent.url, credential, cid);
-    },
-    onSuccess: () => { invalidate(); toast.success("Container started"); },
-    onError:   () => toast.error("Failed to start container"),
-  });
+  function appendEvidenceChunk(runId: number, stream: ContainerEvidenceStream, data: string) {
+    const normalized = data.replace(/\r/g, "\n");
+    setEvidenceRuns((current) => current.map((run) => {
+      if (run.id !== runId) return run;
+      return {
+        ...run,
+        chunks: [
+          ...run.chunks,
+          { id: nextChunkIdRef.current++, stream, data: normalized },
+        ].slice(-250),
+      };
+    }));
+  }
 
-  const stopMutation = useMutation({
-    mutationFn: (cid: string) => {
-      const credential = dockerCredential(agent);
-      if (!agent || !credential) throw new Error();
-      return dockerApi.stopContainer(agent.url, credential, cid);
-    },
-    onSuccess: () => { invalidate(); toast.success("Container stopped"); },
-    onError:   () => toast.error("Failed to stop container"),
-  });
+  function updateEvidenceRun(runId: number, update: Partial<ContainerEvidenceRun>) {
+    setEvidenceRuns((current) => current.map((run) => (run.id === runId ? { ...run, ...update } : run)));
+  }
 
-  const restartMutation = useMutation({
-    mutationFn: (cid: string) => {
-      const credential = dockerCredential(agent);
-      if (!agent || !credential) throw new Error();
-      return dockerApi.restartContainer(agent.url, credential, cid);
-    },
-    onSuccess: () => { invalidate(); toast.success("Container restarted"); },
-    onError:   () => toast.error("Failed to restart container"),
-  });
+  function startContainerAction(action: ContainerActionKind, container: Container) {
+    const credential = dockerCredential(agent);
+    if (!agent || !credential) {
+      toast.error("Agent token not available");
+      return;
+    }
 
-  const removeMutation = useMutation({
-    mutationFn: (cid: string) => {
-      const credential = dockerCredential(agent);
-      if (!agent || !credential) throw new Error();
-      return dockerApi.removeContainer(agent.url, credential, cid);
-    },
-    onSuccess: () => { invalidate(); toast.success("Container removed"); },
-    onError:   () => toast.error("Failed to remove container"),
-  });
+    actionSocketRef.current?.close();
+    const runId = nextRunIdRef.current++;
+    const run: ContainerEvidenceRun = {
+      id: runId,
+      action,
+      containerId: container.id,
+      containerName: containerName(container),
+      isRunning: true,
+      chunks: [],
+      final: null,
+      error: null,
+      startedAt: new Date(),
+    };
+    setEvidenceRuns((current) => [run, ...current].slice(0, 12));
+    setEvidenceOpen(true);
 
-  const removeTargetName = containerToRemove?.names[0]?.replace("/", "") || containerToRemove?.id.slice(0, 12) || "container";
+    const streamUrl = containerActionStreamUrl(agent.url, credential, container.id, action, accessToken);
+    if (!streamUrl) {
+      const message = "Container action stream credentials are missing";
+      updateEvidenceRun(runId, { isRunning: false, error: message });
+      toast.error(message);
+      return;
+    }
 
-  const startPendingId   = startMutation.isPending   ? startMutation.variables   : undefined;
-  const stopPendingId    = stopMutation.isPending    ? stopMutation.variables    : undefined;
-  const restartPendingId = restartMutation.isPending ? restartMutation.variables : undefined;
-  const removePendingId  = removeMutation.isPending  ? removeMutation.variables  : undefined;
+    const socket = new WebSocket(streamUrl);
+    actionSocketRef.current = socket;
+
+    socket.onmessage = (message) => {
+      try {
+        const event = JSON.parse(String(message.data)) as ContainerActionStreamEvent;
+        if (event.type === "started") {
+          appendEvidenceChunk(runId, "meta", `$ ${event.command}\n`);
+        } else if (event.type === "output") {
+          appendEvidenceChunk(runId, event.stream, event.data);
+        } else if (event.type === "complete") {
+          updateEvidenceRun(runId, { isRunning: false, final: event });
+          void invalidate();
+          if (event.success) {
+            toast.success(`Container ${actionLabel(action).toLowerCase()} completed`);
+            if (action === "delete") setContainerToRemove(null);
+          } else {
+            toast.error(`Container ${actionLabel(action).toLowerCase()} failed`, {
+              description: `exit_code=${event.exit_code ?? "unknown"}`,
+            });
+          }
+          socket.close();
+        } else if (event.type === "error") {
+          const detail = event.detail ? `${event.error}: ${event.detail}` : event.error;
+          updateEvidenceRun(runId, { isRunning: false, error: detail });
+          appendEvidenceChunk(runId, "stderr", `${detail}\n`);
+          toast.error(event.error, { description: event.detail });
+        }
+      } catch {
+        appendEvidenceChunk(runId, "stdout", String(message.data));
+      }
+    };
+
+    socket.onerror = () => {
+      const message = "Container action stream connection failed";
+      updateEvidenceRun(runId, { isRunning: false, error: message });
+      toast.error(message);
+    };
+
+    socket.onclose = () => {
+      if (actionSocketRef.current === socket) {
+        actionSocketRef.current = null;
+        setEvidenceRuns((current) => current.map((currentRun) => {
+          if (currentRun.id !== runId || !currentRun.isRunning || currentRun.final || currentRun.error) return currentRun;
+          return { ...currentRun, isRunning: false, error: "Container action stream closed before completion" };
+        }));
+      }
+    };
+  }
+
+  const removeTargetName = containerToRemove ? containerName(containerToRemove) : "container";
+  const runningEvidence = evidenceRuns.find((run) => run.isRunning);
+  const startPendingId = runningEvidence?.action === "start" ? runningEvidence.containerId : undefined;
+  const stopPendingId = runningEvidence?.action === "stop" ? runningEvidence.containerId : undefined;
+  const restartPendingId = runningEvidence?.action === "restart" ? runningEvidence.containerId : undefined;
+  const removePendingId = runningEvidence?.action === "delete" ? runningEvidence.containerId : undefined;
 
   const filtered = (containers ?? []).filter((c) => {
     if (!search) return true;
@@ -433,14 +704,15 @@ function ContainersPage() {
               onExpandedChange={(expanded) => handleContainerExpandedChange(container.id, expanded)}
               activeTab={(shouldRestoreContainerUi ? activeTabs : localActiveTabs)[containerUiKey(id, container.id)] ?? "overview"}
               onTabChange={(tab) => handleContainerTabChange(container.id, tab)}
-              onStart={(cid) => startMutation.mutate(cid)}
-              onStop={(cid) => stopMutation.mutate(cid)}
-              onRestart={(cid) => restartMutation.mutate(cid)}
+              onStart={() => startContainerAction("start", container)}
+              onStop={() => startContainerAction("stop", container)}
+              onRestart={() => startContainerAction("restart", container)}
               onRequestRemove={(container) => setContainerToRemove(container)}
               startPendingId={startPendingId}
               stopPendingId={stopPendingId}
               restartPendingId={restartPendingId}
               removePendingId={removePendingId}
+              actionPending={!!runningEvidence}
               suppressExpandAnimation={scrollMemory.restoreFromSidebar}
             />
           ))}
@@ -451,7 +723,7 @@ function ContainersPage() {
       <AlertDialog
         open={!!containerToRemove}
         onOpenChange={(open) => {
-          if (!open && !removeMutation.isPending) setContainerToRemove(null);
+          if (!open && !runningEvidence) setContainerToRemove(null);
         }}
       >
         <AlertDialogContent>
@@ -465,23 +737,27 @@ function ContainersPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={removeMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={removePendingId === containerToRemove?.id}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
-              disabled={removeMutation.isPending || !containerToRemove}
+              disabled={!!runningEvidence || !containerToRemove}
               onClick={(event) => {
                 event.preventDefault();
                 if (!containerToRemove) return;
-                removeMutation.mutate(containerToRemove.id, {
-                  onSuccess: () => setContainerToRemove(null),
-                });
+                startContainerAction("delete", containerToRemove);
               }}
             >
-              {removeMutation.isPending ? "Removing..." : "Remove"}
+              {removePendingId === containerToRemove?.id ? "Removing..." : "Remove"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <ContainerActionEvidence
+        runs={evidenceRuns}
+        open={evidenceOpen}
+        onOpenChange={setEvidenceOpen}
+        onClear={() => setEvidenceRuns([])}
+      />
     </div>
   );
 }

@@ -29,7 +29,10 @@ use crate::{
         AuditReport, AuditSummary, CheckResult, CheckStatus, FixOutcome, FixProgress, FixRequest,
         RollbackRequest, RuleDefinition, RuleRegistry, fix_helpers,
     },
-    docker::stacks::{ComposeStackAction, stream_stack_compose_action},
+    docker::{
+        containers::{ContainerAction, stream_container_action},
+        stacks::{ComposeStackAction, stream_stack_compose_action},
+    },
     host_shell,
 };
 
@@ -116,6 +119,12 @@ struct ComposeActionStreamPayload {
     force_recreate: bool,
     #[serde(default)]
     volumes: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct ContainerActionStreamPayload {
+    container_id: String,
+    action: String,
 }
 
 const fn default_compose_stream_detach() -> bool {
@@ -371,6 +380,7 @@ async fn execute_stream(
         "host_shell" => host_shell_stream(payload, input_rx, tx, id).await,
         "docker_events" => docker_events_stream(input_rx, tx, id).await,
         "compose_action" => compose_action_stream(payload, input_rx, tx, id).await,
+        "container_action" => container_action_stream(payload, input_rx, tx, id).await,
         "fix_progress" => fix_progress_stream(payload, input_rx, tx, id).await,
         "audit_progress" => audit_progress_stream(input_rx, tx, id).await,
         _ => Err(eyre::eyre!("Unknown stream: {stream}")),
@@ -771,6 +781,47 @@ async fn compose_action_stream(
     let _runner = tokio::spawn(stream_stack_compose_action(
         docker,
         payload.name,
+        action,
+        event_tx,
+    ));
+
+    loop {
+        tokio::select! {
+            input = input_rx.recv() => {
+                match input {
+                    Some(StreamInput::Close) | None => {
+                        break;
+                    }
+                    Some(StreamInput::Data(_)) => {}
+                }
+            }
+            event = event_rx.recv() => {
+                let Some(event) = event else {
+                    break;
+                };
+                send_stream_data(tx, id, serde_json::to_vec(&event)?)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn container_action_stream(
+    payload: serde_json::Value,
+    mut input_rx: mpsc::UnboundedReceiver<StreamInput>,
+    tx: &mpsc::UnboundedSender<Message>,
+    id: &str,
+) -> Result<()> {
+    let payload = serde_json::from_value::<ContainerActionStreamPayload>(payload)
+        .wrap_err("Invalid container action stream payload")?;
+    let action = ContainerAction::parse(&payload.action)
+        .ok_or_else(|| eyre::eyre!("Unknown container action: {}", payload.action))?;
+    let docker = crate::docker::get_docker_client()?;
+    let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+    let _runner = tokio::spawn(stream_container_action(
+        docker,
+        payload.container_id,
         action,
         event_tx,
     ));

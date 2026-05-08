@@ -107,6 +107,30 @@ export type ComposeActionStreamEvent =
     }
   | { type: "error"; error: string; detail: string };
 
+export interface ContainerActionStatus {
+  id: string;
+  name?: string | null;
+  state?: string | null;
+  status?: string | null;
+  exists: boolean;
+}
+
+export type ContainerActionKind = "start" | "stop" | "restart" | "delete";
+
+export type ContainerActionStreamEvent =
+  | { type: "started"; command: string }
+  | { type: "output"; stream: "stdout" | "stderr"; data: string }
+  | {
+      type: "complete";
+      success: boolean;
+      exit_code: number | null;
+      command: string;
+      stdout: string;
+      stderr: string;
+      status: ContainerActionStatus;
+    }
+  | { type: "error"; error: string; detail: string };
+
 export interface ComposeUpOptions {
   detach: boolean;
   force_recreate: boolean;
@@ -157,6 +181,24 @@ export function composeActionStreamUrl(
 
   params.set("token", credential);
   return `${agentUrl.replace(/^http/, "ws")}/docker/stacks/${encodeURIComponent(name)}/${payload.action}/stream?${params.toString()}`;
+}
+
+export function containerActionStreamUrl(
+  agentUrl: string,
+  credential: string,
+  id: string,
+  action: ContainerActionKind,
+  accessToken: string | null,
+) {
+  const params = new URLSearchParams();
+  if (agentUrl === "relay") {
+    if (!accessToken) return null;
+    params.set("access_token", accessToken);
+    return `${wsApiUrl}/agents/${credential}/docker/containers/${encodeURIComponent(id)}/${action}/stream?${params.toString()}`;
+  }
+
+  params.set("token", credential);
+  return `${agentUrl.replace(/^http/, "ws")}/docker/containers/${encodeURIComponent(id)}/${action}/stream?${params.toString()}`;
 }
 
 export type ComposeActionSubmitOptions =

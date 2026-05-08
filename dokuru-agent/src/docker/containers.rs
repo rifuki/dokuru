@@ -6,7 +6,7 @@ use axum::{
     Router,
     extract::{Path, Query},
     http::StatusCode,
-    response::{Json, Response},
+    response::{IntoResponse, Json, Response},
     routing::{get, post},
 };
 use bollard::Docker;
@@ -18,7 +18,9 @@ use bollard::exec::{CreateExecOptions, ResizeExecOptions, StartExecOptions, Star
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::process::Stdio;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
+use tokio::{io::AsyncRead, io::AsyncReadExt, sync::mpsc};
 
 use super::get_docker_client;
 
@@ -37,6 +39,75 @@ pub struct ContainerResponse {
     pub created: i64,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum ContainerAction {
+    Start,
+    Stop,
+    Restart,
+    Delete,
+}
+
+impl ContainerAction {
+    pub fn parse(action: &str) -> Option<Self> {
+        match action {
+            "start" => Some(Self::Start),
+            "stop" => Some(Self::Stop),
+            "restart" => Some(Self::Restart),
+            "delete" | "remove" => Some(Self::Delete),
+            _ => None,
+        }
+    }
+
+    const fn verb(self) -> &'static str {
+        match self {
+            Self::Start => "start",
+            Self::Stop => "stop",
+            Self::Restart => "restart",
+            Self::Delete => "rm",
+        }
+    }
+
+    fn args(self, id: &str) -> Vec<String> {
+        match self {
+            Self::Delete => vec!["rm".to_string(), "-f".to_string(), id.to_string()],
+            _ => vec![self.verb().to_string(), id.to_string()],
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct ContainerActionStatus {
+    pub id: String,
+    pub name: Option<String>,
+    pub state: Option<String>,
+    pub status: Option<String>,
+    pub exists: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ContainerActionStreamEvent {
+    Started {
+        command: String,
+    },
+    Output {
+        stream: &'static str,
+        data: String,
+    },
+    Complete {
+        success: bool,
+        exit_code: Option<i32>,
+        command: String,
+        stdout: String,
+        stderr: String,
+        status: ContainerActionStatus,
+    },
+    Error {
+        error: String,
+        detail: String,
+    },
+}
+
 pub fn routes<S>() -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
@@ -50,6 +121,10 @@ where
         .route("/docker/containers/{id}/start", post(start_container))
         .route("/docker/containers/{id}/stop", post(stop_container))
         .route("/docker/containers/{id}/restart", post(restart_container))
+        .route(
+            "/docker/containers/{id}/{action}/stream",
+            get(container_action_stream),
+        )
         .route("/docker/containers/{id}/update", post(update_container))
         .route("/docker/containers/{id}/logs", get(container_logs))
         .route("/docker/containers/{id}/stats", get(container_stats))
@@ -146,6 +221,230 @@ async fn remove_container(Path(id): Path<String>) -> Result<StatusCode, StatusCo
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn container_action_stream(
+    Path((id, action)): Path<(String, String)>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    let Some(action) = ContainerAction::parse(&action) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "Unknown container action" })),
+        )
+            .into_response();
+    };
+    let docker = match get_docker_client() {
+        Ok(docker) => docker,
+        Err(error) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "Docker client error", "detail": error.to_string() })),
+            )
+                .into_response();
+        }
+    };
+
+    ws.on_upgrade(move |socket| stream_container_action_ws(socket, docker, id, action))
+}
+
+async fn stream_container_action_ws(
+    mut socket: WebSocket,
+    docker: Docker,
+    id: String,
+    action: ContainerAction,
+) {
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    tokio::spawn(stream_container_action(docker, id, action, tx));
+
+    while let Some(event) = rx.recv().await {
+        let Ok(text) = serde_json::to_string(&event) else {
+            continue;
+        };
+        if socket.send(Message::Text(text.into())).await.is_err() {
+            break;
+        }
+    }
+
+    let _ = socket.close().await;
+}
+
+pub async fn stream_container_action(
+    docker: Docker,
+    id: String,
+    action: ContainerAction,
+    event_tx: mpsc::UnboundedSender<ContainerActionStreamEvent>,
+) {
+    if let Err((error, detail)) =
+        stream_container_action_inner(&docker, &id, action, event_tx.clone()).await
+    {
+        let _ = event_tx.send(ContainerActionStreamEvent::Error { error, detail });
+    }
+}
+
+async fn stream_container_action_inner(
+    docker: &Docker,
+    id: &str,
+    action: ContainerAction,
+    event_tx: mpsc::UnboundedSender<ContainerActionStreamEvent>,
+) -> Result<(), (String, String)> {
+    let args = action.args(id);
+    let command_display = format!("docker {}", args.join(" "));
+    let _ = event_tx.send(ContainerActionStreamEvent::Started {
+        command: command_display.clone(),
+    });
+
+    let mut child = tokio::process::Command::new("docker")
+        .args(&args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| ("Failed to run docker".to_string(), error.to_string()))?;
+
+    let stdout_task = child.stdout.take().map(|stdout| {
+        tokio::spawn(read_container_action_output(
+            stdout,
+            "stdout",
+            event_tx.clone(),
+        ))
+    });
+    let stderr_task = child.stderr.take().map(|stderr| {
+        tokio::spawn(read_container_action_output(
+            stderr,
+            "stderr",
+            event_tx.clone(),
+        ))
+    });
+
+    let status = child
+        .wait()
+        .await
+        .map_err(|error| ("Failed to wait for docker".to_string(), error.to_string()))?;
+    let stdout = join_container_action_output(stdout_task).await;
+    let stderr = join_container_action_output(stderr_task).await;
+    let action_status = verified_container_action_status(docker, id, action).await;
+    let success = status.success() || container_action_target_reached(action, &action_status);
+
+    let _ = event_tx.send(ContainerActionStreamEvent::Complete {
+        success,
+        exit_code: status.code(),
+        command: command_display,
+        stdout,
+        stderr,
+        status: action_status,
+    });
+
+    Ok(())
+}
+
+async fn read_container_action_output<R>(
+    mut reader: R,
+    stream: &'static str,
+    event_tx: mpsc::UnboundedSender<ContainerActionStreamEvent>,
+) -> String
+where
+    R: AsyncRead + Unpin,
+{
+    let mut output = String::new();
+    let mut buffer = [0_u8; 4096];
+
+    loop {
+        match reader.read(&mut buffer).await {
+            Ok(0) => break,
+            Ok(bytes_read) => {
+                let chunk = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
+                output.push_str(&chunk);
+                let _ = event_tx.send(ContainerActionStreamEvent::Output {
+                    stream,
+                    data: chunk,
+                });
+            }
+            Err(error) => {
+                let _ = event_tx.send(ContainerActionStreamEvent::Output {
+                    stream: "stderr",
+                    data: format!("Failed to read {stream}: {error}\n"),
+                });
+                break;
+            }
+        }
+    }
+
+    output
+}
+
+async fn join_container_action_output(task: Option<tokio::task::JoinHandle<String>>) -> String {
+    match task {
+        Some(task) => task.await.unwrap_or_default(),
+        None => String::new(),
+    }
+}
+
+async fn verified_container_action_status(
+    docker: &Docker,
+    id: &str,
+    action: ContainerAction,
+) -> ContainerActionStatus {
+    for attempt in 0..12 {
+        let status = container_action_status(docker, id).await;
+        if container_action_target_reached(action, &status) || attempt == 11 {
+            return status;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    }
+
+    unreachable!()
+}
+
+async fn container_action_status(docker: &Docker, id: &str) -> ContainerActionStatus {
+    let containers = docker
+        .list_containers(Some(ListContainersOptions::<String> {
+            all: true,
+            ..Default::default()
+        }))
+        .await
+        .unwrap_or_default();
+    let normalized = id.trim_start_matches('/');
+
+    for container in containers {
+        let container_id = container.id.unwrap_or_default();
+        let names = container.names.unwrap_or_default();
+        let matches_id = container_id == normalized || container_id.starts_with(normalized);
+        let matches_name = names
+            .iter()
+            .any(|name| name.trim_start_matches('/') == normalized);
+        if matches_id || matches_name {
+            return ContainerActionStatus {
+                id: container_id,
+                name: names
+                    .first()
+                    .map(|name| name.trim_start_matches('/').to_string()),
+                state: container.state,
+                status: container.status,
+                exists: true,
+            };
+        }
+    }
+
+    ContainerActionStatus {
+        id: id.to_string(),
+        name: None,
+        state: None,
+        status: None,
+        exists: false,
+    }
+}
+
+fn container_action_target_reached(
+    action: ContainerAction,
+    status: &ContainerActionStatus,
+) -> bool {
+    match action {
+        ContainerAction::Start | ContainerAction::Restart => {
+            status.exists && status.state.as_deref() == Some("running")
+        }
+        ContainerAction::Stop => status.exists && status.state.as_deref() != Some("running"),
+        ContainerAction::Delete => !status.exists,
+    }
 }
 
 #[derive(Deserialize)]

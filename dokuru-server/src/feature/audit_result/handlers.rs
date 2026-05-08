@@ -544,6 +544,45 @@ pub async fn relay_compose_action_stream_ws(
     })
 }
 
+pub async fn relay_container_action_stream_ws(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path((agent_id, container_id, action)): Path<(Uuid, String, String)>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    if !matches!(
+        action.as_str(),
+        "start" | "stop" | "restart" | "delete" | "remove"
+    ) {
+        return ApiError::default()
+            .with_code(StatusCode::BAD_REQUEST)
+            .with_message("Unknown container action")
+            .into_response();
+    }
+
+    let agent = match require_relay_agent(&state, auth_user.user_id, agent_id).await {
+        Ok(agent) => agent,
+        Err(error) => return error.into_response(),
+    };
+
+    let payload = serde_json::json!({
+        "container_id": container_id,
+        "action": action,
+    });
+    let registry = state.agent_registry.clone();
+
+    ws.on_upgrade(move |socket: WebSocket| {
+        relay::proxy_stream_to_websocket(
+            socket,
+            registry,
+            agent.id,
+            "container_action",
+            payload,
+            relay::RelayStreamMode::Text,
+        )
+    })
+}
+
 /// # Errors
 ///
 /// Returns an error if the underlying operation fails.
