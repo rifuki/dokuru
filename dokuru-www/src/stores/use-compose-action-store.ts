@@ -34,7 +34,7 @@ interface ComposeActionStore {
     stackName: string,
     action: ComposeActionKind,
     payload: ComposeActionSubmit,
-    accessToken?: string
+    accessToken?: string | null
   ) => void;
 }
 
@@ -93,7 +93,7 @@ export const useComposeActionStore = create<ComposeActionStore>((set, get) => ({
       payload.action === "up"
         ? { action: "up", detach: true, force_recreate: payload.forceRecreate }
         : { action: "down", volumes: payload.volumes },
-      accessToken,
+      accessToken ?? null,
     );
 
     if (!streamUrl) {
