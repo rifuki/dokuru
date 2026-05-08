@@ -148,26 +148,32 @@ function ContainerActionEvidence({
     terminal.scrollTop = terminal.scrollHeight;
   }, [runs]);
 
+  if (runs.length === 0 && !open) return null;
+
   if (!open) {
     return (
       <button
         type="button"
         onClick={() => onOpenChange(true)}
-        className="fixed right-0 top-1/2 z-50 flex -translate-y-1/2 items-center gap-2 rounded-l-2xl border border-r-0 border-white/10 bg-black/95 px-3 py-4 text-white shadow-2xl shadow-black/40 backdrop-blur transition hover:border-cyan-400/40 hover:text-cyan-100"
+        className="group fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-full border border-white/10 bg-[#0A0A0A]/95 p-1.5 pr-5 text-white shadow-[0_8px_30px_rgb(0,0,0,0.5)] backdrop-blur-xl transition-all hover:-translate-y-1 hover:border-white/20 hover:bg-[#111] hover:shadow-[0_12px_40px_rgb(0,0,0,0.6)]"
       >
-        <Terminal className="h-4 w-4" />
-        <span className="text-[11px] font-semibold uppercase tracking-[0.24em] [writing-mode:vertical-rl]">
-          terminal
-        </span>
-        <span
-          className={cn(
-            "h-2.5 w-2.5 rounded-full",
-            hasRunning ? "animate-pulse bg-emerald-400" : failures > 0 ? "bg-red-400" : "bg-cyan-400",
-          )}
-        />
-        <span className="rounded-full bg-cyan-500 px-2 py-0.5 text-xs font-bold text-white">
-          {runs.length}
-        </span>
+        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-white/10 to-white/5 text-white shadow-inner">
+          <Terminal className="h-4 w-4" />
+          <span
+            className={cn(
+              "absolute right-0 top-0 h-3 w-3 rounded-full border-2 border-[#0A0A0A]",
+              hasRunning ? "animate-pulse bg-emerald-400" : failures > 0 ? "bg-red-500" : "bg-cyan-400"
+            )}
+          />
+        </div>
+        <div className="flex flex-col items-start text-left">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-white/50">
+            {hasRunning ? "Running..." : failures > 0 ? "Failed" : "Evidence"}
+          </span>
+          <span className="text-sm font-bold leading-tight">
+            {runs.length} Action{runs.length !== 1 ? "s" : ""}
+          </span>
+        </div>
       </button>
     );
   }
