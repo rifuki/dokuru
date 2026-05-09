@@ -47,6 +47,7 @@ import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { useComposeActionStore } from "@/stores/use-compose-action-store";
 import { ComposeActionEvidence } from "@/components/agents/ComposeActionEvidence";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/stacks/")({
   component: StacksPage,
@@ -720,6 +721,43 @@ function ComposeActionDialog({
 
 // ---------- Stack card ----------
 
+function StackCardSkeleton() {
+  return (
+    <div aria-hidden="true" className="relative overflow-hidden rounded-2xl border border-border/60 bg-card">
+      <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-muted-foreground/25 to-transparent" />
+      <div className="bg-gradient-to-br from-muted/20 via-muted/0 to-transparent px-5 py-4 sm:px-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0 flex-1 space-y-3">
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-5 w-5 shrink-0 rounded-md" />
+              <Skeleton className="h-6 w-44 max-w-[45vw]" />
+              <Skeleton className="h-6 w-20 rounded-full" />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-56 max-w-full" />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Skeleton className="h-7 w-40 rounded-full" />
+              <Skeleton className="h-7 w-32 rounded-full" />
+            </div>
+          </div>
+
+          <div className="flex shrink-0 flex-wrap items-center gap-2 lg:flex-col lg:items-end">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-8 w-16 rounded-md" />
+              <Skeleton className="h-8 w-20 rounded-md" />
+            </div>
+            <Skeleton className="h-7 w-28 rounded-md" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StackCard({
   stack,
   agentId,
@@ -895,7 +933,7 @@ function StackCard({
                     allRunning ? "bg-emerald-500 hover:bg-emerald-600 text-white" : "bg-primary text-primary-foreground"
                   )}
                   onClick={() => openComposeAction("up")}
-                  disabled={allRunning || isStackActionRunning}
+                  disabled={isStackActionRunning}
                 >
                   {activeStackRun?.action === "up" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
                   Up
@@ -1029,11 +1067,7 @@ function StacksPage() {
       <div className="space-y-3">
         {/* Content */}
         {isLoading ? (
-          <div className="space-y-4">
-            {[1, 2].map((i) => (
-              <div key={i} className="h-28 animate-pulse rounded-2xl border bg-card" />
-            ))}
-          </div>
+          <StackCardSkeleton />
         ) : filtered.length === 0 ? (
           <div className="rounded-2xl border-2 border-dashed border-border/50 bg-muted/10 p-20 text-center">
             <div className="flex justify-center mb-5">

@@ -116,19 +116,19 @@ export function ActionEvidence({
       <button
         type="button"
         onClick={() => onOpenChange(true)}
-        className="group fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-full border border-white/10 bg-[#0A0A0A]/95 p-1.5 pr-5 text-white shadow-[0_8px_30px_rgb(0,0,0,0.5)] backdrop-blur-xl transition-all hover:border-white/20 hover:bg-[#111] hover:shadow-[0_12px_40px_rgb(0,0,0,0.6)]"
+        className="group fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-full border border-border bg-card p-1.5 pr-5 text-foreground shadow-lg shadow-black/10 backdrop-blur-xl transition-all hover:border-primary/25 hover:bg-card/95 hover:shadow-xl hover:shadow-black/15 dark:border-white/10 dark:bg-[#0A0A0A]/95 dark:text-white dark:shadow-[0_8px_30px_rgb(0,0,0,0.5)] dark:hover:border-white/20 dark:hover:bg-[#111] dark:hover:shadow-[0_12px_40px_rgb(0,0,0,0.6)]"
       >
-        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-white/10 to-white/5 text-white shadow-inner">
+        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary shadow-inner dark:bg-gradient-to-br dark:from-white/10 dark:to-white/5 dark:text-white">
           <Terminal className="h-4 w-4" />
           <span
             className={cn(
-              "absolute right-0 top-0 h-3 w-3 rounded-full border-2 border-[#0A0A0A]",
+              "absolute right-0 top-0 h-3 w-3 rounded-full border-2 border-card dark:border-[#0A0A0A]",
               hasRunning ? "animate-pulse bg-emerald-400" : failures > 0 ? "bg-red-500" : "bg-cyan-400",
             )}
           />
         </div>
         <div className="flex flex-col items-start text-left">
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-white/50">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground dark:text-white/50">
             {hasRunning ? "Running..." : failures > 0 ? "Failed" : "Evidence"}
           </span>
           <span className="text-sm font-bold leading-tight">
@@ -207,7 +207,7 @@ export function ActionEvidence({
         </div>
       </div>
 
-      <div ref={terminalRef} className="compose-terminal-scrollbar max-h-[400px] overflow-y-auto bg-[#050505] p-4 font-mono text-[12px] leading-[1.55]">
+      <div ref={terminalRef} className="compose-terminal-scrollbar max-h-[400px] overflow-y-auto bg-zinc-50 p-4 font-mono text-[12px] leading-[1.55] text-zinc-800 shadow-inner dark:bg-[#050505] dark:text-zinc-200">
         {runs.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border bg-muted/20 px-3 py-10 text-center font-sans text-sm text-muted-foreground">
             {emptyMessage}
@@ -217,16 +217,16 @@ export function ActionEvidence({
             {visibleRuns.map((run) => {
               const status = runStatus(run);
               return (
-                <div key={run.id} className="overflow-hidden rounded-xl border border-white/10 bg-[#0d0d0d] shadow-inner shadow-black/20">
-                  <div className="flex items-center justify-between border-b border-white/15 bg-[#171717] px-3 py-2 font-sans text-xs">
+                <div key={run.id} className="overflow-hidden rounded-xl border border-border bg-white shadow-sm dark:border-white/10 dark:bg-[#0d0d0d] dark:shadow-inner dark:shadow-black/20">
+                  <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3 py-2 font-sans text-xs dark:border-white/15 dark:bg-[#171717]">
                     <div className="flex min-w-0 items-center gap-2">
                       <div className="hidden shrink-0 items-center gap-1 sm:flex">
                         <span className="h-2 w-2 rounded-full bg-[#ff5f56]" />
                         <span className="h-2 w-2 rounded-full bg-[#ffbd2e]" />
                         <span className="h-2 w-2 rounded-full bg-[#27c93f]" />
                       </div>
-                      <span className="truncate font-semibold text-zinc-100">{run.title}</span>
-                      <span className="ml-2 font-mono text-[10px] text-zinc-500">{formatRunTime(run.startedAt)}</span>
+                      <span className="truncate font-semibold text-foreground dark:text-zinc-100">{run.title}</span>
+                      <span className="ml-2 font-mono text-[10px] text-muted-foreground dark:text-zinc-500">{formatRunTime(run.startedAt)}</span>
                     </div>
                     <span
                       className={cn(
@@ -250,9 +250,9 @@ export function ActionEvidence({
                         key={chunk.id}
                         className={cn(
                           "whitespace-pre-wrap break-words tabular-nums",
-                          chunk.stream === "stderr" && "text-red-400",
-                          chunk.stream === "meta" && "select-none text-white/45",
-                          chunk.stream === "stdout" && "text-zinc-200/85",
+                          chunk.stream === "stderr" && "text-red-600 dark:text-red-400",
+                          chunk.stream === "meta" && "select-none text-zinc-500 dark:text-white/45",
+                          chunk.stream === "stdout" && "text-zinc-700 dark:text-zinc-200/85",
                         )}
                       >
                         {chunk.data}
