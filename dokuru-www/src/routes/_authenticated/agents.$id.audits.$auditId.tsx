@@ -2965,7 +2965,7 @@ function AuditDetailPage() {
         onTargetChange={updateTargetConfig}
         onRerunAudit={() => {
           closeWizard();
-          void navigate({ to: "/agents/$id/audit", params: { id } });
+          handleRerunAudit();
         }}
       />
       <FixAllWizard
@@ -2986,7 +2986,7 @@ function AuditDetailPage() {
         onBackToConfirm={backFixAllToConfirm}
         onRerunAudit={() => {
           closeFixAll();
-          void navigate({ to: "/agents/$id/audit", params: { id } });
+          handleRerunAudit();
         }}
       />
     </div>

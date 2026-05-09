@@ -730,40 +730,46 @@ function ProgressEventRow({ event, isError }: { event: FixProgress; isError: boo
 
     return (
         <div className={cn(
-            "group flex flex-col border-b border-white/5 py-2.5 last:border-b-0 first:pt-0 last:pb-0 transition-colors",
-            isError && "bg-rose-500/[0.02] -mx-3 px-3 border-y border-y-rose-500/10 first:border-t-0"
+            "group flex min-w-0 flex-col border-b border-white/5 py-2.5 last:border-b-0 first:pt-0 last:pb-0 transition-colors",
+            isError && "-mx-2 border-y border-y-rose-500/10 bg-rose-500/[0.02] px-2 first:border-t-0 sm:-mx-3 sm:px-3"
         )}>
-            <div 
-                className={cn("grid grid-cols-[82px_minmax(0,1fr)_auto] gap-2 items-start transition-colors", hasExtras && "cursor-pointer hover:bg-white/[0.03] rounded-md -my-1 py-1 -mx-2 px-2")}
+            <button
+                type="button"
+                disabled={!hasExtras}
+                className={cn(
+                    "grid w-full min-w-0 grid-cols-[88px_minmax(0,1fr)_18px] items-start gap-2 rounded-md text-left transition-colors disabled:cursor-default",
+                    hasExtras && "-mx-1 -my-1 cursor-pointer px-1 py-1 hover:bg-white/[0.03] sm:-mx-2 sm:px-2"
+                )}
                 onClick={() => hasExtras && setExpanded(e => !e)}
             >
                 <span className={cn("pt-0.5 text-[10px] uppercase tracking-[0.08em]", tone)}>{event.status}</span>
-                <div className="flex min-w-0 flex-wrap items-start gap-x-1.5 gap-y-1 text-white/52 sm:flex-nowrap">
-                    <span className="truncate font-semibold text-white/80">{event.container_name}</span>
-                    <ArrowRight className="mt-1 h-3 w-3 shrink-0 text-white/20 hidden sm:block" />
-                    <span className="shrink-0 text-[#2496ED]/80 font-medium">{event.action}</span>
+                <div className="min-w-0 space-y-0.5 text-white/52">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                        <span className="min-w-0 truncate font-semibold text-white/80">{event.container_name || "dokuru-agent"}</span>
+                        <ArrowRight className="h-3 w-3 shrink-0 text-white/20" />
+                        <span className="min-w-0 truncate font-medium text-[#2496ED]/80">{event.action}</span>
+                    </div>
                     {event.detail && (
-                        <span className={cn(
-                            "text-white/40", 
-                            isError && "text-rose-300/80", 
-                            !expanded ? "truncate max-w-[150px] sm:max-w-full" : "break-words w-full sm:w-auto"
+                        <p className={cn(
+                            "truncate text-white/40",
+                            isError && "text-rose-300/80"
                         )}>
                             {event.detail}
-                        </span>
+                        </p>
                     )}
                 </div>
                 {hasExtras && (
-                    <button className="pt-0.5 text-white/30 group-hover:text-white/60">
+                    <span className="pt-0.5 text-white/30 group-hover:text-white/60">
                         <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-90")} />
-                    </button>
+                    </span>
                 )}
-            </div>
+            </button>
 
             {expanded && hasExtras && (
-                <div className="mt-3 ml-[90px] min-w-0 space-y-2.5 pb-1 pr-1">
+                <div className="mt-3 min-w-0 space-y-2.5 pb-1 pr-1 sm:ml-[90px]">
                     {event.command && (
                         <div className="group/cmd relative">
-                            <pre className="overflow-x-auto rounded-lg border border-[#2496ED]/20 bg-[#06111a] px-3 py-2.5 text-[10px] text-[#58b8ff] shadow-inner">
+                            <pre className="max-w-full overflow-x-auto whitespace-pre rounded-lg border border-[#2496ED]/20 bg-[#06111a] px-3 py-2.5 text-[10px] text-[#58b8ff] shadow-inner">
                                 <span className="select-none text-[#2496ED]/40">$ </span>{event.command}
                             </pre>
                             <div className="absolute top-1.5 right-1.5 opacity-0 transition-opacity group-hover/cmd:opacity-100">
@@ -788,7 +794,10 @@ function ProgressEventRow({ event, isError }: { event: FixProgress; isError: boo
                             )}
                             {event.stderr && (
                                 <div className="group/err relative">
-                                    <pre className="whitespace-pre-wrap break-words px-3 py-2.5 text-[10px] text-rose-300/90 font-medium">
+                                    <pre className={cn(
+                                        "whitespace-pre-wrap break-words px-3 py-2.5 text-[10px] font-medium",
+                                        isError ? "text-rose-300/90" : "text-white/55"
+                                    )}>
                                         {event.stderr}
                                     </pre>
                                     <div className="absolute top-1.5 right-1.5 opacity-0 transition-opacity group-hover/err:opacity-100">
@@ -820,7 +829,7 @@ function ProgressEventsPanel({
 
     return (
         <div className="overflow-hidden rounded-xl border border-white/10 bg-[#030507] shadow-xl">
-            <div className="flex items-center gap-2 border-b border-white/8 bg-white/[0.025] px-3 py-2.5">
+            <div className="flex min-w-0 items-center gap-2 border-b border-white/8 bg-white/[0.025] px-3 py-2.5">
                 <div className="flex items-center gap-1.5 shrink-0">
                     <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f56]" />
                     <span className="h-2.5 w-2.5 rounded-full bg-[#ffbd2e]" />
@@ -849,7 +858,7 @@ function ProgressEventsPanel({
                     </span>
                 </div>
             </div>
-            <div className="max-h-[300px] overflow-y-auto p-3 font-mono text-[11px] leading-relaxed [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10">
+            <div className="max-h-[300px] min-w-0 overflow-y-auto p-2.5 font-mono text-[11px] leading-relaxed sm:p-3 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10">
                 {displayedEvents.length === 0 ? (
                     <div className="flex items-center justify-center py-6 text-emerald-400/60 text-[10px] uppercase tracking-widest">
                         <CheckCircle2 className="mr-2 h-3.5 w-3.5" /> No errors found
@@ -954,17 +963,27 @@ function ApplyingStep({
 
             <FixStepChecklist ruleId={ruleId} stepIndex={stepIndex} state="running" />
 
-            <p className="text-[11px] text-white/30 font-mono text-center">
-                Live progress is streamed from dokuru-agent. Cancel closes the stream and asks the agent to stop the active task.
-            </p>
-
-            <button
-                type="button"
-                onClick={onCancel}
-                className="inline-flex h-9 items-center justify-center rounded-md border border-rose-500/25 bg-rose-500/10 px-4 text-sm font-semibold text-rose-300 transition-colors hover:bg-rose-500/15 hover:text-rose-200"
-            >
-                Cancel Fix
-            </button>
+            <div className="rounded-xl border border-rose-500/15 bg-rose-500/[0.035] px-3 py-2.5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-start gap-2.5">
+                        <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-300/80" />
+                        <div className="min-w-0">
+                            <p className="text-xs font-semibold text-rose-200/90">Need to stop this fix?</p>
+                            <p className="mt-0.5 text-[11px] leading-relaxed text-rose-100/42">
+                                Cancels the active stream and asks the agent to stop the running task.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 self-start rounded-md border border-rose-400/35 bg-rose-500/10 px-3 text-xs font-semibold text-rose-200 transition-colors hover:border-rose-300/50 hover:bg-rose-500/16 hover:text-rose-100 sm:self-auto"
+                    >
+                        <XCircle className="h-3.5 w-3.5" />
+                        Cancel Fix
+                    </button>
+                </div>
+            </div>
 
             <ProgressEventsPanel progressEvents={progressEvents} />
         </div>

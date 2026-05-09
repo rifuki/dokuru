@@ -49,18 +49,18 @@ export function AffectedItems({
   returnTo?: { source: "audit"; auditId?: string; ruleId: string };
 }) {
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex min-w-0 flex-wrap gap-1.5">
       {items.map((item, i) => {
         const container = findContainer(containers, item);
         const Icon = container ? Container : affectedIcon(item);
         const content = (
           <>
             <Icon className="h-3 w-3 shrink-0 text-muted-foreground/50" />
-            {item}
+            <span className="min-w-0 truncate">{item}</span>
           </>
         );
         const className = cn(
-          "inline-flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-[11px] text-foreground/70",
+          "inline-flex max-w-full min-w-0 items-center gap-1.5 rounded border px-2 py-1 font-mono text-[11px] text-foreground/70",
           container
             ? "border-[#2496ED]/30 bg-[#2496ED]/10 text-[#2496ED] hover:border-[#2496ED]/60 hover:bg-[#2496ED]/15"
             : "border-border bg-muted/40",
