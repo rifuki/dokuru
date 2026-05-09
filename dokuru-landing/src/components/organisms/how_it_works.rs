@@ -2,6 +2,7 @@ use super::workflow_panels::{
     agent_dashboard_panel, audit_preview_panel, cloud_dashboard_panel, terminal_install_panel,
 };
 use crate::components::atoms::{section_eyebrow::centered_section_eyebrow, IconKind};
+use crate::content::APP_URL;
 use crate::utils::clipboard::{copy_install_command, reset_copied_after};
 use crate::utils::reveal::reveal_ref;
 use leptos::{html, prelude::*};
@@ -119,7 +120,7 @@ fn step_item(
                     <h3 class=move || if active_step.get() == index { "font-heading text-lg md:text-xl font-bold text-white transition-colors" } else { "font-heading text-lg md:text-xl font-semibold text-zinc-400 group-hover:text-zinc-200 transition-colors" }>{move || step_title(active_mode.get(), index)}</h3>
                     <div class=move || if active_step.get() == index { "grid grid-rows-[1fr] transition-all duration-300 ease-in-out" } else { "grid grid-rows-[0fr] lg:grid-rows-[1fr] transition-all duration-300 ease-in-out opacity-0 lg:opacity-100" }>
                         <div class="overflow-hidden">
-                            <p class=move || if active_step.get() == index { "mt-2 text-zinc-300 text-[14.5px] leading-relaxed" } else { "mt-2 text-zinc-500 text-[14.5px] leading-relaxed group-hover:text-zinc-400" }>{move || step_body(active_mode.get(), index)}</p>
+                            <p class=move || if active_step.get() == index { "mt-2 text-zinc-300 text-[14.5px] leading-relaxed" } else { "mt-2 text-zinc-500 text-[14.5px] leading-relaxed group-hover:text-zinc-400" }>{move || step_body_content(active_mode.get(), index)}</p>
                         </div>
                     </div>
                 </div>
@@ -160,8 +161,24 @@ const fn step_title(mode: WorkflowMode, index: usize) -> &'static str {
 const fn step_body(mode: WorkflowMode, index: usize) -> &'static str {
     match (mode, index) {
         (_, 0) => "Run one command to install the agent. It starts the service, opens a tunnel, and generates your credentials.",
-        (WorkflowMode::Hosted, 1) => "Paste the agent URL and token into the hosted dashboard. Pick Cloudflare Tunnel for the fastest setup.",
         (WorkflowMode::Direct, 1) => "Open the agent on its public/private :3939 host URL, or forward port 3939 over SSH for locked-down hosts.",
         _ => "Run the audit from whichever dashboard you chose, inspect evidence, then apply supported fixes.",
     }
+}
+
+fn step_body_content(mode: WorkflowMode, index: usize) -> impl IntoView {
+    if mode == WorkflowMode::Hosted && index == 1 {
+        return view! {
+            <>
+                "Paste the agent URL and token into the "
+                <a href=APP_URL target="_blank" rel="noopener noreferrer" class="font-medium text-[#2496ED] underline underline-offset-4 transition-colors hover:text-[#5fb8ff]">
+                    "hosted dashboard"
+                </a>
+                ". Pick Cloudflare Tunnel for the fastest setup."
+            </>
+        }
+        .into_any();
+    }
+
+    view! { {step_body(mode, index)} }.into_any()
 }
