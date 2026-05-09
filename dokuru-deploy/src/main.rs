@@ -47,6 +47,10 @@ struct InitArgs {
     #[arg(long)]
     resend_key: Option<String>,
 
+    /// Sender email address for transactional emails
+    #[arg(long)]
+    from_email: Option<String>,
+
     /// Output directory
     #[arg(long)]
     output: Option<PathBuf>,
@@ -286,6 +290,7 @@ struct InitOptions {
     db_user: String,
     db_password: Option<String>,
     resend_key: Option<String>,
+    from_email: Option<String>,
     output: PathBuf,
     clone_if_missing: bool,
     repo_url: String,
@@ -307,6 +312,7 @@ fn main() -> Result<()> {
             db_user: args.db_user.unwrap_or_else(|| "dokuru".to_string()),
             db_password: args.db_password,
             resend_key: args.resend_key,
+            from_email: args.from_email,
             output: args.output.unwrap_or_else(|| PathBuf::from(".")),
             clone_if_missing: args.clone_if_missing,
             repo_url: args
@@ -495,11 +501,16 @@ fn run_init(options: InitOptions) -> Result<()> {
         options.db_password,
         is_interactive,
     )?;
-    let resend_api = resolve_resend_key(options.resend_key, is_interactive)?;
+    let email = resolve_email(
+        options.resend_key,
+        options.from_email,
+        &root_domain_from_api(&domains.api),
+        is_interactive,
+    )?;
     let secrets = resolve_jwt_secrets(is_interactive)?;
-    let config = build_deploy_config(domains, database, secrets, resend_api);
+    let config = build_deploy_config(domains, database, secrets, email);
 
-    confirm_configuration(&config, is_interactive)?;
+    confirm_configuration(&config, strategy, is_interactive)?;
     generate_files(&config, &project_dir, strategy)?;
     show_completion(&config, strategy, is_interactive)?;
 
@@ -543,6 +554,11 @@ struct DatabaseCredentials {
 struct JwtSecrets {
     access: String,
     refresh: String,
+}
+
+struct EmailConfig {
+    resend_api_key: String,
+    from_email: String,
 }
 
 fn show_intro(is_interactive: bool) -> Result<()> {
@@ -699,7 +715,7 @@ fn landing_vercel_domains() -> Result<DomainConfig> {
     let www = prompt_domain("App domain (VPS)", "app.dokuru.rifuki.dev")?;
     let api = prompt_domain("API domain (VPS)", "api.dokuru.rifuki.dev")?;
     let domains = DomainConfig {
-        landing: "landing.vercel.app".to_string(),
+        landing: root_domain_from_api(&api),
         www,
         api,
         strategy: DeployStrategy::LandingVercel,
@@ -726,7 +742,7 @@ fn both_vercel_domains() -> Result<DomainConfig> {
     note("Strategy", "Landing + App on Vercel\nAPI on VPS")?;
     let api = prompt_domain("API domain (VPS)", "api.dokuru.rifuki.dev")?;
     let domains = DomainConfig {
-        landing: "landing.vercel.app".to_string(),
+        landing: root_domain_from_api(&api),
         www: "app.vercel.app".to_string(),
         api,
         strategy: DeployStrategy::BothVercel,
@@ -757,6 +773,13 @@ fn prompt_domain(label: &str, default: &str) -> Result<String> {
         .default_input(default)
         .interact()
         .map_err(Into::into)
+}
+
+fn root_domain_from_api(api_domain: &str) -> String {
+    api_domain
+        .strip_prefix("api.")
+        .unwrap_or(api_domain)
+        .to_string()
 }
 
 fn print_domain_summary(
@@ -845,22 +868,45 @@ fn prompt_database_password() -> Result<String> {
         .map_err(Into::into)
 }
 
-fn resolve_resend_key(resend_key: Option<String>, is_interactive: bool) -> Result<String> {
-    if let Some(key) = resend_key {
-        return Ok(key);
+fn resolve_email(
+    resend_key: Option<String>,
+    from_email: Option<String>,
+    base_domain: &str,
+    is_interactive: bool,
+) -> Result<EmailConfig> {
+    if is_interactive {
+        note(
+            "Email",
+            "Dokuru uses Resend for transactional emails.\nGet your API key at: https://resend.com/api-keys",
+        )?;
     }
-    if !is_interactive {
-        return Err(anyhow::anyhow!("Resend API key is required"));
+    let resend_api_key = match resend_key {
+        Some(key) => key,
+        None if is_interactive => input("Resend API key")
+            .placeholder("re_xxxxxxxxxxxxx")
+            .interact()?,
+        None => return Err(anyhow::anyhow!("Resend API key is required")),
+    };
+    let default_from_email = format!("noreply@{base_domain}");
+    let from_email = match from_email {
+        Some(email) => email,
+        None if is_interactive => input("From email")
+            .placeholder(&default_from_email)
+            .default_input(&default_from_email)
+            .interact()?,
+        None => default_from_email,
+    }
+    .trim()
+    .to_string();
+
+    if !from_email.contains('@') {
+        return Err(anyhow::anyhow!("from email must contain @"));
     }
 
-    note(
-        "Email",
-        "Dokuru uses Resend for transactional emails.\nGet your API key at: https://resend.com/api-keys",
-    )?;
-    input("Resend API key")
-        .placeholder("re_xxxxxxxxxxxxx")
-        .interact()
-        .map_err(Into::into)
+    Ok(EmailConfig {
+        resend_api_key,
+        from_email,
+    })
 }
 
 fn resolve_jwt_secrets(is_interactive: bool) -> Result<JwtSecrets> {
@@ -901,11 +947,9 @@ fn build_deploy_config(
     domains: DomainConfig,
     database: DatabaseCredentials,
     secrets: JwtSecrets,
-    resend_api_key: String,
+    email: EmailConfig,
 ) -> DeployConfig {
-    let base_domain = domains.api.replace("api.", "");
     DeployConfig {
-        base_domain,
         landing_domain: domains.landing,
         www_domain: domains.www,
         api_domain: domains.api,
@@ -914,16 +958,21 @@ fn build_deploy_config(
         db_password: database.password,
         jwt_access_secret: secrets.access,
         jwt_refresh_secret: secrets.refresh,
-        resend_api_key,
+        resend_api_key: email.resend_api_key,
+        from_email: email.from_email,
     }
 }
 
-fn confirm_configuration(config: &DeployConfig, is_interactive: bool) -> Result<()> {
+fn confirm_configuration(
+    config: &DeployConfig,
+    strategy: DeployStrategy,
+    is_interactive: bool,
+) -> Result<()> {
     if !is_interactive {
         return Ok(());
     }
 
-    print_config_summary(config)?;
+    print_config_summary(config, strategy)?;
     if confirm("Proceed and save configuration files?")
         .initial_value(true)
         .interact()?
@@ -935,20 +984,33 @@ fn confirm_configuration(config: &DeployConfig, is_interactive: bool) -> Result<
     }
 }
 
-fn print_config_summary(config: &DeployConfig) -> Result<()> {
+fn print_config_summary(config: &DeployConfig, strategy: DeployStrategy) -> Result<()> {
+    let mut domain_lines = Vec::new();
+    if matches!(
+        strategy,
+        DeployStrategy::FullVps | DeployStrategy::AppVercel | DeployStrategy::Custom
+    ) {
+        domain_lines.push(format!("  Landing: https://{}", config.landing_domain));
+    }
+    if matches!(
+        strategy,
+        DeployStrategy::FullVps | DeployStrategy::LandingVercel | DeployStrategy::Custom
+    ) {
+        domain_lines.push(format!("  App:     https://{}", config.www_domain));
+    }
+    domain_lines.push(format!("  API:     https://{}", config.api_domain));
+
     note(
         "Configuration summary",
         format!(
-            "Domains\n  Landing: https://{}\n  App:     https://{}\n  API:     https://{}\n\nDatabase\n  Name:     {}\n  User:     {}\n  Password: {}\n\nSecurity\n  JWT Access:  {}\n  JWT Refresh: {}\n\nEmail\n  Provider: Resend\n  From:     noreply@{}",
-            config.landing_domain,
-            config.www_domain,
-            config.api_domain,
+            "Domains\n{}\n\nDatabase\n  Name:     {}\n  User:     {}\n  Password: {}\n\nSecurity\n  JWT Access:  {}\n  JWT Refresh: {}\n\nEmail\n  Provider: Resend\n  From:     {}",
+            domain_lines.join("\n"),
             config.db_name,
             config.db_user,
             secret_preview(&config.db_password, "••••••••"),
             secret_preview(&config.jwt_access_secret, "••••••••"),
             secret_preview(&config.jwt_refresh_secret, "••••••••"),
-            config.base_domain,
+            config.from_email,
         ),
     )?;
     Ok(())

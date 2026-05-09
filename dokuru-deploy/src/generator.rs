@@ -97,7 +97,7 @@ fn render_secrets_toml(example_content: &str, config: &DeployConfig) -> Result<S
     );
     table_mut(&mut doc, "email")?.insert(
         "from_email".to_string(),
-        toml::Value::String(format!("noreply@{}", config.base_domain)),
+        toml::Value::String(config.from_email.clone()),
     );
 
     Ok(toml::to_string_pretty(&doc)?)
@@ -248,7 +248,6 @@ mod tests {
 
     fn config() -> DeployConfig {
         DeployConfig {
-            base_domain: "dokuru.rifuki.dev".to_string(),
             landing_domain: "dokuru.rifuki.dev".to_string(),
             www_domain: "app.dokuru.rifuki.dev".to_string(),
             api_domain: "api.dokuru.rifuki.dev".to_string(),
@@ -258,6 +257,7 @@ mod tests {
             jwt_access_secret: "access-secret".to_string(),
             jwt_refresh_secret: "refresh-secret".to_string(),
             resend_api_key: "re_test".to_string(),
+            from_email: "noreply@dokuru.rifuki.dev".to_string(),
         }
     }
 

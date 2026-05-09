@@ -1,6 +1,5 @@
 #[derive(Debug, Clone)]
 pub struct DeployConfig {
-    pub base_domain: String,
     pub landing_domain: String,
     pub www_domain: String,
     pub api_domain: String,
@@ -10,6 +9,7 @@ pub struct DeployConfig {
     pub jwt_access_secret: String,
     pub jwt_refresh_secret: String,
     pub resend_api_key: String,
+    pub from_email: String,
 }
 
 impl DeployConfig {
