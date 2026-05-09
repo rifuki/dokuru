@@ -805,6 +805,75 @@ function LatestAuditSkeleton() {
     );
 }
 
+function hasAuditLineDetails(line: AuditProgressLine) {
+    return Boolean(line.command || line.stdout !== undefined || line.stderr || typeof line.exitCode === "number");
+}
+
+function AuditLogBlock({ label, value }: { label: string; value?: string | number }) {
+    if (value === undefined || value === "") return null;
+
+    return (
+        <div className="space-y-1.5">
+            <div className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground/55">
+                {label}
+            </div>
+            <pre className="max-w-full overflow-x-auto rounded-lg border border-border/70 bg-background/70 px-3 py-2 text-[11px] leading-relaxed text-zinc-700 dark:bg-black/35 dark:text-zinc-300">
+                <code>{String(value)}</code>
+            </pre>
+        </div>
+    );
+}
+
+function AuditLogLine({ line }: { line: AuditProgressLine }) {
+    const [expanded, setExpanded] = useState(false);
+    const hasDetails = hasAuditLineDetails(line);
+
+    return (
+        <div className="space-y-1 border-b border-border/50 py-1.5 last:border-b-0">
+            <div className="flex items-start gap-2">
+                <span className="shrink-0 text-muted-foreground/40">[{line.index.toString().padStart(2, "0")}/{line.total}]</span>
+                <span className={cn(
+                    "shrink-0 font-bold",
+                    line.status === "Pass" ? "text-emerald-600 dark:text-emerald-400" : line.status === "Fail" ? "text-rose-600 dark:text-rose-400" : "text-amber-600 dark:text-amber-400",
+                )}>{line.status.toUpperCase()}</span>
+                <span className="shrink-0 text-[#2496ED]">{line.ruleId}</span>
+                <span className="min-w-0 flex-1 truncate text-zinc-700 dark:text-zinc-300">{line.title}</span>
+                {hasDetails && (
+                    <button
+                        type="button"
+                        onClick={() => setExpanded(open => !open)}
+                        className="-mr-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                        aria-label={expanded ? "Hide audit command details" : "Show audit command details"}
+                        aria-expanded={expanded}
+                    >
+                        {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                    </button>
+                )}
+            </div>
+            {line.command && (
+                <button
+                    type="button"
+                    onClick={() => hasDetails && setExpanded(open => !open)}
+                    disabled={!hasDetails}
+                    title={line.command}
+                    className="block w-full truncate text-left text-zinc-500 disabled:cursor-default dark:text-zinc-500 sm:pl-16"
+                >
+                    $ {line.command}
+                </button>
+            )}
+            <p className="truncate text-zinc-600 dark:text-zinc-400 sm:pl-16">{line.message}</p>
+            {expanded && hasDetails && (
+                <div className="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-3 sm:ml-16">
+                    <AuditLogBlock label="Command" value={line.command ? `$ ${line.command}` : undefined} />
+                    <AuditLogBlock label="Stdout" value={line.stdout ?? "(no stdout)"} />
+                    <AuditLogBlock label="Stderr" value={line.stderr} />
+                    <AuditLogBlock label="Exit Code" value={line.exitCode} />
+                </div>
+            )}
+        </div>
+    );
+}
+
 function AuditRunTerminal({
     agentId,
     total,
@@ -994,21 +1063,7 @@ function AuditRunTerminal({
                     {lines.length === 0 && isCancelled && (
                         <p className="text-muted-foreground/50">$ audit cancelled by user.</p>
                     )}
-                    {lines.map(line => (
-                        <div key={`${line.ruleId}-${line.index}`} className="space-y-0.5 border-b border-border/50 py-1.5 last:border-b-0">
-                            <div className="flex items-center gap-2">
-                                <span className="shrink-0 text-muted-foreground/40">[{line.index.toString().padStart(2, "0")}/{line.total}]</span>
-                                <span className={cn(
-                                    "font-bold",
-                                    line.status === "Pass" ? "text-emerald-600 dark:text-emerald-400" : line.status === "Fail" ? "text-rose-600 dark:text-rose-400" : "text-amber-600 dark:text-amber-400",
-                                )}>{line.status.toUpperCase()}</span>
-                                <span className="shrink-0 text-[#2496ED]">{line.ruleId}</span>
-                                <span className="min-w-0 truncate text-zinc-700 dark:text-zinc-300">{line.title}</span>
-                            </div>
-                            {line.command && <p className="truncate text-zinc-500 dark:text-zinc-500 sm:pl-16">$ {line.command}</p>}
-                            <p className="truncate text-zinc-600 dark:text-zinc-400 sm:pl-16">{line.message}</p>
-                        </div>
-                    ))}
+                    {lines.map(line => <AuditLogLine key={`${line.ruleId}-${line.index}`} line={line} />)}
                     {error && <p className="text-rose-400">! {error}</p>}
                 </div>
 

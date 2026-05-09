@@ -15,6 +15,9 @@ export interface AuditProgressLine {
     status: AuditResult["status"];
     message: string;
     command?: string;
+    stdout?: string;
+    stderr?: string;
+    exitCode?: number;
     timestamp: string;
 }
 
@@ -606,6 +609,9 @@ export const useAuditStore = create<AuditState>((set) => ({
                                             status: message.data.status,
                                             message: message.data.message,
                                             command: message.data.audit_command,
+                                            stdout: message.data.raw_output,
+                                            stderr: message.data.command_stderr,
+                                            exitCode: message.data.command_exit_code,
                                             timestamp: new Date().toISOString(),
                                         }],
                                     },
