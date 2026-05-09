@@ -11,6 +11,7 @@ use crate::feature::user::domain;
 pub struct User {
     pub id: Uuid,
     pub email: String,
+    pub pending_email: Option<String>,
     pub username: Option<String>,
     pub is_active: bool,
     pub email_verified: bool,
@@ -77,6 +78,7 @@ pub struct UserProfile {
 pub struct UserWithProfile {
     pub id: Uuid,
     pub email: String,
+    pub pending_email: Option<String>,
     pub username: Option<String>,
     pub is_active: bool,
     pub email_verified: bool,

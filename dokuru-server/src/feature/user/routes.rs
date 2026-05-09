@@ -21,6 +21,7 @@ pub fn user_routes() -> Router<AppState> {
         .route("/avatar", post(avatar::upload_avatar))
         .route("/avatar", delete(avatar::delete_avatar))
         .route("/change-email", post(email_change::request_email_change))
+        .route("/change-email", delete(email_change::cancel_email_change))
         .layer(middleware::from_fn(auth_middleware));
 
     public.merge(protected)

@@ -19,6 +19,7 @@ import {
 import { Camera, Loader2, AlertCircle, Send, X } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
+import { isApiErrorResponse } from "@/lib/api/axios-instance";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { useProfile, settingsKeys } from "@/features/settings/hooks/use-profile";
 import { useUpdateProfile } from "@/features/settings/hooks/use-update-profile";
@@ -51,10 +52,11 @@ export function ProfileSettings() {
     // Sync form fields only when user ID changes (initial load), not on every render
     const [initializedId, setInitializedId] = useState<string | null>(null);
     if (user && user.id.toString() !== initializedId) {
+        const pendingEmail = user.pending_email?.trim() || "";
         setName(user.name || "");
         setUsername(user.username || "");
-        setEmail(user.email || "");
-        setVerificationSentEmail(null);
+        setEmail(pendingEmail || user.email || "");
+        setVerificationSentEmail(pendingEmail || null);
         setInitializedId(user.id.toString());
     }
 
@@ -142,9 +144,13 @@ export function ProfileSettings() {
         }
     };
 
-    const getErrorMessage = (error: unknown) => error instanceof Error && 'response' in error
-        ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
-        : undefined;
+    const getErrorMessage = (error: unknown) => {
+        if (isApiErrorResponse(error)) return error.message;
+        if (error instanceof Error && 'response' in error) {
+            return (error as { response?: { data?: { message?: string } } }).response?.data?.message;
+        }
+        return undefined;
+    };
 
     const handleSendVerification = async () => {
         const targetEmail = email.trim();
@@ -166,7 +172,14 @@ export function ProfileSettings() {
         if (isCurrentEmail) {
             setIsResendingVerification(true);
             try {
+                if (pendingEmail) {
+                    await apiClient.delete('/users/change-email');
+                }
                 await apiClient.post('/auth/resend-verification', { email: user.email });
+                if (pendingEmail) {
+                    queryClient.invalidateQueries({ queryKey: settingsKeys.profile() });
+                    setVerificationSentEmail(null);
+                }
                 toast.success("Verification email sent! Check your inbox.");
             } catch (error: unknown) {
                 const msg = getErrorMessage(error);
@@ -216,9 +229,10 @@ export function ProfileSettings() {
 
     const normalizedEmail = email.trim();
     const loadedEmail = user.email.trim();
+    const pendingEmail = user.pending_email?.trim() || null;
     const isEmailChanged = normalizedEmail.toLowerCase() !== loadedEmail.toLowerCase();
     const isEmailValid = EMAIL_PATTERN.test(normalizedEmail);
-    const hasPendingEmailVerification = isEmailChanged && verificationSentEmail === normalizedEmail;
+    const hasPendingEmailVerification = isEmailChanged && (verificationSentEmail === normalizedEmail || pendingEmail === normalizedEmail);
     const verificationButtonLabel = isEmailChanged && !hasPendingEmailVerification ? "Send" : "Resend";
     const isSendingVerification = isChangingEmail || isResendingVerification;
     const canSendVerification = isEmailValid && !isSendingVerification && (isEmailChanged || !user.email_verified);
@@ -394,7 +408,12 @@ export function ProfileSettings() {
                             <Label htmlFor="email" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                                 Email Address
                             </Label>
-                            {!user.email_verified && (
+                            {hasPendingEmailVerification ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                                    <AlertCircle className="h-3 w-3" />
+                                    Pending verification
+                                </span>
+                            ) : !user.email_verified && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-500 border border-amber-500/20">
                                     <AlertCircle className="h-3 w-3" />
                                     Unverified

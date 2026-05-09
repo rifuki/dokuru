@@ -10,6 +10,7 @@ mod tests {
         let user = User {
             id: Uuid::new_v4(),
             email: "test@example.com".to_string(),
+            pending_email: None,
             username: Some("testuser".to_string()),
             is_active: true,
             email_verified: false,
@@ -28,6 +29,7 @@ mod tests {
         let user = User {
             id: Uuid::new_v4(),
             email: "admin@example.com".to_string(),
+            pending_email: None,
             username: None,
             is_active: true,
             email_verified: true,
@@ -44,6 +46,7 @@ mod tests {
         let user = User {
             id: Uuid::new_v4(),
             email: "test@example.com".to_string(),
+            pending_email: None,
             username: None,
             is_active: true,
             email_verified: false,
@@ -60,6 +63,7 @@ mod tests {
         let user = User {
             id: Uuid::new_v4(),
             email: "nousername@example.com".to_string(),
+            pending_email: None,
             username: None,
             is_active: true,
             email_verified: true,
@@ -76,6 +80,7 @@ mod tests {
         let user = User {
             id: Uuid::new_v4(),
             email: "serialize@example.com".to_string(),
+            pending_email: None,
             username: Some("serialuser".to_string()),
             is_active: true,
             email_verified: true,
@@ -200,6 +205,7 @@ mod tests {
         let user_with_profile = UserWithProfile {
             id: Uuid::new_v4(),
             email: "complete@example.com".to_string(),
+            pending_email: None,
             username: Some("completeuser".to_string()),
             is_active: true,
             email_verified: true,
@@ -225,6 +231,7 @@ mod tests {
         let user_with_profile = UserWithProfile {
             id: Uuid::new_v4(),
             email: "admin@example.com".to_string(),
+            pending_email: None,
             username: None,
             is_active: true,
             email_verified: true,
@@ -246,6 +253,7 @@ mod tests {
         let user = User {
             id: Uuid::new_v4(),
             email: "clone@example.com".to_string(),
+            pending_email: None,
             username: Some("cloneuser".to_string()),
             is_active: true,
             email_verified: false,
@@ -344,6 +352,7 @@ mod tests {
             let user = User {
                 id: Uuid::new_v4(),
                 email: email.to_string(),
+                pending_email: None,
                 username: None,
                 is_active: true,
                 email_verified: false,
@@ -361,6 +370,7 @@ mod tests {
         let user = User {
             id: Uuid::new_v4(),
             email: "inactive@example.com".to_string(),
+            pending_email: None,
             username: None,
             is_active: false,
             email_verified: false,

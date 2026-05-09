@@ -6,6 +6,7 @@ export interface TokenResponse {
 export interface User {
   id: string;
   email: string;
+  pending_email?: string | null;
   username?: string;
   name: string;
   role: "user" | "admin";

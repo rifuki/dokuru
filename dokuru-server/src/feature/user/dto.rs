@@ -24,6 +24,7 @@ pub struct UpdateUser {
 pub struct UserProfileResponse {
     pub id: Uuid,
     pub email: String,
+    pub pending_email: Option<String>,
     pub email_verified: bool,
     pub username: Option<String>,
     pub name: String,

@@ -35,6 +35,7 @@ pub async fn get_me(
     Ok(ApiSuccess::default().with_data(UserProfileResponse {
         id: user_with_profile.id,
         email: user_with_profile.email,
+        pending_email: user_with_profile.pending_email,
         email_verified: user_with_profile.email_verified,
         username: user_with_profile.username,
         name: user_with_profile.full_name.unwrap_or_default(),
@@ -105,6 +106,7 @@ pub async fn update_me(
         .with_data(UserProfileResponse {
             id: user.id,
             email: user.email,
+            pending_email: None,
             email_verified: user.email_verified,
             username: user.username,
             name: profile

@@ -339,7 +339,7 @@ impl UserRepository for UserRepositoryImpl {
         let row = sqlx::query_as::<_, UserWithProfile>(
             r"
             SELECT 
-                u.id, u.email, u.username, u.is_active, u.email_verified, u.role, u.created_at, u.updated_at,
+                u.id, u.email, u.pending_email, u.username, u.is_active, u.email_verified, u.role, u.created_at, u.updated_at,
                 p.full_name, p.display_name, p.avatar_url, p.bio, p.phone_number
             FROM users u
             LEFT JOIN user_profiles p ON p.user_id = u.id
@@ -450,7 +450,12 @@ impl UserRepository for UserRepositoryImpl {
     async fn verify_pending_email(&self, pool: &PgPool, token: &str) -> Result<bool, sqlx::Error> {
         let result = sqlx::query(
             "UPDATE users SET email = pending_email, email_verified = true, verification_token = NULL, verification_token_expires_at = NULL, pending_email = NULL, pending_email_token = NULL, pending_email_token_expires_at = NULL, updated_at = NOW() 
-             WHERE pending_email_token = $1 AND pending_email_token_expires_at > NOW()"
+             WHERE pending_email_token = $1 AND pending_email_token_expires_at > NOW()
+             AND NOT EXISTS (
+                 SELECT 1 FROM users existing
+                 WHERE existing.email = users.pending_email
+                 AND existing.id <> users.id
+             )"
         )
         .bind(token)
         .execute(pool)
@@ -616,7 +621,7 @@ impl UserProfileRepository for UserProfileRepositoryImpl {
         let row = sqlx::query_as::<_, UserWithProfile>(
             r"
             SELECT 
-                u.id, u.email, u.username, u.is_active, u.email_verified, u.role, u.created_at, u.updated_at,
+                u.id, u.email, u.pending_email, u.username, u.is_active, u.email_verified, u.role, u.created_at, u.updated_at,
                 p.full_name, p.display_name, p.avatar_url, p.bio, p.phone_number
             FROM users u
             LEFT JOIN user_profiles p ON p.user_id = u.id

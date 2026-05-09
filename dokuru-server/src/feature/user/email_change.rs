@@ -109,6 +109,29 @@ pub async fn request_email_change(
     }))
 }
 
+/// # Errors
+///
+/// Returns an error if the underlying operation fails.
+pub async fn cancel_email_change(
+    State(state): State<AppState>,
+    axum::Extension(auth_user): axum::Extension<AuthUser>,
+) -> ApiResult<ChangeEmailResponse> {
+    state
+        .user_repo
+        .clear_pending_email(state.db.pool(), auth_user.user_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to cancel pending email: {}", e);
+            ApiError::default()
+                .with_code(StatusCode::INTERNAL_SERVER_ERROR)
+                .with_message("Failed to cancel pending email change")
+        })?;
+
+    Ok(ApiSuccess::default().with_data(ChangeEmailResponse {
+        message: "Pending email change cancelled".to_string(),
+    }))
+}
+
 #[derive(Deserialize)]
 pub struct VerifyEmailChangeQuery {
     token: String,
@@ -133,6 +156,14 @@ pub async fn verify_email_change(
         })?;
 
     if !verified {
+        if let Some(pending_email) = pending_email_for_token(&state, &query.token).await?
+            && email_is_registered(&state, &pending_email).await?
+        {
+            return Err(ApiError::default()
+                .with_code(StatusCode::BAD_REQUEST)
+                .with_message("Pending email is already registered. Choose a different email."));
+        }
+
         return Err(ApiError::default()
             .with_code(StatusCode::BAD_REQUEST)
             .with_message("Invalid or expired verification token"));
@@ -141,4 +172,36 @@ pub async fn verify_email_change(
     Ok(ApiSuccess::default().with_data(ChangeEmailResponse {
         message: "Email changed successfully".to_string(),
     }))
+}
+
+async fn pending_email_for_token(
+    state: &AppState,
+    token: &str,
+) -> Result<Option<String>, ApiError> {
+    sqlx::query_scalar::<_, Option<String>>(
+        "SELECT pending_email FROM users WHERE pending_email_token = $1",
+    )
+    .bind(token)
+    .fetch_optional(state.db.pool())
+    .await
+    .map(Option::flatten)
+    .map_err(|e| {
+        tracing::error!("Failed to inspect pending email token: {}", e);
+        ApiError::default()
+            .with_code(StatusCode::INTERNAL_SERVER_ERROR)
+            .with_message("Failed to verify email change")
+    })
+}
+
+async fn email_is_registered(state: &AppState, email: &str) -> Result<bool, ApiError> {
+    sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)")
+        .bind(email)
+        .fetch_one(state.db.pool())
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to check pending email ownership: {}", e);
+            ApiError::default()
+                .with_code(StatusCode::INTERNAL_SERVER_ERROR)
+                .with_message("Failed to verify email change")
+        })
 }
