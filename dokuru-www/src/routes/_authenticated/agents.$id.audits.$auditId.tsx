@@ -2970,6 +2970,7 @@ function AuditDetailPage() {
       />
       <FixAllWizard
         open={fixAllOpen}
+        agentId={id}
         step={fixAllStep}
         currentIndex={fixAllIndex}
         ruleStatuses={ruleStatuses}

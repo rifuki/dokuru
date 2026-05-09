@@ -4,12 +4,14 @@ import {
 import {
     AlertTriangle, CheckCircle2, Loader2, XCircle,
     RefreshCw, Check, ShieldAlert, X, FileCode2, Server,
-    Terminal, Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isContainerRecreateRule } from "@/features/audit/hooks/useFix";
 import type { CgroupRuleId, CgroupTargetConfig, FixAllStep, RuleFixStatus } from "@/features/audit/hooks/useFixAll";
 import { ResizableSheetContent } from "@/features/audit/components/ResizableSheetContent";
+import { ProgressEventsPanel } from "@/features/audit/components/ProgressEventsPanel";
+import type { FixProgress } from "@/lib/api/agent-direct";
+import { fixJobKey, useAuditStore } from "@/stores/use-audit-store";
 
 // ── Step indicator ────────────────────────────────────────────────────────────
 
@@ -521,10 +523,12 @@ function ApplyingStep({
     const selected = ruleStatuses.filter(r => r.selected);
     const done = selected.filter(r => r.state === "done").length;
     const total = selected.length;
+    const active = selected.find(r => r.state === "applying") ?? selected[Math.min(Math.max(currentIndex, 0), Math.max(selected.length - 1, 0))];
+    const activeEvents = active?.progressEvents ?? [];
 
     return (
         <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5">
                     <Loader2 className="h-4 w-4 text-[#2496ED] animate-spin shrink-0" />
                     <span className="text-sm font-semibold text-[#2496ED] font-mono">
@@ -536,26 +540,31 @@ function ApplyingStep({
                 </span>
             </div>
 
-            {/* Overall progress bar */}
-            <div className="h-1 rounded-full bg-white/5 overflow-hidden">
-                <div
-                    className="h-full rounded-full bg-[#2496ED] transition-all duration-500"
-                    style={{ width: `${total > 0 ? (done / total) * 100 : 0}%` }}
-                />
-            </div>
-
-            <div className="rounded-lg border border-white/8 bg-[#050507] overflow-hidden divide-y divide-white/5">
-                <div className="flex items-center gap-1.5 px-3 py-2 bg-white/[0.015]">
-                    <span className="text-[10px] font-mono text-white/30 uppercase tracking-[0.15em]">
-                        dokuru-agent · sequential fix
-                    </span>
-                    <span className="ml-auto text-[10px] font-mono text-[#2496ED]/60 uppercase tracking-[0.15em]">
+            <div className="rounded-xl border border-white/8 bg-white/[0.02] p-3.5">
+                <div className="flex min-w-0 items-start justify-between gap-4">
+                    <div className="min-w-0">
+                        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/35">
+                            Current rule
+                        </p>
+                        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
+                            <span className="rounded border border-[#2496ED]/25 bg-[#2496ED]/10 px-2 py-0.5 font-mono text-[11px] font-semibold text-[#2496ED]">
+                                {active?.ruleId ?? "-"}
+                            </span>
+                            <span className="min-w-0 truncate text-sm font-semibold text-white/82">
+                                {active?.title ?? "Waiting for selected fixes"}
+                            </span>
+                        </div>
+                    </div>
+                    <span className="shrink-0 rounded border border-white/8 bg-white/[0.03] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-white/38">
                         {Math.min(currentIndex + 1, total)}/{total}
                     </span>
                 </div>
-                {ruleStatuses.map(rs => (
-                    <RuleRow key={rs.ruleId} rs={rs} showOutcome={true} />
-                ))}
+                <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/5">
+                    <div
+                        className="h-full rounded-full bg-[#2496ED] transition-all duration-500"
+                        style={{ width: `${total > 0 ? (done / total) * 100 : 0}%` }}
+                    />
+                </div>
             </div>
 
             <div className="rounded-lg border border-white/8 bg-white/[0.018] px-3 py-2.5">
@@ -579,6 +588,24 @@ function ApplyingStep({
                     </button>
                 </div>
             </div>
+
+            <ProgressEventsPanel
+                progressEvents={activeEvents}
+                title={active ? `rule ${active.ruleId} terminal transcript` : "live terminal transcript"}
+                emptyMessage="Waiting for agent progress"
+            />
+
+            <div className="overflow-hidden rounded-xl border border-white/8 bg-white/[0.02]">
+                <div className="flex items-center justify-between gap-3 border-b border-white/6 bg-white/[0.025] px-3 py-2">
+                    <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/35">Selected queue</span>
+                    <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/30">{selected.length} rules</span>
+                </div>
+                <div className="divide-y divide-white/6">
+                    {selected.map(rs => (
+                        <RuleRow key={rs.ruleId} rs={rs} showOutcome={true} />
+                    ))}
+                </div>
+            </div>
         </div>
     );
 }
@@ -587,100 +614,33 @@ function uniqueLabels(values: Array<string | undefined | null>) {
     return Array.from(new Set(values.map(value => value?.trim()).filter(Boolean))) as string[];
 }
 
-function EvidenceRuleCard({ rs }: { rs: RuleFixStatus }) {
-    const applied = rs.outcome?.status === "Applied";
-    const blocked = rs.outcome?.status === "Blocked";
-    const evidenceEvents = rs.progressEvents.filter(event => event.command || event.detail || event.action);
-    const targets = uniqueLabels(rs.progressEvents.map(event => event.container_name)).slice(0, 4);
-    const previewEvents = evidenceEvents.slice(-4);
+function progressEventKey(event: FixProgress) {
+    return [
+        event.rule_id,
+        event.container_name,
+        event.step,
+        event.total_steps,
+        event.action,
+        event.status,
+        event.detail,
+        event.command,
+        event.stdout,
+        event.stderr,
+    ].join("\0");
+}
 
-    return (
-        <div className={cn(
-            "rounded-xl border p-3.5",
-            applied ? "border-[#2496ED]/22 bg-[#2496ED]/6" : blocked ? "border-rose-500/25 bg-rose-500/[0.06]" : "border-white/8 bg-white/[0.02]"
-        )}>
-            <div className="flex items-start gap-3">
-                <div className={cn(
-                    "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border",
-                    applied ? "border-[#2496ED]/30 bg-[#2496ED]/12 text-[#2496ED]" : "border-rose-500/25 bg-rose-500/10 text-rose-400"
-                )}>
-                    {applied ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-                </div>
-                <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-xs font-bold text-white/65">{rs.ruleId}</span>
-                        <span className={cn(
-                            "rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em]",
-                            applied ? "border-[#2496ED]/25 bg-[#2496ED]/10 text-[#2496ED]" : "border-rose-500/25 bg-rose-500/10 text-rose-400"
-                        )}>
-                            {applied ? "applied" : "blocked"}
-                        </span>
-                        {rs.progressEvents.length > 0 && (
-                            <span className="rounded border border-white/8 bg-white/[0.035] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-white/38">
-                                {rs.progressEvents.length} events
-                            </span>
-                        )}
-                    </div>
-                    <p className="mt-1 text-sm font-semibold leading-snug text-white/82">{rs.title}</p>
-                    {rs.outcome?.message && (
-                        <p className="mt-1 text-xs leading-relaxed text-white/50">{rs.outcome.message}</p>
-                    )}
-                </div>
-            </div>
+function mergeProgressEvents(base: FixProgress[], live: FixProgress[]) {
+    const seen = new Set<string>();
+    return [...base, ...live].filter((event) => {
+        const key = progressEventKey(event);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
 
-            {targets.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-1.5 pl-10">
-                    {targets.map(target => (
-                        <span key={target} className="rounded-lg border border-[#2496ED]/18 bg-[#2496ED]/8 px-2 py-1 font-mono text-[10px] text-[#2496ED]/85">
-                            {target}
-                        </span>
-                    ))}
-                </div>
-            )}
-
-            {previewEvents.length > 0 ? (
-                <div className="mt-3 overflow-hidden rounded-lg border border-white/8 bg-black/25 font-mono">
-                    {previewEvents.map((event, index) => (
-                        <div key={`${event.rule_id}-${event.action}-${event.step}-${index}`} className="border-b border-white/6 px-3 py-2 last:border-b-0">
-                            <div className="flex min-w-0 items-center gap-2 text-[10px]">
-                                <span className={cn(
-                                    "w-14 shrink-0 uppercase tracking-[0.12em]",
-                                    event.status === "done" ? "text-[#2496ED]" : event.status === "error" ? "text-rose-400" : "text-amber-400"
-                                )}>
-                                    {event.status}
-                                </span>
-                                <span className="truncate font-semibold text-white/68">{event.action.replaceAll("_", " ")}</span>
-                                {event.detail && <span className="truncate text-white/32">{event.detail}</span>}
-                            </div>
-                            {event.command && (
-                                <pre className="mt-1 whitespace-pre-wrap break-words rounded border border-[#2496ED]/12 bg-[#06111a] px-2 py-1.5 text-[10px] text-[#58b8ff]">
-                                    <span className="select-none text-white/28">$ </span>{event.command}
-                                </pre>
-                            )}
-                            {(event.stdout || event.stderr) && (
-                                <div className="mt-1 overflow-hidden rounded border border-white/8 bg-black/45">
-                                    {event.stdout && (
-                                        <pre className="whitespace-pre-wrap break-words px-2 py-1.5 text-[10px] text-emerald-300/80">
-                                            <span className="select-none text-white/28">stdout\n</span>{event.stdout}
-                                        </pre>
-                                    )}
-                                    {event.stderr && (
-                                        <pre className="whitespace-pre-wrap break-words border-t border-white/5 px-2 py-1.5 text-[10px] text-rose-300/80">
-                                            <span className="select-none text-white/28">stderr\n</span>{event.stderr}
-                                        </pre>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    ))}
-                </div>
-            ) : (
-                <p className="mt-3 rounded-lg border border-white/8 bg-white/[0.02] px-3 py-2 text-xs text-white/35">
-                    No streamed evidence was captured for this rule. The final agent outcome is still shown above.
-                </p>
-            )}
-        </div>
-    );
+function selectedProgressEvents(ruleStatuses: RuleFixStatus[]) {
+    return ruleStatuses.flatMap((status) => status.selected ? status.progressEvents : []);
 }
 
 // ── Result step ───────────────────────────────────────────────────────────────
@@ -699,6 +659,7 @@ function ResultStep({
     const allApplied = blocked === 0;
     const evidenceCount = selected.reduce((sum, rs) => sum + rs.progressEvents.length, 0);
     const targets = uniqueLabels(selected.flatMap(rs => rs.progressEvents.map(event => event.container_name)));
+    const progressEvents = selectedProgressEvents(ruleStatuses);
 
     return (
         <div className="flex flex-col gap-5">
@@ -746,27 +707,17 @@ function ResultStep({
                 </div>
             </div>
 
-            <div className="rounded-xl border border-white/8 bg-white/[0.02] p-3.5">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                        <Activity className="h-3.5 w-3.5 text-[#2496ED]" />
-                        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/38">Bulk evidence ledger</p>
-                    </div>
-                    <span className="rounded border border-white/8 bg-white/[0.03] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-white/35">
-                        {selected.length} selected
-                    </span>
-                </div>
-                <div className="space-y-3">
-                    {selected.map(rs => (
-                        <EvidenceRuleCard key={rs.ruleId} rs={rs} />
-                    ))}
-                </div>
-            </div>
+            <ProgressEventsPanel
+                progressEvents={progressEvents}
+                title="bulk terminal transcript"
+                showRuleId
+                emptyMessage="No streamed evidence captured"
+            />
 
             {skipped > 0 && (
                 <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3.5 py-3 text-xs text-white/42">
                     <div className="flex items-start gap-2">
-                        <Terminal className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/35" />
+                        <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/35" />
                         <p className="leading-relaxed">
                             {skipped} rule(s) were intentionally skipped by selection. High-risk rules stay available in the rule list, but they are not mixed into the evidence ledger unless you selected them.
                         </p>
@@ -774,10 +725,16 @@ function ResultStep({
                 </div>
             )}
 
-            <div className="rounded-lg border border-white/8 bg-white/[0.02] overflow-hidden divide-y divide-white/5">
-                {ruleStatuses.map(rs => (
-                    <RuleRow key={rs.ruleId} rs={rs} showOutcome={true} />
-                ))}
+            <div className="overflow-hidden rounded-xl border border-white/8 bg-white/[0.02]">
+                <div className="flex items-center justify-between gap-3 border-b border-white/6 bg-white/[0.025] px-3 py-2">
+                    <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/35">Selected results</span>
+                    <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/30">{selected.length} rules</span>
+                </div>
+                <div className="divide-y divide-white/6">
+                    {selected.map(rs => (
+                        <RuleRow key={rs.ruleId} rs={rs} showOutcome={true} />
+                    ))}
+                </div>
             </div>
 
             {/* Actions */}
@@ -804,6 +761,7 @@ function ResultStep({
 
 interface FixAllWizardProps {
     open: boolean;
+    agentId: string;
     step: FixAllStep;
     currentIndex: number;
     ruleStatuses: RuleFixStatus[];
@@ -822,12 +780,23 @@ interface FixAllWizardProps {
 }
 
 export function FixAllWizard({
-    open, step, currentIndex, ruleStatuses, selectedCount,
+    open, agentId, step, currentIndex, ruleStatuses, selectedCount,
     cgroupTargets, cgroupLoading, selectedCgroupRuleIds,
     onConfirm, onCancelApply, onClose, onRerunAudit, onToggleRule, onSetAllSelected,
     onUpdateCgroupTarget, onBackToConfirm,
 }: FixAllWizardProps) {
     const showConfigure = selectedCgroupRuleIds.length > 0 || step === "configure";
+    const fixJobs = useAuditStore((state) => state.fixJobs);
+    const liveRuleStatuses = ruleStatuses.map((status) => {
+        const job = fixJobs[fixJobKey(agentId, status.ruleId)];
+        if (!job || status.state !== "applying") return status;
+
+        return {
+            ...status,
+            outcome: job.outcome ?? status.outcome,
+            progressEvents: mergeProgressEvents(status.progressEvents, job.progressEvents),
+        };
+    });
 
     return (
         <Sheet open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
@@ -870,7 +839,7 @@ export function FixAllWizard({
                 <div className="flex-1 overflow-y-auto px-6 py-5">
                     {step === "confirm" && (
                         <ConfirmStep
-                            ruleStatuses={ruleStatuses}
+                            ruleStatuses={liveRuleStatuses}
                             selectedCount={selectedCount}
                             hasCgroupSelection={selectedCgroupRuleIds.length > 0}
                             onConfirm={onConfirm}
@@ -891,11 +860,11 @@ export function FixAllWizard({
                         />
                     )}
                     {step === "applying" && (
-                        <ApplyingStep ruleStatuses={ruleStatuses} currentIndex={currentIndex} onCancel={onCancelApply} />
+                        <ApplyingStep ruleStatuses={liveRuleStatuses} currentIndex={currentIndex} onCancel={onCancelApply} />
                     )}
                     {step === "result" && (
                         <ResultStep
-                            ruleStatuses={ruleStatuses}
+                            ruleStatuses={liveRuleStatuses}
                             onRerunAudit={onRerunAudit}
                             onClose={onClose}
                         />
