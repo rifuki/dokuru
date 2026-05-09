@@ -2903,6 +2903,114 @@ async fn pipe_command_lines<R>(
     }
 }
 
+fn compose_project_up_command(
+    target: &ComposeRecoveryTarget,
+    compose_paths: &[PathBuf],
+) -> Command {
+    let mut command = Command::new("docker");
+    command.arg("compose");
+    for compose_path in compose_paths {
+        command.arg("-f").arg(compose_path);
+    }
+    command.arg("-p").arg(&target.project);
+    command.arg("up").arg("-d");
+    for service in &target.services {
+        command.arg(service);
+    }
+    if let Some(working_dir) = &target.working_dir {
+        command.current_dir(working_dir);
+    }
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    command
+}
+
+fn pipe_child_output(
+    child: &mut tokio::process::Child,
+) -> mpsc::UnboundedReceiver<(&'static str, String)> {
+    let (line_tx, line_rx) = mpsc::unbounded_channel::<(&'static str, String)>();
+    if let Some(stdout) = child.stdout.take() {
+        tokio::spawn(pipe_command_lines(stdout, "stdout", line_tx.clone()));
+    }
+    if let Some(stderr) = child.stderr.take() {
+        tokio::spawn(pipe_command_lines(stderr, "stderr", line_tx));
+    }
+    line_rx
+}
+
+fn send_compose_recovery_start(
+    target: &ComposeRecoveryTarget,
+    command_text: &str,
+    progress: Option<&ProgressSender>,
+) {
+    send_progress(
+        progress,
+        userns_progress_event(
+            9,
+            "restart_containers",
+            "in_progress",
+            Some(format!(
+                "Starting detached Compose recovery for project '{}' ({} service(s))",
+                target.project,
+                target.services.len()
+            )),
+            Some(command_text.to_string()),
+        ),
+    );
+}
+
+fn send_compose_recovery_heartbeat(
+    target: &ComposeRecoveryTarget,
+    command_text: &str,
+    progress: Option<&ProgressSender>,
+) {
+    send_progress(
+        progress,
+        userns_progress_event(
+            9,
+            "restart_containers",
+            "in_progress",
+            Some(format!(
+                "Waiting for detached Compose recovery for project '{}' ({} service(s)); image pulls can take several minutes on small VPS instances",
+                target.project,
+                target.services.len()
+            )),
+            Some(command_text.to_string()),
+        ),
+    );
+}
+
+fn record_compose_output_line(
+    target: &ComposeRecoveryTarget,
+    command_text: &str,
+    progress: Option<&ProgressSender>,
+    stdout: &mut String,
+    stderr: &mut String,
+    stream: &'static str,
+    line: String,
+) {
+    if stream == "stdout" {
+        stdout.push_str(&line);
+        stdout.push('\n');
+    } else {
+        stderr.push_str(&line);
+        stderr.push('\n');
+    }
+
+    let mut event = userns_progress_event(
+        9,
+        "restart_containers",
+        "in_progress",
+        Some(format!("Compose project '{}': {line}", target.project)),
+        Some(command_text.to_string()),
+    );
+    if stream == "stdout" {
+        event.stdout = Some(line);
+    } else {
+        event.stderr = Some(line);
+    }
+    send_progress(progress, event);
+}
+
 async fn run_compose_project_up(
     target: &ComposeRecoveryTarget,
     progress: Option<&ProgressSender>,
@@ -2918,71 +3026,13 @@ async fn run_compose_project_up(
     };
     let compose_paths = resolve_compose_files(&ctx).await?;
     let command_text = compose_project_up_command_text(target, &compose_paths);
+    send_compose_recovery_start(target, &command_text, progress);
 
-    send_progress(
-        progress,
-        userns_progress_event(
-            9,
-            "restart_containers",
-            "in_progress",
-            Some(format!(
-                "Starting detached Compose recovery for project '{}' ({} service(s))",
-                target.project,
-                target.services.len()
-            )),
-            Some(command_text.clone()),
-        ),
-    );
-
-    let mut command = Command::new("docker");
-    command.arg("compose");
-    for compose_path in &compose_paths {
-        command.arg("-f").arg(compose_path);
-    }
-    command.arg("-p").arg(&target.project);
-    command.arg("up").arg("-d");
-    for service in &target.services {
-        command.arg(service);
-    }
-    if let Some(working_dir) = &target.working_dir {
-        command.current_dir(working_dir);
-    }
-    command.stdout(Stdio::piped()).stderr(Stdio::piped());
-
-    let mut child = command.spawn()?;
-    let (line_tx, mut line_rx) = mpsc::unbounded_channel::<(&'static str, String)>();
-    if let Some(stdout) = child.stdout.take() {
-        tokio::spawn(pipe_command_lines(stdout, "stdout", line_tx.clone()));
-    }
-    if let Some(stderr) = child.stderr.take() {
-        tokio::spawn(pipe_command_lines(stderr, "stderr", line_tx));
-    }
+    let mut child = compose_project_up_command(target, &compose_paths).spawn()?;
+    let mut line_rx = pipe_child_output(&mut child);
 
     let mut stdout = String::new();
     let mut stderr = String::new();
-    let mut record_line = |stream: &'static str, line: String| {
-        if stream == "stdout" {
-            stdout.push_str(&line);
-            stdout.push('\n');
-        } else {
-            stderr.push_str(&line);
-            stderr.push('\n');
-        }
-
-        let mut event = userns_progress_event(
-            9,
-            "restart_containers",
-            "in_progress",
-            Some(format!("Compose project '{}': {line}", target.project)),
-            Some(command_text.clone()),
-        );
-        if stream == "stdout" {
-            event.stdout = Some(line);
-        } else {
-            event.stderr = Some(line);
-        }
-        send_progress(progress, event);
-    };
 
     let mut heartbeat = tokio::time::interval(tokio::time::Duration::from_secs(10));
     heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -2991,31 +3041,26 @@ async fn run_compose_project_up(
     let status = loop {
         tokio::select! {
             waited = child.wait() => break waited?,
-            Some((stream, line)) = line_rx.recv() => record_line(stream, line),
+            Some((stream, line)) = line_rx.recv() => record_compose_output_line(target, &command_text, progress, &mut stdout, &mut stderr, stream, line),
             _ = heartbeat.tick() => {
                 heartbeat_count += 1;
                 if heartbeat_count > 1 {
-                    send_progress(
-                        progress,
-                        userns_progress_event(
-                            9,
-                            "restart_containers",
-                            "in_progress",
-                            Some(format!(
-                                "Waiting for detached Compose recovery for project '{}' ({} service(s)); image pulls can take several minutes on small VPS instances",
-                                target.project,
-                                target.services.len()
-                            )),
-                            Some(command_text.clone()),
-                        ),
-                    );
+                    send_compose_recovery_heartbeat(target, &command_text, progress);
                 }
             }
         }
     };
 
     while let Ok((stream, line)) = line_rx.try_recv() {
-        record_line(stream, line);
+        record_compose_output_line(
+            target,
+            &command_text,
+            progress,
+            &mut stdout,
+            &mut stderr,
+            stream,
+            line,
+        );
     }
 
     if status.success() {
