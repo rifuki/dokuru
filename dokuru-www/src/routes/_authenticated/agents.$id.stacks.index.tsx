@@ -589,51 +589,63 @@ function ContainerRow({
   container: StackContainer;
   agentId: string;
 }) {
-  const isRunning = container.state.toLowerCase() === "running";
-
   return (
     <Link
       to="/agents/$id/containers/$containerId"
       params={{ id: agentId, containerId: container.id }}
       search={{ from: "stacks" }}
-      className="group/row flex cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/40 sm:px-5"
+      className="group/row flex cursor-pointer flex-col gap-3 px-4 py-3 transition-colors hover:bg-muted/30 sm:flex-row sm:items-center sm:px-5"
     >
-      <div className="relative flex items-center justify-center w-7 h-7 rounded-lg bg-muted/60 shrink-0 group-hover/row:bg-muted transition-colors">
-        <Container className="h-3.5 w-3.5 text-muted-foreground" />
+      <div className="flex min-w-0 flex-1 items-start gap-3">
+        <div className="relative flex size-9 shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted/25 text-muted-foreground transition-colors group-hover/row:border-primary/30 group-hover/row:text-primary">
+          <Container className="h-4 w-4" />
+          <span
+            className={cn(
+              "absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-background",
+              stateDot(container.state),
+            )}
+          />
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold transition-colors group-hover/row:text-foreground">
+            {container.name}
+          </span>
+          <span className="mt-0.5 block truncate font-mono text-xs text-muted-foreground">
+            {container.image}
+          </span>
+          {container.status && (
+            <span className="mt-1 block truncate font-mono text-[11px] text-muted-foreground/75 lg:hidden">
+              {container.status}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 pl-12 sm:shrink-0 sm:pl-0">
+        {container.service && (
+          <span className="max-w-[14rem] shrink-0 truncate rounded-md border border-border/60 bg-muted/20 px-2 py-0.5 font-mono text-xs text-muted-foreground">
+            {container.service}
+          </span>
+        )}
+
         <span
           className={cn(
-            "absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full border border-background",
-            stateDot(container.state),
-            isRunning && "animate-pulse",
+            "inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-0.5 text-xs font-medium",
+            stateColor(container.state),
           )}
-        />
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <span className="text-sm font-medium truncate block group-hover/row:text-foreground transition-colors">
-          {container.name}
+        >
+          {container.state}
         </span>
-        <span className="text-xs text-muted-foreground font-mono truncate block mt-0.5">
-          {container.image}
-        </span>
-      </div>
 
-      {container.service && (
-        <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-xs font-mono bg-muted/60 text-muted-foreground border border-border/50 shrink-0">
-          {container.service}
-        </span>
-      )}
-
-      <span
-        className={cn(
-          "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border shrink-0",
-          stateColor(container.state),
+        {container.status && (
+          <span className="hidden max-w-[18rem] shrink-0 truncate font-mono text-[11px] text-muted-foreground/75 lg:inline">
+            {container.status}
+          </span>
         )}
-      >
-        {container.state}
-      </span>
 
-      <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover/row:text-muted-foreground group-hover/row:translate-x-0.5 transition-all shrink-0" />
+        <ChevronRight className="hidden h-4 w-4 shrink-0 text-muted-foreground/40 transition-all group-hover/row:translate-x-0.5 group-hover/row:text-muted-foreground sm:block" />
+      </div>
     </Link>
   );
 }
@@ -723,36 +735,48 @@ function ComposeActionDialog({
 
 function StackCardSkeleton() {
   return (
-    <div aria-hidden="true" className="relative overflow-hidden rounded-2xl border border-border/60 bg-card">
-      <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-muted-foreground/25 to-transparent" />
-      <div className="bg-gradient-to-br from-muted/20 via-muted/0 to-transparent px-5 py-4 sm:px-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0 flex-1 space-y-3">
-            <div className="flex items-center gap-3">
-              <Skeleton className="h-5 w-5 shrink-0 rounded-md" />
-              <Skeleton className="h-6 w-44 max-w-[45vw]" />
-              <Skeleton className="h-6 w-20 rounded-full" />
+    <div aria-hidden="true" className="overflow-hidden rounded-xl border border-border bg-card">
+      <div className="border-b border-border/50 p-4 sm:p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1 space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Skeleton className="size-9 shrink-0 rounded-md" />
+              <Skeleton className="h-7 w-44 max-w-[45vw]" />
+              <Skeleton className="h-6 w-20 rounded-md" />
             </div>
 
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="h-4 w-56 max-w-full" />
+            <div className="grid gap-2 sm:grid-cols-[11rem_minmax(0,1fr)]">
+              <Skeleton className="h-16 rounded-lg" />
+              <Skeleton className="h-16 rounded-lg" />
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Skeleton className="h-7 w-40 rounded-full" />
-              <Skeleton className="h-7 w-32 rounded-full" />
+              <Skeleton className="h-8 w-40 rounded-md" />
+              <Skeleton className="h-8 w-48 rounded-md" />
             </div>
           </div>
 
-          <div className="flex shrink-0 flex-wrap items-center gap-2 lg:flex-col lg:items-end">
-            <div className="flex items-center gap-2">
-              <Skeleton className="h-8 w-16 rounded-md" />
-              <Skeleton className="h-8 w-20 rounded-md" />
-            </div>
-            <Skeleton className="h-7 w-28 rounded-md" />
+          <div className="grid shrink-0 grid-cols-2 gap-2 sm:w-52 lg:w-44 lg:grid-cols-1">
+            <Skeleton className="h-9 rounded-md" />
+            <Skeleton className="h-9 rounded-md" />
           </div>
         </div>
+      </div>
+
+      <div className="border-b border-border/50 bg-muted/10 px-4 py-2.5 sm:px-5">
+        <Skeleton className="h-4 w-44" />
+      </div>
+      <div className="divide-y divide-border/40">
+        {[0, 1, 2].map((index) => (
+          <div key={index} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 sm:px-5">
+            <Skeleton className="size-9 rounded-md" />
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-48 max-w-full" />
+              <Skeleton className="h-3 w-64 max-w-full" />
+            </div>
+            <Skeleton className="h-6 w-20 rounded-md" />
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -772,7 +796,7 @@ function StackCard({
   const [composeOpen, setComposeOpen] = useState(false);
   const [selectedComposePath, setSelectedComposePath] = useState<string | null>(null);
   const [actionDialog, setActionDialog] = useState<"up" | "down" | null>(null);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const accessToken = useAuthStore((state) => state.accessToken);
   const startAction = useComposeActionStore((state) => state.startAction);
   const composeRuns = useComposeActionStore((state) => state.runs);
@@ -794,92 +818,87 @@ function StackCard({
 
   const statusLabel = allRunning ? "running" : noneRunning ? "stopped" : "partial";
   const statusClass = allRunning
-    ? "bg-green-500/10 text-green-400 border-green-500/30"
+    ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-500 dark:text-emerald-400"
     : noneRunning
-    ? "bg-gray-500/10 text-gray-400 border-gray-500/30"
-    : "bg-yellow-500/10 text-yellow-400 border-yellow-500/30";
+    ? "border-border bg-muted/30 text-muted-foreground"
+    : "border-amber-500/25 bg-amber-500/10 text-amber-500 dark:text-amber-400";
+  const statusDotClass = allRunning ? "bg-emerald-500" : noneRunning ? "bg-muted-foreground/60" : "bg-amber-500";
   const overrideLabel = stack.dokuru_override_active
     ? "Dokuru override active"
     : stack.dokuru_override_exists
     ? "Override file exists"
     : "No Dokuru override";
   const overrideClass = stack.dokuru_override_active
-    ? "border-cyan-500/25 bg-cyan-500/10 text-cyan-400"
+    ? "border-border/70 bg-muted/20 text-foreground"
     : stack.dokuru_override_exists
-    ? "border-amber-500/25 bg-amber-500/10 text-amber-400"
+    ? "border-border/70 bg-muted/20 text-muted-foreground"
     : "border-border bg-muted/30 text-muted-foreground";
   const composeFiles = stackComposeFiles(stack);
   const activeComposePath = selectedComposePath ?? composeFiles[0] ?? null;
   const hasContainers = stack.containers.length > 0;
   const containerLabel = `${stack.total} container${stack.total === 1 ? "" : "s"}`;
   const hasOverride = stack.dokuru_override_active || stack.dokuru_override_exists;
+  const runningPercent = stack.total > 0 ? Math.round((stack.running / stack.total) * 100) : 0;
 
   function openComposeFile(path: string) {
     setSelectedComposePath(path);
     setComposeOpen(true);
   }
 
-  const gradientClass = allRunning
-    ? "from-emerald-500/5 via-emerald-500/0 to-transparent"
-    : noneRunning
-    ? "from-muted/20 via-muted/0 to-transparent"
-    : "from-amber-500/5 via-amber-500/0 to-transparent";
-  const glowBorderClass = allRunning
-    ? "from-transparent via-emerald-500 to-transparent"
-    : noneRunning
-    ? "from-transparent via-muted-foreground/30 to-transparent"
-    : "from-transparent via-amber-500 to-transparent";
-  const cardBorderClass = allRunning
-    ? "border-emerald-500/20 hover:border-emerald-500/40"
-    : noneRunning
-    ? "border-border/60 hover:border-border"
-    : "border-amber-500/20 hover:border-amber-500/40";
-  const iconColor = allRunning ? "text-emerald-400" : noneRunning ? "text-muted-foreground" : "text-amber-400";
+  const iconColor = allRunning ? "text-primary" : noneRunning ? "text-muted-foreground" : "text-amber-500";
 
   return (
     <>
-      <div className={cn("group relative overflow-hidden rounded-2xl border bg-card transition-all duration-300 hover:shadow-lg hover:shadow-black/5", cardBorderClass)}>
-        <div className={cn("absolute inset-x-0 top-0 h-[2px] w-full bg-gradient-to-r opacity-40 transition-opacity duration-500 group-hover:opacity-100", glowBorderClass)} />
-        
-        <div className={cn("bg-gradient-to-br px-5 py-4 sm:px-6 transition-colors duration-500", gradientClass)}>
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex min-w-0 flex-1 flex-col gap-3">
-              <div className="flex items-center gap-3">
-                <Layers className={cn("h-5 w-5 shrink-0 drop-shadow-sm", iconColor)} />
-                <span className="truncate text-lg font-bold tracking-tight text-foreground/90">{stack.name}</span>
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <div className="border-b border-border/50 p-4 sm:p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0 flex-1 space-y-4">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted/25">
+                  <Layers className={cn("h-4 w-4", iconColor)} />
+                </span>
+                <h3 className="min-w-0 truncate text-xl font-bold tracking-tight text-foreground">{stack.name}</h3>
                 <span
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                    "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider",
                     statusClass,
                   )}
                 >
-                  <span
-                    className={cn(
-                      "h-1.5 w-1.5 rounded-full bg-current",
-                      allRunning && "animate-pulse",
-                    )}
-                  />
+                  <span className={cn("h-1.5 w-1.5 rounded-full", statusDotClass)} />
                   {statusLabel}
                 </span>
               </div>
 
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
-                <span className="inline-flex items-center gap-1.5 font-medium">
-                  <Activity className="h-3.5 w-3.5 opacity-70" />
-                  <span>
-                    <span className="text-foreground">{stack.running}</span>
-                    <span className="opacity-60">/{stack.total} running</span>
+              <div className="grid gap-2 sm:grid-cols-[11rem_minmax(0,1fr)]">
+                <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5">
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <Activity className="h-3.5 w-3.5" />
+                    Running
+                  </div>
+                  <div className="mt-1 flex items-baseline gap-2">
+                    <span className="text-2xl font-bold tabular-nums tracking-tight text-foreground">{stack.running}</span>
+                    <span className="text-sm font-medium text-muted-foreground">of {stack.total}</span>
+                    <span className="ml-auto rounded-md border border-border/60 bg-background/50 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+                      {runningPercent}%
+                    </span>
+                  </div>
+                </div>
+
+                <div className="min-w-0 rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5">
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <FolderOpen className="h-3.5 w-3.5" />
+                    Working directory
+                  </div>
+                  <span className="mt-2 block truncate font-mono text-sm text-foreground/85" title={stack.working_dir ?? undefined}>
+                    {stack.working_dir || "Not reported"}
                   </span>
-                </span>
-                {stack.working_dir && (
-                  <span className="inline-flex min-w-0 items-center gap-1.5">
-                    <FolderOpen className="h-3.5 w-3.5 shrink-0 opacity-70" />
-                    <span className="truncate font-mono opacity-80">{stack.working_dir}</span>
-                  </span>
-                )}
+                </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Compose
+                </span>
                 {composeFiles.map((path) => {
                   const isOverride = isOverrideComposeFile(path);
                   return (
@@ -888,10 +907,10 @@ function StackCard({
                       title={path}
                       onClick={() => openComposeFile(path)}
                       className={cn(
-                        "inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition-colors group/compose",
+                        "group/compose inline-flex max-w-full items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition-colors",
                         isOverride
-                          ? "border-cyan-500/25 bg-cyan-500/10 text-cyan-300 hover:border-cyan-500/40 hover:bg-cyan-500/15"
-                          : "border-border/70 bg-muted/30 text-muted-foreground hover:border-cyan-500/30 hover:bg-muted/50 hover:text-foreground",
+                          ? "border-border/70 bg-muted/20 text-foreground hover:bg-muted/35"
+                          : "border-border/70 bg-muted/20 text-muted-foreground hover:bg-muted/35 hover:text-foreground",
                       )}
                     >
                       {isOverride ? (
@@ -902,7 +921,7 @@ function StackCard({
                       <span className="font-semibold uppercase tracking-widest text-muted-foreground/70">
                         {isOverride ? "override" : "base"}
                       </span>
-                      <span className="max-w-[12rem] truncate font-mono sm:max-w-[18rem]">
+                      <span className="max-w-[12rem] truncate font-mono text-foreground/85 sm:max-w-[18rem]">
                         {composeFileName(path)}
                       </span>
                     </button>
@@ -912,7 +931,7 @@ function StackCard({
                   <span
                     title={stack.dokuru_override_file ?? undefined}
                     className={cn(
-                      "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium opacity-80",
+                      "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium opacity-80",
                       overrideClass,
                     )}
                   >
@@ -923,15 +942,10 @@ function StackCard({
               </div>
             </div>
 
-            <div className="flex shrink-0 flex-wrap items-center gap-2 lg:flex-col lg:items-end">
-              <div className="flex items-center gap-2">
+            <div className="grid shrink-0 grid-cols-2 gap-2 sm:w-52 lg:w-44 lg:grid-cols-1">
                 <Button
                   size="sm"
-                  className={cn(
-                    "h-8 gap-1.5 px-4 text-xs font-bold shadow-sm transition-all hover:scale-105 active:scale-95 disabled:opacity-100 disabled:hover:scale-100 disabled:active:scale-100",
-                    "disabled:border-[#2496ED]/15 disabled:bg-[#2496ED]/10 disabled:text-[#2496ED]/45 disabled:shadow-none",
-                    allRunning ? "bg-emerald-500 hover:bg-emerald-600 text-white" : "bg-primary text-primary-foreground"
-                  )}
+                  className="h-9 gap-1.5 px-4 text-xs font-bold shadow-sm disabled:opacity-60"
                   onClick={() => openComposeAction("up")}
                   disabled={isStackActionRunning}
                 >
@@ -941,40 +955,50 @@ function StackCard({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 gap-1.5 border-destructive/30 bg-destructive/5 px-4 text-xs font-bold text-destructive shadow-sm transition-all hover:scale-105 hover:bg-destructive/15 active:scale-95 disabled:opacity-100 disabled:hover:scale-100 disabled:active:scale-100 disabled:border-destructive/15 disabled:bg-destructive/5 disabled:text-destructive/45 disabled:shadow-none"
+                  className="h-9 gap-1.5 border-destructive/30 bg-destructive/5 px-4 text-xs font-bold text-destructive shadow-sm hover:bg-destructive/10 disabled:opacity-60"
                   onClick={() => openComposeAction("down")}
                   disabled={noneRunning || isStackActionRunning}
                 >
                   {activeStackRun?.action === "down" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Power className="h-3.5 w-3.5" />}
                   Down
                 </Button>
-              </div>
-              
-              {hasContainers ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1.5 px-2.5 text-[11px] font-medium text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                  onClick={() => setExpanded((current) => !current)}
-                  aria-expanded={expanded}
-                >
-                  <ChevronRight className={cn("h-3 w-3 transition-transform", expanded && "rotate-90")} />
-                  {expanded ? "Hide" : "Show"} {containerLabel}
-                </Button>
-              ) : (
-                <span className="inline-flex h-7 items-center px-2.5 text-[11px] font-medium text-muted-foreground/50">
-                  {containerLabel}
-                </span>
-              )}
             </div>
           </div>
         </div>
 
-        {expanded && hasContainers && (
-          <div className="divide-y divide-border/30">
-            {stack.containers.map((c) => (
-              <ContainerRow key={c.id} container={c} agentId={agentId} />
-            ))}
+        {hasContainers ? (
+          <div>
+            <div className="flex flex-col gap-2 border-b border-border/50 bg-muted/10 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+              <div className="flex min-w-0 items-center gap-2 text-sm">
+                <Container className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="font-semibold text-foreground">Containers</span>
+                <span className="text-muted-foreground">
+                  {stack.running}/{stack.total} running
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-fit gap-1.5 px-2 text-xs font-medium text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                onClick={() => setExpanded((current) => !current)}
+                aria-expanded={expanded}
+              >
+                <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-90")} />
+                {expanded ? "Hide list" : `Show ${containerLabel}`}
+              </Button>
+            </div>
+
+            {expanded && (
+              <div className="divide-y divide-border/40">
+                {stack.containers.map((c) => (
+                  <ContainerRow key={c.id} container={c} agentId={agentId} />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="border-t border-border/50 bg-muted/10 px-4 py-3 text-sm text-muted-foreground sm:px-5">
+            No containers reported for this stack.
           </div>
         )}
       </div>
@@ -1040,6 +1064,7 @@ function StacksPage() {
 
   const totalRunning = filtered.reduce((sum, s) => sum + s.running, 0);
   const totalContainers = filtered.reduce((sum, s) => sum + s.total, 0);
+  const runningStacks = filtered.filter((s) => s.running > 0).length;
 
   return (
     <>
@@ -1049,7 +1074,7 @@ function StacksPage() {
         title="Stacks"
         loading={isLoading}
         stats={[
-          { value: filtered.length, label: `stack${filtered.length !== 1 ? "s" : ""}` },
+          { value: `${runningStacks}/${filtered.length}`, label: "stacks running" },
           { value: `${totalRunning}/${totalContainers}`, label: "containers running" },
         ]}
       >
