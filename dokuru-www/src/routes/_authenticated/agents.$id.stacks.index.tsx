@@ -796,7 +796,7 @@ function StackCard({
   const [composeOpen, setComposeOpen] = useState(false);
   const [selectedComposePath, setSelectedComposePath] = useState<string | null>(null);
   const [actionDialog, setActionDialog] = useState<"up" | "down" | null>(null);
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const accessToken = useAuthStore((state) => state.accessToken);
   const startAction = useComposeActionStore((state) => state.startAction);
   const composeRuns = useComposeActionStore((state) => state.runs);
@@ -839,6 +839,7 @@ function StackCard({
   const containerLabel = `${stack.total} container${stack.total === 1 ? "" : "s"}`;
   const hasOverride = stack.dokuru_override_active || stack.dokuru_override_exists;
   const runningPercent = stack.total > 0 ? Math.round((stack.running / stack.total) * 100) : 0;
+  const stoppedContainers = Math.max(stack.total - stack.running, 0);
 
   function openComposeFile(path: string) {
     setSelectedComposePath(path);
@@ -972,8 +973,8 @@ function StackCard({
               <div className="flex min-w-0 items-center gap-2 text-sm">
                 <Container className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <span className="font-semibold text-foreground">Containers</span>
-                <span className="text-muted-foreground">
-                  {stack.running}/{stack.total} running
+                <span className="text-muted-foreground tabular-nums">
+                  {stack.running} running, {stoppedContainers} stopped, {stack.total} total
                 </span>
               </div>
               <Button
