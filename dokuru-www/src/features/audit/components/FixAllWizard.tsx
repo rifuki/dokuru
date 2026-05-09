@@ -558,12 +558,12 @@ function ApplyingStep({
                 ))}
             </div>
 
-            <div className="rounded-xl border border-rose-500/15 bg-rose-500/[0.035] px-3 py-2.5">
+            <div className="rounded-lg border border-white/8 bg-white/[0.018] px-3 py-2.5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex min-w-0 items-start gap-2.5">
-                        <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-300/80" />
+                    <div className="flex min-w-0 items-center gap-2.5">
+                        <XCircle className="h-3.5 w-3.5 shrink-0 text-rose-300/75" />
                         <div className="min-w-0">
-                            <p className="text-xs font-semibold text-rose-200/90">Need to stop the batch?</p>
+                            <p className="text-xs font-semibold text-white/78">Need to stop the batch?</p>
                             <p className="mt-0.5 text-[11px] leading-relaxed text-rose-100/42">
                                 Stops the active stream and skips remaining selected rules.
                             </p>
@@ -572,7 +572,7 @@ function ApplyingStep({
                     <button
                         type="button"
                         onClick={onCancel}
-                        className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 self-start rounded-md border border-rose-400/35 bg-rose-500/10 px-3 text-xs font-semibold text-rose-200 transition-colors hover:border-rose-300/50 hover:bg-rose-500/16 hover:text-rose-100 sm:self-auto"
+                        className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 self-start rounded-md border border-rose-400/28 bg-transparent px-3 text-xs font-semibold text-rose-200 transition-colors hover:border-rose-300/45 hover:bg-rose-500/8 hover:text-rose-100 sm:self-auto"
                     >
                         <XCircle className="h-3.5 w-3.5" />
                         Cancel Fix All

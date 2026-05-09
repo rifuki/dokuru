@@ -571,11 +571,19 @@
     grid-template-areas:
       "identity"
       "source"
-      "mode"
-      "value";
+      "mode";
     grid-template-columns: minmax(0, 1fr);
     gap: 0.75rem;
     padding: 0.875rem;
+    align-items: center;
+  }
+
+  .audit-fix-target-row.audit-fix-target-row-has-value {
+    grid-template-areas:
+      "identity"
+      "source"
+      "mode"
+      "value";
   }
 
   .audit-fix-target-row.audit-fix-target-row-image > .audit-fix-target-source,
@@ -589,10 +597,16 @@
     .audit-fix-target-row.audit-fix-target-row-namespace {
       grid-template-areas:
         "identity source"
-        "mode mode"
-        "value value";
+        "mode mode";
       grid-template-columns: minmax(0, 1fr) minmax(150px, 190px);
       gap: 0.75rem 1rem;
+    }
+
+    .audit-fix-target-row.audit-fix-target-row-has-value {
+      grid-template-areas:
+        "identity source"
+        "mode mode"
+        "value value";
     }
   }
 
@@ -600,10 +614,15 @@
     .audit-fix-target-row.audit-fix-target-row-image,
     .audit-fix-target-row.audit-fix-target-row-namespace {
       grid-template-areas:
-        "identity source mode"
-        "value value value";
+        "identity source mode";
       grid-template-columns: minmax(0, 1fr) minmax(120px, 150px) minmax(252px, 290px);
       gap: 0.75rem 1rem;
+    }
+
+    .audit-fix-target-row.audit-fix-target-row-has-value {
+      grid-template-areas:
+        "identity source mode"
+        "value value value";
     }
   }
 

@@ -534,6 +534,8 @@ function ConfirmStep({
                                   : IMAGE_CONFIG_MODE_OPTIONS[0].title;
                             const selectedUser = config?.user ?? target.suggested_user ?? "1000:1000";
                             const selectedUserValid = isValidNonRootUser(selectedUser);
+                            const currentLabel = currentValueLabel(rule.id, target);
+                            const hasTargetValue = isCgroup || isNonRootUserRule;
 
                             return (
                                 <div
@@ -543,19 +545,22 @@ function ConfirmStep({
                                         showStructuredTargets ? "audit-fix-target-row" : "grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center",
                                         isImageConfig && "audit-fix-target-row-image",
                                         (isNamespace || isRuntimeIsolation) && "audit-fix-target-row-namespace",
+                                        hasTargetValue && "audit-fix-target-row-has-value",
                                         i < targets.length - 1 && "border-b border-white/6"
                                     )}
                                 >
-                                    <div className="audit-fix-target-identity flex min-w-0 items-center gap-2.5">
+                                    <div className="audit-fix-target-identity flex min-w-0 items-center gap-2.5 self-center">
                                         <Server className="h-3.5 w-3.5 shrink-0 text-white/32" />
                                         <div className="min-w-0">
                                             <span className="block max-w-full truncate text-[13px] font-semibold leading-tight text-white/75">{target.container_name}</span>
-                                            <span className="block max-w-full truncate text-[10px] leading-tight text-white/28">Before fix: {currentValueLabel(rule.id, target)}</span>
+                                            {currentLabel !== "current" && (
+                                                <span className="block max-w-full truncate text-[10px] leading-tight text-white/28">Current: {currentLabel}</span>
+                                            )}
                                         </div>
                                     </div>
 
                                     {showStructuredTargets && (
-                                        <div className="audit-fix-target-source flex min-w-0 items-center gap-2">
+                                        <div className="audit-fix-target-source flex min-w-0 items-center gap-2 self-center">
                                             {canCompose ? <FileCode2 className="h-3.5 w-3.5 shrink-0 text-[#2496ED]" /> : <Box className="h-3.5 w-3.5 shrink-0 text-white/35" />}
                                             <div className="min-w-0">
                                                 <span className={cn("block truncate text-[10px] uppercase tracking-[0.16em]", canCompose ? "text-[#2496ED]/80" : "text-white/35")}>{canCompose ? "compose" : isImageConfig ? "standalone" : "runtime"}</span>
@@ -963,12 +968,12 @@ function ApplyingStep({
 
             <FixStepChecklist ruleId={ruleId} stepIndex={stepIndex} state="running" />
 
-            <div className="rounded-xl border border-rose-500/15 bg-rose-500/[0.035] px-3 py-2.5">
+            <div className="rounded-lg border border-white/8 bg-white/[0.018] px-3 py-2.5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex min-w-0 items-start gap-2.5">
-                        <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-300/80" />
+                    <div className="flex min-w-0 items-center gap-2.5">
+                        <XCircle className="h-3.5 w-3.5 shrink-0 text-rose-300/75" />
                         <div className="min-w-0">
-                            <p className="text-xs font-semibold text-rose-200/90">Need to stop this fix?</p>
+                            <p className="text-xs font-semibold text-white/78">Need to stop this fix?</p>
                             <p className="mt-0.5 text-[11px] leading-relaxed text-rose-100/42">
                                 Cancels the active stream and asks the agent to stop the running task.
                             </p>
@@ -977,7 +982,7 @@ function ApplyingStep({
                     <button
                         type="button"
                         onClick={onCancel}
-                        className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 self-start rounded-md border border-rose-400/35 bg-rose-500/10 px-3 text-xs font-semibold text-rose-200 transition-colors hover:border-rose-300/50 hover:bg-rose-500/16 hover:text-rose-100 sm:self-auto"
+                        className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 self-start rounded-md border border-rose-400/28 bg-transparent px-3 text-xs font-semibold text-rose-200 transition-colors hover:border-rose-300/45 hover:bg-rose-500/8 hover:text-rose-100 sm:self-auto"
                     >
                         <XCircle className="h-3.5 w-3.5" />
                         Cancel Fix
