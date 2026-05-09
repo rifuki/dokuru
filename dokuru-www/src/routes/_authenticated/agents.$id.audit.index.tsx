@@ -273,6 +273,7 @@ function RuleCard({ result, agentId, agentUrl, agentAccessMode, token, container
     const navigate = useNavigate();
     const { fixingRules, fixOutcomes, setFixing, setFixOutcome } = useAuditStore();
     const fixing = fixingRules[agentId]?.[result.rule.id] ?? false;
+    const applyLocked = !fixing && Object.values(fixingRules[agentId] ?? {}).some(Boolean);
     const fixOutcome = fixOutcomes[agentId]?.[result.rule.id] ?? null;
     const [open, setOpen] = useState(false);
     const [confirmOpen, setConfirmOpen] = useState(false);
@@ -519,11 +520,11 @@ function RuleCard({ result, agentId, agentUrl, agentAccessMode, token, container
                             {remediation_kind === "auto" && (
                                 <button
                                     onClick={openConfirm}
-                                    disabled={fixing}
+                                    disabled={fixing || applyLocked}
                                     className={cn(
                                         "inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-md border transition-all",
                                         "bg-blue-500 hover:bg-blue-600 text-white border-blue-500",
-                                        fixing && "opacity-60 cursor-not-allowed"
+                                        (fixing || applyLocked) && "opacity-60 cursor-not-allowed"
                                     )}
                                 >
                                     {fixing ? (

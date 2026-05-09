@@ -554,7 +554,7 @@ function AgentVerificationPanel({
   );
 }
 
-function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAccessMode, token, containers, focusedRuleId, open, activeTab, appliedFixEntry, onOpenChange, onActiveTabChange, onOpenWizard }: {
+function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAccessMode, token, containers, focusedRuleId, open, activeTab, appliedFixEntry, applyDisabled = false, onOpenChange, onActiveTabChange, onOpenWizard }: {
   result: AuditResult;
   agentId: string;
   auditId: string;
@@ -567,6 +567,7 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
   open: boolean;
   activeTab: RuleCardTab;
   appliedFixEntry?: FixHistoryEntry;
+  applyDisabled?: boolean;
   onOpenChange: (open: boolean) => void;
   onActiveTabChange: (tab: RuleCardTab) => void;
   onOpenWizard: (result: AuditResult) => void;
@@ -612,6 +613,7 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
     && fixJob?.status === "applied"
     && !isFullyAppliedOutcome(currentJobOutcome ?? currentStoredOutcome);
   const isFixBlocked = isCurrentFixJob && (fixJob?.status === "blocked" || fixJob?.status === "failed" || currentStoredOutcome?.status === "Blocked" || isPartialAppliedOutcome);
+  const shouldDisableApply = applyDisabled && !isFixing && !isFixed && !isFixBlocked;
   const tabs = [
     { id: "overview" as const, label: "Overview", show: true },
     { id: "fix" as const, label: "Fix", show: hasFix },
@@ -675,6 +677,7 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
             <button
               onClick={(e) => {
                 e.stopPropagation();
+                if (shouldDisableApply) return;
                 if (appliedFixEntry) {
                   useAuditStore.getState().setFixOutcome(agentId, rule.id, appliedFixEntry.outcome);
                 } else if (!isFixed && storedOutcome && !isFixBlocked) {
@@ -683,9 +686,10 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
                 onOpenWizard(result);
               }}
               className={cn(
-                "inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-md text-white transition-all shadow-sm",
+                "inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-md text-white transition-all shadow-sm disabled:cursor-not-allowed disabled:opacity-60",
                 isFixed ? "bg-emerald-600 hover:bg-emerald-700" : isFixBlocked ? "bg-amber-600 hover:bg-amber-700" : "bg-[#2496ED] hover:bg-[#1d7ac7]",
               )}
+              disabled={shouldDisableApply}
             >
               {isFixing ? <Loader2 className="h-3 w-3 animate-spin" /> : isFixed ? <ShieldCheck className="h-3 w-3" /> : isFixBlocked ? <AlertTriangle className="h-3 w-3" /> : <Wrench className="h-3 w-3" />}
               {isFixing ? "View Progress" : isFixed || isFixBlocked ? "View Result" : "Apply Fix"}
@@ -1913,6 +1917,8 @@ function AuditDetailPage() {
     },
     staleTime: 15_000,
   });
+  const hasRunningFixJob = Object.values(fixJobs).some(job => job.agentId === id && job.status === "running");
+  const fixControlsLocked = hasRunningFixJob || wizardStep === "applying" || fixAllStep === "applying";
 
   useEffect(() => {
     markAuditResultViewed(id, auditId);
@@ -2587,10 +2593,11 @@ function AuditDetailPage() {
               </div>
               <button
                 onClick={() => openFixAll(autoFixableResults)}
-                className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-[#2496ED] px-4 py-2.5 text-sm font-bold text-white shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] transition-all hover:bg-[#1e80cc] hover:shadow-[0_0_24px_-4px_rgba(36,150,237,0.7)] active:scale-[0.98] sm:w-auto"
+                disabled={fixControlsLocked}
+                className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-[#2496ED] px-4 py-2.5 text-sm font-bold text-white shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] transition-all hover:bg-[#1e80cc] hover:shadow-[0_0_24px_-4px_rgba(36,150,237,0.7)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#2496ED] disabled:hover:shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] sm:w-auto"
               >
-                <Wrench className="h-4 w-4" />
-                Fix All ({autoFixableResults.length})
+                {fixControlsLocked ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
+                {fixControlsLocked ? "Fix running" : `Fix All (${autoFixableResults.length})`}
               </button>
             </div>
           )}
@@ -2888,6 +2895,7 @@ function AuditDetailPage() {
                                 open={openRuleIds.has(r.rule.id) || focusedRuleId === r.rule.id}
                                 activeTab={activeRuleTabs[r.rule.id] ?? (focusedRuleId === r.rule.id ? "fix" : "overview")}
                                 appliedFixEntry={appliedHistoryByRule.get(r.rule.id)}
+                                applyDisabled={fixControlsLocked}
                                 onOpenChange={(nextOpen) => handleRuleOpenChange(r.rule.id, nextOpen)}
                                 onActiveTabChange={(tab) => handleRuleTabChange(r.rule.id, tab)}
                                 onOpenWizard={openWizard}
@@ -2927,6 +2935,7 @@ function AuditDetailPage() {
                                 open={openRuleIds.has(r.rule.id) || focusedRuleId === r.rule.id}
                                 activeTab={activeRuleTabs[r.rule.id] ?? (focusedRuleId === r.rule.id ? "fix" : "overview")}
                                 appliedFixEntry={appliedHistoryByRule.get(r.rule.id)}
+                                applyDisabled={fixControlsLocked}
                                 onOpenChange={(nextOpen) => handleRuleOpenChange(r.rule.id, nextOpen)}
                                 onActiveTabChange={(tab) => handleRuleTabChange(r.rule.id, tab)}
                                 onOpenWizard={openWizard}

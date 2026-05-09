@@ -737,8 +737,10 @@ function StackCard({
   const [expanded, setExpanded] = useState(false);
   const accessToken = useAuthStore((state) => state.accessToken);
   const startAction = useComposeActionStore((state) => state.startAction);
+  const composeRuns = useComposeActionStore((state) => state.runs);
 
   function openComposeAction(action: "up" | "down") {
+    if (isStackActionRunning) return;
     setActionDialog(action);
   }
 
@@ -749,6 +751,8 @@ function StackCard({
 
   const allRunning = stack.total > 0 && stack.running === stack.total;
   const noneRunning = stack.running === 0;
+  const activeStackRun = composeRuns.find((run) => run.agentId === agentId && run.stackName === stack.name && run.isRunning);
+  const isStackActionRunning = Boolean(activeStackRun);
 
   const statusLabel = allRunning ? "running" : noneRunning ? "stopped" : "partial";
   const statusClass = allRunning
@@ -886,22 +890,24 @@ function StackCard({
                 <Button
                   size="sm"
                   className={cn(
-                    "h-8 gap-1.5 px-4 text-xs font-bold shadow-sm transition-all hover:scale-105 active:scale-95",
+                    "h-8 gap-1.5 px-4 text-xs font-bold shadow-sm transition-all hover:scale-105 active:scale-95 disabled:opacity-100 disabled:hover:scale-100 disabled:active:scale-100",
+                    "disabled:border-[#2496ED]/15 disabled:bg-[#2496ED]/10 disabled:text-[#2496ED]/45 disabled:shadow-none",
                     allRunning ? "bg-emerald-500 hover:bg-emerald-600 text-white" : "bg-primary text-primary-foreground"
                   )}
                   onClick={() => openComposeAction("up")}
+                  disabled={allRunning || isStackActionRunning}
                 >
-                  <Play className="h-3.5 w-3.5" />
+                  {activeStackRun?.action === "up" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
                   Up
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 gap-1.5 border-destructive/30 bg-destructive/5 px-4 text-xs font-bold text-destructive shadow-sm transition-all hover:scale-105 hover:bg-destructive/15 active:scale-95"
+                  className="h-8 gap-1.5 border-destructive/30 bg-destructive/5 px-4 text-xs font-bold text-destructive shadow-sm transition-all hover:scale-105 hover:bg-destructive/15 active:scale-95 disabled:opacity-100 disabled:hover:scale-100 disabled:active:scale-100 disabled:border-destructive/15 disabled:bg-destructive/5 disabled:text-destructive/45 disabled:shadow-none"
                   onClick={() => openComposeAction("down")}
-                  disabled={noneRunning}
+                  disabled={noneRunning || isStackActionRunning}
                 >
-                  <Power className="h-3.5 w-3.5" />
+                  {activeStackRun?.action === "down" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Power className="h-3.5 w-3.5" />}
                   Down
                 </Button>
               </div>

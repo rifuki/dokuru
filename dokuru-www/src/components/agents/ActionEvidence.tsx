@@ -149,7 +149,7 @@ export function ActionEvidence({
       style={position ? { left: `${position.left}px`, top: `${position.top}px` } : undefined}
     >
       <div
-        className="flex cursor-grab select-none items-center justify-between border-b border-border bg-muted/30 px-4 py-3 active:cursor-grabbing"
+        className="flex cursor-grab select-none items-center justify-between border-b border-border bg-card px-4 py-3 active:cursor-grabbing"
         onPointerDown={startDrag}
         onPointerMove={moveDrag}
         onPointerUp={endDrag}
@@ -185,7 +185,7 @@ export function ActionEvidence({
             type="button"
             size="sm"
             variant="ghost"
-            className="h-8 rounded-full border border-white/10 bg-white/[0.03] px-3 text-xs font-medium text-white/55 transition hover:border-primary/35 hover:bg-primary/10 hover:text-primary disabled:opacity-35"
+            className="h-8 rounded-full border border-border bg-muted/35 px-3 text-xs font-medium text-muted-foreground transition hover:border-primary/35 hover:bg-primary/10 hover:text-primary disabled:opacity-45 dark:border-white/10 dark:bg-white/[0.03] dark:text-white/55 dark:hover:text-primary"
             onClick={onClear}
             onPointerDown={(event) => event.stopPropagation()}
             disabled={runs.length === 0 || hasRunning}
@@ -197,7 +197,7 @@ export function ActionEvidence({
             type="button"
             size="icon"
             variant="ghost"
-            className="h-8 w-8 rounded-full border border-white/10 bg-white/[0.03] text-white/55 transition hover:border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+            className="h-8 w-8 rounded-full border border-border bg-muted/35 text-muted-foreground transition hover:border-destructive/30 hover:bg-destructive/10 hover:text-destructive dark:border-white/10 dark:bg-white/[0.03] dark:text-white/55"
             onClick={() => onOpenChange(false)}
             onPointerDown={(event) => event.stopPropagation()}
           >
@@ -217,11 +217,16 @@ export function ActionEvidence({
             {visibleRuns.map((run) => {
               const status = runStatus(run);
               return (
-                <div key={run.id} className="overflow-hidden rounded-xl border border-white/10 bg-[#111]/90 shadow-inner shadow-black/20">
-                  <div className="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-2 font-sans text-xs">
-                    <div className="min-w-0">
-                      <span className="truncate font-medium text-foreground">{run.title}</span>
-                      <span className="ml-2 font-mono text-[10px] text-muted-foreground/65">{formatRunTime(run.startedAt)}</span>
+                <div key={run.id} className="overflow-hidden rounded-xl border border-white/10 bg-[#0d0d0d] shadow-inner shadow-black/20">
+                  <div className="flex items-center justify-between border-b border-white/15 bg-[#171717] px-3 py-2 font-sans text-xs">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <div className="hidden shrink-0 items-center gap-1 sm:flex">
+                        <span className="h-2 w-2 rounded-full bg-[#ff5f56]" />
+                        <span className="h-2 w-2 rounded-full bg-[#ffbd2e]" />
+                        <span className="h-2 w-2 rounded-full bg-[#27c93f]" />
+                      </div>
+                      <span className="truncate font-semibold text-zinc-100">{run.title}</span>
+                      <span className="ml-2 font-mono text-[10px] text-zinc-500">{formatRunTime(run.startedAt)}</span>
                     </div>
                     <span
                       className={cn(
