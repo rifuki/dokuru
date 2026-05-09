@@ -2,7 +2,7 @@ use crate::components::{
     atoms::{icon::icon, IconKind},
     molecules::audit_stats,
 };
-use crate::content::AUDIT_SECTIONS;
+use crate::content::{APP_URL, AUDIT_SECTIONS};
 use leptos::prelude::*;
 
 #[must_use]
@@ -74,7 +74,7 @@ pub(crate) fn cloud_dashboard_panel() -> impl IntoView {
                     {form_field("Agent Name", "Production Server", "text-zinc-500")}
                     {form_field("Agent URL", "https://xxx.trycloudflare.com", "text-[#00E5FF] font-mono")}
                     {form_field("Agent Token", "dok_************", "text-amber-300 font-mono")}
-                    <button class="h-[38px] cursor-pointer rounded-lg bg-[#2496ED] px-4 text-sm font-semibold text-white shadow-[0_0_24px_rgba(36,150,237,0.18)] transition-colors hover:bg-[#2496ED]/90 lg:whitespace-nowrap">"Add Agent"</button>
+                    <a href=APP_URL target="_blank" rel="noopener noreferrer" class="h-[38px] rounded-lg bg-[#2496ED] px-4 text-sm font-semibold text-white shadow-[0_0_24px_rgba(36,150,237,0.18)] transition-colors hover:bg-[#2496ED]/90 lg:inline-flex lg:items-center lg:justify-center lg:whitespace-nowrap">"Add Agent"</a>
                 </div>
 
                 <div class="flex flex-col gap-2 border-t border-white/10 pt-3 text-[11px] leading-5 text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
