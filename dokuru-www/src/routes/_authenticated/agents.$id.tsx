@@ -1,7 +1,6 @@
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { useAuthUser } from "@/stores/use-auth-store";
-import { ComposeActionEvidence } from "@/components/agents/ComposeActionEvidence";
 export const Route = createFileRoute("/_authenticated/agents/$id")({
     component: AgentLayout,
 });
@@ -19,9 +18,6 @@ function AgentLayout() {
     if (user?.role === "admin") return null;
 
     return (
-        <>
-            <Outlet />
-            <ComposeActionEvidence />
-        </>
+        <Outlet />
     );
 }

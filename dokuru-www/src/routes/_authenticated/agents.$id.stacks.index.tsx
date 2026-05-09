@@ -46,6 +46,7 @@ import { toast } from "sonner";
 import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { useComposeActionStore } from "@/stores/use-compose-action-store";
+import { ComposeActionEvidence } from "@/components/agents/ComposeActionEvidence";
 
 export const Route = createFileRoute("/_authenticated/agents/$id/stacks/")({
   component: StacksPage,
@@ -997,6 +998,7 @@ function StacksPage() {
   const totalContainers = filtered.reduce((sum, s) => sum + s.total, 0);
 
   return (
+    <>
     <div className="mx-auto w-full max-w-7xl">
       <PageHeader
         icon={Layers}
@@ -1055,5 +1057,7 @@ function StacksPage() {
         )}
       </div>
     </div>
+    <ComposeActionEvidence />
+    </>
   );
 }

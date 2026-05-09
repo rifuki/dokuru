@@ -55,8 +55,6 @@ import { IS_LOCAL_AGENT_MODE } from "@/lib/env";
 import { markSidebarNavigation } from "@/lib/sidebar-navigation";
 
 const AGENT_NAV_MEMORY_KEY = "dokuru_agent_nav_memory";
-const RECENT_FIX_STATUS_MS = 5 * 60 * 1000;
-
 type SidebarStatus = {
   label: string;
   title: string;
@@ -139,38 +137,9 @@ function auditSidebarStatus(stream?: AuditStreamState): SidebarStatus | null {
   return null;
 }
 
-function isRecentCompletedFixJob(job: FixJobState, now: number) {
-  if (job.status === "running" || !job.completedAt) return false;
-  const completedAt = Date.parse(job.completedAt);
-  return Number.isFinite(completedAt) && now - completedAt <= RECENT_FIX_STATUS_MS;
-}
-
-function fixStatusLabel(status: FixJobState["status"]) {
-  if (status === "applied") return "Fixed";
-  if (status === "blocked") return "Blocked";
-  if (status === "failed") return "Failed";
-  if (status === "cancelled") return "Cancelled";
-  return "Fixing";
-}
-
-function completedFixClassName(status: FixJobState["status"]) {
-  if (status === "applied") return "border-emerald-400/30 bg-emerald-400/10 text-emerald-300";
-  if (status === "blocked") return "border-amber-400/30 bg-amber-400/10 text-amber-300";
-  if (status === "failed") return "border-rose-400/30 bg-rose-400/10 text-rose-300";
-  return "border-muted-foreground/25 bg-muted-foreground/10 text-muted-foreground";
-}
-
-function completedFixIndicatorClassName(status: FixJobState["status"]) {
-  if (status === "applied") return "bg-emerald-400";
-  if (status === "blocked") return "bg-amber-400";
-  if (status === "failed") return "bg-rose-400";
-  return "bg-muted-foreground";
-}
-
-function fixSidebarStatus(agentId: string, fixJobs: Record<string, FixJobState>, now: number): SidebarStatus | null {
+function fixSidebarStatus(agentId: string, fixJobs: Record<string, FixJobState>): SidebarStatus | null {
   let runningCount = 0;
   let latestRunningJob: FixJobState | null = null;
-  let latestCompletedJob: FixJobState | null = null;
 
   for (const job of Object.values(fixJobs)) {
     if (job.agentId !== agentId) continue;
@@ -180,13 +149,6 @@ function fixSidebarStatus(agentId: string, fixJobs: Record<string, FixJobState>,
       if (!latestRunningJob || Date.parse(job.startedAt) >= Date.parse(latestRunningJob.startedAt)) {
         latestRunningJob = job;
       }
-      continue;
-    }
-
-    const completedAt = Date.parse(job.completedAt ?? "");
-    const latestCompletedAt = Date.parse(latestCompletedJob?.completedAt ?? "");
-    if (isRecentCompletedFixJob(job, now) && (!latestCompletedJob || completedAt >= latestCompletedAt)) {
-      latestCompletedJob = job;
     }
   }
 
@@ -208,16 +170,7 @@ function fixSidebarStatus(agentId: string, fixJobs: Record<string, FixJobState>,
     };
   }
 
-  if (!latestCompletedJob) return null;
-
-  const label = fixStatusLabel(latestCompletedJob.status);
-  const message = latestCompletedJob.error ?? latestCompletedJob.outcome?.message;
-  return {
-    label,
-    title: message ? `${label} rule ${latestCompletedJob.ruleId}: ${message}` : `${label} rule ${latestCompletedJob.ruleId}`,
-    className: completedFixClassName(latestCompletedJob.status),
-    indicatorClassName: completedFixIndicatorClassName(latestCompletedJob.status),
-  };
+  return null;
 }
 
 const agentNavItems = (agentId: string) => {
@@ -280,9 +233,7 @@ export function AppSidebar() {
   const isIconMode = sidebarState === "collapsed";
   const [openAgents, setOpenAgents] = useState<Record<string, boolean>>({});
   const [lastDetailHrefByDefaultHref, setLastDetailHrefByDefaultHref] = useState<Record<string, string>>(() => readRememberedAgentNavTargets());
-  const [fixStatusNow, setFixStatusNow] = useState(() => Date.now());
   const notifiedAuditIdsRef = useRef<Set<string>>(new Set());
-  const hasVisibleCompletedFixJob = Object.values(fixJobs).some((job) => isRecentCompletedFixJob(job, fixStatusNow));
 
   // Backend WS: relay agents + server-level events (agent:connected / agent:disconnected)
   useRealtimeAgents();
@@ -291,13 +242,6 @@ export function AppSidebar() {
   // online/offline detection. Marks agent offline the instant the WS closes,
   // then reconnects with exponential backoff (2s → 4s → … → 30s).
   useAgentConnections(isAdmin ? [] : agents);
-
-  useEffect(() => {
-    if (!hasVisibleCompletedFixJob) return;
-
-    const timer = window.setInterval(() => setFixStatusNow(Date.now()), 15_000);
-    return () => window.clearInterval(timer);
-  }, [hasVisibleCompletedFixJob]);
 
   useEffect(() => {
     if (!isAdmin) fetchAgents();
@@ -532,7 +476,7 @@ export function AppSidebar() {
                 const isConnecting = !!agentConnectingStatus[agent.id];
                 const isOnline = agentOnlineStatus[agent.id] === true;
                 const isOffline = !isConnecting && agentOnlineStatus[agent.id] === false;
-                const agentFixStatus = fixSidebarStatus(agent.id, fixJobs, fixStatusNow);
+                const agentFixStatus = fixSidebarStatus(agent.id, fixJobs);
                 const AgentIcon = isOnline || isConnecting ? Bot : BotOff;
                 const iconColor = isConnecting
                   ? "animate-pulse text-muted-foreground/45"

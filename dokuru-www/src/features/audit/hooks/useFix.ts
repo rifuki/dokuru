@@ -418,12 +418,13 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token, auditTimesta
         cancelFixJob(agentId, activeResult.rule.id);
     }, [activeResult, agentId, cancelFixJob]);
 
-    const effectiveStep = activeJob
-        ? activeJob.status === "running" ? "applying" : "result"
+    const currentActiveJob = isFixJobCurrentForAudit(activeJob, auditTimestamp) ? activeJob : undefined;
+    const effectiveStep = currentActiveJob
+        ? currentActiveJob.status === "running" ? "applying" : "result"
         : step;
-    const effectiveOutcome = activeJob?.outcome ?? outcome;
-    const effectiveStepIndex = activeJob?.stepIndex ?? stepIndex;
-    const effectiveProgressEvents = activeJob?.progressEvents ?? [];
+    const effectiveOutcome = currentActiveJob?.outcome ?? outcome;
+    const effectiveStepIndex = currentActiveJob?.stepIndex ?? stepIndex;
+    const effectiveProgressEvents = currentActiveJob?.progressEvents ?? [];
 
     return {
         open,
