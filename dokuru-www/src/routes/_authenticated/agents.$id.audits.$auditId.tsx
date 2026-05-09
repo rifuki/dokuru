@@ -46,6 +46,7 @@ import { FixHistoryPanel } from "@/features/audit/components/FixHistoryPanel";
 import { AffectedItems } from "@/features/audit/components/AffectedItems";
 import { useFix } from "@/features/audit/hooks/useFix";
 import { useFixAll } from "@/features/audit/hooks/useFixAll";
+import { isAutoTriggeredFixJob } from "@/features/audit/lib/fixDependencies";
 import { useWindowScrollMemory } from "@/hooks/use-window-scroll-memory";
 import { isSidebarNavigationForPath } from "@/lib/sidebar-navigation";
 import { downloadAuditJson } from "@/features/audit/audit-export";
@@ -386,9 +387,9 @@ function ruleStatusTone(status: "Pass" | "Fail" | "Error") {
   };
 }
 
-function RuleStatusBadge({ status, fixedAfterAudit = false }: { status: "Pass" | "Fail" | "Error"; fixedAfterAudit?: boolean }) {
+function RuleStatusBadge({ status, fixedAfterAudit = false, autoTriggered = false }: { status: "Pass" | "Fail" | "Error"; fixedAfterAudit?: boolean; autoTriggered?: boolean }) {
   const config = fixedAfterAudit ? {
-    label: "Fixed, audit stale",
+    label: autoTriggered ? "Auto-triggered, audit stale" : "Fixed, audit stale",
     cls: "border-emerald-500/25 bg-emerald-500/10 text-emerald-400",
     dot: "bg-emerald-400",
   } : {
@@ -604,6 +605,7 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
   const isFixing = !hasAppliedOutcome && isCurrentFixJob && fixJob?.status === "running";
   const isFixed = hasAppliedOutcome;
   const isStaleFixed = isFixed && status === "Fail";
+  const isAutoTriggeredFix = isCurrentFixJob && isAutoTriggeredFixJob(fixJob);
   const statusTone = isStaleFixed ? {
     borderLeft: "border-l-emerald-500/70",
     cardTone: "border-border bg-card/95 hover:bg-muted/[0.08]",
@@ -633,7 +635,7 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
           {isStaleFixed ? <ShieldCheck className={cn("h-5 w-5 shrink-0", statusTone.icon)} /> : <StatusIcon status={status} />}
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
-              <RuleStatusBadge status={status} fixedAfterAudit={isStaleFixed} />
+              <RuleStatusBadge status={status} fixedAfterAudit={isStaleFixed} autoTriggered={isAutoTriggeredFix} />
               <span className="inline-flex h-6 items-center rounded-md border border-border/70 bg-muted/35 px-2 font-mono text-[11px] font-bold text-muted-foreground/80">
                 {rule.id}
               </span>
@@ -652,6 +654,12 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
                 <span className="inline-flex h-6 items-center gap-1.5 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 text-xs font-semibold text-emerald-400">
                   <ShieldCheck className="h-3 w-3" />
                   Fix applied
+                </span>
+              )}
+              {isAutoTriggeredFix && (
+                <span className="inline-flex h-6 items-center gap-1.5 rounded-md border border-[#2496ED]/25 bg-[#2496ED]/10 px-2 text-xs font-semibold text-[#2496ED]" title={`Triggered by ${fixJob?.triggeredByRuleIds?.join(", ") ?? "another fix"}`}>
+                  <RefreshCw className="h-3 w-3" />
+                  Auto-triggered
                 </span>
               )}
               {!isFixing && !isFixed && isFixBlocked && (
@@ -863,6 +871,7 @@ function AuditBreakdownRow({
   passed,
   fixedCount = 0,
   fixedRuleIds = [],
+  autoTriggeredCount = 0,
 }: {
   leading: ReactNode;
   label: string;
@@ -870,6 +879,7 @@ function AuditBreakdownRow({
   passed: number;
   fixedCount?: number;
   fixedRuleIds?: string[];
+  autoTriggeredCount?: number;
 }) {
   const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
   const projectedPassed = Math.min(total, passed + fixedCount);
@@ -885,7 +895,7 @@ function AuditBreakdownRow({
         <span className="min-w-0 flex-1 truncate text-sm font-semibold leading-5 text-foreground/90">{label}</span>
         {hasProjection && (
           <span className="inline-flex items-center gap-1 rounded-full bg-[#2496ED]/10 px-2 py-0.5 text-[10px] font-bold text-[#2496ED]" title={fixedRuleIds.join(", ")}>
-            +{fixedCount} fixed
+            +{fixedCount} fixed{autoTriggeredCount > 0 ? `, ${autoTriggeredCount} auto` : ""}
           </span>
         )}
         <span className="shrink-0 text-xs text-muted-foreground/60 font-mono">
@@ -913,7 +923,7 @@ function AuditBreakdownRow({
   );
 }
 
-function SectionHeader({ section, total, passed, fixedCount, fixedRuleIds }: { section: string; total: number; passed: number; fixedCount?: number; fixedRuleIds?: string[] }) {
+function SectionHeader({ section, total, passed, fixedCount, fixedRuleIds, autoTriggeredCount }: { section: string; total: number; passed: number; fixedCount?: number; fixedRuleIds?: string[]; autoTriggeredCount?: number }) {
   const meta = sectionMeta(section);
   return (
     <AuditBreakdownRow
@@ -927,6 +937,7 @@ function SectionHeader({ section, total, passed, fixedCount, fixedRuleIds }: { s
       passed={passed}
       fixedCount={fixedCount}
       fixedRuleIds={fixedRuleIds}
+      autoTriggeredCount={autoTriggeredCount}
     />
   );
 }
@@ -1331,13 +1342,15 @@ function groupProjectionFromFixes(
   results: AuditResult[],
   fixedRuleIds: Set<string>,
   keyForResult: (result: AuditResult) => string,
+  autoTriggeredRuleIds = new Set<string>(),
 ) {
-  const projections = new Map<string, { fixedCount: number; ruleIds: string[] }>();
+  const projections = new Map<string, { fixedCount: number; ruleIds: string[]; autoTriggeredCount: number }>();
   for (const result of fixedFailedResults(results, fixedRuleIds)) {
     const key = keyForResult(result);
-    const projection = projections.get(key) ?? { fixedCount: 0, ruleIds: [] };
+    const projection = projections.get(key) ?? { fixedCount: 0, ruleIds: [], autoTriggeredCount: 0 };
     projection.fixedCount += 1;
     projection.ruleIds.push(result.rule.id);
+    if (autoTriggeredRuleIds.has(result.rule.id)) projection.autoTriggeredCount += 1;
     projections.set(key, projection);
   }
   return projections;
@@ -1511,7 +1524,7 @@ function buildAuditDocumentHtml({
     </div>
   `;
 
-  const groupRows = (groups: AuditGroupSummary[], projections: Map<string, { fixedCount: number; ruleIds: string[] }>) => groups.map(group => {
+  const groupRows = (groups: AuditGroupSummary[], projections: Map<string, { fixedCount: number; ruleIds: string[]; autoTriggeredCount?: number }>) => groups.map(group => {
     const projection = projections.get(group.key);
     const projectedPassed = Math.min(group.total, group.passed + (projection?.fixedCount ?? 0));
     const projectedPercent = group.total > 0 ? Math.round((projectedPassed / group.total) * 100) : 0;
@@ -1998,17 +2011,22 @@ function AuditDetailPage() {
   const ruleCountSummary = `${checkRuleTotal} checks`;
   const appliedHistoryByRule = latestAppliedFixesAfterAudit(fixHistoryQuery.data ?? [], auditData);
   const appliedRuleIds = new Set<string>(appliedHistoryByRule.keys());
+  const autoTriggeredRuleIds = new Set<string>();
   for (const result of baseResults) {
     const ruleId = result.rule.id;
     const job = fixJobs[fixJobKey(id, ruleId)];
-    if (job?.status === "applied" && isFixJobAfterAudit(job, auditData)) appliedRuleIds.add(ruleId);
+    if (job?.status === "applied" && isFixJobAfterAudit(job, auditData)) {
+      appliedRuleIds.add(ruleId);
+      if (isAutoTriggeredFixJob(job)) autoTriggeredRuleIds.add(ruleId);
+    }
   }
   const forecastRuleIds = appliedRuleIds;
   const projectedFixScore = auditData ? projectedScoreFromFixes(auditData, baseResults, forecastRuleIds) : null;
   const hasProjectedFixes = (projectedFixScore?.fixedCount ?? 0) > 0;
+  const autoTriggeredProjectionCount = projectedFixScore?.fixedRuleIds.filter(ruleId => autoTriggeredRuleIds.has(ruleId)).length ?? 0;
   const fixedResultPreviews = fixedFailedResults(baseResults, forecastRuleIds);
-  const pillarProjections = groupProjectionFromFixes(baseResults, forecastRuleIds, result => getRulePillar(result.rule.id));
-  const sectionProjections = groupProjectionFromFixes(baseResults, forecastRuleIds, result => result.rule.section);
+  const pillarProjections = groupProjectionFromFixes(baseResults, forecastRuleIds, result => getRulePillar(result.rule.id), autoTriggeredRuleIds);
+  const sectionProjections = groupProjectionFromFixes(baseResults, forecastRuleIds, result => result.rule.section, autoTriggeredRuleIds);
   const sectionSummaries = groupSummariesFromResults(baseResults, result => result.rule.section, key => key);
   const sections = sectionSummaries.map(section => section.key);
   const sectionStats: Record<string, { total: number; passed: number; percent: number }> = Object.fromEntries(sectionSummaries.map(section => [
@@ -2322,6 +2340,9 @@ function AuditDetailPage() {
                         {projectedFixScore.scoreDelta > 0 && (
                           <span className="rounded-full bg-[#2496ED]/10 px-1.5 py-0.5 font-mono text-[10px] tracking-normal">+{projectedFixScore.scoreDelta}</span>
                         )}
+                        {autoTriggeredProjectionCount > 0 && (
+                          <span className="rounded-full bg-[#2496ED]/10 px-1.5 py-0.5 font-mono text-[10px] tracking-normal">{autoTriggeredProjectionCount} auto-triggered</span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2378,7 +2399,9 @@ function AuditDetailPage() {
                     </span>
                     <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pass</span>
                     {hasProjectedFixes && projectedFixScore && (
-                      <span className="mt-0.5 font-mono text-[10px] font-semibold text-[#00d9a5]/85">+{projectedFixScore.fixedCount} after fixes</span>
+                      <span className="mt-0.5 font-mono text-[10px] font-semibold text-[#00d9a5]/85">
+                        +{projectedFixScore.fixedCount} after fixes{autoTriggeredProjectionCount > 0 ? ` (${autoTriggeredProjectionCount} auto)` : ""}
+                      </span>
                     )}
                   </button>
                   <button
@@ -2400,7 +2423,9 @@ function AuditDetailPage() {
                     </span>
                     <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Fail</span>
                     {hasProjectedFixes && projectedFixScore && (
-                      <span className="mt-0.5 font-mono text-[10px] font-semibold text-rose-300/75">-{projectedFixScore.fixedCount} after fixes</span>
+                      <span className="mt-0.5 font-mono text-[10px] font-semibold text-rose-300/75">
+                        -{projectedFixScore.fixedCount} after fixes{autoTriggeredProjectionCount > 0 ? ` (${autoTriggeredProjectionCount} auto)` : ""}
+                      </span>
                     )}
                   </button>
                   <div className="flex min-h-[76px] flex-col items-center justify-center rounded-[12px] border border-border bg-muted/20 px-2 py-2.5 text-center sm:min-h-[84px] sm:px-3">
@@ -2489,6 +2514,7 @@ function AuditDetailPage() {
                           passed={pillarSummary.passed}
                           fixedCount={projection?.fixedCount}
                           fixedRuleIds={projection?.ruleIds}
+                          autoTriggeredCount={projection?.autoTriggeredCount}
                         />
                       );
                     })
@@ -2499,6 +2525,7 @@ function AuditDetailPage() {
                         passed={sectionStats[s]?.passed ?? 0}
                         fixedCount={sectionProjections.get(s)?.fixedCount}
                         fixedRuleIds={sectionProjections.get(s)?.ruleIds}
+                        autoTriggeredCount={sectionProjections.get(s)?.autoTriggeredCount}
                       />
                     ))
                   )}
@@ -2552,6 +2579,7 @@ function AuditDetailPage() {
                   const pillar = getRulePillar(result.rule.id);
                   const meta = PILLAR_META[pillar];
                   const Icon = meta.icon;
+                  const autoTriggered = autoTriggeredRuleIds.has(result.rule.id);
                   return (
                     <button
                       key={result.rule.id}
@@ -2563,6 +2591,11 @@ function AuditDetailPage() {
                         <span className="rounded border border-border/70 bg-muted/30 px-1.5 py-0.5 font-mono text-[10px] font-bold text-foreground/80">{result.rule.id}</span>
                         <Icon className={cn("h-3.5 w-3.5", meta.color)} />
                         <span className="truncate text-[11px] font-semibold text-muted-foreground group-hover:text-[#2496ED]">{meta.name}</span>
+                        {autoTriggered && (
+                          <span className="rounded border border-[#2496ED]/25 bg-[#2496ED]/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#2496ED]">
+                            auto-triggered
+                          </span>
+                        )}
                       </div>
                       <p className="mt-1 line-clamp-1 text-xs font-medium text-foreground/85">{result.rule.title}</p>
                     </button>

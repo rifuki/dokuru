@@ -789,6 +789,7 @@ function ResultStep({
 }) {
     const isApplied = outcome.status === "Applied";
     const isBlocked = outcome.status === "Blocked";
+    const isAutoTriggered = progressEvents.some(event => event.action === "auto_trigger_verify_audit_rule" && event.rule_id === result.rule.id);
     const affectedItems = result.affected.length > 0
         ? result.affected
         : Array.from(new Set(progressEvents.map(event => event.container_name).filter(Boolean)));
@@ -810,6 +811,11 @@ function ResultStep({
                                 "rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em]",
                                 isApplied ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-300" : isBlocked ? "border-rose-400/20 bg-rose-500/10 text-rose-300" : "border-amber-400/20 bg-amber-500/10 text-amber-300"
                             )}>{outcome.status}</span>
+                            {isAutoTriggered && (
+                                <span className="rounded-full border border-[#2496ED]/20 bg-[#2496ED]/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-[#2496ED]">
+                                    auto-triggered
+                                </span>
+                            )}
                         </div>
                         <p className="mt-1 text-xs leading-relaxed text-white/48">
                             {isApplied

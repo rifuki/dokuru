@@ -41,7 +41,16 @@ export interface FixJobState {
     error?: string;
     startedAt: string;
     completedAt?: string;
+    autoTriggered?: boolean;
+    triggeredByRuleIds?: string[];
+    triggerLabel?: string;
 }
+
+export type AutoTriggeredFixJobMeta = {
+    autoTriggered?: boolean;
+    triggeredByRuleIds?: string[];
+    triggerLabel?: string;
+};
 
 export interface StartFixJobRequest {
     agentId: string;
@@ -187,7 +196,9 @@ interface AuditState {
     setAuditHistory: (agentId: string, history: AuditResponse[]) => void;
     setFixing: (agentId: string, ruleId: string, fixing: boolean) => void;
     setFixOutcome: (agentId: string, ruleId: string, outcome: FixOutcome | null) => void;
-    completeFixJob: (agentId: string, ruleId: string, outcome: FixOutcome, progressEvents?: FixProgress[]) => void;
+    startSyntheticFixJob: (agentId: string, ruleId: string, meta?: AutoTriggeredFixJobMeta) => void;
+    appendFixJobProgress: (agentId: string, ruleId: string, progressEvents: FixProgress[]) => void;
+    completeFixJob: (agentId: string, ruleId: string, outcome: FixOutcome, progressEvents?: FixProgress[], meta?: AutoTriggeredFixJobMeta) => void;
     hydrateFixJobFromHistory: (agentId: string, entry: FixHistoryEntry) => void;
     markAuditResultViewed: (agentId: string, auditId: string) => void;
     startAudit: (agent: Agent, token?: string) => Promise<AuditResponse>;
@@ -232,9 +243,55 @@ export const useAuditStore = create<AuditState>((set) => ({
             },
         })),
 
-    completeFixJob: (agentId, ruleId, outcome, progressEvents = []) =>
+    startSyntheticFixJob: (agentId, ruleId, meta = {}) =>
         set((s) => {
             const key = fixJobKey(agentId, ruleId);
+            const startedAt = new Date().toISOString();
+            return {
+                fixingRules: {
+                    ...s.fixingRules,
+                    [agentId]: { ...s.fixingRules[agentId], [ruleId]: true },
+                },
+                fixOutcomes: {
+                    ...s.fixOutcomes,
+                    [agentId]: { ...s.fixOutcomes[agentId], [ruleId]: null },
+                },
+                fixJobs: {
+                    ...s.fixJobs,
+                    [key]: {
+                        agentId,
+                        ruleId,
+                        status: "running",
+                        progressEvents: [],
+                        stepIndex: 0,
+                        startedAt,
+                        ...meta,
+                    },
+                },
+            };
+        }),
+
+    appendFixJobProgress: (agentId, ruleId, progressEvents) =>
+        set((s) => {
+            if (progressEvents.length === 0) return s;
+            const key = fixJobKey(agentId, ruleId);
+            const current = s.fixJobs[key];
+            if (!current) return s;
+            return {
+                fixJobs: {
+                    ...s.fixJobs,
+                    [key]: {
+                        ...current,
+                        progressEvents: [...current.progressEvents, ...progressEvents],
+                    },
+                },
+            };
+        }),
+
+    completeFixJob: (agentId, ruleId, outcome, progressEvents = [], meta = {}) =>
+        set((s) => {
+            const key = fixJobKey(agentId, ruleId);
+            const currentJob = s.fixJobs[key];
             const status: FixJobStatus = isFullyAppliedOutcome(outcome)
                 ? "applied"
                 : outcome.status === "Blocked"
@@ -260,8 +317,11 @@ export const useAuditStore = create<AuditState>((set) => ({
                         error: status === "applied" ? undefined : outcome.message,
                         progressEvents,
                         stepIndex: finalFixStepIndex(status, progressEvents),
-                        startedAt: s.fixJobs[key]?.startedAt ?? completedAt,
+                        startedAt: currentJob?.startedAt ?? completedAt,
                         completedAt,
+                        autoTriggered: meta.autoTriggered ?? currentJob?.autoTriggered,
+                        triggeredByRuleIds: meta.triggeredByRuleIds ?? currentJob?.triggeredByRuleIds,
+                        triggerLabel: meta.triggerLabel ?? currentJob?.triggerLabel,
                     },
                 },
             };

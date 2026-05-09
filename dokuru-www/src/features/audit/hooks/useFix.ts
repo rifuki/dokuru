@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { agentApi } from "@/lib/api/agent";
 import { agentDirectApi, type AuditResult, type FixOutcome, type FixPreview, type FixTarget } from "@/lib/api/agent-direct";
 import { FIX_CANCELLED_MESSAGE, fixJobKey, isAgentAuditWorkspacePath, useAuditStore, type FixJobState } from "@/stores/use-audit-store";
+import { runAutoTriggeredVerifications } from "@/features/audit/lib/fixDependencies";
 
 export type WizardStep = "confirm" | "applying" | "result";
 
@@ -387,6 +388,14 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token, auditTimesta
             await queryClient.invalidateQueries({ queryKey: ["fix-history"] });
 
             if (fixOutcome.status === "Applied") {
+                await runAutoTriggeredVerifications({
+                    agentId,
+                    agentUrl,
+                    agentAccessMode,
+                    token,
+                    triggerRuleIds: [rule.id],
+                    appendToRuleIds: [rule.id],
+                });
                 if (shouldShowRouteFixToast(agentId)) {
                     toast.success(`Fix applied - rule ${rule.id}`);
                 }

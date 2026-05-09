@@ -126,6 +126,11 @@ function RuleRow({
                             <ShieldAlert className="h-2.5 w-2.5" /> risky
                         </span>
                     )}
+                    {rs.autoTriggered && (
+                        <span className="rounded border border-[#2496ED]/25 bg-[#2496ED]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#2496ED]" title={`Triggered by ${rs.triggeredByRuleIds?.join(", ") ?? "another fix"}`}>
+                            auto-triggered
+                        </span>
+                    )}
                 </div>
                 <p className={cn(
                     "mt-1 truncate text-xs leading-snug",
@@ -239,6 +244,11 @@ function RuleEvidenceRow({
                         {rs.highRisk && (
                             <span className="inline-flex items-center gap-1 rounded border border-rose-500/22 bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-medium text-rose-300/85">
                                 <ShieldAlert className="h-2.5 w-2.5" /> risky
+                            </span>
+                        )}
+                        {rs.autoTriggered && (
+                            <span className="rounded border border-[#2496ED]/25 bg-[#2496ED]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#2496ED]" title={`Triggered by ${rs.triggeredByRuleIds?.join(", ") ?? "another fix"}`}>
+                                auto-triggered
                             </span>
                         )}
                     </span>
@@ -687,6 +697,7 @@ function ResultStep({
     const applied = selected.filter(r => r.outcome?.status === "Applied").length;
     const blocked = selected.filter(r => r.outcome?.status === "Blocked").length;
     const skipped = ruleStatuses.filter(r => r.state === "skipped").length;
+    const autoTriggered = selected.filter(r => r.autoTriggered).length;
     const allApplied = blocked === 0;
     const evidenceCount = selected.reduce((sum, rs) => sum + rs.progressEvents.length, 0);
     const targets = uniqueLabels(selected.flatMap(rs => rs.progressEvents.map(event => event.container_name)));
@@ -711,7 +722,7 @@ function ResultStep({
                     </p>
                     <p className={cn("text-xs mt-0.5", allApplied ? "text-emerald-400/70" : "text-amber-400/70")}>
                         {allApplied
-                            ? skipped > 0 ? `${skipped} rule(s) were skipped by selection. Re-run the audit to see the updated score.` : "Re-run the audit to see the updated score."
+                            ? `${autoTriggered > 0 ? `${autoTriggered} dependent check(s) were auto-triggered and verified. ` : ""}${skipped > 0 ? `${skipped} rule(s) were skipped by selection. ` : ""}Re-run the audit to see the updated score.`
                             : "Blocked fixes may require elevated privileges or manual intervention."
                         }
                     </p>

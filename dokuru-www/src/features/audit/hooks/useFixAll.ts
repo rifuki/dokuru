@@ -9,6 +9,7 @@ import {
     isNamespaceIsolationRule,
     isRuntimeIsolationRule,
 } from "@/features/audit/hooks/useFix";
+import { type AutoVerifyDependency, type AutoVerifyRun, CGROUP_RESOURCE_RULE_IDS, runAutoTriggeredVerifications } from "@/features/audit/lib/fixDependencies";
 import { FIX_CANCELLED_MESSAGE, fixJobKey, isAgentAuditWorkspacePath, useAuditStore } from "@/stores/use-audit-store";
 
 function shouldShowRouteFixToast(agentId: string) {
@@ -26,11 +27,12 @@ export type RuleFixStatus = {
     state: "pending" | "applying" | "done" | "skipped" | "cancelled";
     selected: boolean;
     highRisk: boolean;
+    autoTriggered?: boolean;
+    triggeredByRuleIds?: string[];
 };
 
 const HIGH_RISK_AUTO_FIX_RULES = new Set(["2.10", "2.15", "4.1", "5.4", "5.5", "5.10", "5.16", "5.17", "5.18", "5.21", "5.22", "5.31"]);
 const CGROUP_RULE_IDS = ["5.11", "5.12", "5.25", "5.29"] as const;
-const RESOURCE_CGROUP_RULE_IDS = ["5.11", "5.12", "5.29"] as const;
 const MIN_CGROUP_VALUES = {
     memoryMb: 64,
     cpuShares: 128,
@@ -64,7 +66,7 @@ function selectedCgroupRules(ruleStatuses: RuleFixStatus[]): CgroupRuleId[] {
 }
 
 function concreteCgroupRuleIds(ruleIds: CgroupRuleId[]) {
-    return ruleIds.filter((ruleId) => (RESOURCE_CGROUP_RULE_IDS as readonly string[]).includes(ruleId));
+    return ruleIds.filter((ruleId) => (CGROUP_RESOURCE_RULE_IDS as readonly string[]).includes(ruleId));
 }
 
 function cgroupTargetKey(target: FixPreviewTarget) {
@@ -547,15 +549,17 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
                     commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
 
                     if (targets.length === 0) {
-                        updated[i].outcome = {
+                        const outcome = {
                             rule_id: ruleId,
                             status: "Applied",
                             message: "No current cgroup targets still need this rule",
                             requires_restart: false,
                             restart_command: undefined,
                             requires_elevation: false,
-                        };
+                        } satisfies FixOutcome;
+                        updated[i].outcome = outcome;
                         updated[i].state = "done";
+                        completeFixJob(agentId, ruleId, outcome, updated[i].progressEvents);
                         commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
                         activeRuleRef.current = null;
                         appliedIndex += 1;
@@ -574,15 +578,17 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
                     commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
 
                     if (targets.length === 0) {
-                        updated[i].outcome = {
+                        const outcome = {
                             rule_id: ruleId,
                             status: "Applied",
                             message: "No current targets still need this rule",
                             requires_restart: false,
                             restart_command: undefined,
                             requires_elevation: false,
-                        };
+                        } satisfies FixOutcome;
+                        updated[i].outcome = outcome;
                         updated[i].state = "done";
+                        completeFixJob(agentId, ruleId, outcome, updated[i].progressEvents);
                         commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
                         activeRuleRef.current = null;
                         appliedIndex += 1;
@@ -644,7 +650,87 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
 
         activeRuleRef.current = null;
 
-        commitSession((current) => ({ ...current, currentIndex: selectedTotal, step: "result", ruleStatuses: [...updated] }));
+        const successfulTriggerRuleIds = updated
+            .filter((status) => status.selected && status.outcome?.status === "Applied")
+            .map((status) => status.ruleId);
+        const alreadyAppliedDependentRuleIds = updated
+            .filter((status) => status.outcome?.status === "Applied")
+            .map((status) => status.ruleId);
+
+        function ensureAutoTriggeredStatus(dependency: AutoVerifyDependency, state: RuleFixStatus["state"], progressEvents: FixProgress[], outcome: FixOutcome | null) {
+            const existingIndex = updated.findIndex((status) => status.ruleId === dependency.ruleId);
+            const nextStatus: RuleFixStatus = existingIndex >= 0
+                ? {
+                    ...updated[existingIndex],
+                    selected: true,
+                    state,
+                    outcome,
+                    progressEvents,
+                    autoTriggered: true,
+                    triggeredByRuleIds: dependency.triggerRuleIds,
+                }
+                : {
+                    ruleId: dependency.ruleId,
+                    title: dependency.title,
+                    outcome,
+                    progressEvents,
+                    state,
+                    selected: true,
+                    highRisk: false,
+                    autoTriggered: true,
+                    triggeredByRuleIds: dependency.triggerRuleIds,
+                };
+
+            if (existingIndex >= 0) {
+                updated[existingIndex] = nextStatus;
+            } else {
+                updated.push(nextStatus);
+            }
+        }
+
+        function appendAutoVerifyEventsToTriggers(dependency: AutoVerifyDependency, events: FixProgress[]) {
+            for (const triggerRuleId of dependency.triggerRuleIds) {
+                const index = updated.findIndex((status) => status.ruleId === triggerRuleId);
+                if (index >= 0) {
+                    updated[index] = {
+                        ...updated[index],
+                        progressEvents: [...updated[index].progressEvents, ...events],
+                    };
+                }
+            }
+        }
+
+        if (!cancelRequestedRef.current && successfulTriggerRuleIds.length > 0) {
+            await runAutoTriggeredVerifications({
+                agentId,
+                agentUrl,
+                agentAccessMode,
+                token,
+                triggerRuleIds: successfulTriggerRuleIds,
+                skipRuleIds: alreadyAppliedDependentRuleIds,
+                onDependencyStart: (dependency, progressEvents) => {
+                    activeRuleRef.current = dependency.ruleId;
+                    ensureAutoTriggeredStatus(dependency, "applying", progressEvents, null);
+                    appendAutoVerifyEventsToTriggers(dependency, progressEvents);
+                    commitSession((current) => ({
+                        ...current,
+                        currentIndex: updated.filter((status) => status.selected && status.state === "done").length,
+                        ruleStatuses: [...updated],
+                    }));
+                },
+                onDependencyComplete: (run: AutoVerifyRun) => {
+                    ensureAutoTriggeredStatus(run.dependency, "done", run.progressEvents, run.outcome);
+                    appendAutoVerifyEventsToTriggers(run.dependency, run.progressEvents.slice(1));
+                    commitSession((current) => ({
+                        ...current,
+                        ruleStatuses: [...updated],
+                    }));
+                },
+            });
+            activeRuleRef.current = null;
+        }
+
+        commitSession((current) => ({ ...current, currentIndex: updated.filter((status) => status.selected).length, step: "result", ruleStatuses: [...updated] }));
 
         const selected = updated.filter(r => r.selected);
         const applied = selected.filter(r => r.outcome?.status === "Applied").length;
