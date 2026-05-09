@@ -44,16 +44,40 @@ function SheetOverlay({
   )
 }
 
+function isInsideToaster(target: EventTarget | null) {
+  return target instanceof Element && target.closest("[data-sonner-toaster]") !== null
+}
+
 function SheetContent({
   className,
   children,
   side = "right",
   showCloseButton = true,
+  onInteractOutside,
+  onPointerDownOutside,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
 }) {
+  const handleInteractOutside: React.ComponentProps<typeof SheetPrimitive.Content>["onInteractOutside"] = (event) => {
+    if (isInsideToaster(event.detail.originalEvent.target)) {
+      event.preventDefault()
+      return
+    }
+
+    onInteractOutside?.(event)
+  }
+
+  const handlePointerDownOutside: React.ComponentProps<typeof SheetPrimitive.Content>["onPointerDownOutside"] = (event) => {
+    if (isInsideToaster(event.detail.originalEvent.target)) {
+      event.preventDefault()
+      return
+    }
+
+    onPointerDownOutside?.(event)
+  }
+
   return (
     <SheetPortal>
       <SheetOverlay />
@@ -71,6 +95,8 @@ function SheetContent({
             "data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom inset-x-0 bottom-0 h-auto border-t",
           className
         )}
+        onInteractOutside={handleInteractOutside}
+        onPointerDownOutside={handlePointerDownOutside}
         {...props}
       >
         {children}
