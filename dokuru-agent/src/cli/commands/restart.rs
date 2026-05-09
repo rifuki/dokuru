@@ -1,8 +1,12 @@
-use super::super::helpers::{command_success, default_config_dir, nix_like_is_root, run_command};
+use super::super::helpers::{command_success, default_config_dir, nix_like_is_root};
 use crate::api::{AccessMode, Config as RuntimeConfig, config_path_in};
 use cliclack::{intro, outro, outro_cancel};
-use eyre::{Result, WrapErr};
-use std::path::Path;
+use eyre::{Result, WrapErr, bail};
+use std::{
+    io::{IsTerminal, stderr, stdin},
+    path::Path,
+    process::{Command, Stdio},
+};
 
 pub fn run_restart(service_only: bool) -> Result<()> {
     intro("🐳 Dokuru  restart")?;
@@ -57,11 +61,10 @@ pub fn run_restart(service_only: bool) -> Result<()> {
 
 fn restart_systemd_unit(unit: &str) -> Result<()> {
     let command = systemd_restart_command(unit);
-    let args = command.args.iter().map(String::as_str).collect::<Vec<_>>();
-    run_command(&command.program, &args).map_err(|error| {
-        if command.program == "sudo" {
+    run_systemd_command(&command).map_err(|error| {
+        if command.program == "sudo" && !command.interactive {
             eyre::eyre!(
-                "{error}. Passwordless sudo is required; run `sudo systemctl restart {unit}` or allow this user to run systemctl via sudo without a password"
+                "{error}. Passwordless sudo is required in non-interactive sessions; run `sudo dokuru restart` from a terminal or allow this user to run systemctl via sudo without a password"
             )
         } else {
             error
@@ -70,14 +73,31 @@ fn restart_systemd_unit(unit: &str) -> Result<()> {
 }
 
 fn systemd_restart_command(unit: &str) -> SystemdCommand {
-    systemd_restart_command_for_root(unit, nix_like_is_root())
+    systemd_restart_command_for_context(unit, nix_like_is_root(), can_prompt_for_sudo_password())
 }
 
-fn systemd_restart_command_for_root(unit: &str, is_root: bool) -> SystemdCommand {
+fn systemd_restart_command_for_context(
+    unit: &str,
+    is_root: bool,
+    can_prompt_for_password: bool,
+) -> SystemdCommand {
     if is_root {
         return SystemdCommand {
             program: "systemctl".to_string(),
             args: vec!["restart".to_string(), unit.to_string()],
+            interactive: false,
+        };
+    }
+
+    if can_prompt_for_password {
+        return SystemdCommand {
+            program: "sudo".to_string(),
+            args: vec![
+                "systemctl".to_string(),
+                "restart".to_string(),
+                unit.to_string(),
+            ],
+            interactive: true,
         };
     }
 
@@ -89,13 +109,48 @@ fn systemd_restart_command_for_root(unit: &str, is_root: bool) -> SystemdCommand
             "restart".to_string(),
             unit.to_string(),
         ],
+        interactive: false,
     }
+}
+
+fn can_prompt_for_sudo_password() -> bool {
+    stdin().is_terminal() && stderr().is_terminal()
+}
+
+fn run_systemd_command(command: &SystemdCommand) -> Result<()> {
+    let mut process = Command::new(&command.program);
+    process.args(&command.args);
+
+    if command.interactive {
+        process
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit());
+    } else {
+        process.stdout(Stdio::null()).stderr(Stdio::null());
+    }
+
+    let status = process
+        .status()
+        .wrap_err_with(|| format!("Failed to execute {}", command.program))?;
+
+    if !status.success() {
+        bail!(
+            "{} {:?} exited with status {}",
+            command.program,
+            command.args,
+            status
+        );
+    }
+
+    Ok(())
 }
 
 #[derive(Debug, Eq, PartialEq)]
 struct SystemdCommand {
     program: String,
     args: Vec<String>,
+    interactive: bool,
 }
 
 fn persist_cloudflare_url(url: &str) -> Result<()> {
@@ -121,7 +176,7 @@ fn persist_cloudflare_url_at(config_path: &Path, url: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{persist_cloudflare_url_at, systemd_restart_command_for_root};
+    use super::{persist_cloudflare_url_at, systemd_restart_command_for_context};
     use crate::api::{AccessMode, Config as RuntimeConfig};
 
     #[test]
@@ -163,19 +218,30 @@ mod tests {
     }
 
     #[test]
-    fn non_root_restart_uses_non_interactive_sudo() {
-        let command = systemd_restart_command_for_root("dokuru", false);
+    fn non_root_interactive_restart_uses_sudo_password_prompt() {
+        let command = systemd_restart_command_for_context("dokuru", false, true);
+
+        assert_eq!(command.program, "sudo");
+        assert_eq!(command.args, ["systemctl", "restart", "dokuru"]);
+        assert!(command.interactive);
+    }
+
+    #[test]
+    fn non_root_non_interactive_restart_requires_passwordless_sudo() {
+        let command = systemd_restart_command_for_context("dokuru", false, false);
 
         assert_eq!(command.program, "sudo");
         assert_eq!(command.args, ["-n", "systemctl", "restart", "dokuru"]);
+        assert!(!command.interactive);
     }
 
     #[test]
     fn root_restart_uses_systemctl_directly() {
-        let command = systemd_restart_command_for_root("dokuru", true);
+        let command = systemd_restart_command_for_context("dokuru", true, false);
 
         assert_eq!(command.program, "systemctl");
         assert_eq!(command.args, ["restart", "dokuru"]);
+        assert!(!command.interactive);
     }
 
     fn temp_config_path(test_name: &str) -> std::path::PathBuf {
