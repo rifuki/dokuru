@@ -1,4 +1,4 @@
-use super::super::helpers::{command_success, default_config_dir, run_command};
+use super::super::helpers::{command_success, default_config_dir, nix_like_is_root, run_command};
 use crate::api::{AccessMode, Config as RuntimeConfig, config_path_in};
 use cliclack::{intro, outro, outro_cancel};
 use eyre::{Result, WrapErr};
@@ -12,7 +12,7 @@ pub fn run_restart(service_only: bool) -> Result<()> {
         cliclack::log::warning("dokuru service is not running — starting it instead")?;
     }
 
-    run_command("systemctl", &["restart", "dokuru"])
+    restart_systemd_unit("dokuru")
         .map_err(|e| eyre::eyre!("Failed to restart dokuru service: {e}"))?;
 
     let now_active = command_success("systemctl", &["is-active", "dokuru"]);
@@ -27,7 +27,7 @@ pub fn run_restart(service_only: bool) -> Result<()> {
         let tunnel_exists = command_success("systemctl", &["cat", "dokuru-tunnel"]);
         if tunnel_exists {
             let tunnel_started_after = crate::cli::CloudflareTunnel::journal_timestamp_now();
-            run_command("systemctl", &["restart", "dokuru-tunnel"])
+            restart_systemd_unit("dokuru-tunnel")
                 .map_err(|e| eyre::eyre!("Failed to restart tunnel: {e}"))?;
             cliclack::log::success("✓ dokuru-tunnel restarted")?;
 
@@ -55,6 +55,49 @@ pub fn run_restart(service_only: bool) -> Result<()> {
     Ok(())
 }
 
+fn restart_systemd_unit(unit: &str) -> Result<()> {
+    let command = systemd_restart_command(unit);
+    let args = command.args.iter().map(String::as_str).collect::<Vec<_>>();
+    run_command(&command.program, &args).map_err(|error| {
+        if command.program == "sudo" {
+            eyre::eyre!(
+                "{error}. Passwordless sudo is required; run `sudo systemctl restart {unit}` or allow this user to run systemctl via sudo without a password"
+            )
+        } else {
+            error
+        }
+    })
+}
+
+fn systemd_restart_command(unit: &str) -> SystemdCommand {
+    systemd_restart_command_for_root(unit, nix_like_is_root())
+}
+
+fn systemd_restart_command_for_root(unit: &str, is_root: bool) -> SystemdCommand {
+    if is_root {
+        return SystemdCommand {
+            program: "systemctl".to_string(),
+            args: vec!["restart".to_string(), unit.to_string()],
+        };
+    }
+
+    SystemdCommand {
+        program: "sudo".to_string(),
+        args: vec![
+            "-n".to_string(),
+            "systemctl".to_string(),
+            "restart".to_string(),
+            unit.to_string(),
+        ],
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct SystemdCommand {
+    program: String,
+    args: Vec<String>,
+}
+
 fn persist_cloudflare_url(url: &str) -> Result<()> {
     let config_path = config_path_in(&default_config_dir());
     persist_cloudflare_url_at(&config_path, url)
@@ -78,7 +121,7 @@ fn persist_cloudflare_url_at(config_path: &Path, url: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::persist_cloudflare_url_at;
+    use super::{persist_cloudflare_url_at, systemd_restart_command_for_root};
     use crate::api::{AccessMode, Config as RuntimeConfig};
 
     #[test]
@@ -117,6 +160,22 @@ mod tests {
         assert_eq!(saved.access.url, "http://10.0.0.1:3939");
 
         std::fs::remove_dir_all(config_path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn non_root_restart_uses_non_interactive_sudo() {
+        let command = systemd_restart_command_for_root("dokuru", false);
+
+        assert_eq!(command.program, "sudo");
+        assert_eq!(command.args, ["-n", "systemctl", "restart", "dokuru"]);
+    }
+
+    #[test]
+    fn root_restart_uses_systemctl_directly() {
+        let command = systemd_restart_command_for_root("dokuru", true);
+
+        assert_eq!(command.program, "systemctl");
+        assert_eq!(command.args, ["restart", "dokuru"]);
     }
 
     fn temp_config_path(test_name: &str) -> std::path::PathBuf {
