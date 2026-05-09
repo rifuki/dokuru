@@ -1,11 +1,13 @@
 use std::{
     collections::BTreeSet,
+    fs,
     path::{Path, PathBuf},
     process::Command,
 };
 
 use anyhow::{Context, Result, bail};
 use cliclack::{intro, outro};
+use serde_yaml::Value;
 
 use crate::{ghcr, project};
 
@@ -15,6 +17,7 @@ const MIGRATION_SERVICE: &str = "dokuru-server-migrate";
 const SERVER_SERVICE: &str = "dokuru-server";
 const HEALTHCHECK_BINARY: &str = "/app/dokuru-server";
 const HEALTHCHECK_ARG: &str = "--healthcheck";
+const DISABLED_PROFILE: &str = "disabled";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ComposeBinary {
@@ -42,7 +45,11 @@ impl Compose {
     }
 
     pub fn deploy(&self, services: &[String], pull: bool, migrate: bool) -> Result<()> {
-        let app_services = services_or_default(services, APP_SERVICES);
+        let app_services = if services.is_empty() {
+            self.default_app_services()?
+        } else {
+            services.to_vec()
+        };
 
         if pull {
             let pull_services = with_migration_service(&app_services);
@@ -133,6 +140,19 @@ impl Compose {
             return Ok(());
         }
         ghcr::ensure_access(&self.project_dir, self.version.as_deref())
+    }
+
+    fn default_app_services(&self) -> Result<Vec<String>> {
+        let override_path = self.project_dir.join("docker-compose.override.yaml");
+        if !override_path.is_file() {
+            return Ok(to_owned(APP_SERVICES));
+        }
+
+        let content = fs::read_to_string(&override_path)
+            .with_context(|| format!("failed to read {}", override_path.display()))?;
+        let disabled_services = disabled_services_from_compose_override(&content)
+            .with_context(|| format!("failed to parse {}", override_path.display()))?;
+        Ok(app_services_except(&disabled_services))
     }
 
     fn run<I>(&self, args: I) -> Result<()>
@@ -374,6 +394,51 @@ fn with_migration_service(services: &[String]) -> Vec<String> {
     set.into_iter().collect()
 }
 
+fn app_services_except(disabled_services: &BTreeSet<String>) -> Vec<String> {
+    APP_SERVICES
+        .iter()
+        .filter(|service| !disabled_services.contains(**service))
+        .map(ToString::to_string)
+        .collect()
+}
+
+fn disabled_services_from_compose_override(content: &str) -> Result<BTreeSet<String>> {
+    let doc = serde_yaml::from_str::<Value>(content)?;
+    let Some(root) = doc.as_mapping() else {
+        return Ok(BTreeSet::new());
+    };
+    let services_key = Value::String("services".to_string());
+    let Some(services) = root.get(&services_key).and_then(Value::as_mapping) else {
+        return Ok(BTreeSet::new());
+    };
+
+    let disabled_services = APP_SERVICES
+        .iter()
+        .filter_map(|service_name| {
+            let compose_service_name = Value::String((*service_name).to_string());
+            let service = services.get(&compose_service_name)?;
+            service_has_disabled_profile(service).then(|| (*service_name).to_string())
+        })
+        .collect();
+
+    Ok(disabled_services)
+}
+
+fn service_has_disabled_profile(service: &Value) -> bool {
+    service
+        .as_mapping()
+        .and_then(|service| {
+            let profiles_key = Value::String("profiles".to_string());
+            service.get(&profiles_key)
+        })
+        .and_then(Value::as_sequence)
+        .is_some_and(|profiles| {
+            profiles
+                .iter()
+                .any(|profile| profile.as_str() == Some(DISABLED_PROFILE))
+        })
+}
+
 fn services_require_ghcr(services: &[String]) -> bool {
     services.is_empty()
         || services.iter().any(|service| {
@@ -402,8 +467,8 @@ fn shell_quote(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        APP_SERVICES, services_or_default, services_require_ghcr, shell_quote,
-        with_migration_service,
+        APP_SERVICES, app_services_except, disabled_services_from_compose_override,
+        services_or_default, services_require_ghcr, shell_quote, with_migration_service,
     };
 
     #[test]
@@ -429,6 +494,40 @@ mod tests {
                 "dokuru-server".to_string(),
                 "dokuru-server-migrate".to_string()
             ]
+        );
+    }
+
+    #[test]
+    fn disabled_landing_is_removed_from_default_app_services() {
+        let override_yaml = r#"
+services:
+  dokuru-www:
+    labels: []
+  dokuru-landing:
+    profiles: ["disabled"]
+"#;
+        let disabled = disabled_services_from_compose_override(override_yaml).unwrap();
+
+        assert_eq!(
+            app_services_except(&disabled),
+            vec!["dokuru-server".to_string(), "dokuru-www".to_string()]
+        );
+    }
+
+    #[test]
+    fn disabled_landing_and_www_leave_only_server_by_default() {
+        let override_yaml = r#"
+services:
+  dokuru-www:
+    profiles: ["disabled"]
+  dokuru-landing:
+    profiles: ["disabled"]
+"#;
+        let disabled = disabled_services_from_compose_override(override_yaml).unwrap();
+
+        assert_eq!(
+            app_services_except(&disabled),
+            vec!["dokuru-server".to_string()]
         );
     }
 
