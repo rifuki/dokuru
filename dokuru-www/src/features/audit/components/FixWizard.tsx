@@ -776,7 +776,7 @@ function ProgressEventRow({ event, isError }: { event: FixProgress; isError: boo
                 <div className="mt-3 min-w-0 space-y-2.5 pb-1 pr-1 sm:ml-[90px]">
                     {event.command && (
                         <div className="group/cmd relative">
-                            <pre className="max-w-full overflow-x-auto whitespace-pre rounded-lg border border-[#2496ED]/20 bg-[#06111a] px-3 py-2.5 text-[10px] text-[#58b8ff] shadow-inner">
+                            <pre className="max-w-full whitespace-pre-wrap break-words rounded-lg border border-[#2496ED]/20 bg-[#06111a] px-3 py-2.5 pr-12 text-[10px] text-[#58b8ff] shadow-inner">
                                 <span className="select-none text-[#2496ED]/40">$ </span>{event.command}
                             </pre>
                             <div className="absolute top-1.5 right-1.5 opacity-0 transition-opacity group-hover/cmd:opacity-100">
@@ -1119,7 +1119,7 @@ function ResultStep({
                             <span className="text-[10px] font-mono text-white/30">bash</span>
                             <CopyButton text={outcome.restart_command} />
                         </div>
-                        <pre className="px-4 py-3 text-xs font-mono text-emerald-400 overflow-x-auto">
+                        <pre className="whitespace-pre-wrap break-words px-4 py-3 text-xs font-mono text-emerald-400">
                             <span className="text-white/30 select-none">$ </span>
                             {outcome.restart_command}
                         </pre>

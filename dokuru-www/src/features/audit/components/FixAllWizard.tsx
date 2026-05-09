@@ -653,7 +653,7 @@ function EvidenceRuleCard({ rs }: { rs: RuleFixStatus }) {
                                 {event.detail && <span className="truncate text-white/32">{event.detail}</span>}
                             </div>
                             {event.command && (
-                                <pre className="mt-1 overflow-x-auto rounded border border-[#2496ED]/12 bg-[#06111a] px-2 py-1.5 text-[10px] text-[#58b8ff]">
+                                <pre className="mt-1 whitespace-pre-wrap break-words rounded border border-[#2496ED]/12 bg-[#06111a] px-2 py-1.5 text-[10px] text-[#58b8ff]">
                                     <span className="select-none text-white/28">$ </span>{event.command}
                                 </pre>
                             )}
