@@ -268,6 +268,19 @@
     background: linear-gradient(180deg, rgba(125, 211, 252, 0.78), rgba(34, 211, 238, 0.52));
   }
 
+  .toaster [data-sonner-toast][data-styled="true"] {
+    padding-right: 2.75rem;
+  }
+
+  .toaster [data-sonner-toast][data-styled="true"] [data-close-button] {
+    left: auto;
+    right: 0.625rem;
+    top: 0.625rem;
+    transform: none;
+    z-index: 2147483647;
+    pointer-events: auto;
+  }
+
   [data-slot="skeleton"]::before {
     content: "";
     position: absolute;

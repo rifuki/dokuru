@@ -725,7 +725,9 @@ function ConfirmStep({
 
 function ProgressEventRow({ event, isError }: { event: FixProgress; isError: boolean }) {
     const [expanded, setExpanded] = useState(isError);
-    const hasExtras = Boolean(event.command || event.stdout || event.stderr || (event.detail && event.detail.length > 50));
+    const detailCanExpand = Boolean(event.detail && event.detail.length > 72);
+    const hasStructuredExtras = Boolean(event.command || event.stdout || event.stderr);
+    const hasExtras = hasStructuredExtras || detailCanExpand;
 
     const tone = event.status === "done"
         ? "text-emerald-400"
@@ -756,7 +758,7 @@ function ProgressEventRow({ event, isError }: { event: FixProgress; isError: boo
                     </div>
                     {event.detail && (
                         <p className={cn(
-                            "truncate text-white/40",
+                            detailCanExpand && expanded ? "whitespace-pre-wrap break-words text-white/40" : "truncate text-white/40",
                             isError && "text-rose-300/80"
                         )}>
                             {event.detail}
@@ -770,7 +772,7 @@ function ProgressEventRow({ event, isError }: { event: FixProgress; isError: boo
                 )}
             </button>
 
-            {expanded && hasExtras && (
+            {expanded && hasStructuredExtras && (
                 <div className="mt-3 min-w-0 space-y-2.5 pb-1 pr-1 sm:ml-[90px]">
                     {event.command && (
                         <div className="group/cmd relative">
