@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { agentApi } from "@/lib/api/agent";
@@ -198,13 +198,69 @@ interface UseFixAllArgs {
     token?: string;
 }
 
+type FixAllSessionState = {
+    open: boolean;
+    step: FixAllStep;
+    currentIndex: number;
+    ruleStatuses: RuleFixStatus[];
+    cgroupTargets: CgroupTargetConfig[];
+    cgroupLoading: boolean;
+};
+
+const fixAllSessions = new Map<string, FixAllSessionState>();
+const fixAllSessionListeners = new Map<string, Set<() => void>>();
+
+const EMPTY_FIX_ALL_SESSION: FixAllSessionState = {
+    open: false,
+    step: "confirm",
+    currentIndex: -1,
+    ruleStatuses: [],
+    cgroupTargets: [],
+    cgroupLoading: false,
+};
+
+function emptyFixAllSession(): FixAllSessionState {
+    return { ...EMPTY_FIX_ALL_SESSION };
+}
+
+function shouldPersistFixAllSession(state: FixAllSessionState) {
+    return state.open
+        || state.step === "applying"
+        || state.step === "result"
+        || state.ruleStatuses.length > 0
+        || state.cgroupTargets.length > 0
+        || state.cgroupLoading;
+}
+
+function getFixAllSession(agentId: string) {
+    return fixAllSessions.get(agentId) ?? EMPTY_FIX_ALL_SESSION;
+}
+
+function subscribeFixAllSession(agentId: string, listener: () => void) {
+    const listeners = fixAllSessionListeners.get(agentId) ?? new Set<() => void>();
+    listeners.add(listener);
+    fixAllSessionListeners.set(agentId, listeners);
+    return () => {
+        listeners.delete(listener);
+        if (listeners.size === 0) fixAllSessionListeners.delete(agentId);
+    };
+}
+
+function publishFixAllSession(agentId: string) {
+    fixAllSessionListeners.get(agentId)?.forEach((listener) => listener());
+}
+
 export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixAllArgs) {
-    const [open, setOpen] = useState(false);
-    const [step, setStep] = useState<FixAllStep>("confirm");
-    const [currentIndex, setCurrentIndex] = useState(-1);
-    const [ruleStatuses, setRuleStatuses] = useState<RuleFixStatus[]>([]);
-    const [cgroupTargets, setCgroupTargets] = useState<CgroupTargetConfig[]>([]);
-    const [cgroupLoading, setCgroupLoading] = useState(false);
+    const session = useSyncExternalStore(
+        useCallback((listener) => subscribeFixAllSession(agentId, listener), [agentId]),
+        useCallback(() => getFixAllSession(agentId), [agentId]),
+        () => EMPTY_FIX_ALL_SESSION,
+    );
+    const sessionRef = useRef(session);
+
+    useEffect(() => {
+        sessionRef.current = session;
+    }, [session]);
 
     const queryClient = useQueryClient();
     const startFixJob = useAuditStore((state) => state.startFixJob);
@@ -212,13 +268,30 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
     const cancelRequestedRef = useRef(false);
     const activeRuleRef = useRef<string | null>(null);
 
+    const commitSession = useCallback((updater: FixAllSessionState | ((current: FixAllSessionState) => FixAllSessionState)) => {
+        const next = typeof updater === "function" ? updater(sessionRef.current) : updater;
+        sessionRef.current = next;
+        if (shouldPersistFixAllSession(next)) {
+            fixAllSessions.set(agentId, next);
+        } else {
+            fixAllSessions.delete(agentId);
+        }
+        publishFixAllSession(agentId);
+        return next;
+    }, [agentId]);
+
+    const { open, step, currentIndex, ruleStatuses, cgroupTargets, cgroupLoading } = session;
+
     const openFixAll = useCallback((rules: AuditResult[]) => {
-        setStep((currentStep) => {
-            if (currentStep === "applying" || currentStep === "result") {
-                setOpen(true);
-                return currentStep;
+        commitSession((current) => {
+            if ((current.step === "applying" || current.step === "result") && current.ruleStatuses.length > 0) {
+                return { ...current, open: true };
             }
-            setRuleStatuses(rules.map(r => ({
+
+            return {
+                ...emptyFixAllSession(),
+                open: true,
+                ruleStatuses: rules.map(r => ({
                 ruleId: r.rule.id,
                 title: r.rule.title,
                 outcome: null,
@@ -226,66 +299,60 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
                 state: "pending",
                 selected: !HIGH_RISK_AUTO_FIX_RULES.has(r.rule.id),
                 highRisk: HIGH_RISK_AUTO_FIX_RULES.has(r.rule.id),
-            })));
-            setCurrentIndex(-1);
-            setCgroupTargets([]);
-            setCgroupLoading(false);
-            cancelRequestedRef.current = false;
-            activeRuleRef.current = null;
-            setOpen(true);
-            return "confirm";
+                })),
+            };
         });
-    }, []);
+        cancelRequestedRef.current = false;
+        activeRuleRef.current = null;
+    }, [commitSession]);
 
     const toggleRule = useCallback((ruleId: string) => {
-        setRuleStatuses(statuses => statuses.map(status => (
-            status.ruleId === ruleId && status.state === "pending"
+        commitSession((current) => ({
+            ...current,
+            ruleStatuses: current.ruleStatuses.map(status => (
+                status.ruleId === ruleId && status.state === "pending"
                 ? { ...status, selected: !status.selected }
                 : status
-        )));
-    }, []);
+            )),
+        }));
+    }, [commitSession]);
 
     const setAllSelected = useCallback((selected: boolean) => {
-        setRuleStatuses(statuses => statuses.map(status => (
-            status.state === "pending" ? { ...status, selected } : status
-        )));
-    }, []);
+        commitSession((current) => ({
+            ...current,
+            ruleStatuses: current.ruleStatuses.map(status => (
+                status.state === "pending" ? { ...status, selected } : status
+            )),
+        }));
+    }, [commitSession]);
 
     const updateCgroupTarget = useCallback((key: string, patch: Partial<CgroupTargetConfig>) => {
-        setCgroupTargets((targets) => targets.map((target) => (
-            target.key === key ? { ...target, ...patch } : target
-        )));
-    }, []);
+        commitSession((current) => ({
+            ...current,
+            cgroupTargets: current.cgroupTargets.map((target) => (
+                target.key === key ? { ...target, ...patch } : target
+            )),
+        }));
+    }, [commitSession]);
 
     const backToConfirm = useCallback(() => {
-        setStep("confirm");
-    }, []);
+        commitSession((current) => ({ ...current, step: "confirm" }));
+    }, [commitSession]);
 
     const closeFixAll = useCallback(() => {
-        setOpen(false);
-        setStep((currentStep) => {
-            if (currentStep !== "applying" && currentStep !== "result") {
-                cancelRequestedRef.current = false;
-                activeRuleRef.current = null;
-                setTimeout(() => {
-                    setStep((s) => {
-                        if (s !== "applying" && s !== "result") {
-                            setCurrentIndex(-1);
-                            setRuleStatuses([]);
-                            setCgroupTargets([]);
-                            setCgroupLoading(false);
-                            return "confirm";
-                        }
-                        return s;
-                    });
-                }, 300);
+        commitSession((current) => {
+            if (current.step === "applying" || current.step === "result") {
+                return { ...current, open: false };
             }
-            return currentStep;
+
+            cancelRequestedRef.current = false;
+            activeRuleRef.current = null;
+            return emptyFixAllSession();
         });
-    }, []);
+    }, [commitSession]);
 
     const loadCgroupConfig = useCallback(async (ruleIds: CgroupRuleId[]) => {
-        setCgroupLoading(true);
+        commitSession((current) => ({ ...current, cgroupLoading: true }));
         try {
             const previews = await Promise.all(ruleIds.map(async (ruleId) => ({
                 ruleId,
@@ -301,18 +368,21 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
                 }
             }
 
-            setCgroupTargets(Array.from(configs.values()).sort((a, b) => {
-                const projectCompare = (a.composeProject ?? "").localeCompare(b.composeProject ?? "");
-                if (projectCompare !== 0) return projectCompare;
-                return (a.composeService ?? a.containerName).localeCompare(b.composeService ?? b.containerName);
+            commitSession((current) => ({
+                ...current,
+                cgroupTargets: Array.from(configs.values()).sort((a, b) => {
+                    const projectCompare = (a.composeProject ?? "").localeCompare(b.composeProject ?? "");
+                    if (projectCompare !== 0) return projectCompare;
+                    return (a.composeService ?? a.containerName).localeCompare(b.composeService ?? b.containerName);
+                }),
+                cgroupLoading: false,
+                step: "configure",
             }));
-            setStep("configure");
         } catch {
             toast.error("Failed to load cgroup resource preview");
-        } finally {
-            setCgroupLoading(false);
+            commitSession((current) => ({ ...current, cgroupLoading: false }));
         }
-    }, [agentAccessMode, agentId, agentUrl, token]);
+    }, [agentAccessMode, agentId, agentUrl, commitSession, token]);
 
     const refreshCgroupTargetsForRule = useCallback(async (ruleId: CgroupRuleId) => {
         const preview = agentAccessMode === "relay"
@@ -325,10 +395,10 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
         }
         return cgroupTargetsForRule(
             ruleId,
-            cgroupTargets,
+            sessionRef.current.cgroupTargets,
             currentTargets,
         );
-    }, [agentAccessMode, agentId, agentUrl, cgroupTargets, token]);
+    }, [agentAccessMode, agentId, agentUrl, token]);
 
     const refreshPreviewTargetsForRule = useCallback(async (ruleId: string) => {
         const preview = agentAccessMode === "relay"
@@ -338,38 +408,42 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
     }, [agentAccessMode, agentId, agentUrl, token]);
 
     const applyAll = useCallback(async () => {
-        const selectedTotal = ruleStatuses.filter(r => r.selected).length;
+        const activeSession = sessionRef.current;
+        const activeRuleStatuses = activeSession.ruleStatuses;
+        const activeCgroupTargets = activeSession.cgroupTargets;
+        const activeStep = activeSession.step;
+        const selectedTotal = activeRuleStatuses.filter(r => r.selected).length;
         if (selectedTotal === 0) {
             toast.error("Select at least one rule to fix");
             return;
         }
 
-        const selectedCgroupRuleIds = selectedCgroupRules(ruleStatuses);
+        const selectedCgroupRuleIds = selectedCgroupRules(activeRuleStatuses);
         const selectedConcreteCgroupRuleIds = concreteCgroupRuleIds(selectedCgroupRuleIds);
         if (selectedCgroupRuleIds.includes("5.25") && selectedConcreteCgroupRuleIds.length === 0) {
             toast.error("Select memory, CPU shares, or PIDs with 5.25 so Dokuru knows which cgroup limit to apply");
             return;
         }
 
-        if (step === "confirm" && selectedCgroupRuleIds.length > 0) {
+        if (activeStep === "confirm" && selectedCgroupRuleIds.length > 0) {
             await loadCgroupConfig(selectedCgroupRuleIds);
             return;
         }
 
-        if (step === "configure") {
-            const invalidField = invalidCgroupTarget(selectedCgroupRuleIds, cgroupTargets);
+        if (activeStep === "configure") {
+            const invalidField = invalidCgroupTarget(selectedCgroupRuleIds, activeCgroupTargets);
             if (invalidField) {
                 toast.error(`Enter a valid minimum value for ${invalidField} before applying fixes`);
                 return;
             }
         }
 
-        setStep("applying");
         cancelRequestedRef.current = false;
-        const updated: RuleFixStatus[] = ruleStatuses.map(r => ({
+        const updated: RuleFixStatus[] = activeRuleStatuses.map(r => ({
             ...r,
             state: r.selected ? "pending" : "skipped",
         }));
+        commitSession((current) => ({ ...current, step: "applying", ruleStatuses: [...updated] }));
         let appliedIndex = 0;
 
         for (let i = 0; i < updated.length; i++) {
@@ -381,13 +455,12 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
             }
             const ruleId = updated[i].ruleId;
 
-            setCurrentIndex(appliedIndex);
             updated[i].state = "applying";
-            setRuleStatuses([...updated]);
+            commitSession((current) => ({ ...current, currentIndex: appliedIndex, ruleStatuses: [...updated] }));
             activeRuleRef.current = ruleId;
 
             try {
-                let targets = cgroupTargetsForRule(ruleId, cgroupTargets);
+                let targets = cgroupTargetsForRule(ruleId, activeCgroupTargets);
 
                 if (isBulkCgroupRule(ruleId)) {
                     const refreshedTargets = await refreshCgroupTargetsForRule(ruleId);
@@ -404,7 +477,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
                             ? `Resolved ${refreshedTargets.length} current cgroup target(s) before applying`
                             : "No current cgroup targets still need this rule; skipped backend apply to avoid defaulting stale targets",
                     )];
-                    setRuleStatuses([...updated]);
+                    commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
 
                     if (cgroupUsageCoveredBySelectedResources) {
                         updated[i].outcome = {
@@ -418,7 +491,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
                             requires_elevation: false,
                         };
                         updated[i].state = "done";
-                        setRuleStatuses([...updated]);
+                        commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
                         activeRuleRef.current = null;
                         appliedIndex += 1;
                         continue;
@@ -434,7 +507,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
                             requires_elevation: false,
                         };
                         updated[i].state = "done";
-                        setRuleStatuses([...updated]);
+                        commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
                         activeRuleRef.current = null;
                         appliedIndex += 1;
                         continue;
@@ -449,7 +522,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
                             ? `Resolved ${refreshedTargets.length} current target(s) before applying`
                             : "No current targets still need this rule; skipped backend apply to avoid defaulting stale targets",
                     )];
-                    setRuleStatuses([...updated]);
+                    commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
 
                     if (targets.length === 0) {
                         updated[i].outcome = {
@@ -461,7 +534,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
                             requires_elevation: false,
                         };
                         updated[i].state = "done";
-                        setRuleStatuses([...updated]);
+                        commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
                         activeRuleRef.current = null;
                         appliedIndex += 1;
                         continue;
@@ -508,7 +581,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
                 updated[i].state = cancelled ? "cancelled" : "done";
             }
             activeRuleRef.current = null;
-            setRuleStatuses([...updated]);
+            commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
             appliedIndex += 1;
 
             if (cancelRequestedRef.current) {
@@ -523,8 +596,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
 
         activeRuleRef.current = null;
 
-        setCurrentIndex(selectedTotal);
-        setStep("result");
+        commitSession((current) => ({ ...current, currentIndex: selectedTotal, step: "result", ruleStatuses: [...updated] }));
 
         const selected = updated.filter(r => r.selected);
         const applied = selected.filter(r => r.outcome?.status === "Applied").length;
@@ -550,7 +622,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
                 toast.error("No fixes could be applied");
             }
         }
-    }, [agentAccessMode, agentId, agentUrl, cgroupTargets, loadCgroupConfig, queryClient, refreshCgroupTargetsForRule, refreshPreviewTargetsForRule, ruleStatuses, startFixJob, step, token]);
+    }, [agentAccessMode, agentId, agentUrl, commitSession, loadCgroupConfig, queryClient, refreshCgroupTargetsForRule, refreshPreviewTargetsForRule, startFixJob, token]);
 
     const cancelApplyAll = useCallback(() => {
         cancelRequestedRef.current = true;

@@ -180,6 +180,10 @@ impl Section5 {
         )
     }
 
+    fn cgroup_usage_command() -> String {
+        r#"docker ps --format "{{.ID}} {{.Names}}" | while read -r id name; do memory=$(docker inspect --format "{{ .HostConfig.Memory }}" "$id"); cpu=$(docker inspect --format "{{ .HostConfig.CpuShares }}" "$id"); pids=$(docker inspect --format "{{ .HostConfig.PidsLimit }}" "$id"); parent=$(docker inspect --format "{{ .HostConfig.CgroupParent }}" "$id"); printf "%s: Memory=%s CpuShares=%s PidsLimit=%s CgroupParent=%s\n" "$name" "$memory" "$cpu" "$pids" "$parent"; done"#.into()
+    }
+
     fn container_name(names: Option<&Vec<String>>, id: &str) -> String {
         names.and_then(|n| n.first()).map_or_else(
             || id.chars().take(12).collect(),
@@ -1367,7 +1371,7 @@ impl Section5 {
             severity: Severity::Medium,
             scored: true,
 
-            audit_command: Some(Self::inspect_command(".HostConfig.CgroupParent", "CgroupParent")),
+            audit_command: Some(Self::cgroup_usage_command()),
             check_fn: |docker, containers| {
                 let docker = docker.clone();
                 let containers = containers.to_vec();
@@ -1433,7 +1437,7 @@ impl Section5 {
                         },
                         affected: failing,
                         remediation_kind: RemediationKind::Manual,
-                        audit_command: Some(Self::inspect_command(".HostConfig.CgroupParent", "CgroupParent")),
+                        audit_command: Some(Self::cgroup_usage_command()),
                         raw_output: Some(raw_lines.join("\n")),
                         references: None,
                         rationale: None,

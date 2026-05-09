@@ -1302,6 +1302,16 @@ function latestAppliedFixesAfterAudit(history: FixHistoryEntry[], audit?: AuditR
   return latest;
 }
 
+const CGROUP_RESOURCE_RULE_IDS = new Set(["5.11", "5.12", "5.29"]);
+
+function fixedRuleIdsWithInferredCgroupUsage(results: AuditResult[], fixedRuleIds: Set<string>) {
+  const next = new Set(fixedRuleIds);
+  const cgroupUsageFailed = results.some(result => result.rule.id === "5.25" && result.status === "Fail");
+  const cgroupResourceFixed = [...CGROUP_RESOURCE_RULE_IDS].some(ruleId => fixedRuleIds.has(ruleId));
+  if (cgroupUsageFailed && cgroupResourceFixed) next.add("5.25");
+  return next;
+}
+
 function projectedScoreFromFixes(audit: AuditResponse, results: AuditResult[], fixedRuleIds: Set<string>) {
   const fixedFailedResults = results.filter(result => result.status === "Fail" && fixedRuleIds.has(result.rule.id));
   const total = audit.summary.total || results.length;
@@ -1991,12 +2001,13 @@ function AuditDetailPage() {
   const displayFailedTotal = resultFailedTotal || auditData?.summary.failed || 0;
   const ruleCountSummary = `${checkRuleTotal} checks`;
   const appliedHistoryByRule = latestAppliedFixesAfterAudit(fixHistoryQuery.data ?? [], auditData);
-  const fixedRuleIds = new Set<string>(appliedHistoryByRule.keys());
+  const directFixedRuleIds = new Set<string>(appliedHistoryByRule.keys());
   for (const result of baseResults) {
     const ruleId = result.rule.id;
     const job = fixJobs[fixJobKey(id, ruleId)];
-    if (job?.status === "applied" && isFixJobAfterAudit(job, auditData)) fixedRuleIds.add(ruleId);
+    if (job?.status === "applied" && isFixJobAfterAudit(job, auditData)) directFixedRuleIds.add(ruleId);
   }
+  const fixedRuleIds = fixedRuleIdsWithInferredCgroupUsage(baseResults, directFixedRuleIds);
   const projectedFixScore = auditData ? projectedScoreFromFixes(auditData, baseResults, fixedRuleIds) : null;
   const hasProjectedFixes = (projectedFixScore?.fixedCount ?? 0) > 0;
   const fixedResultPreviews = fixedFailedResults(baseResults, fixedRuleIds);
@@ -2524,7 +2535,7 @@ function AuditDetailPage() {
                     )}
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    These checks were fully fixed after this audit. Blue segments estimate the pass gain if rerun confirms them and no unrelated checks regress.
+                    These checks were fixed or made compliant after this audit. Blue segments estimate the pass gain if rerun confirms them and no unrelated checks regress.
                   </p>
                 </div>
                 <Button

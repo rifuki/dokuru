@@ -617,7 +617,7 @@ function ApplyingStep({
                     <button
                         type="button"
                         onClick={onCancel}
-                        className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 self-start rounded-md border border-rose-400/28 bg-transparent px-3 text-xs font-semibold text-rose-200 transition-colors hover:border-rose-300/45 hover:bg-rose-500/8 hover:text-rose-100 sm:self-auto"
+                        className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 self-start rounded-md border border-destructive/35 bg-transparent px-3 text-xs font-semibold text-destructive transition-colors hover:border-destructive hover:bg-destructive hover:text-destructive-foreground sm:self-auto"
                     >
                         <XCircle className="h-3.5 w-3.5" />
                         Cancel Fix All
