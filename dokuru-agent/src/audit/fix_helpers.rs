@@ -118,6 +118,8 @@ const DEFAULT_HEALTHCHECK_TIMEOUT_NANOS: i64 = 10_000_000_000;
 const DEFAULT_HEALTHCHECK_START_PERIOD_NANOS: i64 = 10_000_000_000;
 const AUDIT_RULES_PATH: &str = "/etc/audit/rules.d/docker.rules";
 const AUDIT_FIX_STEPS: u8 = 4;
+const DAEMON_JSON_PATH: &str = "/etc/docker/daemon.json";
+const DAEMON_JSON_AUDIT_RULE: &str = "-w /etc/docker/daemon.json -p rwxa -k docker";
 const DOCKER_ROOT_PARTITION_RULE_ID: &str = "1.1.1";
 const DOCKER_ROOT_PARTITION_FIX_STEPS: u8 = 9;
 const MIN_DOCKER_ROOT_LV_BYTES: u64 = 10 * 1024 * 1024 * 1024;
@@ -381,7 +383,7 @@ fn audit_rule_fix_spec(rule_id: &str) -> Option<AuditRuleFixSpec> {
         "1.1.8" => ("/run/containerd/containerd.sock", None),
         "1.1.9" => ("/var/run/docker.sock", None),
         "1.1.10" => ("/etc/default/docker", Some("/etc/default/docker")),
-        "1.1.11" => ("/etc/docker/daemon.json", Some("/etc/docker/daemon.json")),
+        "1.1.11" => (DAEMON_JSON_PATH, Some(DAEMON_JSON_PATH)),
         "1.1.12" => (
             "/etc/containerd/config.toml",
             Some("/etc/containerd/config.toml"),
@@ -8316,20 +8318,23 @@ async fn restore_container_networks(
 /// Merge a key into /etc/docker/daemon.json, creating the file if needed.
 /// value must be a valid JSON value string, e.g. `"\"default\""` or `"true"`.
 pub fn merge_daemon_json(key: &str, value: serde_json::Value) -> eyre::Result<()> {
-    let path = "/etc/docker/daemon.json";
-    let mut obj: serde_json::Map<String, serde_json::Value> = if std::path::Path::new(path).exists()
-    {
-        let content = std::fs::read_to_string(path)?;
-        serde_json::from_str(&content).unwrap_or_default()
-    } else {
-        serde_json::Map::new()
-    };
+    let mut obj: serde_json::Map<String, serde_json::Value> =
+        if std::path::Path::new(DAEMON_JSON_PATH).exists() {
+            let content = std::fs::read_to_string(DAEMON_JSON_PATH)?;
+            serde_json::from_str(&content).unwrap_or_default()
+        } else {
+            serde_json::Map::new()
+        };
 
     obj.insert(key.to_string(), value);
 
     // Ensure directory exists
     std::fs::create_dir_all("/etc/docker")?;
-    std::fs::write(path, serde_json::to_string_pretty(&obj)?)?;
+    std::fs::write(DAEMON_JSON_PATH, serde_json::to_string_pretty(&obj)?)?;
+
+    // Creating daemon.json makes CIS 1.1.11 applicable; add its audit rule now
+    // so daemon hardening fixes do not introduce a new failing rule on rerun.
+    ensure_audit_rule(DAEMON_JSON_AUDIT_RULE)?;
     Ok(())
 }
 
@@ -8356,6 +8361,14 @@ pub fn ensure_audit_rule(rule_line: &str) -> eyre::Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn daemon_json_audit_fix_uses_same_rule_as_daemon_writes() {
+        let spec = audit_rule_fix_spec("1.1.11").unwrap();
+
+        assert_eq!(spec.target, DAEMON_JSON_PATH);
+        assert_eq!(spec.rule_line, DAEMON_JSON_AUDIT_RULE);
+    }
 
     #[test]
     fn fix_outcome_blocks_partial_failures() {

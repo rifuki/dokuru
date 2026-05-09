@@ -386,12 +386,8 @@ function ruleStatusTone(status: "Pass" | "Fail" | "Error") {
   };
 }
 
-function RuleStatusBadge({ status, fixedAfterAudit = false }: { status: "Pass" | "Fail" | "Error"; fixedAfterAudit?: boolean }) {
-  const config = fixedAfterAudit ? {
-    label: "Fixed, audit stale",
-    cls: "border-emerald-500/25 bg-emerald-500/10 text-emerald-400",
-    dot: "bg-emerald-400",
-  } : {
+function RuleStatusBadge({ status }: { status: "Pass" | "Fail" | "Error" }) {
+  const config = {
     Pass: { label: "Passed", cls: "border-emerald-500/20 bg-emerald-500/10 text-emerald-400", dot: "bg-emerald-400" },
     Fail: { label: "Needs fix", cls: "border-rose-500/25 bg-rose-500/10 text-rose-400", dot: "bg-rose-400" },
     Error: { label: "Error", cls: "border-amber-500/20 bg-amber-500/10 text-amber-400", dot: "bg-amber-400" },
@@ -601,13 +597,7 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
     || isFullyAppliedOutcome(currentJobOutcome)
     || isFullyAppliedOutcome(appliedFixEntry?.outcome);
   const isFixing = !hasAppliedOutcome && isCurrentFixJob && fixJob?.status === "running";
-  const isFixed = hasAppliedOutcome;
-  const isStaleFixed = isFixed && status === "Fail";
-  const statusTone = isStaleFixed ? {
-    borderLeft: "border-l-emerald-500/70",
-    cardTone: "border-border bg-card/95 hover:bg-muted/[0.08]",
-    icon: "text-emerald-400",
-  } : ruleStatusTone(status);
+  const statusTone = ruleStatusTone(status);
   const isPartialAppliedOutcome = isCurrentFixJob
     && fixJob?.status === "applied"
     && !isFullyAppliedOutcome(currentJobOutcome ?? currentStoredOutcome);
@@ -628,10 +618,10 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
       {/* Header row */}
       <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:px-5">
         <button onClick={() => onOpenChange(!open)} className="flex min-w-0 flex-1 items-start gap-3 text-left sm:items-center">
-          {isStaleFixed ? <ShieldCheck className={cn("h-5 w-5 shrink-0", statusTone.icon)} /> : <StatusIcon status={status} />}
+          <StatusIcon status={status} />
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
-              <RuleStatusBadge status={status} fixedAfterAudit={isStaleFixed} />
+              <RuleStatusBadge status={status} />
               <span className="inline-flex h-6 items-center rounded-md border border-border/70 bg-muted/35 px-2 font-mono text-[11px] font-bold text-muted-foreground/80">
                 {rule.id}
               </span>
@@ -646,13 +636,13 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
                   Fixing now
                 </span>
               )}
-              {isFixed && !isStaleFixed && (
-                <span className="inline-flex h-6 items-center gap-1.5 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 text-xs font-semibold text-emerald-400">
-                  <ShieldCheck className="h-3 w-3" />
-                  Fix applied
+              {hasAppliedOutcome && (
+                <span className="inline-flex h-6 items-center gap-1.5 rounded-md border border-[#2496ED]/25 bg-[#2496ED]/10 px-2 text-xs font-semibold text-[#2496ED]">
+                  <Wrench className="h-3 w-3" />
+                  Fix applied, verify pending
                 </span>
               )}
-              {!isFixing && !isFixed && isFixBlocked && (
+              {!isFixing && !hasAppliedOutcome && isFixBlocked && (
                 <span className="inline-flex h-6 items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/10 px-2 text-xs font-semibold text-amber-400">
                   <AlertTriangle className="h-3 w-3" />
                   Fix needs review
@@ -677,18 +667,18 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
                 e.stopPropagation();
                 if (appliedFixEntry) {
                   useAuditStore.getState().setFixOutcome(agentId, rule.id, appliedFixEntry.outcome);
-                } else if (!isFixed && storedOutcome && !isFixBlocked) {
+                } else if (!hasAppliedOutcome && storedOutcome && !isFixBlocked) {
                   useAuditStore.getState().setFixOutcome(agentId, rule.id, null);
                 }
                 onOpenWizard(result);
               }}
               className={cn(
                 "inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-md text-white transition-all shadow-sm",
-                isFixed ? "bg-emerald-600 hover:bg-emerald-700" : isFixBlocked ? "bg-amber-600 hover:bg-amber-700" : "bg-[#2496ED] hover:bg-[#1d7ac7]",
+                isFixBlocked ? "bg-amber-600 hover:bg-amber-700" : "bg-[#2496ED] hover:bg-[#1d7ac7]",
               )}
             >
-              {isFixing ? <Loader2 className="h-3 w-3 animate-spin" /> : isFixed ? <ShieldCheck className="h-3 w-3" /> : isFixBlocked ? <AlertTriangle className="h-3 w-3" /> : <Wrench className="h-3 w-3" />}
-              {isFixing ? "View Progress" : isFixed || isFixBlocked ? "View Result" : "Apply Fix"}
+              {isFixing ? <Loader2 className="h-3 w-3 animate-spin" /> : isFixBlocked ? <AlertTriangle className="h-3 w-3" /> : <Wrench className="h-3 w-3" />}
+              {isFixing ? "View Progress" : hasAppliedOutcome || isFixBlocked ? "View Result" : "Apply Fix"}
             </button>
           )}
           <button onClick={() => onOpenChange(!open)} className="p-1 hover:bg-muted/40 rounded transition-colors">
@@ -1302,16 +1292,6 @@ function latestAppliedFixesAfterAudit(history: FixHistoryEntry[], audit?: AuditR
   return latest;
 }
 
-const CGROUP_RESOURCE_RULE_IDS = new Set(["5.11", "5.12", "5.29"]);
-
-function fixedRuleIdsWithInferredCgroupUsage(results: AuditResult[], fixedRuleIds: Set<string>) {
-  const next = new Set(fixedRuleIds);
-  const cgroupUsageFailed = results.some(result => result.rule.id === "5.25" && result.status === "Fail");
-  const cgroupResourceFixed = [...CGROUP_RESOURCE_RULE_IDS].some(ruleId => fixedRuleIds.has(ruleId));
-  if (cgroupUsageFailed && cgroupResourceFixed) next.add("5.25");
-  return next;
-}
-
 function projectedScoreFromFixes(audit: AuditResponse, results: AuditResult[], fixedRuleIds: Set<string>) {
   const fixedFailedResults = results.filter(result => result.status === "Fail" && fixedRuleIds.has(result.rule.id));
   const total = audit.summary.total || results.length;
@@ -1645,7 +1625,7 @@ function buildAuditDocumentHtml({
         <div>
           <div class="score-track"><div class="score-fill"></div></div>
           <div class="projected">
-            <span>${projectedScore ? `Projected after fully applied fixes: <strong>~${escapeHtml(projectedScore)}/100</strong>` : "No post-audit fixes included in this report."}</span>
+            <span>${projectedScore ? `Projected after verified post-audit checks: <strong>~${escapeHtml(projectedScore)}/100</strong>` : "Post-audit fixes do not change this verified score until a rerun."}</span>
             <span>${escapeHtml(audit.summary.total)} rules audited</span>
           </div>
         </div>
@@ -1661,12 +1641,12 @@ function buildAuditDocumentHtml({
 
       <section class="section">
         <h2>Executive Summary</h2>
-        <p class="lead">Snapshot of the host security posture at audit time, with remediation forecast separated from verified score.</p>
+        <p class="lead">Snapshot of the host security posture at audit time. Post-audit fixes are listed separately and do not change verified score.</p>
         <table>
           <tbody>
             <tr><th>Host</th><td>${escapeHtml(audit.hostname)}</td><th>Agent</th><td>${escapeHtml(agent?.name ?? "Unknown")}</td></tr>
             <tr><th>Audit ID</th><td>${escapeHtml(audit.id ?? "unsaved")}</td><th>Generated</th><td>${escapeHtml(formatDocumentDate(generatedAt))}</td></tr>
-            <tr><th>Previous score</th><td>${escapeHtml(previousAudit ? `${previousAudit.summary.score}/100` : "Not available")}</td><th>Rerun estimate</th><td>${projectedScore ? `~${escapeHtml(projectedScore)}/100` : "No fully applied post-audit fixes"}</td></tr>
+            <tr><th>Previous score</th><td>${escapeHtml(previousAudit ? `${previousAudit.summary.score}/100` : "Not available")}</td><th>Post-audit score</th><td>${projectedScore ? `~${escapeHtml(projectedScore)}/100` : "Requires audit rerun"}</td></tr>
           </tbody>
         </table>
       </section>
@@ -1691,7 +1671,7 @@ function buildAuditDocumentHtml({
 
       <section class="section">
         <h2>Applied Fixes After This Audit</h2>
-        <p class="lead">These fixes are recorded after the audit timestamp. Re-run audit to turn estimates into verified score.</p>
+        <p class="lead">These fixes are recorded after the audit timestamp. Re-run audit to verify their impact.</p>
         <table><thead><tr><th>Rule</th><th>Time</th><th>Status</th><th>Outcome</th></tr></thead><tbody>${appliedRows}</tbody></table>
       </section>
 
@@ -2001,18 +1981,19 @@ function AuditDetailPage() {
   const displayFailedTotal = resultFailedTotal || auditData?.summary.failed || 0;
   const ruleCountSummary = `${checkRuleTotal} checks`;
   const appliedHistoryByRule = latestAppliedFixesAfterAudit(fixHistoryQuery.data ?? [], auditData);
-  const directFixedRuleIds = new Set<string>(appliedHistoryByRule.keys());
+  const appliedRuleIds = new Set<string>(appliedHistoryByRule.keys());
   for (const result of baseResults) {
     const ruleId = result.rule.id;
     const job = fixJobs[fixJobKey(id, ruleId)];
-    if (job?.status === "applied" && isFixJobAfterAudit(job, auditData)) directFixedRuleIds.add(ruleId);
+    if (job?.status === "applied" && isFixJobAfterAudit(job, auditData)) appliedRuleIds.add(ruleId);
   }
-  const fixedRuleIds = fixedRuleIdsWithInferredCgroupUsage(baseResults, directFixedRuleIds);
-  const projectedFixScore = auditData ? projectedScoreFromFixes(auditData, baseResults, fixedRuleIds) : null;
+  // Applied fix history is factual, but it is not proof that a saved audit rule now passes.
+  const verifiedPostAuditRuleIds = new Set<string>();
+  const projectedFixScore = auditData ? projectedScoreFromFixes(auditData, baseResults, verifiedPostAuditRuleIds) : null;
   const hasProjectedFixes = (projectedFixScore?.fixedCount ?? 0) > 0;
-  const fixedResultPreviews = fixedFailedResults(baseResults, fixedRuleIds);
-  const pillarProjections = groupProjectionFromFixes(baseResults, fixedRuleIds, result => getRulePillar(result.rule.id));
-  const sectionProjections = groupProjectionFromFixes(baseResults, fixedRuleIds, result => result.rule.section);
+  const fixedResultPreviews = fixedFailedResults(baseResults, verifiedPostAuditRuleIds);
+  const pillarProjections = groupProjectionFromFixes(baseResults, verifiedPostAuditRuleIds, result => getRulePillar(result.rule.id));
+  const sectionProjections = groupProjectionFromFixes(baseResults, verifiedPostAuditRuleIds, result => result.rule.section);
   const sectionSummaries = groupSummariesFromResults(baseResults, result => result.rule.section, key => key);
   const sections = sectionSummaries.map(section => section.key);
   const sectionStats: Record<string, { total: number; passed: number; percent: number }> = Object.fromEntries(sectionSummaries.map(section => [
@@ -2062,9 +2043,9 @@ function AuditDetailPage() {
     medium: baseResults.filter(r => r.rule.severity === "Medium" && r.status === "Fail").length,
   };
   const remediationPlan = buildRemediationPlan(baseResults);
-  const autoFixableResults = baseResults.filter(result => isAutoFixableResult(result) && !fixedRuleIds.has(result.rule.id));
+  const autoFixableResults = baseResults.filter(result => isAutoFixableResult(result) && !appliedRuleIds.has(result.rule.id));
   const auditListLayoutSignature = [
-    fixedResultPreviews.map(result => result.rule.id).join(","),
+    [...appliedRuleIds].sort().join(","),
     autoFixableResults.length,
     fixHistoryQuery.data?.length ?? 0,
     fixHistoryQuery.isFetching ? "fetching" : "idle",
@@ -2321,7 +2302,7 @@ function AuditDetailPage() {
                     {hasProjectedFixes && projectedFixScore && (
                       <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#2496ED]">
                         <ShieldCheck className="h-3.5 w-3.5" />
-                        <span>Rerun estimate</span>
+                        <span>Verified delta</span>
                         <span className="font-mono text-sm tracking-normal">~{projectedFixScore.projectedScore}</span>
                         {projectedFixScore.scoreDelta > 0 && (
                           <span className="rounded-full bg-[#2496ED]/10 px-1.5 py-0.5 font-mono text-[10px] tracking-normal">+{projectedFixScore.scoreDelta}</span>
@@ -2382,7 +2363,7 @@ function AuditDetailPage() {
                     </span>
                     <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pass</span>
                     {hasProjectedFixes && projectedFixScore && (
-                      <span className="mt-0.5 font-mono text-[10px] font-semibold text-[#00d9a5]/85">+{projectedFixScore.fixedCount} after fixes</span>
+                      <span className="mt-0.5 font-mono text-[10px] font-semibold text-[#00d9a5]/85">+{projectedFixScore.fixedCount} verified</span>
                     )}
                   </button>
                   <button
@@ -2404,7 +2385,7 @@ function AuditDetailPage() {
                     </span>
                     <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Fail</span>
                     {hasProjectedFixes && projectedFixScore && (
-                      <span className="mt-0.5 font-mono text-[10px] font-semibold text-rose-300/75">-{projectedFixScore.fixedCount} after fixes</span>
+                      <span className="mt-0.5 font-mono text-[10px] font-semibold text-rose-300/75">-{projectedFixScore.fixedCount} verified</span>
                     )}
                   </button>
                   <div className="flex min-h-[76px] flex-col items-center justify-center rounded-[12px] border border-border bg-muted/20 px-2 py-2.5 text-center sm:min-h-[84px] sm:px-3">
@@ -2529,13 +2510,13 @@ function AuditDetailPage() {
                 <div className="min-w-0">
                   <p className="flex items-center gap-2 text-sm font-bold text-[#2496ED]">
                     <ShieldCheck className="h-4 w-4" />
-                    Fix impact preview
+                    Verified impact preview
                     {projectedFixScore && projectedFixScore.scoreDelta > 0 && (
                       <span className="rounded-full bg-[#2496ED]/10 px-2 py-0.5 font-mono text-xs">score +{projectedFixScore.scoreDelta}</span>
                     )}
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    These checks were fixed or made compliant after this audit. Blue segments estimate the pass gain if rerun confirms them and no unrelated checks regress.
+                    These checks have real post-audit verification. Blue segments show the verified pass gain while the saved audit snapshot remains unchanged.
                   </p>
                 </div>
                 <Button
@@ -2548,7 +2529,7 @@ function AuditDetailPage() {
                   }}
                   className="w-full shrink-0 border-[#2496ED]/25 text-[#2496ED] hover:text-[#2496ED] md:w-auto"
                 >
-                  Jump to fixed rules
+                  Jump to verified rules
                 </Button>
               </div>
               <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
