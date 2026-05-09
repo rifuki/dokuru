@@ -32,7 +32,7 @@ pub(crate) fn terminal_install_panel(
                     <div class="mt-4 pt-3 border-t border-white/5 space-y-1.5">
                         <div class="text-zinc-500 text-[11px]">"→ Next steps:"</div>
                         <div class="pl-3">
-                            <div class="text-zinc-300">"Dashboard URL: " <span class="text-[#00E5FF]">"https://xxx.trycloudflare.com"</span></div>
+                            <div class="text-zinc-300">"Agent URL: " <span class="text-[#00E5FF]">"https://xxx.trycloudflare.com"</span></div>
                             <div class="text-zinc-300">"Token: " <span class="text-amber-300">"dok_cbb8becb44ca7ace..."</span></div>
                         </div>
                     </div>
