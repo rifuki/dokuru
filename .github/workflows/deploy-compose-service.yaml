@@ -95,6 +95,7 @@ jobs:
 
           need_web=false
           need_server=false
+          need_compose=false
 
           if [[ "${BEFORE_SHA}" =~ ^0+$ ]]; then
             files=$(gh api "/repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}" --jq '.files[].filename')
@@ -113,12 +114,16 @@ jobs:
               dokuru-server/*|dokuru-core/*)
                 need_server=true
                 ;;
+              docker-compose.yaml|docker-compose.override.yaml)
+                need_compose=true
+                ;;
             esac
           done <<< "${files}"
 
           printf 'need_web=%s\n' "${need_web}" >> "${GITHUB_OUTPUT}"
           printf 'need_server=%s\n' "${need_server}" >> "${GITHUB_OUTPUT}"
-          printf 'Image build requirements: web=%s server=%s\n' "${need_web}" "${need_server}"
+          printf 'need_compose=%s\n' "${need_compose}" >> "${GITHUB_OUTPUT}"
+          printf 'Deploy requirements: web=%s server=%s compose=%s\n' "${need_web}" "${need_server}" "${need_compose}"
 
       - name: Wait for required image builds
         if: github.event_name == 'push'
@@ -127,6 +132,7 @@ jobs:
           HEAD_SHA: ${{ github.sha }}
           NEED_WEB: ${{ steps.changes.outputs.need_web }}
           NEED_SERVER: ${{ steps.changes.outputs.need_server }}
+          NEED_COMPOSE: ${{ steps.changes.outputs.need_compose }}
         run: |
           set -Eeuo pipefail
 
@@ -167,7 +173,7 @@ jobs:
             wait_for_workflow "build-server.yaml" "Build Server Image"
           fi
 
-          if [ "${NEED_WEB}" != "true" ] && [ "${NEED_SERVER}" != "true" ]; then
+          if [ "${NEED_WEB}" != "true" ] && [ "${NEED_SERVER}" != "true" ] && [ "${NEED_COMPOSE}" != "true" ]; then
             printf 'No image rebuild required for this deploy.\n'
           fi
 
@@ -220,9 +226,14 @@ jobs:
 
       - name: Deploy via Docker Compose
         if: steps.gate.outputs.deploy == 'true'
+        env:
+          NEED_WEB: ${{ steps.changes.outputs.need_web }}
+          NEED_SERVER: ${{ steps.changes.outputs.need_server }}
+          NEED_COMPOSE: ${{ steps.changes.outputs.need_compose }}
         run: |
           remote_env=$(
-            printf 'DOKURU_DEPLOY_PATH=%q' "${DEPLOY_PATH}"
+            printf 'DOKURU_DEPLOY_PATH=%q GITHUB_EVENT_NAME=%q NEED_WEB=%q NEED_SERVER=%q NEED_COMPOSE=%q' \
+              "${DEPLOY_PATH}" "${GITHUB_EVENT_NAME}" "${NEED_WEB:-false}" "${NEED_SERVER:-false}" "${NEED_COMPOSE:-false}"
           )
 
           ssh -i ~/.ssh/dokuru_deploy_key -p "${DEPLOY_PORT}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
@@ -235,11 +246,39 @@ jobs:
 
           test -f docker-compose.yaml
 
+          if [ "${GITHUB_EVENT_NAME}" != "push" ]; then
+            NEED_WEB=true
+            NEED_SERVER=true
+            NEED_COMPOSE=true
+          fi
+
+          pull_services=()
+          app_services=()
+
+          if [ "${NEED_SERVER}" = "true" ] || [ "${NEED_COMPOSE}" = "true" ]; then
+            pull_services+=(dokuru-server dokuru-server-migrate)
+            app_services+=(dokuru-server)
+          fi
+
+          if [ "${NEED_WEB}" = "true" ] || [ "${NEED_COMPOSE}" = "true" ]; then
+            pull_services+=(dokuru-www)
+            app_services+=(dokuru-www)
+          fi
+
           docker compose config --quiet
-          docker compose pull dokuru-server dokuru-server-migrate dokuru-www
           docker compose up -d dokuru-db dokuru-redis
-          docker compose up -d --force-recreate --no-deps dokuru-server dokuru-www
-          docker compose ps dokuru-db dokuru-redis dokuru-server dokuru-www
+
+          if [ "${#pull_services[@]}" -gt 0 ]; then
+            docker compose pull "${pull_services[@]}"
+          fi
+
+          if [ "${#app_services[@]}" -gt 0 ]; then
+            docker compose up -d --force-recreate --no-deps "${app_services[@]}"
+          else
+            printf 'No app services need recreation for this deploy.\n'
+          fi
+
+          docker compose ps dokuru-db dokuru-redis "${app_services[@]}"
           REMOTE
 
   notify:
