@@ -155,6 +155,11 @@ function finalFixStepIndex(status: FixJobStatus, events: FixProgress[]) {
     return Math.max(0, completedStep);
 }
 
+function isLongRunningRecoveryEvent(event?: FixProgress) {
+    if (!event || event.status !== "in_progress") return false;
+    return event.action === "restart_containers" || event.action === "restart_docker";
+}
+
 const createIdleStream = (): AuditStreamState => ({
     status: "idle",
     total: 0,
@@ -744,7 +749,12 @@ export const useAuditStore = create<AuditState>((set) => ({
             };
 
             const recoverJobFromHistory = async () => {
-                const attempts = streamEvents.length > 0 ? 60 : 10;
+                const lastStreamEvent = streamEvents.at(-1);
+                const attempts = isLongRunningRecoveryEvent(lastStreamEvent)
+                    ? 900
+                    : streamEvents.length > 0
+                    ? 60
+                    : 10;
                 for (let attempt = 0; attempt < attempts; attempt += 1) {
                     if (settled) return;
                     try {

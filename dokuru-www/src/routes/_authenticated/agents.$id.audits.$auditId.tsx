@@ -1299,7 +1299,10 @@ function isAfterAudit(entry: FixHistoryEntry, audit?: AuditResponse | null) {
 }
 
 function isFixJobAfterAudit(job: { completedAt?: string; startedAt?: string } | undefined, audit?: { timestamp?: string } | null) {
-  return isTimestampAfter(job?.completedAt ?? job?.startedAt, audit?.timestamp);
+  if (!job) return false;
+  return job.startedAt
+    ? isTimestampAfter(job.startedAt, audit?.timestamp)
+    : isTimestampAfter(job.completedAt, audit?.timestamp);
 }
 
 function isFullyAppliedOutcome(outcome?: FixOutcome | null) {
@@ -1932,7 +1935,9 @@ function AuditDetailPage() {
     staleTime: 15_000,
   });
   const hasRunningFixJob = Object.values(fixJobs).some(job => job.agentId === id && job.status === "running");
+  const fixAllSessionActive = ruleStatuses.length > 0 && (fixAllStep === "applying" || fixAllStep === "result");
   const fixControlsLocked = hasRunningFixJob || wizardStep === "applying" || fixAllStep === "applying";
+  const fixAllButtonDisabled = fixControlsLocked && !fixAllSessionActive;
 
   useEffect(() => {
     markAuditResultViewed(id, auditId);
@@ -2078,6 +2083,13 @@ function AuditDetailPage() {
   };
   const remediationPlan = buildRemediationPlan(baseResults);
   const autoFixableResults = baseResults.filter(result => isAutoFixableResult(result) && !appliedRuleIds.has(result.rule.id));
+  const fixAllButtonLabel = fixAllStep === "applying" && ruleStatuses.length > 0
+    ? "View Fix All Progress"
+    : fixAllStep === "result" && ruleStatuses.length > 0
+    ? "View Fix All Result"
+    : fixControlsLocked
+    ? "Fix running"
+    : `Fix All (${autoFixableResults.length})`;
   const auditListLayoutSignature = [
     [...appliedRuleIds].sort().join(","),
     autoFixableResults.length,
@@ -2615,11 +2627,15 @@ function AuditDetailPage() {
           )}
 
           {/* ── Fix All banner ───────────────────────────────── */}
-          {autoFixableResults.length > 0 && (
+          {(autoFixableResults.length > 0 || fixAllSessionActive) && (
             <div className="flex flex-col gap-3 rounded-xl border border-[#2496ED]/25 bg-[#2496ED]/5 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5">
               <div className="min-w-0">
                 <p className="text-sm font-bold text-[#2496ED]">
-                  {autoFixableResults.length} rule{autoFixableResults.length > 1 ? "s" : ""} can be auto-fixed
+                  {fixAllStep === "applying" && ruleStatuses.length > 0
+                    ? "Fix All is still running"
+                    : fixAllStep === "result" && ruleStatuses.length > 0
+                    ? "Fix All result is ready"
+                    : `${autoFixableResults.length} rule${autoFixableResults.length > 1 ? "s" : ""} can be auto-fixed`}
                 </p>
                 <p className="text-xs text-[#2496ED]/60 mt-0.5">
                   Image config, namespace isolation, cgroup limits, and privileged containers — one click.
@@ -2627,11 +2643,15 @@ function AuditDetailPage() {
               </div>
               <button
                 onClick={() => openFixAll(autoFixableResults)}
-                disabled={fixControlsLocked}
+                disabled={fixAllButtonDisabled}
                 className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-[#2496ED] px-4 py-2.5 text-sm font-bold text-white shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] transition-all hover:bg-[#1e80cc] hover:shadow-[0_0_24px_-4px_rgba(36,150,237,0.7)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#2496ED] disabled:hover:shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] sm:w-auto"
               >
-                {fixControlsLocked ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
-                {fixControlsLocked ? "Fix running" : `Fix All (${autoFixableResults.length})`}
+                {fixAllStep === "applying" || (fixControlsLocked && !fixAllSessionActive) ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Wrench className="h-4 w-4" />
+                )}
+                {fixAllButtonLabel}
               </button>
             </div>
           )}
