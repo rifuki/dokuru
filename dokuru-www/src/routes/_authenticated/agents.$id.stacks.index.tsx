@@ -737,28 +737,28 @@ function StackCardSkeleton() {
   return (
     <div aria-hidden="true" className="overflow-hidden rounded-xl border border-border bg-card">
       <div className="border-b border-border/50 p-4 sm:p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0 flex-1 space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <Skeleton className="size-9 shrink-0 rounded-md" />
               <Skeleton className="h-7 w-44 max-w-[45vw]" />
               <Skeleton className="h-6 w-20 rounded-md" />
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-[11rem_minmax(0,1fr)]">
-              <Skeleton className="h-16 rounded-lg" />
-              <Skeleton className="h-16 rounded-lg" />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Skeleton className="h-8 w-40 rounded-md" />
-              <Skeleton className="h-8 w-48 rounded-md" />
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
+              <Skeleton className="h-8 rounded-md sm:w-20" />
+              <Skeleton className="h-8 rounded-md sm:w-24" />
             </div>
           </div>
 
-          <div className="grid shrink-0 grid-cols-2 gap-2 sm:w-52 lg:w-44 lg:grid-cols-1">
-            <Skeleton className="h-9 rounded-md" />
-            <Skeleton className="h-9 rounded-md" />
+          <div className="grid gap-2 sm:grid-cols-[11rem_minmax(0,1fr)]">
+            <Skeleton className="h-16 rounded-lg" />
+            <Skeleton className="h-16 rounded-lg" />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Skeleton className="h-8 w-40 rounded-md" />
+            <Skeleton className="h-8 w-48 rounded-md" />
           </div>
         </div>
       </div>
@@ -852,9 +852,9 @@ function StackCard({
     <>
       <div className="overflow-hidden rounded-xl border border-border bg-card">
         <div className="border-b border-border/50 p-4 sm:p-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0 flex-1 space-y-4">
-              <div className="flex flex-wrap items-center gap-2.5">
+          <div className="space-y-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex min-w-0 flex-wrap items-center gap-2.5">
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted/25">
                   <Layers className={cn("h-4 w-4", iconColor)} />
                 </span>
@@ -869,6 +869,29 @@ function StackCard({
                   {statusLabel}
                 </span>
               </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
+                <Button
+                  size="sm"
+                  className="h-8 w-full gap-1.5 px-3 text-xs font-bold shadow-none sm:w-20"
+                  onClick={() => openComposeAction("up")}
+                  disabled={isStackActionRunning}
+                >
+                  {activeStackRun?.action === "up" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                  Up
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-full gap-1.5 border-destructive/30 bg-background/40 px-3 text-xs font-bold text-destructive shadow-none hover:bg-destructive/10 sm:w-24"
+                  onClick={() => openComposeAction("down")}
+                  disabled={noneRunning || isStackActionRunning}
+                >
+                  {activeStackRun?.action === "down" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Power className="h-3.5 w-3.5" />}
+                  Down
+                </Button>
+              </div>
+            </div>
 
               <div className="grid gap-2 sm:grid-cols-[11rem_minmax(0,1fr)]">
                 <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5">
@@ -941,29 +964,6 @@ function StackCard({
                   </span>
                 )}
               </div>
-            </div>
-
-            <div className="grid shrink-0 grid-cols-2 gap-2 sm:w-52 lg:w-44 lg:grid-cols-1">
-                <Button
-                  size="sm"
-                  className="h-9 gap-1.5 px-4 text-xs font-bold shadow-sm disabled:opacity-60"
-                  onClick={() => openComposeAction("up")}
-                  disabled={isStackActionRunning}
-                >
-                  {activeStackRun?.action === "up" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-                  Up
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-9 gap-1.5 border-destructive/30 bg-destructive/5 px-4 text-xs font-bold text-destructive shadow-sm hover:bg-destructive/10 disabled:opacity-60"
-                  onClick={() => openComposeAction("down")}
-                  disabled={noneRunning || isStackActionRunning}
-                >
-                  {activeStackRun?.action === "down" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Power className="h-3.5 w-3.5" />}
-                  Down
-                </Button>
-            </div>
           </div>
         </div>
 
