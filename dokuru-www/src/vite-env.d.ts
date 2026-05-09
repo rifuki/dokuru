@@ -4,6 +4,7 @@ interface ImportMetaEnv {
   readonly VITE_API_BASE_URL: string;
   readonly VITE_DOKURU_MODE?: "agent" | "cloud";
   readonly VITE_ENABLE_HOST_SHELL?: string;
+  readonly VITE_ENABLE_TANSTACK_DEVTOOLS?: string;
 }
 
 interface ImportMeta {

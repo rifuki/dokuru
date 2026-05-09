@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/button";
 // Stores
 import { useIsAuthenticated } from "@/stores/use-auth-store";
 
+const showTanStackDevtools = import.meta.env.DEV && import.meta.env.VITE_ENABLE_TANSTACK_DEVTOOLS === "true";
+
 export const Route = createRootRoute({
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
@@ -31,7 +33,7 @@ function RootComponent() {
           <Toaster position="bottom-right" richColors />
         </ThemeProvider>
       </TanStackProvider>
-      <TanStackRouterDevtools />
+      {showTanStackDevtools && <TanStackRouterDevtools />}
     </Fragment>
   );
 }
