@@ -13,8 +13,8 @@ const router = createRouter({
   routeTree,
   scrollRestoration: ({ location }) => !location.pathname.startsWith("/agents/"),
   defaultPendingComponent: RoutePendingFallback,
-  defaultPendingMs: 120,
-  defaultPendingMinMs: 250,
+  defaultPendingMs: 300,
+  defaultPendingMinMs: 120,
 });
 
 // Register the router instance for type safety
