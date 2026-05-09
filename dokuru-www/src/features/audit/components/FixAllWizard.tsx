@@ -415,14 +415,15 @@ function ConfigureResourcesStep({
         (acc[key] ??= []).push(target);
         return acc;
     }, {});
-    const showMemory = selectedCgroupRuleIds.includes("5.11") || selectedCgroupRuleIds.includes("5.25");
+    const showMemory = selectedCgroupRuleIds.includes("5.11");
     const showCpu = selectedCgroupRuleIds.includes("5.12");
     const showPids = selectedCgroupRuleIds.includes("5.29");
+    const needsConcreteLimit = selectedCgroupRuleIds.includes("5.25") && !showMemory && !showCpu && !showPids;
     const hasInvalidValues = cgroupTargets.some((target) => (
-        (showMemory && target.ruleIds.some((ruleId) => ruleId === "5.11" || ruleId === "5.25") && (!Number.isFinite(target.memoryMb) || target.memoryMb < CGROUP_RESOURCE_MINIMUMS.memoryMb))
+        (showMemory && target.ruleIds.some((ruleId) => ruleId === "5.11") && (!Number.isFinite(target.memoryMb) || target.memoryMb < CGROUP_RESOURCE_MINIMUMS.memoryMb))
         || (showCpu && target.ruleIds.some((ruleId) => ruleId === "5.12") && (!Number.isFinite(target.cpuShares) || target.cpuShares < CGROUP_RESOURCE_MINIMUMS.cpuShares))
         || (showPids && target.ruleIds.some((ruleId) => ruleId === "5.29") && (!Number.isFinite(target.pidsLimit) || target.pidsLimit < CGROUP_RESOURCE_MINIMUMS.pidsLimit))
-    ));
+    )) || needsConcreteLimit;
 
     return (
         <div className="flex flex-col gap-5">
@@ -443,12 +444,18 @@ function ConfigureResourcesStep({
                 ))}
             </div>
 
+            {needsConcreteLimit && (
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/8 px-4 py-3 text-sm text-amber-200/80">
+                    Select 5.11, 5.12, or 5.29 with 5.25 to choose which concrete cgroup limit should be applied.
+                </div>
+            )}
+
             {cgroupLoading ? (
                 <div className="rounded-xl border border-white/8 bg-white/[0.02] px-4 py-6 text-center text-sm text-white/45">
                     <Loader2 className="mx-auto mb-2 h-4 w-4 animate-spin text-[#2496ED]" />
                     Loading cgroup target preview...
                 </div>
-            ) : cgroupTargets.length === 0 ? (
+            ) : needsConcreteLimit ? null : cgroupTargets.length === 0 ? (
                 <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/8 px-4 py-3 text-sm text-emerald-300/80">
                     The agent preview did not find cgroup targets that still need these selected fixes. Applying will let the agent verify and no-op if everything already matches.
                 </div>
@@ -462,7 +469,7 @@ function ConfigureResourcesStep({
                             <div className="divide-y divide-white/6">
                                 {targets.map((target) => {
                                     const canCompose = Boolean(target.composeProject && target.composeService);
-                                    const hasMemory = target.ruleIds.some((ruleId) => ruleId === "5.11" || ruleId === "5.25");
+                                    const hasMemory = target.ruleIds.some((ruleId) => ruleId === "5.11");
                                     const hasCpu = target.ruleIds.some((ruleId) => ruleId === "5.12");
                                     const hasPids = target.ruleIds.some((ruleId) => ruleId === "5.29");
                                     const resources: CgroupResourceField[] = [];

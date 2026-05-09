@@ -30,6 +30,7 @@ export type RuleFixStatus = {
 
 const HIGH_RISK_AUTO_FIX_RULES = new Set(["2.10", "2.15", "4.1", "5.4", "5.5", "5.10", "5.16", "5.17", "5.18", "5.21", "5.22", "5.31"]);
 const CGROUP_RULE_IDS = ["5.11", "5.12", "5.25", "5.29"] as const;
+const RESOURCE_CGROUP_RULE_IDS = ["5.11", "5.12", "5.29"] as const;
 const MIN_CGROUP_VALUES = {
     memoryMb: 64,
     cpuShares: 128,
@@ -60,6 +61,10 @@ function selectedCgroupRules(ruleStatuses: RuleFixStatus[]): CgroupRuleId[] {
     return ruleStatuses.flatMap((status) => (
         status.selected && isBulkCgroupRule(status.ruleId) ? [status.ruleId] : []
     ));
+}
+
+function concreteCgroupRuleIds(ruleIds: CgroupRuleId[]) {
+    return ruleIds.filter((ruleId) => (RESOURCE_CGROUP_RULE_IDS as readonly string[]).includes(ruleId));
 }
 
 function cgroupTargetKey(target: FixPreviewTarget) {
@@ -131,7 +136,7 @@ function cgroupTargetsForRule(
 
 function invalidCgroupTarget(ruleIds: CgroupRuleId[], targets: CgroupTargetConfig[]) {
     for (const target of targets) {
-        if ((ruleIds.includes("5.11") || ruleIds.includes("5.25")) && target.ruleIds.some((ruleId) => ruleId === "5.11" || ruleId === "5.25")) {
+        if (ruleIds.includes("5.11") && target.ruleIds.some((ruleId) => ruleId === "5.11")) {
             if (!Number.isFinite(target.memoryMb) || target.memoryMb < MIN_CGROUP_VALUES.memoryMb) return "memory";
         }
         if (ruleIds.includes("5.12") && target.ruleIds.some((ruleId) => ruleId === "5.12")) {
@@ -340,6 +345,12 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
         }
 
         const selectedCgroupRuleIds = selectedCgroupRules(ruleStatuses);
+        const selectedConcreteCgroupRuleIds = concreteCgroupRuleIds(selectedCgroupRuleIds);
+        if (selectedCgroupRuleIds.includes("5.25") && selectedConcreteCgroupRuleIds.length === 0) {
+            toast.error("Select memory, CPU shares, or PIDs with 5.25 so Dokuru knows which cgroup limit to apply");
+            return;
+        }
+
         if (step === "confirm" && selectedCgroupRuleIds.length > 0) {
             await loadCgroupConfig(selectedCgroupRuleIds);
             return;
@@ -381,14 +392,37 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
                 if (isBulkCgroupRule(ruleId)) {
                     const refreshedTargets = await refreshCgroupTargetsForRule(ruleId);
                     targets = refreshedTargets;
+                    const cgroupUsageCoveredBySelectedResources = ruleId === "5.25" && selectedConcreteCgroupRuleIds.length > 0;
                     updated[i].progressEvents = [refreshProgress(
                         ruleId,
-                        "done",
-                        refreshedTargets.length > 0
+                        cgroupUsageCoveredBySelectedResources && refreshedTargets.length > 0 ? "error" : "done",
+                        cgroupUsageCoveredBySelectedResources
+                            ? refreshedTargets.length > 0
+                                ? `Cgroup usage is still unconfirmed for ${refreshedTargets.length} target(s) after selected resource fixes`
+                                : "Cgroup usage is confirmed by selected resource fixes"
+                            : refreshedTargets.length > 0
                             ? `Resolved ${refreshedTargets.length} current cgroup target(s) before applying`
                             : "No current cgroup targets still need this rule; skipped backend apply to avoid defaulting stale targets",
                     )];
                     setRuleStatuses([...updated]);
+
+                    if (cgroupUsageCoveredBySelectedResources) {
+                        updated[i].outcome = {
+                            rule_id: ruleId,
+                            status: targets.length === 0 ? "Applied" : "Blocked",
+                            message: targets.length === 0
+                                ? "Cgroup usage confirmed by selected resource fixes"
+                                : "Selected resource fixes did not fully confirm cgroup usage; no unselected resource limit was applied",
+                            requires_restart: false,
+                            restart_command: undefined,
+                            requires_elevation: false,
+                        };
+                        updated[i].state = "done";
+                        setRuleStatuses([...updated]);
+                        activeRuleRef.current = null;
+                        appliedIndex += 1;
+                        continue;
+                    }
 
                     if (targets.length === 0) {
                         updated[i].outcome = {
