@@ -1,6 +1,6 @@
 import { agentApi } from "@/lib/api/agent";
 import { agentDirectApi, type AuditResult, type FixOutcome, type FixProgress } from "@/lib/api/agent-direct";
-import { useAuditStore, type AutoTriggeredFixJobMeta } from "@/stores/use-audit-store";
+import { fixJobKey, useAuditStore, type AutoTriggeredFixJobMeta, type FixJobState } from "@/stores/use-audit-store";
 
 export const CGROUP_RESOURCE_RULE_IDS = ["5.11", "5.12", "5.29"] as const;
 const DAEMON_JSON_TRIGGER_RULE_IDS = ["2.10", "2.15"] as const;
@@ -26,6 +26,7 @@ type RunAutoTriggeredVerificationsArgs = {
   triggerRuleIds: string[];
   appendToRuleIds?: string[];
   skipRuleIds?: string[];
+  auditTimestamp?: string;
   onDependencyStart?: (dependency: AutoVerifyDependency, progressEvents: FixProgress[]) => void;
   onDependencyComplete?: (run: AutoVerifyRun) => void;
 };
@@ -121,6 +122,20 @@ async function verifyRuleNow({
     : await agentDirectApi.verifyFix(agentUrl, ruleId, token);
 }
 
+function isTimestampAfter(value?: string, reference?: string) {
+  if (!value || !reference) return false;
+  const valueTime = Date.parse(value);
+  const referenceTime = Date.parse(reference);
+  return Number.isFinite(valueTime) && Number.isFinite(referenceTime) && valueTime > referenceTime;
+}
+
+function isCurrentAppliedDependency(job: FixJobState | undefined, auditTimestamp?: string) {
+  if (!job) return false;
+  if (job.status === "running") return true;
+  if (job.status !== "applied") return false;
+  return !auditTimestamp || isTimestampAfter(job.completedAt ?? job.startedAt, auditTimestamp);
+}
+
 export async function runAutoTriggeredVerifications({
   agentId,
   agentUrl,
@@ -129,11 +144,16 @@ export async function runAutoTriggeredVerifications({
   triggerRuleIds,
   appendToRuleIds,
   skipRuleIds = [],
+  auditTimestamp,
   onDependencyStart,
   onDependencyComplete,
 }: RunAutoTriggeredVerificationsArgs) {
   const skipped = new Set(skipRuleIds);
-  const dependencies = autoVerifyDependenciesForRules(triggerRuleIds).filter((dependency) => !skipped.has(dependency.ruleId));
+  const dependencies = autoVerifyDependenciesForRules(triggerRuleIds).filter((dependency) => {
+    if (skipped.has(dependency.ruleId)) return false;
+    const job = useAuditStore.getState().fixJobs[fixJobKey(agentId, dependency.ruleId)];
+    return !isCurrentAppliedDependency(job, auditTimestamp);
+  });
   const runs: AutoVerifyRun[] = [];
 
   for (const dependency of dependencies) {

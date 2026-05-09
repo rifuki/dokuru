@@ -395,6 +395,7 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token, auditTimesta
                     token,
                     triggerRuleIds: [rule.id],
                     appendToRuleIds: [rule.id],
+                    auditTimestamp,
                 });
                 if (shouldShowRouteFixToast(agentId)) {
                     toast.success(`Fix applied - rule ${rule.id}`);
@@ -420,7 +421,7 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token, auditTimesta
                 toast.error(errOutcome.message === FIX_CANCELLED_MESSAGE ? "Fix cancelled" : "Fix failed");
             }
         }
-    }, [activeResult, agentAccessMode, agentId, agentUrl, buildTargets, queryClient, startFixJob, token]);
+    }, [activeResult, agentAccessMode, agentId, agentUrl, auditTimestamp, buildTargets, queryClient, startFixJob, token]);
 
     const cancelFix = useCallback(() => {
         if (!activeResult) return;

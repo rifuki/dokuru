@@ -213,6 +213,7 @@ interface UseFixAllArgs {
     agentUrl: string;
     agentAccessMode?: string;
     token?: string;
+    auditTimestamp?: string;
 }
 
 type FixAllSessionState = {
@@ -267,7 +268,7 @@ function publishFixAllSession(agentId: string) {
     fixAllSessionListeners.get(agentId)?.forEach((listener) => listener());
 }
 
-export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixAllArgs) {
+export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTimestamp }: UseFixAllArgs) {
     const session = useSyncExternalStore(
         useCallback((listener) => subscribeFixAllSession(agentId, listener), [agentId]),
         useCallback(() => getFixAllSession(agentId), [agentId]),
@@ -708,6 +709,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
                 token,
                 triggerRuleIds: successfulTriggerRuleIds,
                 skipRuleIds: alreadyAppliedDependentRuleIds,
+                auditTimestamp,
                 onDependencyStart: (dependency, progressEvents) => {
                     activeRuleRef.current = dependency.ruleId;
                     ensureAutoTriggeredStatus(dependency, "applying", progressEvents, null);
@@ -756,7 +758,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
                 toast.error("No fixes could be applied");
             }
         }
-    }, [agentId, agentUrl, agentAccessMode, commitSession, completeFixJob, loadCgroupConfig, queryClient, refreshCgroupTargetsForRule, refreshPreviewTargetsForRule, startFixJob, token, verifyRuleNow]);
+    }, [agentId, agentUrl, agentAccessMode, auditTimestamp, commitSession, completeFixJob, loadCgroupConfig, queryClient, refreshCgroupTargetsForRule, refreshPreviewTargetsForRule, startFixJob, token, verifyRuleNow]);
 
     const cancelApplyAll = useCallback(() => {
         cancelRequestedRef.current = true;

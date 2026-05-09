@@ -1917,6 +1917,7 @@ function AuditDetailPage() {
     agentUrl: agent?.url ?? "",
     agentAccessMode: agent?.access_mode,
     token,
+    auditTimestamp: auditData?.timestamp,
   });
 
   const fixHistoryQuery = useQuery({
