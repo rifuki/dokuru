@@ -173,6 +173,21 @@ function refreshProgress(ruleId: string, status: FixProgress["status"], detail: 
     };
 }
 
+function verifyProgress(ruleId: string, status: FixProgress["status"], detail: string, result?: AuditResult): FixProgress {
+    return {
+        rule_id: ruleId,
+        container_name: "dokuru-agent",
+        step: 1,
+        total_steps: 1,
+        action: "verify_audit_rule",
+        status,
+        detail,
+        command: result?.audit_command,
+        stdout: result?.raw_output,
+        stderr: result?.command_stderr,
+    };
+}
+
 function isBulkPreviewTargetRule(ruleId: string) {
     return isImageConfigRecreateRule(ruleId)
         || isNamespaceIsolationRule(ruleId)
@@ -265,6 +280,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
     const queryClient = useQueryClient();
     const startFixJob = useAuditStore((state) => state.startFixJob);
     const cancelFixJob = useAuditStore((state) => state.cancelFixJob);
+    const completeFixJob = useAuditStore((state) => state.completeFixJob);
     const cancelRequestedRef = useRef(false);
     const activeRuleRef = useRef<string | null>(null);
 
@@ -407,6 +423,32 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
         return previewTargetsForRule(ruleId, preview.targets);
     }, [agentAccessMode, agentId, agentUrl, token]);
 
+    const verifyRuleNow = useCallback(async (ruleId: string) => {
+        const result = agentAccessMode === "relay"
+            ? await agentApi.verifyFix(agentId, ruleId)
+            : await agentDirectApi.verifyFix(agentUrl, ruleId, token);
+        const passed = result.status === "Pass";
+        const outcome: FixOutcome = {
+            rule_id: ruleId,
+            status: passed ? "Applied" : "Blocked",
+            message: passed
+                ? `${ruleId} passed real verification after selected fixes`
+                : `${ruleId} still fails real verification: ${result.message}`,
+            requires_restart: false,
+            restart_command: undefined,
+            requires_elevation: false,
+        };
+        return {
+            outcome,
+            progressEvent: verifyProgress(
+                ruleId,
+                passed ? "done" : "error",
+                result.message,
+                result,
+            ),
+        };
+    }, [agentAccessMode, agentId, agentUrl, token]);
+
     const applyAll = useCallback(async () => {
         const activeSession = sessionRef.current;
         const activeRuleStatuses = activeSession.ruleStatuses;
@@ -445,9 +487,18 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
         }));
         commitSession((current) => ({ ...current, step: "applying", ruleStatuses: [...updated] }));
         let appliedIndex = 0;
+        const selectedIndexes = updated.flatMap((status, index) => status.selected ? [index] : []);
+        const orderedIndexes = selectedConcreteCgroupRuleIds.length > 0
+            ? [...selectedIndexes].sort((a, b) => {
+                const aIsCgroupUsage = updated[a].ruleId === "5.25";
+                const bIsCgroupUsage = updated[b].ruleId === "5.25";
+                if (aIsCgroupUsage !== bIsCgroupUsage) return aIsCgroupUsage ? 1 : -1;
+                return selectedIndexes.indexOf(a) - selectedIndexes.indexOf(b);
+            })
+            : selectedIndexes;
 
-        for (let i = 0; i < updated.length; i++) {
-            if (!updated[i].selected) continue;
+        for (let orderIndex = 0; orderIndex < orderedIndexes.length; orderIndex += 1) {
+            const i = orderedIndexes[orderIndex];
             if (cancelRequestedRef.current) {
                 updated[i].outcome = cancelledOutcome(updated[i].ruleId);
                 updated[i].state = "cancelled";
@@ -463,39 +514,37 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
                 let targets = cgroupTargetsForRule(ruleId, activeCgroupTargets);
 
                 if (isBulkCgroupRule(ruleId)) {
-                    const refreshedTargets = await refreshCgroupTargetsForRule(ruleId);
-                    targets = refreshedTargets;
                     const cgroupUsageCoveredBySelectedResources = ruleId === "5.25" && selectedConcreteCgroupRuleIds.length > 0;
-                    updated[i].progressEvents = [refreshProgress(
-                        ruleId,
-                        cgroupUsageCoveredBySelectedResources && refreshedTargets.length > 0 ? "error" : "done",
-                        cgroupUsageCoveredBySelectedResources
-                            ? refreshedTargets.length > 0
-                                ? `Cgroup usage is still unconfirmed for ${refreshedTargets.length} target(s) after selected resource fixes`
-                                : "Cgroup usage is confirmed by selected resource fixes"
-                            : refreshedTargets.length > 0
-                            ? `Resolved ${refreshedTargets.length} current cgroup target(s) before applying`
-                            : "No current cgroup targets still need this rule; skipped backend apply to avoid defaulting stale targets",
-                    )];
-                    commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
-
                     if (cgroupUsageCoveredBySelectedResources) {
-                        updated[i].outcome = {
-                            rule_id: ruleId,
-                            status: targets.length === 0 ? "Applied" : "Blocked",
-                            message: targets.length === 0
-                                ? "Cgroup usage confirmed by selected resource fixes"
-                                : "Selected resource fixes did not fully confirm cgroup usage; no unselected resource limit was applied",
-                            requires_restart: false,
-                            restart_command: undefined,
-                            requires_elevation: false,
-                        };
+                        const running = verifyProgress(
+                            ruleId,
+                            "in_progress",
+                            "Running real 5.25 verification after selected cgroup limit fixes",
+                        );
+                        updated[i].progressEvents = [running];
+                        commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
+
+                        const verified = await verifyRuleNow(ruleId);
+                        updated[i].outcome = verified.outcome;
+                        updated[i].progressEvents = [running, verified.progressEvent];
                         updated[i].state = "done";
+                        completeFixJob(agentId, ruleId, verified.outcome, updated[i].progressEvents);
                         commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
                         activeRuleRef.current = null;
                         appliedIndex += 1;
                         continue;
                     }
+
+                    const refreshedTargets = await refreshCgroupTargetsForRule(ruleId);
+                    targets = refreshedTargets;
+                    updated[i].progressEvents = [refreshProgress(
+                        ruleId,
+                        "done",
+                        refreshedTargets.length > 0
+                            ? `Resolved ${refreshedTargets.length} current cgroup target(s) before applying`
+                            : "No current cgroup targets still need this rule; skipped backend apply to avoid defaulting stale targets",
+                    )];
+                    commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
 
                     if (targets.length === 0) {
                         updated[i].outcome = {
@@ -585,8 +634,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
             appliedIndex += 1;
 
             if (cancelRequestedRef.current) {
-                for (let nextIndex = i + 1; nextIndex < updated.length; nextIndex += 1) {
-                    if (!updated[nextIndex].selected) continue;
+                for (const nextIndex of orderedIndexes.slice(orderIndex + 1)) {
                     updated[nextIndex].outcome = cancelledOutcome(updated[nextIndex].ruleId);
                     updated[nextIndex].state = "cancelled";
                 }
@@ -622,7 +670,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token }: UseFixA
                 toast.error("No fixes could be applied");
             }
         }
-    }, [agentAccessMode, agentId, agentUrl, commitSession, loadCgroupConfig, queryClient, refreshCgroupTargetsForRule, refreshPreviewTargetsForRule, startFixJob, token]);
+    }, [agentId, agentUrl, agentAccessMode, commitSession, completeFixJob, loadCgroupConfig, queryClient, refreshCgroupTargetsForRule, refreshPreviewTargetsForRule, startFixJob, token, verifyRuleNow]);
 
     const cancelApplyAll = useCallback(() => {
         cancelRequestedRef.current = true;

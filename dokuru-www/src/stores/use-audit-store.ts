@@ -187,6 +187,7 @@ interface AuditState {
     setAuditHistory: (agentId: string, history: AuditResponse[]) => void;
     setFixing: (agentId: string, ruleId: string, fixing: boolean) => void;
     setFixOutcome: (agentId: string, ruleId: string, outcome: FixOutcome | null) => void;
+    completeFixJob: (agentId: string, ruleId: string, outcome: FixOutcome, progressEvents?: FixProgress[]) => void;
     hydrateFixJobFromHistory: (agentId: string, entry: FixHistoryEntry) => void;
     markAuditResultViewed: (agentId: string, auditId: string) => void;
     startAudit: (agent: Agent, token?: string) => Promise<AuditResponse>;
@@ -230,6 +231,41 @@ export const useAuditStore = create<AuditState>((set) => ({
                 [agentId]: { ...s.fixOutcomes[agentId], [ruleId]: outcome },
             },
         })),
+
+    completeFixJob: (agentId, ruleId, outcome, progressEvents = []) =>
+        set((s) => {
+            const key = fixJobKey(agentId, ruleId);
+            const status: FixJobStatus = isFullyAppliedOutcome(outcome)
+                ? "applied"
+                : outcome.status === "Blocked"
+                ? "blocked"
+                : "failed";
+            const completedAt = new Date().toISOString();
+            return {
+                fixingRules: {
+                    ...s.fixingRules,
+                    [agentId]: { ...s.fixingRules[agentId], [ruleId]: false },
+                },
+                fixOutcomes: {
+                    ...s.fixOutcomes,
+                    [agentId]: { ...s.fixOutcomes[agentId], [ruleId]: outcome },
+                },
+                fixJobs: {
+                    ...s.fixJobs,
+                    [key]: {
+                        agentId,
+                        ruleId,
+                        status,
+                        outcome,
+                        error: status === "applied" ? undefined : outcome.message,
+                        progressEvents,
+                        stepIndex: finalFixStepIndex(status, progressEvents),
+                        startedAt: s.fixJobs[key]?.startedAt ?? completedAt,
+                        completedAt,
+                    },
+                },
+            };
+        }),
 
     hydrateFixJobFromHistory: (agentId, entry) =>
         set((s) => {
