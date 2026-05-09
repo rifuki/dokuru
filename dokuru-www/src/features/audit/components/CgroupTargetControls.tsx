@@ -38,7 +38,7 @@ function CgroupApplyModePicker({
     const effectiveValue = canCompose ? value : "docker_update";
 
     return (
-        <div className="audit-fix-mode-control grid h-9 w-full grid-cols-3 overflow-hidden rounded-md border" role="radiogroup" aria-label="Apply mode">
+        <div className="audit-fix-mode-control grid h-8 w-full grid-cols-3 overflow-hidden rounded-md border" role="radiogroup" aria-label="Apply mode">
             {CGROUP_APPLY_MODE_OPTIONS.map((option) => {
                 const disabled = !canCompose && option.value !== "docker_update";
                 const active = effectiveValue === option.value;
@@ -94,7 +94,7 @@ function ResourceValueInput({ field }: { field: CgroupResourceField }) {
                     if (Number.isFinite(value)) field.onChange(value);
                 }}
                 className={cn(
-                    "audit-fix-number-input h-9 w-full rounded-md border bg-black/30 px-3 text-right text-[13px] font-semibold outline-none transition-colors focus:bg-black/45 disabled:cursor-not-allowed disabled:text-white/25",
+                    "audit-fix-number-input h-8 w-full rounded-md border bg-black/30 px-3 text-right text-[13px] font-semibold outline-none transition-colors focus:bg-black/45 disabled:cursor-not-allowed disabled:text-white/25",
                     invalid
                         ? "border-red-500/60 text-red-400 focus:border-red-500/80"
                         : "border-white/10 text-white/85 focus:border-[#2496ED]/60",
@@ -131,7 +131,7 @@ export function CgroupTargetEditor({
     onStrategyChange: (strategy: CgroupApplyStrategy) => void;
 }) {
     return (
-        <div className={cn("audit-fix-target-row audit-fix-target-row-has-value text-xs font-mono", className)}>
+        <div className={cn("audit-fix-target-row audit-fix-target-row-has-value text-xs font-mono", resources.length === 1 && "audit-fix-target-row-single-value", className)}>
             <div className="audit-fix-target-identity flex min-w-0 items-center gap-2.5 self-center">
                 <Server className="h-3.5 w-3.5 shrink-0 text-white/32" />
                 <div className="min-w-0">

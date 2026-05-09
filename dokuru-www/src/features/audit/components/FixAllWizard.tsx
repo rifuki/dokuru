@@ -1,9 +1,10 @@
+import { useState } from "react";
 import {
     Sheet, SheetClose, SheetDescription, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
 import {
     AlertTriangle, CheckCircle2, Loader2, XCircle,
-    RefreshCw, Check, ShieldAlert, X, FileCode2,
+    RefreshCw, Check, ShieldAlert, X, FileCode2, ChevronRight, Terminal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isContainerRecreateRule } from "@/features/audit/hooks/useFix";
@@ -164,6 +165,117 @@ function RuleRow({
                 </span>
             )}
         </button>
+    );
+}
+
+function ruleStatusLabel(rs: RuleFixStatus) {
+    if (rs.state === "applying") return "running";
+    if (rs.state === "pending") return "queued";
+    if (rs.state === "skipped") return "skipped";
+    if (rs.state === "cancelled") return "cancelled";
+    if (rs.outcome?.status === "Applied") return "applied";
+    return "blocked";
+}
+
+function ruleStatusTone(rs: RuleFixStatus) {
+    if (rs.state === "applying") return "border-[#2496ED]/30 bg-[#2496ED]/10 text-[#2496ED]";
+    if (rs.state === "pending") return "border-white/8 bg-white/[0.025] text-white/35";
+    if (rs.state === "skipped") return "border-white/8 bg-white/[0.015] text-white/25";
+    if (rs.outcome?.status === "Applied") return "border-emerald-500/25 bg-emerald-500/10 text-emerald-300";
+    return "border-rose-500/25 bg-rose-500/10 text-rose-300";
+}
+
+function RuleStatusIcon({ rs }: { rs: RuleFixStatus }) {
+    const applied = rs.outcome?.status === "Applied";
+    const cancelled = rs.state === "cancelled";
+
+    if (rs.state === "applying") return <Loader2 className="h-3.5 w-3.5 animate-spin text-[#2496ED]" />;
+    if (rs.state === "done" || cancelled) {
+        return applied
+            ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+            : <XCircle className="h-3.5 w-3.5 text-rose-400" />;
+    }
+    return <span className="mt-0.5 inline-block h-3 w-3 rounded-full border border-white/15" />;
+}
+
+function RuleEvidenceRow({
+    rs,
+    defaultExpanded = false,
+    position,
+}: {
+    rs: RuleFixStatus;
+    defaultExpanded?: boolean;
+    position?: string;
+}) {
+    const [expanded, setExpanded] = useState(defaultExpanded);
+    const isActive = rs.state === "applying";
+    const isRecreate = isContainerRecreateRule(rs.ruleId);
+    const eventCount = rs.progressEvents.length;
+    const summary = rs.state === "skipped"
+        ? "Skipped by selection"
+        : rs.state === "cancelled"
+        ? "Cancelled before completion"
+        : rs.outcome?.message ?? rs.title;
+
+    return (
+        <div className={cn("group transition-colors", isActive && "bg-[#2496ED]/5")}>
+            <button
+                type="button"
+                onClick={() => setExpanded(open => !open)}
+                className="grid w-full min-w-0 grid-cols-[18px_minmax(0,1fr)_auto_18px] items-start gap-3 px-3 py-3 text-left transition-colors hover:bg-white/[0.025]"
+                aria-expanded={expanded}
+            >
+                <span className="mt-1 flex h-4 w-4 items-center justify-center">
+                    <RuleStatusIcon rs={rs} />
+                </span>
+                <span className="min-w-0">
+                    <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+                        <span className="font-mono text-[11px] font-bold text-white/62">{rs.ruleId}</span>
+                        {isRecreate && (
+                            <span className="rounded border border-amber-500/22 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-300/85">
+                                recreate
+                            </span>
+                        )}
+                        {rs.highRisk && (
+                            <span className="inline-flex items-center gap-1 rounded border border-rose-500/22 bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-medium text-rose-300/85">
+                                <ShieldAlert className="h-2.5 w-2.5" /> risky
+                            </span>
+                        )}
+                    </span>
+                    <span className={cn(
+                        "mt-1 block truncate text-xs leading-snug",
+                        rs.state === "applying" ? "text-white/82" : rs.outcome?.status === "Applied" ? "text-[#2496ED]" : rs.outcome?.status === "Blocked" ? "text-rose-300/82" : "text-white/48",
+                    )}>
+                        {summary}
+                    </span>
+                </span>
+                <span className="flex shrink-0 flex-col items-end gap-1">
+                    <span className={cn("rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em]", ruleStatusTone(rs))}>
+                        {ruleStatusLabel(rs)}
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded border border-white/8 bg-white/[0.025] px-1.5 py-0.5 font-mono text-[9px] text-white/35">
+                        <Terminal className="h-2.5 w-2.5 text-[#2496ED]/70" />
+                        {eventCount} event{eventCount === 1 ? "" : "s"}
+                    </span>
+                    {position && (
+                        <span className="font-mono text-[9px] text-white/24">{position}</span>
+                    )}
+                </span>
+                <ChevronRight className={cn("mt-1 h-3.5 w-3.5 text-white/28 transition-transform group-hover:text-white/55", expanded && "rotate-90 text-[#2496ED]")} />
+            </button>
+
+            {expanded && (
+                <div className="px-3 pb-3 pl-10">
+                    <ProgressEventsPanel
+                        progressEvents={rs.progressEvents}
+                        title={`rule ${rs.ruleId} terminal transcript`}
+                        emptyMessage={rs.state === "pending" ? "Waiting for this rule to start" : "No streamed evidence captured"}
+                        className="shadow-none"
+                        maxHeightClassName="max-h-[240px]"
+                    />
+                </div>
+            )}
+        </div>
     );
 }
 
@@ -443,7 +555,6 @@ function ApplyingStep({
     const done = selected.filter(r => r.state === "done").length;
     const total = selected.length;
     const active = selected.find(r => r.state === "applying") ?? selected[Math.min(Math.max(currentIndex, 0), Math.max(selected.length - 1, 0))];
-    const activeEvents = active?.progressEvents ?? [];
 
     return (
         <div className="flex flex-col gap-4">
@@ -508,20 +619,19 @@ function ApplyingStep({
                 </div>
             </div>
 
-            <ProgressEventsPanel
-                progressEvents={activeEvents}
-                title={active ? `rule ${active.ruleId} terminal transcript` : "live terminal transcript"}
-                emptyMessage="Waiting for agent progress"
-            />
-
             <div className="overflow-hidden rounded-xl border border-white/8 bg-white/[0.02]">
                 <div className="flex items-center justify-between gap-3 border-b border-white/6 bg-white/[0.025] px-3 py-2">
-                    <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/35">Selected queue</span>
-                    <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/30">{selected.length} rules</span>
+                    <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/35">Selected queue & evidence</span>
+                    <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/30">expand any rule for terminal</span>
                 </div>
                 <div className="divide-y divide-white/6">
-                    {selected.map(rs => (
-                        <RuleRow key={rs.ruleId} rs={rs} showOutcome={true} />
+                    {selected.map((rs, index) => (
+                        <RuleEvidenceRow
+                            key={`${rs.ruleId}-${rs.ruleId === active?.ruleId ? "active" : "idle"}`}
+                            rs={rs}
+                            defaultExpanded={rs.ruleId === active?.ruleId}
+                            position={`${index + 1}/${total}`}
+                        />
                     ))}
                 </div>
             </div>
@@ -558,10 +668,6 @@ function mergeProgressEvents(base: FixProgress[], live: FixProgress[]) {
     });
 }
 
-function selectedProgressEvents(ruleStatuses: RuleFixStatus[]) {
-    return ruleStatuses.flatMap((status) => status.selected ? status.progressEvents : []);
-}
-
 // ── Result step ───────────────────────────────────────────────────────────────
 
 function ResultStep({
@@ -578,7 +684,6 @@ function ResultStep({
     const allApplied = blocked === 0;
     const evidenceCount = selected.reduce((sum, rs) => sum + rs.progressEvents.length, 0);
     const targets = uniqueLabels(selected.flatMap(rs => rs.progressEvents.map(event => event.container_name)));
-    const progressEvents = selectedProgressEvents(ruleStatuses);
 
     return (
         <div className="flex flex-col gap-5">
@@ -626,13 +731,6 @@ function ResultStep({
                 </div>
             </div>
 
-            <ProgressEventsPanel
-                progressEvents={progressEvents}
-                title="bulk terminal transcript"
-                showRuleId
-                emptyMessage="No streamed evidence captured"
-            />
-
             {skipped > 0 && (
                 <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3.5 py-3 text-xs text-white/42">
                     <div className="flex items-start gap-2">
@@ -646,12 +744,17 @@ function ResultStep({
 
             <div className="overflow-hidden rounded-xl border border-white/8 bg-white/[0.02]">
                 <div className="flex items-center justify-between gap-3 border-b border-white/6 bg-white/[0.025] px-3 py-2">
-                    <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/35">Selected results</span>
-                    <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/30">{selected.length} rules</span>
+                    <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/35">Selected results & evidence</span>
+                    <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/30">{evidenceCount} events</span>
                 </div>
                 <div className="divide-y divide-white/6">
-                    {selected.map(rs => (
-                        <RuleRow key={rs.ruleId} rs={rs} showOutcome={true} />
+                    {selected.map((rs, index) => (
+                        <RuleEvidenceRow
+                            key={rs.ruleId}
+                            rs={rs}
+                            defaultExpanded={rs.outcome?.status === "Blocked" || rs.state === "cancelled"}
+                            position={`${index + 1}/${selected.length}`}
+                        />
                     ))}
                 </div>
             </div>

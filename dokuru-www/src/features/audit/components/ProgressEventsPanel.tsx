@@ -140,11 +140,15 @@ export function ProgressEventsPanel({
     title = "live terminal transcript",
     showRuleId = false,
     emptyMessage,
+    className,
+    maxHeightClassName = "max-h-[300px]",
 }: {
     progressEvents: FixProgress[];
     title?: string;
     showRuleId?: boolean;
     emptyMessage?: string;
+    className?: string;
+    maxHeightClassName?: string;
 }) {
     const [filterError, setFilterError] = useState(false);
 
@@ -154,7 +158,7 @@ export function ProgressEventsPanel({
     const displayedEvents = filterError ? progressEvents.filter(e => e.status === "error") : progressEvents;
 
     return (
-        <div className="overflow-hidden rounded-xl border border-white/10 bg-[#030507] shadow-xl">
+        <div className={cn("overflow-hidden rounded-xl border border-white/10 bg-[#030507] shadow-xl", className)}>
             <div className="flex min-w-0 items-center gap-2 border-b border-white/8 bg-white/[0.025] px-3 py-2.5">
                 <div className="flex shrink-0 items-center gap-1.5">
                     <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f56]" />
@@ -184,7 +188,7 @@ export function ProgressEventsPanel({
                     </span>
                 </div>
             </div>
-            <div className="max-h-[300px] min-w-0 overflow-y-auto p-2.5 font-mono text-[11px] leading-relaxed sm:p-3 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10">
+            <div className={cn(maxHeightClassName, "min-w-0 overflow-y-auto p-2.5 font-mono text-[11px] leading-relaxed sm:p-3 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10")}>
                 {displayedEvents.length === 0 ? (
                     <div className="flex items-center justify-center py-6 text-[10px] uppercase tracking-widest text-[#2496ED]/60">
                         <Terminal className="mr-2 h-3.5 w-3.5" /> {emptyMessage ?? "Waiting for agent progress"}
