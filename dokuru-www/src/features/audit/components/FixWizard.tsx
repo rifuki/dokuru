@@ -193,7 +193,7 @@ function ApplyModePicker({
     const effectiveValue = canCompose ? (value === "recreate" ? "dokuru_override" : value) : "docker_update";
 
     return (
-        <div className="audit-fix-mode-control grid h-9 grid-cols-3 rounded-md border p-0.5" role="radiogroup" aria-label="Apply mode">
+        <div className="audit-fix-mode-control grid h-9 w-full grid-cols-3 overflow-hidden rounded-md border" role="radiogroup" aria-label="Apply mode">
             {CGROUP_APPLY_MODE_OPTIONS.map((option) => {
                 const disabled = !canCompose && option.value !== "docker_update";
                 const active = effectiveValue === option.value;
@@ -207,7 +207,7 @@ function ApplyModePicker({
                         disabled={disabled}
                         onClick={() => onChange(option.value)}
                         className={cn(
-                            "audit-fix-mode-button h-full min-w-0 rounded-[6px] px-2 text-[10px] font-semibold transition-colors whitespace-nowrap outline-none",
+                            "audit-fix-mode-button h-full min-w-0 px-2 text-[10px] font-semibold transition-colors whitespace-nowrap outline-none",
                             active && "audit-fix-mode-button-active",
                             !active && "audit-fix-mode-button-idle",
                             disabled && "cursor-not-allowed opacity-35",
@@ -235,7 +235,7 @@ function NamespaceModePicker({
         : "docker_update";
 
     return (
-        <div className="audit-fix-mode-control grid h-9 grid-cols-3 rounded-md border p-0.5" role="radiogroup" aria-label="Namespace apply mode">
+        <div className="audit-fix-mode-control grid h-9 w-full grid-cols-3 overflow-hidden rounded-md border" role="radiogroup" aria-label="Namespace apply mode">
             {NAMESPACE_APPLY_MODE_OPTIONS.map((option) => {
                 const disabled = !canCompose && option.value !== "docker_update";
                 const active = effectiveValue === option.value;
@@ -249,7 +249,7 @@ function NamespaceModePicker({
                         disabled={disabled}
                         onClick={() => onChange(option.value)}
                         className={cn(
-                            "audit-fix-mode-button h-full min-w-0 rounded-[6px] px-2 text-[10px] font-semibold transition-colors whitespace-nowrap outline-none",
+                            "audit-fix-mode-button h-full min-w-0 px-2 text-[10px] font-semibold transition-colors whitespace-nowrap outline-none",
                             active && "audit-fix-mode-button-active",
                             !active && "audit-fix-mode-button-idle",
                             disabled && "cursor-not-allowed opacity-35",
@@ -279,7 +279,7 @@ function RuntimeModePicker({
 
     return (
         <div className={cn(
-            "audit-fix-mode-control grid h-9 rounded-md border p-0.5",
+            "audit-fix-mode-control grid h-9 w-full overflow-hidden rounded-md border",
             options.length === 2 ? "grid-cols-2" : "grid-cols-3",
         )} role="radiogroup" aria-label="Runtime isolation apply mode">
             {options.map((option) => {
@@ -295,7 +295,7 @@ function RuntimeModePicker({
                         disabled={disabled}
                         onClick={() => onChange(option.value)}
                         className={cn(
-                            "audit-fix-mode-button h-full min-w-0 rounded-[6px] px-2 text-[10px] font-semibold transition-colors whitespace-nowrap outline-none",
+                            "audit-fix-mode-button h-full min-w-0 px-2 text-[10px] font-semibold transition-colors whitespace-nowrap outline-none",
                             active && "audit-fix-mode-button-active",
                             !active && "audit-fix-mode-button-idle",
                             disabled && "cursor-not-allowed opacity-35",
@@ -325,7 +325,7 @@ function ImageConfigModePicker({
         : value === "compose_update" ? "compose_update" : "dokuru_override";
 
     return (
-        <div className="audit-fix-mode-control grid h-9 grid-cols-3 rounded-md border p-0.5" role="radiogroup" aria-label="Image config apply mode">
+        <div className="audit-fix-mode-control grid h-9 w-full grid-cols-3 overflow-hidden rounded-md border" role="radiogroup" aria-label="Image config apply mode">
             {IMAGE_CONFIG_MODE_OPTIONS.map((option) => {
                 const dockerfileDisabled = option.value === "dockerfile_update" && !dockerfilePath;
                 const active = effectiveValue === option.value;
@@ -341,7 +341,7 @@ function ImageConfigModePicker({
                             if (!dockerfileDisabled) onChange(option.value);
                         }}
                         className={cn(
-                            "audit-fix-mode-button h-full min-w-0 rounded-[6px] px-2 text-[10px] font-semibold transition-colors whitespace-nowrap outline-none",
+                            "audit-fix-mode-button h-full min-w-0 px-2 text-[10px] font-semibold transition-colors whitespace-nowrap outline-none",
                             active && "audit-fix-mode-button-active",
                             !active && "audit-fix-mode-button-idle",
                             dockerfileDisabled && "cursor-not-allowed opacity-45",
@@ -358,7 +358,7 @@ function ImageConfigModePicker({
 function StaticModePanel({ strategy }: { strategy: ApplyStrategy }) {
     const meta = STRATEGY_META[strategy];
     return (
-        <div className="audit-fix-mode-control flex h-9 min-w-0 items-center justify-between gap-3 rounded-md border px-3">
+        <div className="audit-fix-mode-control flex h-9 w-full min-w-0 items-center justify-between gap-3 rounded-md border px-3">
             <span className="truncate text-[10px] font-semibold text-[#7dd3fc]">{meta.label}</span>
             <span className="truncate text-[10px] text-white/32">{meta.title}</span>
         </div>
@@ -615,7 +615,7 @@ function ConfirmStep({
                                     )}
 
                                     {isNonRootUserRule && config && (
-                                        <label className="audit-fix-target-value text-[10px] text-white/35">
+                                        <label className="audit-fix-target-value w-full text-[10px] text-white/35">
                                             <span className="audit-fix-target-value-label uppercase tracking-[0.12em]">Run as <span className="text-white/20">UID:GID</span></span>
                                             <input
                                                 value={selectedUser}
@@ -636,7 +636,7 @@ function ConfirmStep({
                                     )}
 
                                     {isCgroup && config && (
-                                        <label className="audit-fix-target-value text-[10px] text-white/35">
+                                        <label className="audit-fix-target-value w-full text-[10px] text-white/35">
                                             <span className="audit-fix-target-value-label uppercase tracking-[0.12em]">{meta.label} <span className="text-white/20">{meta.unit}</span></span>
                                             <input
                                                 type="number"

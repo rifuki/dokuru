@@ -368,13 +368,13 @@ function ConfigureResourcesStep({
                                                         </p>
                                                     </div>
                                                 </div>
-                                                <div className="audit-fix-mode-control grid h-9 shrink-0 grid-cols-3 rounded-md border p-0.5">
+                                                <div className="audit-fix-mode-control grid h-9 w-full shrink-0 grid-cols-3 overflow-hidden rounded-md border">
                                                     <button
                                                         type="button"
                                                         disabled={!canCompose}
                                                         onClick={() => onUpdateTarget(target.key, { strategy: "dokuru_override" })}
                                                         className={cn(
-                                                            "audit-fix-mode-button h-full rounded-[6px] px-2 text-[10px] font-semibold transition-colors",
+                                                            "audit-fix-mode-button h-full px-2 text-[10px] font-semibold transition-colors",
                                                             target.strategy === "dokuru_override" && canCompose ? "audit-fix-mode-button-active" : "audit-fix-mode-button-idle",
                                                             !canCompose && "cursor-not-allowed opacity-35"
                                                         )}
@@ -386,7 +386,7 @@ function ConfigureResourcesStep({
                                                         disabled={!canCompose}
                                                         onClick={() => onUpdateTarget(target.key, { strategy: "compose_update" })}
                                                         className={cn(
-                                                            "audit-fix-mode-button h-full rounded-[6px] px-2 text-[10px] font-semibold transition-colors",
+                                                            "audit-fix-mode-button h-full px-2 text-[10px] font-semibold transition-colors",
                                                             target.strategy === "compose_update" && canCompose ? "audit-fix-mode-button-active" : "audit-fix-mode-button-idle",
                                                             !canCompose && "cursor-not-allowed opacity-35"
                                                         )}
@@ -397,7 +397,7 @@ function ConfigureResourcesStep({
                                                         type="button"
                                                         onClick={() => onUpdateTarget(target.key, { strategy: "docker_update" })}
                                                         className={cn(
-                                                            "audit-fix-mode-button h-full rounded-[6px] px-2 text-[10px] font-semibold transition-colors",
+                                                            "audit-fix-mode-button h-full px-2 text-[10px] font-semibold transition-colors",
                                                             target.strategy === "docker_update" ? "audit-fix-mode-button-active" : "audit-fix-mode-button-idle"
                                                         )}
                                                     >
