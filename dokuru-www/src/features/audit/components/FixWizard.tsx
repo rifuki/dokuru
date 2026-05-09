@@ -17,6 +17,11 @@ import {
 } from "@/features/audit/hooks/useFix";
 import { ResizableSheetContent } from "@/features/audit/components/ResizableSheetContent";
 import { CopyButton, ProgressEventsPanel } from "@/features/audit/components/ProgressEventsPanel";
+import {
+    CGROUP_RESOURCE_MINIMUMS,
+    CgroupTargetEditor,
+    type CgroupApplyStrategy,
+} from "@/features/audit/components/CgroupTargetControls";
 
 // ── Step indicator ────────────────────────────────────────────────────────────
 
@@ -27,12 +32,6 @@ const WIZARD_STEPS: { key: WizardStep; label: string }[] = [
 ];
 
 type ApplyStrategy = TargetConfig["strategy"];
-
-const CGROUP_APPLY_MODE_OPTIONS: { value: ApplyStrategy; label: string; title: string }[] = [
-    { value: "dokuru_override", label: "Override", title: "Write Compose override file" },
-    { value: "compose_update", label: "Patch", title: "Patch source Compose YAML" },
-    { value: "docker_update", label: "Live", title: "Update current container only" },
-];
 
 const NAMESPACE_APPLY_MODE_OPTIONS: { value: Extract<ApplyStrategy, "dokuru_override" | "compose_update" | "docker_update">; label: string; title: string }[] = [
     { value: "dokuru_override", label: "Override", title: "Write Compose override file" },
@@ -152,53 +151,18 @@ function dockerfileSnippet(ruleId: string, targets: FixPreview["targets"]) {
 }
 
 function valueMeta(ruleId: string) {
-    if (ruleId === "5.11") return { label: "Memory", unit: "MB", key: "memoryMb" as const, min: 64 };
-    if (ruleId === "5.12") return { label: "CPU", unit: "shares", key: "cpuShares" as const, min: 128 };
-    return { label: "Limit", unit: "PIDs", key: "pidsLimit" as const, min: 50 };
+    if (ruleId === "5.11") return { label: "Memory", unit: "MB", key: "memoryMb" as const, min: CGROUP_RESOURCE_MINIMUMS.memoryMb };
+    if (ruleId === "5.12") return { label: "CPU", unit: "shares", key: "cpuShares" as const, min: CGROUP_RESOURCE_MINIMUMS.cpuShares };
+    return { label: "Limit", unit: "PIDs", key: "pidsLimit" as const, min: CGROUP_RESOURCE_MINIMUMS.pidsLimit };
 }
 
 function isValidNonRootUser(user?: string) {
     return /^([1-9]\d*):(\d+)$/.test(user ?? "");
 }
 
-function ApplyModePicker({
-    value,
-    canCompose,
-    onChange,
-}: {
-    value: ApplyStrategy;
-    canCompose: boolean;
-    onChange: (strategy: ApplyStrategy) => void;
-}) {
-    const effectiveValue = canCompose ? (value === "recreate" ? "dokuru_override" : value) : "docker_update";
-
-    return (
-        <div className="audit-fix-mode-control grid h-9 w-full grid-cols-3 overflow-hidden rounded-md border" role="radiogroup" aria-label="Apply mode">
-            {CGROUP_APPLY_MODE_OPTIONS.map((option) => {
-                const disabled = !canCompose && option.value !== "docker_update";
-                const active = effectiveValue === option.value;
-                return (
-                    <button
-                        key={option.value}
-                        type="button"
-                        role="radio"
-                        aria-checked={active}
-                        title={option.title}
-                        disabled={disabled}
-                        onClick={() => onChange(option.value)}
-                        className={cn(
-                            "audit-fix-mode-button h-full min-w-0 px-2 text-[10px] font-semibold transition-colors whitespace-nowrap outline-none",
-                            active && "audit-fix-mode-button-active",
-                            !active && "audit-fix-mode-button-idle",
-                            disabled && "cursor-not-allowed opacity-35",
-                        )}
-                    >
-                        {option.label}
-                    </button>
-                );
-            })}
-        </div>
-    );
+function cgroupStrategy(strategy: ApplyStrategy, canCompose: boolean): CgroupApplyStrategy {
+    if (!canCompose) return "docker_update";
+    return strategy === "dokuru_override" || strategy === "compose_update" ? strategy : "docker_update";
 }
 
 function NamespaceModePicker({
@@ -517,6 +481,32 @@ function ConfirmStep({
                             const currentLabel = currentValueLabel(rule.id, target);
                             const hasTargetValue = isCgroup || isNonRootUserRule;
 
+                            if (isCgroup && config) {
+                                return (
+                                    <CgroupTargetEditor
+                                        key={target.container_id}
+                                        className={cn(i < targets.length - 1 && "border-b border-white/6")}
+                                        containerName={target.container_name}
+                                        currentLabel={currentLabel !== "current" ? currentLabel : undefined}
+                                        canCompose={canCompose}
+                                        sourceLabel={canCompose ? "compose" : "runtime"}
+                                        sourceDetail={canCompose ? `${target.compose_project}/${target.compose_service}` : "standalone"}
+                                        strategy={cgroupStrategy(strategy, canCompose)}
+                                        onStrategyChange={(nextStrategy) => onTargetChange(target.container_id, { strategy: nextStrategy })}
+                                        resources={[
+                                            {
+                                                key: meta.key,
+                                                label: meta.label,
+                                                unit: meta.unit,
+                                                value,
+                                                min: meta.min,
+                                                onChange: (nextValue) => onTargetChange(target.container_id, { [meta.key]: nextValue }),
+                                            },
+                                        ]}
+                                    />
+                                );
+                            }
+
                             return (
                                 <div
                                     key={target.container_id}
@@ -547,14 +537,6 @@ function ConfirmStep({
                                                 <span className="block truncate text-[10px] text-white/30">{canCompose ? `${target.compose_project}/${target.compose_service}` : "standalone"}</span>
                                             </div>
                                         </div>
-                                    )}
-
-                                    {isCgroup && config && (
-                                        <ApplyModePicker
-                                            value={strategy}
-                                            canCompose={canCompose}
-                                            onChange={(nextStrategy) => onTargetChange(target.container_id, { strategy: nextStrategy })}
-                                        />
                                     )}
 
                                     {isNamespace && config && (
@@ -615,40 +597,6 @@ function ConfirmStep({
                                         </label>
                                     )}
 
-                                    {isCgroup && config && (
-                                        <label className="audit-fix-target-value w-full text-[10px] text-white/35">
-                                            <span className="audit-fix-target-value-label uppercase tracking-[0.12em]">{meta.label} <span className="text-white/20">{meta.unit}</span></span>
-                                            <input
-                                                type="number"
-                                                min={meta.min}
-                                                inputMode="numeric"
-                                                aria-label={`${meta.label} ${meta.unit}`}
-                                                value={value > 0 ? value : ""}
-                                                onChange={(e) => {
-                                                    const input = e.target.value;
-                                                    if (input === "") {
-                                                        onTargetChange(target.container_id, { [meta.key]: 0 });
-                                                        return;
-                                                    }
-                                                    const val = Number(input);
-                                                    if (!isNaN(val)) {
-                                                        onTargetChange(target.container_id, { [meta.key]: val });
-                                                    }
-                                                }}
-                                                className={cn(
-                                                    "audit-fix-number-input h-9 w-full rounded-md border bg-black/30 px-3 text-right text-[13px] font-semibold outline-none transition-colors focus:bg-black/45",
-                                                    value < meta.min
-                                                        ? "border-red-500/60 text-red-400 focus:border-red-500/80"
-                                                        : "border-white/10 text-white/85 focus:border-[#2496ED]/60"
-                                                )}
-                                            />
-                                            {value < meta.min && (
-                                                <span className="audit-fix-target-value-error text-[9px] text-red-400/80">
-                                                    Min {meta.min} {meta.unit}
-                                                </span>
-                                            )}
-                                        </label>
-                                    )}
                                 </div>
                             );
                         })}
@@ -682,12 +630,12 @@ function ConfirmStep({
             </div>
 
             {/* Actions */}
-            <div className="flex justify-end pt-1">
+            <div className="pt-1">
                 <button
                     onClick={onConfirm}
                     disabled={applyDisabled}
                     className={cn(
-                        "audit-on-primary inline-flex h-9 w-full max-w-[156px] items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold text-white transition-all active:scale-[0.98]",
+                        "audit-on-primary inline-flex h-10 w-full items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold text-white transition-all active:scale-[0.98]",
                         applyDisabled
                             ? "bg-white/10 cursor-not-allowed opacity-50"
                             : "bg-[#2496ED] hover:bg-[#1e80cc]"
@@ -947,17 +895,17 @@ function ResultStep({
             )}
 
             {/* Actions */}
-            <div className="grid grid-cols-2 gap-2 pt-1 sm:flex sm:justify-end">
+            <div className="flex items-center gap-3 pt-1">
                 <button
                     onClick={onClose}
-                    className="h-9 rounded-md border border-white/12 bg-white/[0.03] px-4 text-sm font-medium text-white/60 transition-all hover:bg-white/[0.07] hover:text-white/90 sm:w-28"
+                    className="h-10 flex-1 rounded-md border border-white/12 bg-white/[0.03] px-4 text-sm font-medium text-white/60 transition-all hover:bg-white/[0.07] hover:text-white/90"
                 >
                     Close
                 </button>
                 {isApplied && (
                     <button
                         onClick={onRerunAudit}
-                        className="audit-on-primary inline-flex h-9 items-center justify-center gap-2 rounded-md bg-[#2496ED] px-4 text-sm font-semibold text-white transition-all hover:bg-[#1e80cc] active:scale-[0.98] sm:w-36"
+                        className="audit-on-primary inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md bg-[#2496ED] px-4 text-sm font-semibold text-white transition-all hover:bg-[#1e80cc] active:scale-[0.98]"
                     >
                         <RefreshCw className="h-3.5 w-3.5" />
                         Re-run Audit

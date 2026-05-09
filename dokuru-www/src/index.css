@@ -541,6 +541,13 @@
     justify-self: start;
   }
 
+  .audit-fix-target-values-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.5rem;
+    width: 100%;
+  }
+
   .audit-fix-number-input {
     appearance: textfield;
     -moz-appearance: textfield;
@@ -659,6 +666,17 @@
         "value value value";
       grid-template-columns: minmax(0, 1fr) minmax(120px, 150px) minmax(252px, 290px);
     }
+  }
+
+  @container (min-width: 700px) {
+    .audit-fix-target-row.audit-fix-target-row-has-value .audit-fix-target-values-grid {
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    }
+  }
+
+  .audit-fix-target-values-grid .audit-fix-target-value-error {
+    position: static;
+    justify-self: end;
   }
 
   @container (min-width: 900px) {

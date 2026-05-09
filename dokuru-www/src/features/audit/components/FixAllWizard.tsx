@@ -3,13 +3,14 @@ import {
 } from "@/components/ui/sheet";
 import {
     AlertTriangle, CheckCircle2, Loader2, XCircle,
-    RefreshCw, Check, ShieldAlert, X, FileCode2, Server,
+    RefreshCw, Check, ShieldAlert, X, FileCode2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isContainerRecreateRule } from "@/features/audit/hooks/useFix";
 import type { CgroupRuleId, CgroupTargetConfig, FixAllStep, RuleFixStatus } from "@/features/audit/hooks/useFixAll";
 import { ResizableSheetContent } from "@/features/audit/components/ResizableSheetContent";
 import { ProgressEventsPanel } from "@/features/audit/components/ProgressEventsPanel";
+import { CGROUP_RESOURCE_MINIMUMS, CgroupTargetEditor, type CgroupResourceField } from "@/features/audit/components/CgroupTargetControls";
 import type { FixProgress } from "@/lib/api/agent-direct";
 import { fixJobKey, useAuditStore } from "@/stores/use-audit-store";
 
@@ -22,15 +23,15 @@ const STEPS: { key: FixAllStep; label: string }[] = [
     { key: "result",   label: "Result"   },
 ];
 
-function StepIndicator({ current, showConfigure }: { current: FixAllStep; showConfigure: boolean }) {
+function StepIndicator({ current, showConfigure, complete = false }: { current: FixAllStep; showConfigure: boolean; complete?: boolean }) {
     const steps = showConfigure ? STEPS : STEPS.filter((step) => step.key !== "configure");
     const idx = Math.max(steps.findIndex(s => s.key === current), 0);
 
     return (
         <div className="flex w-full items-start" aria-label="Fix progress">
             {steps.map((s, i) => {
-                const done = i < idx;
-                const active = i === idx;
+                const done = i < idx || (complete && i === idx);
+                const active = i === idx && !done;
 
                 return (
                     <div key={s.key} className={cn("flex items-start", i < steps.length - 1 ? "flex-1" : "flex-none")}>
@@ -280,12 +281,6 @@ function ruleValueLabel(ruleId: CgroupRuleId) {
     return "PIDs";
 }
 
-const RESOURCE_MINIMUMS = {
-    memoryMb: 64,
-    cpuShares: 128,
-    pidsLimit: 50,
-} as const;
-
 function ConfigureResourcesStep({
     cgroupTargets,
     cgroupLoading,
@@ -313,9 +308,9 @@ function ConfigureResourcesStep({
     const showPids = selectedCgroupRuleIds.includes("5.29");
     const showAllResources = selectedCgroupRuleIds.includes("5.25");
     const hasInvalidValues = cgroupTargets.some((target) => (
-        ((showMemory || showAllResources) && target.ruleIds.some((ruleId) => ruleId === "5.11" || ruleId === "5.25") && (!Number.isFinite(target.memoryMb) || target.memoryMb < RESOURCE_MINIMUMS.memoryMb))
-        || ((showCpu || showAllResources) && target.ruleIds.some((ruleId) => ruleId === "5.12" || ruleId === "5.25") && (!Number.isFinite(target.cpuShares) || target.cpuShares < RESOURCE_MINIMUMS.cpuShares))
-        || ((showPids || showAllResources) && target.ruleIds.some((ruleId) => ruleId === "5.29" || ruleId === "5.25") && (!Number.isFinite(target.pidsLimit) || target.pidsLimit < RESOURCE_MINIMUMS.pidsLimit))
+        ((showMemory || showAllResources) && target.ruleIds.some((ruleId) => ruleId === "5.11" || ruleId === "5.25") && (!Number.isFinite(target.memoryMb) || target.memoryMb < CGROUP_RESOURCE_MINIMUMS.memoryMb))
+        || ((showCpu || showAllResources) && target.ruleIds.some((ruleId) => ruleId === "5.12" || ruleId === "5.25") && (!Number.isFinite(target.cpuShares) || target.cpuShares < CGROUP_RESOURCE_MINIMUMS.cpuShares))
+        || ((showPids || showAllResources) && target.ruleIds.some((ruleId) => ruleId === "5.29" || ruleId === "5.25") && (!Number.isFinite(target.pidsLimit) || target.pidsLimit < CGROUP_RESOURCE_MINIMUMS.pidsLimit))
     ));
 
     return (
@@ -349,95 +344,65 @@ function ConfigureResourcesStep({
             ) : (
                 <div className="space-y-4">
                     {Object.entries(grouped).map(([group, targets]) => (
-                        <div key={group} className="overflow-hidden rounded-xl border border-white/8 bg-white/[0.02]">
+                        <div key={group} className="audit-fix-target-list overflow-hidden rounded-xl border border-white/8 bg-white/[0.02]">
                             <div className="border-b border-white/6 bg-white/[0.025] px-3 py-2">
                                 <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/35">{group}</p>
                             </div>
                             <div className="divide-y divide-white/6">
                                 {targets.map((target) => {
                                     const canCompose = Boolean(target.composeProject && target.composeService);
-                                    return (
-                                        <div key={target.key} className="space-y-3 px-3 py-3">
-                                            <div className="flex min-w-0 items-start justify-between gap-3">
-                                                <div className="flex min-w-0 items-center gap-2.5">
-                                                    {canCompose ? <FileCode2 className="h-4 w-4 shrink-0 text-[#2496ED]" /> : <Server className="h-4 w-4 shrink-0 text-white/35" />}
-                                                    <div className="min-w-0">
-                                                        <p className="truncate text-sm font-semibold text-white/75">
-                                                            {target.composeService ?? target.containerName}
-                                                        </p>
-                                                        <p className="truncate font-mono text-[10px] text-white/30">
-                                                            {canCompose ? target.containerName : target.image || "standalone"}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <div className="audit-fix-mode-control grid h-9 w-full shrink-0 grid-cols-3 overflow-hidden rounded-md border">
-                                                    <button
-                                                        type="button"
-                                                        disabled={!canCompose}
-                                                        onClick={() => onUpdateTarget(target.key, { strategy: "dokuru_override" })}
-                                                        className={cn(
-                                                            "audit-fix-mode-button h-full px-2 text-[10px] font-semibold transition-colors",
-                                                            target.strategy === "dokuru_override" && canCompose ? "audit-fix-mode-button-active" : "audit-fix-mode-button-idle",
-                                                            !canCompose && "cursor-not-allowed opacity-35"
-                                                        )}
-                                                    >
-                                                        Override
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        disabled={!canCompose}
-                                                        onClick={() => onUpdateTarget(target.key, { strategy: "compose_update" })}
-                                                        className={cn(
-                                                            "audit-fix-mode-button h-full px-2 text-[10px] font-semibold transition-colors",
-                                                            target.strategy === "compose_update" && canCompose ? "audit-fix-mode-button-active" : "audit-fix-mode-button-idle",
-                                                            !canCompose && "cursor-not-allowed opacity-35"
-                                                        )}
-                                                    >
-                                                        Patch
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => onUpdateTarget(target.key, { strategy: "docker_update" })}
-                                                        className={cn(
-                                                            "audit-fix-mode-button h-full px-2 text-[10px] font-semibold transition-colors",
-                                                            target.strategy === "docker_update" ? "audit-fix-mode-button-active" : "audit-fix-mode-button-idle"
-                                                        )}
-                                                    >
-                                                        Live
-                                                    </button>
-                                                </div>
-                                            </div>
+                                    const hasMemory = target.ruleIds.some((ruleId) => ruleId === "5.11" || ruleId === "5.25");
+                                    const hasCpu = target.ruleIds.some((ruleId) => ruleId === "5.12" || ruleId === "5.25");
+                                    const hasPids = target.ruleIds.some((ruleId) => ruleId === "5.29" || ruleId === "5.25");
+                                    const resources: CgroupResourceField[] = [];
 
-                                            <div className="grid gap-2 sm:grid-cols-3">
-                                                {(showMemory || showAllResources) && (
-                                                    <ResourceInput
-                                                        label="Memory MB"
-                                                        value={target.memoryMb}
-                                                        enabled={target.ruleIds.some((ruleId) => ruleId === "5.11" || ruleId === "5.25")}
-                                                        min={RESOURCE_MINIMUMS.memoryMb}
-                                                        onChange={(value) => onUpdateTarget(target.key, { memoryMb: value })}
-                                                    />
-                                                )}
-                                                {(showCpu || showAllResources) && (
-                                                    <ResourceInput
-                                                        label="CPU shares"
-                                                        value={target.cpuShares}
-                                                        enabled={target.ruleIds.some((ruleId) => ruleId === "5.12" || ruleId === "5.25")}
-                                                        min={RESOURCE_MINIMUMS.cpuShares}
-                                                        onChange={(value) => onUpdateTarget(target.key, { cpuShares: value })}
-                                                    />
-                                                )}
-                                                {(showPids || showAllResources) && (
-                                                    <ResourceInput
-                                                        label="PIDs"
-                                                        value={target.pidsLimit}
-                                                        enabled={target.ruleIds.some((ruleId) => ruleId === "5.29" || ruleId === "5.25")}
-                                                        min={RESOURCE_MINIMUMS.pidsLimit}
-                                                        onChange={(value) => onUpdateTarget(target.key, { pidsLimit: value })}
-                                                    />
-                                                )}
-                                            </div>
-                                        </div>
+                                    if (showMemory || showAllResources) {
+                                        resources.push({
+                                            key: "memoryMb",
+                                            label: "Memory",
+                                            unit: "MB",
+                                            value: target.memoryMb,
+                                            min: CGROUP_RESOURCE_MINIMUMS.memoryMb,
+                                            enabled: hasMemory,
+                                            onChange: (value) => onUpdateTarget(target.key, { memoryMb: value }),
+                                        });
+                                    }
+
+                                    if (showCpu || showAllResources) {
+                                        resources.push({
+                                            key: "cpuShares",
+                                            label: "CPU",
+                                            unit: "shares",
+                                            value: target.cpuShares,
+                                            min: CGROUP_RESOURCE_MINIMUMS.cpuShares,
+                                            enabled: hasCpu,
+                                            onChange: (value) => onUpdateTarget(target.key, { cpuShares: value }),
+                                        });
+                                    }
+
+                                    if (showPids || showAllResources) {
+                                        resources.push({
+                                            key: "pidsLimit",
+                                            label: "Limit",
+                                            unit: "PIDs",
+                                            value: target.pidsLimit,
+                                            min: CGROUP_RESOURCE_MINIMUMS.pidsLimit,
+                                            enabled: hasPids,
+                                            onChange: (value) => onUpdateTarget(target.key, { pidsLimit: value }),
+                                        });
+                                    }
+
+                                    return (
+                                        <CgroupTargetEditor
+                                            key={target.key}
+                                            containerName={target.composeService ?? target.containerName}
+                                            canCompose={canCompose}
+                                            sourceLabel={canCompose ? "compose" : "runtime"}
+                                            sourceDetail={canCompose ? target.containerName : target.image || "standalone"}
+                                            strategy={target.strategy}
+                                            onStrategyChange={(strategy) => onUpdateTarget(target.key, { strategy })}
+                                            resources={resources}
+                                        />
                                     );
                                 })}
                             </div>
@@ -462,52 +427,6 @@ function ConfigureResourcesStep({
                 </button>
             </div>
         </div>
-    );
-}
-
-function ResourceInput({
-    label,
-    value,
-    enabled,
-    min,
-    onChange,
-}: {
-    label: string;
-    value: number;
-    enabled: boolean;
-    min: number;
-    onChange: (value: number) => void;
-}) {
-    const invalid = enabled && (!Number.isFinite(value) || value < min);
-    return (
-        <label className={cn(
-            "block rounded-lg border px-2.5 py-2 transition-colors",
-            enabled ? "border-white/10 bg-black/25" : "border-white/5 bg-white/[0.015] opacity-45",
-            invalid && "border-red-500/60 bg-red-500/10",
-        )}>
-            <span className="mb-1 block font-mono text-[9px] uppercase tracking-[0.12em] text-white/35">{label}</span>
-            <input
-                type="number"
-                min={min}
-                inputMode="numeric"
-                disabled={!enabled}
-                value={value > 0 ? value : ""}
-                onChange={(event) => {
-                    const next = event.target.value;
-                    const parsed = Number(next);
-                    onChange(next === "" || !Number.isFinite(parsed) ? 0 : parsed);
-                }}
-                className={cn(
-                    "audit-fix-number-input h-8 w-full rounded border bg-black/35 px-2 text-right font-mono text-xs font-semibold outline-none transition-colors disabled:cursor-not-allowed disabled:text-white/25",
-                    invalid ? "border-red-500/70 text-red-400 focus:border-red-500" : "border-white/8 text-white/80 focus:border-[#2496ED]/60",
-                )}
-            />
-            {invalid && (
-                <span className="mt-1 block text-right font-mono text-[9px] text-red-400/85">
-                    Minimum {min}
-                </span>
-            )}
-        </label>
     );
 }
 
@@ -797,6 +716,10 @@ export function FixAllWizard({
             progressEvents: mergeProgressEvents(status.progressEvents, job.progressEvents),
         };
     });
+    const selectedStatuses = liveRuleStatuses.filter((status) => status.selected);
+    const resultComplete = step === "result"
+        && selectedStatuses.length > 0
+        && selectedStatuses.every((status) => status.outcome?.status === "Applied");
 
     return (
         <Sheet open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
@@ -832,7 +755,7 @@ export function FixAllWizard({
                             </p>
                         </div>
                     </div>
-                    <StepIndicator current={step} showConfigure={showConfigure} />
+                    <StepIndicator current={step} showConfigure={showConfigure} complete={resultComplete} />
                 </SheetHeader>
 
                 {/* Body */}
