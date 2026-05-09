@@ -196,14 +196,6 @@ pub fn supports_cgroup_resource_fix(rule_id: &str) -> bool {
     matches!(rule_id, "5.11" | "5.12" | "5.25" | "5.29" | "cgroup_all")
 }
 
-fn cgroup_effective_rule_id(rule_id: &str) -> &str {
-    if rule_id == "5.25" {
-        "cgroup_all"
-    } else {
-        rule_id
-    }
-}
-
 pub fn supports_image_config_fix(rule_id: &str) -> bool {
     matches!(rule_id, "4.1" | "4.6")
 }
@@ -3583,7 +3575,7 @@ async fn default_target_for_rule(
     rule_id: &str,
     container: &ContainerSummary,
 ) -> Option<FixTarget> {
-    let effective_rule_id = cgroup_effective_rule_id(rule_id);
+    let effective_rule_id = rule_id;
     let id = container.id.as_deref()?;
     let inspect = docker.inspect_container(id, None).await.ok()?;
     let host_config = inspect.host_config.as_ref()?;
@@ -3591,10 +3583,14 @@ async fn default_target_for_rule(
     let memory = host_config.memory.unwrap_or(0);
     let cpu_shares = host_config.cpu_shares.unwrap_or(0);
     let pids_limit = host_config.pids_limit.unwrap_or(0);
+    let cgroup_parent = host_config.cgroup_parent.as_deref().unwrap_or("");
+    let has_any_cgroup_limit =
+        memory > 0 || cpu_shares > 0 || pids_limit > 0 || !cgroup_parent.is_empty();
 
     let needs_update = match effective_rule_id {
         "5.11" => memory == 0,
         "5.12" => cpu_shares == 0,
+        "5.25" => !has_any_cgroup_limit,
         "5.29" => pids_limit <= 0,
         "cgroup_all" => memory == 0 || cpu_shares == 0 || pids_limit <= 0,
         _ => false,
@@ -3611,7 +3607,7 @@ async fn default_target_for_rule(
 
     Some(FixTarget {
         container_id: id.to_string(),
-        memory: (matches!(effective_rule_id, "5.11" | "cgroup_all") && memory == 0)
+        memory: (matches!(effective_rule_id, "5.11" | "5.25" | "cgroup_all") && memory == 0)
             .then_some(DEFAULT_MEMORY_BYTES),
         cpu_shares: (matches!(effective_rule_id, "5.12" | "cgroup_all") && cpu_shares == 0)
             .then_some(DEFAULT_CPU_SHARES),
@@ -5038,7 +5034,7 @@ fn emit_compose_up_progress(
 
 fn cgroup_update_detail(rule_id: &str, target: &FixTarget) -> String {
     match rule_id {
-        "5.11" => format!(
+        "5.11" | "5.25" => format!(
             "memory={} bytes",
             target.memory.unwrap_or(DEFAULT_MEMORY_BYTES)
         ),
@@ -5050,7 +5046,7 @@ fn cgroup_update_detail(rule_id: &str, target: &FixTarget) -> String {
             "pids_limit={}",
             target.pids_limit.unwrap_or(DEFAULT_PIDS_LIMIT)
         ),
-        "5.25" | "cgroup_all" => format!(
+        "cgroup_all" => format!(
             "memory={} bytes, cpu_shares={}, pids_limit={}",
             target.memory.unwrap_or(DEFAULT_MEMORY_BYTES),
             target.cpu_shares.unwrap_or(DEFAULT_CPU_SHARES),
@@ -5062,7 +5058,7 @@ fn cgroup_update_detail(rule_id: &str, target: &FixTarget) -> String {
 
 fn docker_update_command(rule_id: &str, target: &FixTarget, container: &str) -> String {
     match rule_id {
-        "5.11" => format!(
+        "5.11" | "5.25" => format!(
             "docker update --memory={} --memory-swap=-1 {container}",
             compose_memory_value(target.memory.unwrap_or(DEFAULT_MEMORY_BYTES))
         ),
@@ -5074,7 +5070,7 @@ fn docker_update_command(rule_id: &str, target: &FixTarget, container: &str) -> 
             "docker update --pids-limit={} {container}",
             target.pids_limit.unwrap_or(DEFAULT_PIDS_LIMIT)
         ),
-        "5.25" | "cgroup_all" => format!(
+        "cgroup_all" => format!(
             "docker update --memory={} --memory-swap=-1 --cpu-shares={} --pids-limit={} {container}",
             compose_memory_value(target.memory.unwrap_or(DEFAULT_MEMORY_BYTES)),
             target.cpu_shares.unwrap_or(DEFAULT_CPU_SHARES),
@@ -5114,7 +5110,7 @@ fn update_options(
         options.memory_swap = Some(-1);
     }
 
-    if matches!(rule_id, "5.12" | "5.25" | "cgroup_all") {
+    if matches!(rule_id, "5.12" | "cgroup_all") {
         let cpu_shares = target.cpu_shares.unwrap_or(DEFAULT_CPU_SHARES);
         if cpu_shares <= 0 {
             return Err(eyre::eyre!("cpu_shares must be greater than zero"));
@@ -5124,7 +5120,7 @@ fn update_options(
         options.cpu_shares = Some(cpu_shares);
     }
 
-    if matches!(rule_id, "5.29" | "5.25" | "cgroup_all") {
+    if matches!(rule_id, "5.29" | "cgroup_all") {
         let pids_limit = target.pids_limit.unwrap_or(DEFAULT_PIDS_LIMIT);
         if pids_limit <= 0 {
             return Err(eyre::eyre!("pids_limit must be greater than zero"));
@@ -5167,14 +5163,14 @@ fn verify_cgroup_host_config(
         }
     }
 
-    if matches!(rule_id, "5.12" | "5.25" | "cgroup_all") {
+    if matches!(rule_id, "5.12" | "cgroup_all") {
         let expected = target.cpu_shares.unwrap_or(DEFAULT_CPU_SHARES);
         if host_config.cpu_shares.unwrap_or(0) != expected {
             return Err(eyre::eyre!("CPU shares did not update to {expected}"));
         }
     }
 
-    if matches!(rule_id, "5.29" | "5.25" | "cgroup_all") {
+    if matches!(rule_id, "5.29" | "cgroup_all") {
         let expected = target.pids_limit.unwrap_or(DEFAULT_PIDS_LIMIT);
         if host_config.pids_limit.unwrap_or(0) != expected {
             return Err(eyre::eyre!("PIDs limit did not update to {expected}"));
@@ -6909,7 +6905,7 @@ fn apply_dokuru_override_service_lines(
             set_service_value_text(lines, block, "userns_mode", "!reset null")
                 | set_service_value_text(lines, block, "userns", "!reset null")
         }
-        "5.11" => set_service_value_text(
+        "5.11" | "5.25" => set_service_value_text(
             lines,
             block,
             "mem_limit",
@@ -6937,7 +6933,7 @@ fn apply_dokuru_override_service_lines(
                 .unwrap_or(DEFAULT_PIDS_LIMIT)
                 .to_string(),
         ),
-        "5.25" | "cgroup_all" => {
+        "cgroup_all" => {
             let target =
                 target.ok_or_else(|| eyre::eyre!("cgroup override needs target values"))?;
             set_cgroup_all_service_values(lines, block, target)
@@ -7030,7 +7026,7 @@ fn update_compose_service_lines(
         "5.17" => remove_service_keys_text(lines, block, &["ipc"]),
         "5.21" => remove_service_keys_text(lines, block, &["uts"]),
         "5.31" => remove_service_keys_text(lines, block, &["userns_mode", "userns"]),
-        "5.11" => set_service_value_text(
+        "5.11" | "5.25" => set_service_value_text(
             lines,
             block,
             "mem_limit",
@@ -7058,7 +7054,7 @@ fn update_compose_service_lines(
                 .unwrap_or(DEFAULT_PIDS_LIMIT)
                 .to_string(),
         ),
-        "5.25" | "cgroup_all" => {
+        "cgroup_all" => {
             let target =
                 target.ok_or_else(|| eyre::eyre!("cgroup compose update needs target values"))?;
             set_cgroup_all_service_values(lines, block, target)
@@ -8936,6 +8932,7 @@ services:
         let cases = [
             ("5.11", "mem_limit", "512m"),
             ("5.12", "cpu_shares", "1024"),
+            ("5.25", "mem_limit", "512m"),
             ("5.29", "pids_limit", "200"),
         ];
         let target = FixTarget {
@@ -9291,7 +9288,7 @@ services:
             user: None,
         };
 
-        let command = docker_update_command("5.25", &target, "web-1");
+        let command = docker_update_command("cgroup_all", &target, "web-1");
 
         assert_eq!(
             command,

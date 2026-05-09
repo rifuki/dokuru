@@ -123,8 +123,8 @@ function cgroupTargetsForRule(
             };
 
             if (ruleId === "5.11" || ruleId === "5.25") payload.memory = Math.max(MIN_CGROUP_VALUES.memoryMb, target.memoryMb) * 1024 * 1024;
-            if (ruleId === "5.12" || ruleId === "5.25") payload.cpu_shares = Math.max(MIN_CGROUP_VALUES.cpuShares, target.cpuShares);
-            if (ruleId === "5.29" || ruleId === "5.25") payload.pids_limit = Math.max(MIN_CGROUP_VALUES.pidsLimit, target.pidsLimit);
+            if (ruleId === "5.12") payload.cpu_shares = Math.max(MIN_CGROUP_VALUES.cpuShares, target.cpuShares);
+            if (ruleId === "5.29") payload.pids_limit = Math.max(MIN_CGROUP_VALUES.pidsLimit, target.pidsLimit);
             return [payload];
         });
 }
@@ -134,10 +134,10 @@ function invalidCgroupTarget(ruleIds: CgroupRuleId[], targets: CgroupTargetConfi
         if ((ruleIds.includes("5.11") || ruleIds.includes("5.25")) && target.ruleIds.some((ruleId) => ruleId === "5.11" || ruleId === "5.25")) {
             if (!Number.isFinite(target.memoryMb) || target.memoryMb < MIN_CGROUP_VALUES.memoryMb) return "memory";
         }
-        if ((ruleIds.includes("5.12") || ruleIds.includes("5.25")) && target.ruleIds.some((ruleId) => ruleId === "5.12" || ruleId === "5.25")) {
+        if (ruleIds.includes("5.12") && target.ruleIds.some((ruleId) => ruleId === "5.12")) {
             if (!Number.isFinite(target.cpuShares) || target.cpuShares < MIN_CGROUP_VALUES.cpuShares) return "CPU shares";
         }
-        if ((ruleIds.includes("5.29") || ruleIds.includes("5.25")) && target.ruleIds.some((ruleId) => ruleId === "5.29" || ruleId === "5.25")) {
+        if (ruleIds.includes("5.29") && target.ruleIds.some((ruleId) => ruleId === "5.29")) {
             if (!Number.isFinite(target.pidsLimit) || target.pidsLimit < MIN_CGROUP_VALUES.pidsLimit) return "PIDs";
         }
     }

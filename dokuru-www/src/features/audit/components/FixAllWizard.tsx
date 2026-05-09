@@ -387,7 +387,7 @@ function ConfirmStep({
 // ── Configure resources step ──────────────────────────────────────────────────
 
 function ruleValueLabel(ruleId: CgroupRuleId) {
-    if (ruleId === "5.25") return "Resource limits";
+    if (ruleId === "5.25") return "Cgroup usage";
     if (ruleId === "5.11") return "Memory";
     if (ruleId === "5.12") return "CPU shares";
     return "PIDs";
@@ -415,14 +415,13 @@ function ConfigureResourcesStep({
         (acc[key] ??= []).push(target);
         return acc;
     }, {});
-    const showMemory = selectedCgroupRuleIds.includes("5.11");
+    const showMemory = selectedCgroupRuleIds.includes("5.11") || selectedCgroupRuleIds.includes("5.25");
     const showCpu = selectedCgroupRuleIds.includes("5.12");
     const showPids = selectedCgroupRuleIds.includes("5.29");
-    const showAllResources = selectedCgroupRuleIds.includes("5.25");
     const hasInvalidValues = cgroupTargets.some((target) => (
-        ((showMemory || showAllResources) && target.ruleIds.some((ruleId) => ruleId === "5.11" || ruleId === "5.25") && (!Number.isFinite(target.memoryMb) || target.memoryMb < CGROUP_RESOURCE_MINIMUMS.memoryMb))
-        || ((showCpu || showAllResources) && target.ruleIds.some((ruleId) => ruleId === "5.12" || ruleId === "5.25") && (!Number.isFinite(target.cpuShares) || target.cpuShares < CGROUP_RESOURCE_MINIMUMS.cpuShares))
-        || ((showPids || showAllResources) && target.ruleIds.some((ruleId) => ruleId === "5.29" || ruleId === "5.25") && (!Number.isFinite(target.pidsLimit) || target.pidsLimit < CGROUP_RESOURCE_MINIMUMS.pidsLimit))
+        (showMemory && target.ruleIds.some((ruleId) => ruleId === "5.11" || ruleId === "5.25") && (!Number.isFinite(target.memoryMb) || target.memoryMb < CGROUP_RESOURCE_MINIMUMS.memoryMb))
+        || (showCpu && target.ruleIds.some((ruleId) => ruleId === "5.12") && (!Number.isFinite(target.cpuShares) || target.cpuShares < CGROUP_RESOURCE_MINIMUMS.cpuShares))
+        || (showPids && target.ruleIds.some((ruleId) => ruleId === "5.29") && (!Number.isFinite(target.pidsLimit) || target.pidsLimit < CGROUP_RESOURCE_MINIMUMS.pidsLimit))
     ));
 
     return (
@@ -464,11 +463,11 @@ function ConfigureResourcesStep({
                                 {targets.map((target) => {
                                     const canCompose = Boolean(target.composeProject && target.composeService);
                                     const hasMemory = target.ruleIds.some((ruleId) => ruleId === "5.11" || ruleId === "5.25");
-                                    const hasCpu = target.ruleIds.some((ruleId) => ruleId === "5.12" || ruleId === "5.25");
-                                    const hasPids = target.ruleIds.some((ruleId) => ruleId === "5.29" || ruleId === "5.25");
+                                    const hasCpu = target.ruleIds.some((ruleId) => ruleId === "5.12");
+                                    const hasPids = target.ruleIds.some((ruleId) => ruleId === "5.29");
                                     const resources: CgroupResourceField[] = [];
 
-                                    if (showMemory || showAllResources) {
+                                    if (showMemory) {
                                         resources.push({
                                             key: "memoryMb",
                                             label: "Memory",
@@ -480,7 +479,7 @@ function ConfigureResourcesStep({
                                         });
                                     }
 
-                                    if (showCpu || showAllResources) {
+                                    if (showCpu) {
                                         resources.push({
                                             key: "cpuShares",
                                             label: "CPU",
@@ -492,7 +491,7 @@ function ConfigureResourcesStep({
                                         });
                                     }
 
-                                    if (showPids || showAllResources) {
+                                    if (showPids) {
                                         resources.push({
                                             key: "pidsLimit",
                                             label: "Limit",

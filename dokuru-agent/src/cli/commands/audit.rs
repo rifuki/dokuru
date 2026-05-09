@@ -493,7 +493,7 @@ fn cgroup_cpu_shares(
     suggestion: Option<i64>,
     overrides: &TargetOverrides,
 ) -> Option<i64> {
-    if matches!(rule_id, "5.12" | "5.25" | "cgroup_all") {
+    if matches!(rule_id, "5.12" | "cgroup_all") {
         overrides.cpu_shares.or(suggestion)
     } else {
         overrides.cpu_shares
@@ -505,7 +505,7 @@ fn cgroup_pids_limit(
     suggestion: Option<i64>,
     overrides: &TargetOverrides,
 ) -> Option<i64> {
-    if matches!(rule_id, "5.29" | "5.25" | "cgroup_all") {
+    if matches!(rule_id, "5.29" | "cgroup_all") {
         overrides.pids_limit.or(suggestion)
     } else {
         overrides.pids_limit
