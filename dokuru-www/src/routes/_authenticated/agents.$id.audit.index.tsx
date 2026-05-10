@@ -809,15 +809,48 @@ function hasAuditLineDetails(line: AuditProgressLine) {
     return Boolean(line.command || line.stdout !== undefined || line.stderr || typeof line.exitCode === "number");
 }
 
-function AuditLogBlock({ label, value }: { label: string; value?: string | number }) {
+function firstAuditOutputLines(value?: string, maxLines = 2) {
+    const lines = value?.trim().split(/\r?\n/).filter(Boolean) ?? [];
+    if (lines.length === 0) return null;
+    const preview = lines.slice(0, maxLines).join("\n");
+    return lines.length > maxLines ? `${preview}\n... ${lines.length - maxLines} more line(s)` : preview;
+}
+
+function auditLineEvidencePreview(line: AuditProgressLine) {
+    return firstAuditOutputLines(line.stdout, 2) ?? firstAuditOutputLines(line.stderr, 1);
+}
+
+function auditLineEvidenceKind(line: AuditProgressLine) {
+    if (line.stdout?.trim()) return "stdout";
+    if (line.stderr?.trim()) return "stderr";
+    if (line.command) return "command";
+    return null;
+}
+
+function shouldShowAuditMessage(line: AuditProgressLine, evidencePreview: string | null) {
+    const message = line.message.trim();
+    if (!message) return false;
+    if (message === line.title.trim()) return false;
+    if (evidencePreview && evidencePreview.includes(message)) return false;
+    return true;
+}
+
+function AuditLogBlock({ label, value, tone = "default" }: { label: string; value?: string | number; tone?: "default" | "muted" | "danger" }) {
     if (value === undefined || value === "") return null;
 
     return (
-        <div className="space-y-1.5">
-            <div className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground/55">
+        <div className="grid gap-1.5 md:grid-cols-[76px_minmax(0,1fr)] md:items-start">
+            <div className="pt-1.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground/55">
                 {label}
             </div>
-            <pre className="max-w-full overflow-x-auto rounded-lg border border-border/70 bg-background/70 px-3 py-2 text-[11px] leading-relaxed text-zinc-700 dark:bg-black/35 dark:text-zinc-300">
+            <pre className={cn(
+                "min-w-0 whitespace-pre-wrap break-words rounded border px-3 py-2 text-[11px] leading-relaxed [overflow-wrap:anywhere]",
+                tone === "danger"
+                    ? "border-rose-500/20 bg-rose-500/5 text-rose-700 dark:text-rose-300"
+                    : tone === "muted"
+                    ? "border-border/50 bg-muted/20 text-muted-foreground"
+                    : "border-border/60 bg-background/75 text-zinc-700 dark:bg-black/25 dark:text-zinc-300",
+            )}>
                 <code>{String(value)}</code>
             </pre>
         </div>
@@ -827,22 +860,30 @@ function AuditLogBlock({ label, value }: { label: string; value?: string | numbe
 function AuditLogLine({ line }: { line: AuditProgressLine }) {
     const [expanded, setExpanded] = useState(false);
     const hasDetails = hasAuditLineDetails(line);
+    const evidencePreview = auditLineEvidencePreview(line);
+    const evidenceKind = auditLineEvidenceKind(line);
+    const showMessage = shouldShowAuditMessage(line, evidencePreview);
 
     return (
-        <div className="space-y-1 border-b border-border/50 py-1.5 last:border-b-0">
-            <div className="flex items-start gap-2">
-                <span className="shrink-0 text-muted-foreground/40">[{line.index.toString().padStart(2, "0")}/{line.total}]</span>
+        <div className="border-b border-border/45 py-2.5 last:border-b-0">
+            <div className="flex items-start gap-2.5">
+                <span className="w-[52px] shrink-0 text-right text-muted-foreground/40">[{line.index.toString().padStart(2, "0")}/{line.total}]</span>
                 <span className={cn(
-                    "shrink-0 font-bold",
+                    "w-[42px] shrink-0 font-bold",
                     line.status === "Pass" ? "text-emerald-600 dark:text-emerald-400" : line.status === "Fail" ? "text-rose-600 dark:text-rose-400" : "text-amber-600 dark:text-amber-400",
                 )}>{line.status.toUpperCase()}</span>
-                <span className="shrink-0 text-[#2496ED]">{line.ruleId}</span>
+                <span className="w-[36px] shrink-0 text-[#2496ED]">{line.ruleId}</span>
                 <span className="min-w-0 flex-1 truncate text-zinc-700 dark:text-zinc-300">{line.title}</span>
+                {evidenceKind && (
+                    <span className="hidden w-[54px] shrink-0 justify-center rounded border border-border/60 bg-muted/30 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground/65 sm:inline-flex">
+                        {evidenceKind}
+                    </span>
+                )}
                 {hasDetails && (
                     <button
                         type="button"
                         onClick={() => setExpanded(open => !open)}
-                        className="-mr-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                        className="-mr-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
                         aria-label={expanded ? "Hide audit command details" : "Show audit command details"}
                         aria-expanded={expanded}
                     >
@@ -850,24 +891,48 @@ function AuditLogLine({ line }: { line: AuditProgressLine }) {
                     </button>
                 )}
             </div>
-            {line.command && (
-                <button
-                    type="button"
-                    onClick={() => hasDetails && setExpanded(open => !open)}
-                    disabled={!hasDetails}
-                    title={line.command}
-                    className="block w-full truncate text-left text-zinc-500 disabled:cursor-default dark:text-zinc-500 sm:pl-16"
-                >
-                    $ {line.command}
-                </button>
-            )}
-            <p className="truncate text-zinc-600 dark:text-zinc-400 sm:pl-16">{line.message}</p>
+            <div className="mt-1 space-y-1 sm:pl-[160px]">
+                {showMessage && (
+                    <p className="truncate text-zinc-600 dark:text-zinc-400">{line.message}</p>
+                )}
+                {evidencePreview && !expanded && (
+                    <button
+                        type="button"
+                        onClick={() => setExpanded(true)}
+                        className="grid w-full grid-cols-[44px_minmax(0,1fr)] gap-2 rounded border border-transparent px-0 py-0.5 text-left transition-colors hover:border-border/55 hover:bg-muted/20"
+                    >
+                        <span className="pt-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground/45">
+                            {evidenceKind ?? "out"}
+                        </span>
+                        <span className="line-clamp-2 whitespace-pre-line text-[11px] leading-relaxed text-muted-foreground/80">
+                            {evidencePreview}
+                        </span>
+                    </button>
+                )}
+            </div>
             {expanded && hasDetails && (
-                <div className="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-3 sm:ml-16">
-                    <AuditLogBlock label="Command" value={line.command ? `$ ${line.command}` : undefined} />
-                    <AuditLogBlock label="Stdout" value={line.stdout ?? "(no stdout)"} />
-                    <AuditLogBlock label="Stderr" value={line.stderr} />
-                    <AuditLogBlock label="Exit Code" value={line.exitCode} />
+                <div className="mt-2 border-l border-border/70 pl-3 sm:ml-[160px]">
+                    <div className="overflow-hidden rounded-md border border-border/70 bg-muted/10">
+                        <div className="flex items-center justify-between gap-3 border-b border-border/60 px-3 py-1.5">
+                            <span className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground/60">Audit evidence</span>
+                            {typeof line.exitCode === "number" && (
+                                <span className={cn(
+                                    "rounded border px-1.5 py-0.5 font-mono text-[10px]",
+                                    line.exitCode === 0
+                                        ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-500 dark:text-emerald-300"
+                                        : "border-rose-500/25 bg-rose-500/10 text-rose-500 dark:text-rose-300",
+                                )}>
+                                    exit {line.exitCode}
+                                </span>
+                            )}
+                        </div>
+                        <div className="space-y-2 p-3">
+                            <AuditLogBlock label="Result" value={showMessage ? line.message : undefined} tone="muted" />
+                            <AuditLogBlock label="Command" value={line.command ? `$ ${line.command}` : undefined} />
+                            <AuditLogBlock label="Stdout" value={line.stdout} />
+                            <AuditLogBlock label="Stderr" value={line.stderr} tone="danger" />
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
@@ -1056,7 +1121,7 @@ function AuditRunTerminal({
                     </div>
                 </div>
 
-                <div ref={logRef} onScroll={handleLogScroll} className="audit-terminal-log min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-zinc-50 p-4 font-mono text-[11px] leading-relaxed text-zinc-800 shadow-inner dark:bg-zinc-950 dark:text-zinc-200">
+                <div ref={logRef} onScroll={handleLogScroll} className="audit-terminal-log min-h-0 flex-1 overflow-x-hidden overflow-y-auto rounded-lg border border-border bg-zinc-50 p-4 font-mono text-[11px] leading-relaxed text-zinc-800 shadow-inner dark:bg-zinc-950 dark:text-zinc-200">
                     {lines.length === 0 && !error && !isCancelled && (
                         <p className="text-muted-foreground/50">$ connecting to dokuru-agent audit websocket...</p>
                     )}

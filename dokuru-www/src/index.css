@@ -344,6 +344,10 @@
     height: 0.625rem;
   }
 
+  .audit-terminal-log::-webkit-scrollbar:horizontal {
+    height: 0;
+  }
+
   .audit-terminal-log::-webkit-scrollbar-track {
     background: transparent;
   }
