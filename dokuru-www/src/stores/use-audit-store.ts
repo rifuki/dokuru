@@ -695,7 +695,9 @@ export const useAuditStore = create<AuditState>((set) => ({
             return Promise.reject(new Error("Agent token not found. Edit this agent and paste the token once to sync it across devices."));
         }
 
-        const startedAt = new Date().toISOString();
+        const currentJob = useAuditStore.getState().fixJobs[key];
+        const initialProgressEvents = currentJob?.status === "running" ? currentJob.progressEvents : [];
+        const startedAt = currentJob?.status === "running" ? currentJob.startedAt : new Date().toISOString();
         set((s) => ({
             fixingRules: {
                 ...s.fixingRules,
@@ -711,8 +713,8 @@ export const useAuditStore = create<AuditState>((set) => ({
                     agentId: request.agentId,
                     ruleId: request.ruleId,
                     status: "running",
-                    progressEvents: [],
-                    stepIndex: 0,
+                    progressEvents: initialProgressEvents,
+                    stepIndex: currentJob?.status === "running" ? currentJob.stepIndex : 0,
                     startedAt,
                 },
             },
@@ -724,7 +726,7 @@ export const useAuditStore = create<AuditState>((set) => ({
                 ? agentApi.fixStreamUrl(request.agentId, payload)
                 : agentDirectApi.fixStreamUrl(request.agentUrl, payload, request.token);
             const socket = new WebSocket(url);
-            const streamEvents: FixProgress[] = [];
+            const streamEvents: FixProgress[] = [...initialProgressEvents];
             let settled = false;
             fixSockets.set(key, socket);
 

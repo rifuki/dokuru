@@ -113,7 +113,7 @@ function cgroupTargetsForRule(
 ): FixTarget[] {
     if (!isBulkCgroupRule(ruleId)) return [];
 
-    return targets
+    const configuredTargets = targets
         .filter((target) => target.ruleIds.includes(ruleId))
         .flatMap((target) => {
             const currentTarget = currentTargets?.get(target.key)
@@ -134,6 +134,32 @@ function cgroupTargetsForRule(
             if (ruleId === "5.29") payload.pids_limit = Math.max(MIN_CGROUP_VALUES.pidsLimit, target.pidsLimit);
             return [payload];
         });
+
+    if (!currentTargets) return configuredTargets;
+
+    const configuredContainerIds = new Set(configuredTargets.map((target) => target.container_id));
+    const seenCurrentContainerIds = new Set<string>();
+    const freshTargets = Array.from(currentTargets.values()).flatMap((target) => {
+        if (seenCurrentContainerIds.has(target.container_id) || configuredContainerIds.has(target.container_id)) return [];
+        seenCurrentContainerIds.add(target.container_id);
+
+        const fallback = getSuggestedLimits(target.container_name || target.compose_service || target.image);
+        const payload: FixTarget = {
+            container_id: target.container_id,
+            strategy: cgroupStrategy(target),
+            container_name: target.container_name,
+            image: target.image,
+            compose_project: target.compose_project,
+            compose_service: target.compose_service,
+        };
+
+        if (ruleId === "5.11" || ruleId === "5.25") payload.memory = target.suggestion?.memory ?? fallback.memoryMb * 1024 * 1024;
+        if (ruleId === "5.12") payload.cpu_shares = target.suggestion?.cpu_shares ?? fallback.cpuShares;
+        if (ruleId === "5.29") payload.pids_limit = target.suggestion?.pids_limit ?? fallback.pidsLimit;
+        return [payload];
+    });
+
+    return [...configuredTargets, ...freshTargets];
 }
 
 function invalidCgroupTarget(ruleIds: CgroupRuleId[], targets: CgroupTargetConfig[]) {
@@ -308,6 +334,8 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
 
     const queryClient = useQueryClient();
     const startFixJob = useAuditStore((state) => state.startFixJob);
+    const startSyntheticFixJob = useAuditStore((state) => state.startSyntheticFixJob);
+    const appendFixJobProgress = useAuditStore((state) => state.appendFixJobProgress);
     const cancelFixJob = useAuditStore((state) => state.cancelFixJob);
     const completeFixJob = useAuditStore((state) => state.completeFixJob);
     const cancelRequestedRef = useRef(false);
@@ -539,27 +567,6 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
                 let targets = cgroupTargetsForRule(ruleId, activeCgroupTargets);
 
                 if (isBulkCgroupRule(ruleId)) {
-                    const cgroupUsageCoveredBySelectedResources = ruleId === "5.25" && selectedConcreteCgroupRuleIds.length > 0;
-                    if (cgroupUsageCoveredBySelectedResources) {
-                        const running = verifyProgress(
-                            ruleId,
-                            "in_progress",
-                            "Running real 5.25 verification after selected cgroup limit fixes",
-                        );
-                        updated[i].progressEvents = [running];
-                        commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
-
-                        const verified = await verifyRuleNow(ruleId);
-                        updated[i].outcome = verified.outcome;
-                        updated[i].progressEvents = [running, verified.progressEvent];
-                        updated[i].state = "done";
-                        completeFixJob(agentId, ruleId, verified.outcome, updated[i].progressEvents);
-                        commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
-                        activeRuleRef.current = null;
-                        appliedIndex += 1;
-                        continue;
-                    }
-
                     const refreshedTargets = await refreshCgroupTargetsForRule(ruleId);
                     targets = refreshedTargets;
                     updated[i].progressEvents = [refreshProgress(
@@ -572,6 +579,29 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
                     commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
 
                     if (targets.length === 0) {
+                        const cgroupUsageCoveredBySelectedResources = ruleId === "5.25" && selectedConcreteCgroupRuleIds.length > 0;
+                        if (cgroupUsageCoveredBySelectedResources) {
+                            const running = verifyProgress(
+                                ruleId,
+                                "in_progress",
+                                "Running real 5.25 verification after selected cgroup limit fixes",
+                            );
+                            startSyntheticFixJob(agentId, ruleId);
+                            appendFixJobProgress(agentId, ruleId, [...updated[i].progressEvents, running]);
+                            updated[i].progressEvents = [...updated[i].progressEvents, running];
+                            commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
+
+                            const verified = await verifyRuleNow(ruleId);
+                            updated[i].outcome = verified.outcome;
+                            updated[i].progressEvents = [...updated[i].progressEvents, verified.progressEvent];
+                            updated[i].state = "done";
+                            completeFixJob(agentId, ruleId, verified.outcome, updated[i].progressEvents);
+                            commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
+                            activeRuleRef.current = null;
+                            appliedIndex += 1;
+                            continue;
+                        }
+
                         const outcome = {
                             rule_id: ruleId,
                             status: "Applied",
@@ -676,6 +706,9 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
         const successfulTriggerRuleIds = updated
             .filter((status) => status.selected && status.outcome?.status === "Applied")
             .map((status) => status.ruleId);
+        const selectedRuleIds = updated
+            .filter((status) => status.selected)
+            .map((status) => status.ruleId);
         const alreadyAppliedDependentRuleIds = updated
             .filter((status) => status.outcome?.status === "Applied")
             .map((status) => status.ruleId);
@@ -730,7 +763,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
                 agentAccessMode,
                 token,
                 triggerRuleIds: successfulTriggerRuleIds,
-                skipRuleIds: alreadyAppliedDependentRuleIds,
+                skipRuleIds: [...new Set([...alreadyAppliedDependentRuleIds, ...selectedRuleIds])],
                 auditTimestamp,
                 onDependencyStart: (dependency, progressEvents) => {
                     activeRuleRef.current = dependency.ruleId;
@@ -780,7 +813,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
                 toast.error("No fixes could be applied");
             }
         }
-    }, [agentId, agentUrl, agentAccessMode, auditTimestamp, commitSession, completeFixJob, loadCgroupConfig, queryClient, refreshCgroupTargetsForRule, refreshPreviewTargetsForRule, startFixJob, token, verifyRuleNow]);
+    }, [agentId, agentUrl, agentAccessMode, appendFixJobProgress, auditTimestamp, commitSession, completeFixJob, loadCgroupConfig, queryClient, refreshCgroupTargetsForRule, refreshPreviewTargetsForRule, startFixJob, startSyntheticFixJob, token, verifyRuleNow]);
 
     const cancelApplyAll = useCallback(() => {
         cancelRequestedRef.current = true;
