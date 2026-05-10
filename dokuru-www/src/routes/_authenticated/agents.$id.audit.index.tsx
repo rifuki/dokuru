@@ -809,55 +809,25 @@ function hasAuditLineDetails(line: AuditProgressLine) {
     return Boolean(line.command || line.stdout !== undefined || line.stderr || typeof line.exitCode === "number");
 }
 
-function firstAuditOutputLines(value?: string, maxLines = 2) {
-    const lines = value?.trim().split(/\r?\n/).filter(Boolean) ?? [];
-    if (lines.length === 0) return null;
-    const preview = lines.slice(0, maxLines).join("\n");
-    return lines.length > maxLines ? `${preview}\n... ${lines.length - maxLines} more line(s)` : preview;
-}
-
-function auditLineEvidencePreview(line: AuditProgressLine) {
-    return firstAuditOutputLines(line.stdout, 2) ?? firstAuditOutputLines(line.stderr, 1);
-}
-
-function auditLineEvidenceKind(line: AuditProgressLine) {
-    if (line.stdout?.trim()) return "stdout";
-    if (line.stderr?.trim()) return "stderr";
-    if (line.command) return "command";
-    return null;
-}
-
-function shouldShowAuditMessage(line: AuditProgressLine, evidencePreview: string | null) {
+function shouldShowAuditResultMessage(line: AuditProgressLine) {
     const message = line.message.trim();
     if (!message) return false;
     if (message === line.title.trim()) return false;
-    if (evidencePreview && evidencePreview.includes(message)) return false;
+    if (line.stdout?.includes(message) || line.stderr?.includes(message)) return false;
     return true;
 }
 
-function auditStatusTextClass(status: AuditProgressLine["status"]) {
-    return status === "Pass"
-        ? "text-emerald-600 dark:text-emerald-400"
-        : status === "Fail"
-        ? "text-rose-600 dark:text-rose-400"
-        : "text-amber-600 dark:text-amber-400";
-}
-
-function AuditEvidenceRow({ label, value, tone = "default" }: { label: string; value?: string | number; tone?: "default" | "muted" | "danger" }) {
+function AuditEvidenceRow({ label, value, tone = "default" }: { label: string; value?: string | number; tone?: "default" | "danger" }) {
     if (value === undefined || value === "") return null;
 
     return (
-        <div className="grid gap-2 py-2 sm:grid-cols-[72px_minmax(0,1fr)] sm:gap-3">
-            <div className="font-mono text-[9px] font-bold uppercase tracking-[0.15em] text-muted-foreground/50 sm:pt-0.5">
+        <div className="grid gap-1.5 px-3 py-2 sm:grid-cols-[76px_minmax(0,1fr)] sm:gap-3">
+            <div className="font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground/55 sm:pt-0.5">
                 {label}
             </div>
             <pre className={cn(
                 "m-0 min-w-0 whitespace-pre-wrap break-words bg-transparent text-[11px] leading-relaxed [overflow-wrap:anywhere]",
-                tone === "danger"
-                    ? "text-rose-700 dark:text-rose-300"
-                    : tone === "muted"
-                    ? "text-muted-foreground"
-                    : "text-zinc-700 dark:text-zinc-300",
+                tone === "danger" ? "text-rose-700 dark:text-rose-300" : "text-zinc-700 dark:text-zinc-300",
             )}>
                 <code>{String(value)}</code>
             </pre>
@@ -871,46 +841,23 @@ function auditLogLineKey(line: AuditProgressLine) {
 
 function AuditLogLine({ line, expanded, onToggle }: { line: AuditProgressLine; expanded: boolean; onToggle: () => void }) {
     const hasDetails = hasAuditLineDetails(line);
-    const evidencePreview = auditLineEvidencePreview(line);
-    const evidenceKind = auditLineEvidenceKind(line);
-    const showMessage = shouldShowAuditMessage(line, evidencePreview);
-    const supportingText = evidencePreview ?? (showMessage ? line.message : null);
+    const showResultMessage = shouldShowAuditResultMessage(line);
 
     return (
-        <div className={cn(
-            "border-b border-border/45 last:border-b-0",
-            expanded && "bg-muted/12 dark:bg-white/[0.018]",
-        )}>
-            <div className="grid grid-cols-[50px_48px_54px_minmax(0,1fr)_34px] items-start gap-2.5 px-2 py-2.5">
-                <span className="pt-0.5 text-right text-muted-foreground/38">{line.index.toString().padStart(2, "0")}</span>
+        <div className="space-y-0.5 border-b border-border/50 py-1.5 last:border-b-0">
+            <div className="flex items-center gap-2">
+                <span className="shrink-0 text-muted-foreground/40">[{line.index.toString().padStart(2, "0")}/{line.total}]</span>
                 <span className={cn(
-                    "pt-0.5 font-bold",
-                    auditStatusTextClass(line.status),
+                    "font-bold",
+                    line.status === "Pass" ? "text-emerald-600 dark:text-emerald-400" : line.status === "Fail" ? "text-rose-600 dark:text-rose-400" : "text-amber-600 dark:text-amber-400",
                 )}>{line.status.toUpperCase()}</span>
-                <span className="pt-0.5 text-[#2496ED]">{line.ruleId}</span>
-                <div className="min-w-0 space-y-1">
-                    <p className="truncate text-zinc-700 dark:text-zinc-300">{line.title}</p>
-                    {supportingText && (
-                        <button
-                            type="button"
-                            onClick={hasDetails ? onToggle : undefined}
-                            disabled={!hasDetails}
-                            className="grid w-full grid-cols-[44px_minmax(0,1fr)] gap-2 text-left disabled:cursor-default"
-                        >
-                            <span className="pt-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground/40">
-                                {evidencePreview ? evidenceKind ?? "out" : "note"}
-                            </span>
-                            <span className="line-clamp-2 whitespace-pre-line text-[11px] leading-relaxed text-muted-foreground/78">
-                                {supportingText}
-                            </span>
-                        </button>
-                    )}
-                </div>
+                <span className="shrink-0 text-[#2496ED]">{line.ruleId}</span>
+                <span className="min-w-0 flex-1 truncate text-zinc-700 dark:text-zinc-300">{line.title}</span>
                 {hasDetails && (
                     <button
                         type="button"
                         onClick={onToggle}
-                        className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                        className="-mr-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
                         aria-label={expanded ? "Hide audit command details" : "Show audit command details"}
                         aria-expanded={expanded}
                     >
@@ -918,26 +865,28 @@ function AuditLogLine({ line, expanded, onToggle }: { line: AuditProgressLine; e
                     </button>
                 )}
             </div>
+            {!expanded && line.command && <p className="truncate text-zinc-500 dark:text-zinc-500 sm:pl-16">$ {line.command}</p>}
+            {!expanded && <p className="truncate text-zinc-600 dark:text-zinc-400 sm:pl-16">{line.message}</p>}
             {expanded && hasDetails && (
-                <div className="px-2 pb-3 sm:pl-[164px]">
-                    <div className="border-l border-border/70 pl-3">
-                        <div className="flex items-center justify-between border-y border-border/60 py-2">
-                            <span className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground/55">Evidence</span>
-                            {typeof line.exitCode === "number" && (
-                                <span className={cn(
-                                    "font-mono text-[10px]",
-                                    line.exitCode === 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
-                                )}>
-                                    exit {line.exitCode}
-                                </span>
-                            )}
-                        </div>
-                        <dl className="divide-y divide-border/50">
-                            <AuditEvidenceRow label="Result" value={showMessage ? line.message : undefined} tone="muted" />
-                            <AuditEvidenceRow label="Command" value={line.command ? `$ ${line.command}` : undefined} />
-                            <AuditEvidenceRow label="Stdout" value={line.stdout} />
-                            <AuditEvidenceRow label="Stderr" value={line.stderr} tone="danger" />
-                        </dl>
+                <div className="mt-2 overflow-hidden rounded-lg border border-border/70 bg-background/70 dark:bg-black/25 sm:ml-16">
+                    <div className="flex items-center justify-between gap-3 border-b border-border/60 px-3 py-2">
+                        <span className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground/60">Evidence</span>
+                        {typeof line.exitCode === "number" && (
+                            <span className={cn(
+                                "rounded border px-1.5 py-0.5 font-mono text-[10px]",
+                                line.exitCode === 0
+                                    ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
+                                    : "border-rose-500/25 bg-rose-500/10 text-rose-600 dark:text-rose-300",
+                            )}>
+                                exit {line.exitCode}
+                            </span>
+                        )}
+                    </div>
+                    <div className="divide-y divide-border/45">
+                        <AuditEvidenceRow label="Command" value={line.command ? `$ ${line.command}` : undefined} />
+                        <AuditEvidenceRow label="Output" value={line.stdout} />
+                        <AuditEvidenceRow label="Error" value={line.stderr} tone="danger" />
+                        {showResultMessage && <AuditEvidenceRow label="Result" value={line.message} />}
                     </div>
                 </div>
             )}
@@ -1128,7 +1077,7 @@ function AuditRunTerminal({
                     </div>
                 </div>
 
-                <div ref={logRef} onScroll={handleLogScroll} className="audit-terminal-log min-h-0 flex-1 overflow-x-hidden overflow-y-auto rounded-md border border-border bg-zinc-50 p-4 font-mono text-[11px] leading-relaxed text-zinc-800 shadow-inner dark:bg-zinc-950 dark:text-zinc-200">
+                <div ref={logRef} onScroll={handleLogScroll} className="audit-terminal-log min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-zinc-50 p-4 font-mono text-[11px] leading-relaxed text-zinc-800 shadow-inner dark:bg-zinc-950 dark:text-zinc-200">
                     {lines.length === 0 && !error && !isCancelled && (
                         <p className="text-muted-foreground/50">$ connecting to dokuru-agent audit websocket...</p>
                     )}
