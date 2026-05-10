@@ -1302,12 +1302,18 @@ pub fn runtime_config_path(config: &InstallerConfig) -> PathBuf {
 }
 
 pub fn parse_cors_origins(cors_origins: &str) -> Vec<String> {
-    cors_origins
+    let parsed = cors_origins
         .split(',')
         .map(str::trim)
         .filter(|origin| !origin.is_empty())
         .map(ToString::to_string)
-        .collect::<Vec<_>>()
+        .collect::<Vec<_>>();
+
+    if parsed.is_empty() {
+        vec!["*".to_string()]
+    } else {
+        parsed
+    }
 }
 
 // ─── Token Generation ────────────────────────────────────────────────────────
@@ -1327,7 +1333,24 @@ pub fn hash_token(token: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::should_use_dokuru_group_permissions_for;
+    use super::{parse_cors_origins, should_use_dokuru_group_permissions_for};
+
+    #[test]
+    fn empty_cors_input_defaults_to_any_origin() {
+        assert_eq!(parse_cors_origins(""), vec!["*".to_string()]);
+        assert_eq!(parse_cors_origins(" , "), vec!["*".to_string()]);
+    }
+
+    #[test]
+    fn parses_comma_separated_cors_origins() {
+        assert_eq!(
+            parse_cors_origins("https://app.dokuru.rifuki.dev, https://agent.example.test"),
+            vec![
+                "https://app.dokuru.rifuki.dev".to_string(),
+                "https://agent.example.test".to_string(),
+            ],
+        );
+    }
 
     #[test]
     fn root_login_uses_root_only_permissions() {

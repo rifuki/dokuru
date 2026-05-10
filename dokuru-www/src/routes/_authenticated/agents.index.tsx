@@ -20,6 +20,7 @@ import {
   normalizeAgentAccessMode,
   type AgentAccessMode,
 } from "@/components/agents/AgentConnectionMode";
+import { normalizeAgentUrlForAccessMode } from "@/lib/agent-url";
 import { AgentSetupDialog, AGENT_INSTALL_COMMAND } from "@/components/agents/AgentSetupGuide";
 import { agentDirectApi } from "@/lib/api/agent-direct";
 import { agentApi } from "@/lib/api/agent";
@@ -149,7 +150,7 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
 
   const handleSave = async () => {
     const name = editName.trim();
-    const url = editAccessMode === "relay" ? "relay" : editUrl.trim();
+    const url = editAccessMode === "relay" ? "relay" : normalizeAgentUrlForAccessMode(editUrl, editAccessMode);
 
     if (!name) {
       toast.error("Agent name is required");

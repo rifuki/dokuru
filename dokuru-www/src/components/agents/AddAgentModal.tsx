@@ -1,5 +1,6 @@
 import { useState, type CSSProperties, type FormEvent } from "react";
 import { useAgentStore, getAgentTokenByUrl, setAgentTokenByUrl } from "@/stores/use-agent-store";
+import { normalizeAgentUrlForAccessMode } from "@/lib/agent-url";
 import { IS_LOCAL_AGENT_MODE } from "@/lib/env";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,7 +48,7 @@ export function AddAgentModal({ open, onOpenChange, onOpenSetupGuide }: AddAgent
         setUrl(newUrl);
         // Auto-fill token from cache if available and token field is empty
         if (newUrl && accessMode !== "relay" && !token) {
-            const cachedToken = getAgentTokenByUrl(newUrl);
+            const cachedToken = getAgentTokenByUrl(normalizeAgentUrlForAccessMode(newUrl, accessMode));
             if (cachedToken) {
                 setToken(cachedToken);
             }
@@ -69,8 +70,10 @@ export function AddAgentModal({ open, onOpenChange, onOpenSetupGuide }: AddAgent
             return;
         }
 
-        // Validate URL based on access mode
-        if (accessMode === "cloudflare" && !url.startsWith("https://")) {
+        const normalizedUrl = accessMode === "relay" ? "relay" : normalizeAgentUrlForAccessMode(url, accessMode);
+
+        // Validate URL based on access mode. http://*.trycloudflare.com is upgraded above.
+        if (accessMode === "cloudflare" && !normalizedUrl.startsWith("https://")) {
             toast.error("Cloudflare Tunnel URL must use HTTPS");
             return;
         }
@@ -78,14 +81,14 @@ export function AddAgentModal({ open, onOpenChange, onOpenSetupGuide }: AddAgent
         try {
             await createAgent({
                 name: name.trim(),
-                url: accessMode === "relay" ? "relay" : url.trim(),
+                url: normalizedUrl,
                 token: token.trim(),
                 access_mode: accessMode,
             });
             
             // Cache token by URL for future auto-fill
             if (accessMode !== "relay") {
-                setAgentTokenByUrl(url.trim(), token.trim());
+                setAgentTokenByUrl(normalizedUrl, token.trim());
             }
             
             toast.success("Agent added successfully");

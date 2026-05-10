@@ -1,6 +1,7 @@
 import axios from "axios";
 import { apiClient } from "@/lib/api";
 import { wsApiUrl } from "@/lib/api/api-config";
+import { normalizeAgentEndpoint, normalizeAgentUrlForAccessMode } from "@/lib/agent-url";
 import { IS_LOCAL_AGENT_MODE } from "@/lib/env";
 import { getLocalAgentToken, localAgent, localAgentUrl, LOCAL_AGENT_ID, setLocalAgentBootstrap, setLocalAgentToken } from "@/lib/local-agent";
 import { useAuthStore } from "@/stores/use-auth-store";
@@ -22,35 +23,44 @@ function localAgentRootUrl() {
   return localAgentUrl().replace(/\/+$/, "");
 }
 
+function normalizeAgentDto<T extends CreateAgentDto | UpdateAgentDto>(dto: T): T {
+  return {
+    ...dto,
+    url: normalizeAgentUrlForAccessMode(dto.url, dto.access_mode),
+  };
+}
+
 export const agentApi = {
   list: async (): Promise<Agent[]> => {
     if (IS_LOCAL_AGENT_MODE) return [localAgent()];
     const response = await apiClient.get("/agents");
-    return response.data.data;
+    return response.data.data.map(normalizeAgentEndpoint);
   },
 
   create: async (dto: CreateAgentDto): Promise<Agent> => {
+    const normalizedDto = normalizeAgentDto(dto);
     if (IS_LOCAL_AGENT_MODE) {
-      setLocalAgentBootstrap({ token: dto.token, name: dto.name, url: localAgentRootUrl() });
+      setLocalAgentBootstrap({ token: normalizedDto.token, name: normalizedDto.name, url: localAgentRootUrl() });
       return localAgent();
     }
-    const response = await apiClient.post("/agents", dto);
-    return response.data.data;
+    const response = await apiClient.post("/agents", normalizedDto);
+    return normalizeAgentEndpoint(response.data.data);
   },
 
   getById: async (id: string): Promise<Agent> => {
     if (IS_LOCAL_AGENT_MODE && id === LOCAL_AGENT_ID) return localAgent();
     const response = await apiClient.get(`/agents/${id}`);
-    return response.data.data;
+    return normalizeAgentEndpoint(response.data.data);
   },
 
   update: async (id: string, dto: UpdateAgentDto): Promise<Agent> => {
+    const normalizedDto = normalizeAgentDto(dto);
     if (IS_LOCAL_AGENT_MODE && id === LOCAL_AGENT_ID) {
-      if (dto.token) setLocalAgentToken(dto.token);
+      if (normalizedDto.token) setLocalAgentToken(normalizedDto.token);
       return localAgent();
     }
-    const response = await apiClient.put(`/agents/${id}`, dto);
-    return response.data.data;
+    const response = await apiClient.put(`/agents/${id}`, normalizedDto);
+    return normalizeAgentEndpoint(response.data.data);
   },
 
   delete: async (id: string): Promise<void> => {
