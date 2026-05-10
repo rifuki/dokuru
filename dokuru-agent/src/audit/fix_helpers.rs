@@ -128,6 +128,7 @@ const MIN_DOCKER_ROOT_LV_BYTES: u64 = 10 * 1024 * 1024 * 1024;
 const DOCKER_ROOT_LV_HEADROOM_BYTES: u64 = 1024 * 1024 * 1024;
 const USERNS_SNAPSHOT_PATH: &str = "/tmp/dokuru-userns-remap-snapshot.json";
 const USERNS_IMAGE_ARCHIVE_PATH: &str = "/tmp/dokuru-userns-remap-images.tar";
+const USERNS_IMAGE_ARCHIVE_HEADROOM_BYTES: u64 = 512 * 1024 * 1024;
 const USERNS_REMAP_RULE_ID: &str = "2.10";
 const USERNS_REMAP_TOTAL_STEPS: u8 = 9;
 const DAEMON_NO_NEW_PRIVILEGES_RULE_ID: &str = "2.15";
@@ -1858,6 +1859,12 @@ struct ComposeRecoveryTarget {
     services: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UsernsImageRecoveryMode {
+    LocalArchive,
+    RegistryFallback,
+}
+
 #[derive(Debug, Default)]
 struct UsernsRecoveryResult {
     completed: usize,
@@ -2052,7 +2059,131 @@ fn docker_socket_non_root_selection(
     })
 }
 
-async fn archive_userns_images(image_names: &[String], progress: Option<&ProgressSender>) {
+fn parse_df_available_bytes(stdout: &str) -> Option<u64> {
+    let line = stdout.lines().rfind(|line| !line.trim().is_empty())?;
+    let available_kib = line.split_whitespace().nth(3)?.parse::<u64>().ok()?;
+    available_kib.checked_mul(1024)
+}
+
+async fn tmp_available_bytes() -> Option<u64> {
+    let (stdout, _, true) = run_cmd("df", &["-Pk", "/tmp"]).await.ok()? else {
+        return None;
+    };
+    parse_df_available_bytes(&stdout)
+}
+
+fn parse_image_inspect_sizes(stdout: &str) -> Option<u64> {
+    let mut sizes = BTreeMap::<String, u64>::new();
+    for line in stdout
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
+        let (id, size) = line.split_once(' ')?;
+        sizes.entry(id.to_string()).or_insert(size.parse().ok()?);
+    }
+    sizes
+        .values()
+        .try_fold(0u64, |total, size| total.checked_add(*size))
+}
+
+async fn estimate_userns_image_archive_bytes(image_names: &[String]) -> Option<u64> {
+    let mut command = Command::new("docker");
+    command
+        .arg("image")
+        .arg("inspect")
+        .arg("--format")
+        .arg("{{.Id}} {{.Size}}");
+    for image in image_names {
+        command.arg(image);
+    }
+    let output = command.output().await.ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    parse_image_inspect_sizes(&String::from_utf8_lossy(&output.stdout))
+}
+
+async fn should_archive_userns_images(
+    image_names: &[String],
+    progress: Option<&ProgressSender>,
+) -> bool {
+    let Some(needed_bytes) = estimate_userns_image_archive_bytes(image_names).await else {
+        send_progress(
+            progress,
+            userns_progress_event(
+                1,
+                "archive_images",
+                "in_progress",
+                Some("Could not estimate image archive size; attempting local archive".to_string()),
+                Some("docker image inspect --format '{{.Id}} {{.Size}}' <images>".to_string()),
+            ),
+        );
+        return true;
+    };
+
+    let Some(available_bytes) = tmp_available_bytes().await else {
+        send_progress(
+            progress,
+            userns_progress_event(
+                1,
+                "archive_images",
+                "in_progress",
+                Some("Could not estimate free /tmp space; attempting local archive".to_string()),
+                Some("df -Pk /tmp".to_string()),
+            ),
+        );
+        return true;
+    };
+
+    let required_bytes = needed_bytes.saturating_add(USERNS_IMAGE_ARCHIVE_HEADROOM_BYTES);
+    if required_bytes > available_bytes {
+        send_progress(
+            progress,
+            userns_progress_event(
+                1,
+                "archive_images",
+                "done",
+                Some(format!(
+                    "Skipping local image archive because /tmp has {} MiB free, estimated archive needs {} MiB plus 512 MiB headroom; recovery may pull images if needed",
+                    available_bytes / 1024 / 1024,
+                    needed_bytes / 1024 / 1024
+                )),
+                Some(
+                    "df -Pk /tmp && docker image inspect --format '{{.Id}} {{.Size}}' <images>"
+                        .to_string(),
+                ),
+            ),
+        );
+        return false;
+    }
+
+    send_progress(
+        progress,
+        userns_progress_event(
+            1,
+            "archive_images",
+            "in_progress",
+            Some(format!(
+                "/tmp has {} MiB free; estimated image archive needs {} MiB, so recovery will use a local archive and refuse registry pulls",
+                available_bytes / 1024 / 1024,
+                needed_bytes / 1024 / 1024
+            )),
+            Some(
+                "df -Pk /tmp && docker image inspect --format '{{.Id}} {{.Size}}' <images>"
+                    .to_string(),
+            ),
+        ),
+    );
+    true
+}
+
+async fn archive_userns_images(
+    image_names: &[String],
+    progress: Option<&ProgressSender>,
+) -> UsernsImageRecoveryMode {
+    let _ = tokio::fs::remove_file(USERNS_IMAGE_ARCHIVE_PATH).await;
+
     if image_names.is_empty() {
         send_progress(
             progress,
@@ -2064,7 +2195,11 @@ async fn archive_userns_images(image_names: &[String], progress: Option<&Progres
                 None,
             ),
         );
-        return;
+        return UsernsImageRecoveryMode::RegistryFallback;
+    }
+
+    if !should_archive_userns_images(image_names, progress).await {
+        return UsernsImageRecoveryMode::RegistryFallback;
     }
 
     let command_text = format!(
@@ -2108,6 +2243,7 @@ async fn archive_userns_images(image_names: &[String], progress: Option<&Progres
                     Some(command_text),
                 ),
             );
+            UsernsImageRecoveryMode::LocalArchive
         }
         Ok(output) => {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -2125,6 +2261,7 @@ async fn archive_userns_images(image_names: &[String], progress: Option<&Progres
                     Some(command_text),
                 ),
             );
+            UsernsImageRecoveryMode::RegistryFallback
         }
         Err(error) => {
             send_progress(
@@ -2139,6 +2276,7 @@ async fn archive_userns_images(image_names: &[String], progress: Option<&Progres
                     Some(command_text),
                 ),
             );
+            UsernsImageRecoveryMode::RegistryFallback
         }
     }
 }
@@ -3074,6 +3212,7 @@ fn compose_recovery_targets(snapshots: &[ContainerSnapshot]) -> Vec<ComposeRecov
 fn compose_project_up_command_text(
     target: &ComposeRecoveryTarget,
     compose_paths: &[PathBuf],
+    image_recovery_mode: UsernsImageRecoveryMode,
 ) -> String {
     let mut parts = vec!["docker".to_string(), "compose".to_string()];
     for compose_path in compose_paths {
@@ -3083,8 +3222,10 @@ fn compose_project_up_command_text(
     parts.push("-p".to_string());
     parts.push(target.project.clone());
     parts.push("up".to_string());
-    parts.push("--pull".to_string());
-    parts.push("never".to_string());
+    if image_recovery_mode == UsernsImageRecoveryMode::LocalArchive {
+        parts.push("--pull".to_string());
+        parts.push("never".to_string());
+    }
     parts.push("-d".to_string());
     parts.extend(target.services.iter().cloned());
     parts.join(" ")
@@ -3106,6 +3247,7 @@ async fn pipe_command_lines<R>(
 fn compose_project_up_command(
     target: &ComposeRecoveryTarget,
     compose_paths: &[PathBuf],
+    image_recovery_mode: UsernsImageRecoveryMode,
 ) -> Command {
     let mut command = Command::new("docker");
     command.arg("compose");
@@ -3113,7 +3255,11 @@ fn compose_project_up_command(
         command.arg("-f").arg(compose_path);
     }
     command.arg("-p").arg(&target.project);
-    command.arg("up").arg("--pull").arg("never").arg("-d");
+    command.arg("up");
+    if image_recovery_mode == UsernsImageRecoveryMode::LocalArchive {
+        command.arg("--pull").arg("never");
+    }
+    command.arg("-d");
     for service in &target.services {
         command.arg(service);
     }
@@ -3161,8 +3307,17 @@ fn send_compose_recovery_start(
 fn send_compose_recovery_heartbeat(
     target: &ComposeRecoveryTarget,
     command_text: &str,
+    image_recovery_mode: UsernsImageRecoveryMode,
     progress: Option<&ProgressSender>,
 ) {
+    let image_source = match image_recovery_mode {
+        UsernsImageRecoveryMode::LocalArchive => {
+            "using locally loaded images and refusing registry pulls"
+        }
+        UsernsImageRecoveryMode::RegistryFallback => {
+            "local archive was skipped/unavailable, so Compose may pull missing images"
+        }
+    };
     send_progress(
         progress,
         userns_progress_event(
@@ -3170,7 +3325,7 @@ fn send_compose_recovery_heartbeat(
             "restart_containers",
             "in_progress",
             Some(format!(
-                "Waiting for detached Compose recovery for project '{}' ({} service(s)); using locally loaded images and refusing registry pulls",
+                "Waiting for detached Compose recovery for project '{}' ({} service(s)); {image_source}",
                 target.project,
                 target.services.len()
             )),
@@ -3213,6 +3368,7 @@ fn record_compose_output_line(
 
 async fn run_compose_project_up(
     target: &ComposeRecoveryTarget,
+    image_recovery_mode: UsernsImageRecoveryMode,
     progress: Option<&ProgressSender>,
 ) -> eyre::Result<()> {
     let Some(first_service) = target.services.first() else {
@@ -3225,10 +3381,11 @@ async fn run_compose_project_up(
         config_files: target.config_files.clone(),
     };
     let compose_paths = resolve_compose_files(&ctx).await?;
-    let command_text = compose_project_up_command_text(target, &compose_paths);
+    let command_text = compose_project_up_command_text(target, &compose_paths, image_recovery_mode);
     send_compose_recovery_start(target, &command_text, progress);
 
-    let mut child = compose_project_up_command(target, &compose_paths).spawn()?;
+    let mut child =
+        compose_project_up_command(target, &compose_paths, image_recovery_mode).spawn()?;
     let mut line_rx = pipe_child_output(&mut child);
 
     let mut stdout = String::new();
@@ -3245,7 +3402,7 @@ async fn run_compose_project_up(
             _ = heartbeat.tick() => {
                 heartbeat_count += 1;
                 if heartbeat_count > 1 {
-                    send_compose_recovery_heartbeat(target, &command_text, progress);
+                    send_compose_recovery_heartbeat(target, &command_text, image_recovery_mode, progress);
                 }
             }
         }
@@ -3277,11 +3434,12 @@ async fn run_compose_project_up(
 
 async fn restart_compose_stacks(
     snapshots: &[ContainerSnapshot],
+    image_recovery_mode: UsernsImageRecoveryMode,
     progress: Option<&ProgressSender>,
 ) -> UsernsRecoveryResult {
     let mut result = UsernsRecoveryResult::default();
     for target in compose_recovery_targets(snapshots) {
-        match run_compose_project_up(&target, progress).await {
+        match run_compose_project_up(&target, image_recovery_mode, progress).await {
             Ok(()) => result.completed += 1,
             Err(error) => result.failed.push(format!("{}: {}", target.project, error)),
         }
@@ -3344,9 +3502,10 @@ async fn recreate_standalone_containers(
 async fn restart_recovered_containers(
     docker: &Docker,
     snapshots: &[ContainerSnapshot],
+    image_recovery_mode: UsernsImageRecoveryMode,
     progress: Option<&ProgressSender>,
 ) -> UsernsRecoveryResult {
-    let mut result = restart_compose_stacks(snapshots, progress).await;
+    let mut result = restart_compose_stacks(snapshots, image_recovery_mode, progress).await;
     let standalone = recreate_standalone_containers(docker, snapshots).await;
     result.completed += standalone.completed;
     result.skipped += standalone.skipped;
@@ -3646,12 +3805,32 @@ async fn normalize_docker_socket_permissions() -> Option<String> {
 async fn recover_userns_state(
     docker: &Docker,
     state: &UsernsSnapshotState,
+    image_recovery_mode: UsernsImageRecoveryMode,
     progress: Option<&ProgressSender>,
 ) -> UsernsRecoverySummary {
     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
     let (uid, gid) = dockremap_uid_gid();
 
-    let image_result = load_archived_userns_images(progress).await;
+    let image_result = if image_recovery_mode == UsernsImageRecoveryMode::LocalArchive {
+        load_archived_userns_images(progress).await
+    } else {
+        let mut result = UsernsRecoveryResult::default();
+        result.skipped += 1;
+        send_progress(
+            progress,
+            userns_progress_event(
+                7,
+                "load_images",
+                "done",
+                Some(
+                    "Local image archive unavailable or skipped; Compose recovery may pull missing images"
+                        .to_string(),
+                ),
+                None,
+            ),
+        );
+        result
+    };
 
     send_progress(
         progress,
@@ -3692,10 +3871,16 @@ async fn recover_userns_state(
             "restart_containers",
             "in_progress",
             Some("Restarting Compose stacks and standalone containers from snapshot".to_string()),
-            Some("docker compose up --pull never -d".to_string()),
+            Some(match image_recovery_mode {
+                UsernsImageRecoveryMode::LocalArchive => {
+                    "docker compose up --pull never -d".to_string()
+                }
+                UsernsImageRecoveryMode::RegistryFallback => "docker compose up -d".to_string(),
+            }),
         ),
     );
-    let restart_result = restart_recovered_containers(docker, &state.snapshots, progress).await;
+    let restart_result =
+        restart_recovered_containers(docker, &state.snapshots, image_recovery_mode, progress).await;
 
     let failures = image_result
         .failed
@@ -3757,7 +3942,7 @@ pub async fn apply_userns_remap_fix_with_progress(
 ) -> eyre::Result<FixOutcome> {
     let state = snapshot_userns_recovery_state(docker, progress).await;
 
-    archive_userns_images(&state.image_names, progress).await;
+    let image_recovery_mode = archive_userns_images(&state.image_names, progress).await;
 
     create_dockremap_user(progress).await;
 
@@ -3773,7 +3958,7 @@ pub async fn apply_userns_remap_fix_with_progress(
         return Ok(outcome);
     }
 
-    let summary = recover_userns_state(docker, &state, progress).await;
+    let summary = recover_userns_state(docker, &state, image_recovery_mode, progress).await;
     Ok(userns_final_outcome(&summary))
 }
 
@@ -9641,7 +9826,7 @@ services:
     }
 
     #[test]
-    fn userns_compose_recovery_refuses_registry_pulls() {
+    fn userns_compose_recovery_refuses_registry_pulls_when_archive_is_available() {
         let target = ComposeRecoveryTarget {
             project: "dokuru-lab".to_string(),
             working_dir: Some(PathBuf::from("/srv/dokuru-lab")),
@@ -9651,11 +9836,50 @@ services:
         let command = compose_project_up_command_text(
             &target,
             &[PathBuf::from("/srv/dokuru-lab/docker-compose.yaml")],
+            UsernsImageRecoveryMode::LocalArchive,
         );
 
         assert_eq!(
             command,
             "docker compose -f /srv/dokuru-lab/docker-compose.yaml -p dokuru-lab up --pull never -d web api"
+        );
+    }
+
+    #[test]
+    fn userns_compose_recovery_allows_registry_pull_without_archive() {
+        let target = ComposeRecoveryTarget {
+            project: "dokuru-lab".to_string(),
+            working_dir: Some(PathBuf::from("/srv/dokuru-lab")),
+            config_files: Some("/srv/dokuru-lab/docker-compose.yaml".to_string()),
+            services: vec!["web".to_string(), "api".to_string()],
+        };
+        let command = compose_project_up_command_text(
+            &target,
+            &[PathBuf::from("/srv/dokuru-lab/docker-compose.yaml")],
+            UsernsImageRecoveryMode::RegistryFallback,
+        );
+
+        assert_eq!(
+            command,
+            "docker compose -f /srv/dokuru-lab/docker-compose.yaml -p dokuru-lab up -d web api"
+        );
+    }
+
+    #[test]
+    fn parses_df_available_space() {
+        assert_eq!(
+            parse_df_available_bytes(
+                "Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/root 1000 100 900 10% /\n"
+            ),
+            Some(921_600)
+        );
+    }
+
+    #[test]
+    fn parses_unique_image_sizes() {
+        assert_eq!(
+            parse_image_inspect_sizes("sha256:a 100\nsha256:b 250\nsha256:a 100\n"),
+            Some(350)
         );
     }
 
