@@ -1935,6 +1935,7 @@ function AuditDetailPage() {
     },
     staleTime: 15_000,
   });
+  const fixHistoryEntries = fixHistoryQuery.data ?? [];
   const hasRunningFixJob = Object.values(fixJobs).some(job => job.agentId === id && job.status === "running");
   const selectedFixAllStatuses = ruleStatuses.filter(status => status.selected);
   const fixAllResultSuccessful = fixAllStep === "result"
@@ -2021,7 +2022,7 @@ function AuditDetailPage() {
   const displayPassedTotal = resultPassedTotal || auditData?.summary.passed || 0;
   const displayFailedTotal = resultFailedTotal || auditData?.summary.failed || 0;
   const ruleCountSummary = `${checkRuleTotal} checks`;
-  const appliedHistoryByRule = latestAppliedFixesAfterAudit(fixHistoryQuery.data ?? [], auditData);
+  const appliedHistoryByRule = latestAppliedFixesAfterAudit(fixHistoryEntries, auditData);
   const appliedRuleIds = new Set<string>(appliedHistoryByRule.keys());
   const autoTriggeredRuleIds = new Set<string>();
   for (const result of baseResults) {
@@ -2037,6 +2038,7 @@ function AuditDetailPage() {
   const hasProjectedFixes = (projectedFixScore?.fixedCount ?? 0) > 0;
   const autoTriggeredProjectionCount = projectedFixScore?.fixedRuleIds.filter(ruleId => autoTriggeredRuleIds.has(ruleId)).length ?? 0;
   const fixedResultPreviews = fixedFailedResults(baseResults, forecastRuleIds);
+  const shouldShowFixHistory = !!agent && fixHistoryEntries.length > 0;
   const pillarProjections = groupProjectionFromFixes(baseResults, forecastRuleIds, result => getRulePillar(result.rule.id), autoTriggeredRuleIds);
   const sectionProjections = groupProjectionFromFixes(baseResults, forecastRuleIds, result => result.rule.section, autoTriggeredRuleIds);
   const sectionSummaries = groupSummariesFromResults(baseResults, result => result.rule.section, key => key);
@@ -2101,7 +2103,7 @@ function AuditDetailPage() {
   const auditListLayoutSignature = [
     [...appliedRuleIds].sort().join(","),
     autoFixableResults.length,
-    fixHistoryQuery.data?.length ?? 0,
+    fixHistoryEntries.length,
     fixHistoryQuery.isFetching ? "fetching" : "idle",
   ].join(":");
   useStableAuditListAnchor(resultsAnchorRef, auditListLayoutSignature, wizardOpen || fixAllOpen);
@@ -2567,6 +2569,38 @@ function AuditDetailPage() {
             </div>
           </div>
 
+          {/* ── Fix All status/action ───────────────────────── */}
+          {(autoFixableResults.length > 0 || fixAllSessionActive || fixAllResultFailed) && (
+            <div className="flex flex-col gap-3 rounded-xl border border-[#2496ED]/25 bg-[#2496ED]/5 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-[#2496ED]">
+                  {fixAllStep === "applying" && ruleStatuses.length > 0
+                    ? "Fix All is still running"
+                    : fixAllResultSuccessful
+                    ? "Fix All result is ready"
+                    : fixAllResultFailed
+                    ? "Fix All can be retried"
+                    : `${autoFixableResults.length} rule${autoFixableResults.length > 1 ? "s" : ""} can be auto-fixed`}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Image config, namespace isolation, cgroup limits, and privileged containers in one click.
+                </p>
+              </div>
+              <button
+                onClick={() => openFixAll(autoFixableResults)}
+                disabled={fixAllButtonDisabled}
+                className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-[#2496ED] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[#1e80cc] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#2496ED] sm:w-auto"
+              >
+                {fixAllStep === "applying" || (fixControlsLocked && !fixAllSessionActive) ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Wrench className="h-4 w-4" />
+                )}
+                {fixAllButtonLabel}
+              </button>
+            </div>
+          )}
+
           {fixedResultPreviews.length > 0 && (
             <div className="rounded-xl border border-[#2496ED]/25 bg-[#2496ED]/5 px-5 py-4">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -2634,39 +2668,7 @@ function AuditDetailPage() {
             />
           )}
 
-          {/* ── Fix All banner ───────────────────────────────── */}
-          {(autoFixableResults.length > 0 || fixAllSessionActive || fixAllResultFailed) && (
-            <div className="flex flex-col gap-3 rounded-xl border border-[#2496ED]/25 bg-[#2496ED]/5 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5">
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-[#2496ED]">
-                  {fixAllStep === "applying" && ruleStatuses.length > 0
-                    ? "Fix All is still running"
-                    : fixAllResultSuccessful
-                    ? "Fix All result is ready"
-                    : fixAllResultFailed
-                    ? "Fix All can be retried"
-                    : `${autoFixableResults.length} rule${autoFixableResults.length > 1 ? "s" : ""} can be auto-fixed`}
-                </p>
-                <p className="text-xs text-[#2496ED]/60 mt-0.5">
-                  Image config, namespace isolation, cgroup limits, and privileged containers — one click.
-                </p>
-              </div>
-              <button
-                onClick={() => openFixAll(autoFixableResults)}
-                disabled={fixAllButtonDisabled}
-                className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-[#2496ED] px-4 py-2.5 text-sm font-bold text-white shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] transition-all hover:bg-[#1e80cc] hover:shadow-[0_0_24px_-4px_rgba(36,150,237,0.7)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#2496ED] disabled:hover:shadow-[0_0_20px_-4px_rgba(36,150,237,0.5)] sm:w-auto"
-              >
-                {fixAllStep === "applying" || (fixControlsLocked && !fixAllSessionActive) ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Wrench className="h-4 w-4" />
-                )}
-                {fixAllButtonLabel}
-              </button>
-            </div>
-          )}
-
-          {agent && (
+          {shouldShowFixHistory && agent && (
             <FixHistoryPanel
               agentId={id}
               agentUrl={agent.url}
@@ -2674,88 +2676,6 @@ function AuditDetailPage() {
               token={token}
             />
           )}
-
-          {remediationPlan.total_failed ? (
-            <div className="rounded-2xl border border-border bg-card dark:bg-gradient-to-br dark:from-[#0A0A0B] dark:to-[#111113] overflow-hidden">
-              <div className="flex flex-col gap-4 border-b border-border px-5 py-4 md:flex-row md:items-center md:justify-between">
-                <div className="max-w-2xl">
-                  <h3 className="text-base font-bold tracking-tight">Remediation Plan</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Top {Math.min(remediationPlan.actions.length, 5)} of {remediationPlan.total_failed} failed checks from this audit. After a fix and audit rerun, the next failed rule moves into this priority list.
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
-                  <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2">
-                    <p className="text-lg font-black text-rose-400">{remediationPlan.high_impact}</p>
-                    <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">High severity</p>
-                  </div>
-                  <div className="rounded-lg border border-[#2496ED]/20 bg-[#2496ED]/10 px-3 py-2">
-                    <p className="text-lg font-black text-[#2496ED]">{remediationPlan.auto_fixable}</p>
-                    <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Auto-fixable</p>
-                  </div>
-                  <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
-                    <p className="text-lg font-black text-foreground">{remediationPlan.quick_wins}</p>
-                    <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Quick fixes</p>
-                  </div>
-                  <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
-                    <p className="text-lg font-black text-foreground">{remediationPlan.manual + remediationPlan.guided}</p>
-                    <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Manual review</p>
-                  </div>
-                </div>
-              </div>
-              <div className="divide-y divide-border">
-                {remediationPlan.actions.slice(0, 5).map((action) => {
-                  const pillar = action.pillar_key as SecurityPillar;
-                  const meta = PILLAR_META[pillar];
-                  const effortLabel = action.effort === "quick" ? "Quick" : action.effort === "moderate" ? "Moderate" : "Involved";
-                  const kindLabel = action.remediation_kind === "auto" ? "Apply fix" : action.remediation_kind === "guided" ? "Guided" : "Manual";
-                  const kindClass = action.remediation_kind === "auto"
-                    ? "border-[#2496ED]/25 bg-[#2496ED]/10 text-[#2496ED]"
-                    : "border-border bg-muted/30 text-muted-foreground";
-                  const scopeLabel = action.affected_count > 0
-                    ? `${action.affected_count} affected item${action.affected_count > 1 ? "s" : ""}`
-                    : "Host-level check";
-
-                  return (
-                    <div key={action.rule_id} className="grid gap-3 px-5 py-4 md:grid-cols-[auto_1fr_auto] md:items-start">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-muted/30 font-mono text-xs font-black text-muted-foreground">
-                        {action.rank}
-                      </div>
-                      <div className="min-w-0 space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-xs font-black text-muted-foreground bg-muted/40 px-2 py-1 rounded border border-border">
-                            {action.rule_id}
-                          </span>
-                          <SeverityBadge severity={action.severity} />
-                          {meta && (
-                            <span className={cn("inline-flex items-center gap-1.5 text-xs font-bold px-2 py-1 rounded border", meta.bg, meta.color, meta.border)}>
-                              {action.pillar_label}
-                            </span>
-                          )}
-                          <span className={cn("inline-flex items-center gap-1.5 rounded border px-2 py-1 text-xs font-bold", kindClass)}>
-                            <Wrench className="h-3 w-3" />
-                            {kindLabel}
-                          </span>
-                          <span className="inline-flex items-center gap-1.5 rounded border border-border bg-muted/30 px-2 py-1 text-xs font-bold text-muted-foreground">
-                            <Clock className="h-3 w-3" />
-                            {effortLabel}
-                          </span>
-                        </div>
-                        <p className="font-semibold leading-snug">{action.title}</p>
-                        <p className="line-clamp-2 text-sm text-muted-foreground">{action.summary}</p>
-                      </div>
-                      <div className="flex items-center md:min-w-[170px] md:justify-end">
-                        <span className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs font-bold text-muted-foreground">
-                          <Server className="h-3.5 w-3.5 text-muted-foreground/70" />
-                          {scopeLabel}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
 
           {/* ── Search & Filters ────────────────────────────── */}
           <div ref={resultsAnchorRef} className="space-y-2">
