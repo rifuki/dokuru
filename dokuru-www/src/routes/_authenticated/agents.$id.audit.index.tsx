@@ -869,7 +869,7 @@ function AuditLogLine({ line, expanded, onToggle }: { line: AuditProgressLine; e
             {!expanded && <p className="truncate text-zinc-600 dark:text-zinc-400 sm:pl-16">{line.message}</p>}
             {expanded && hasDetails && (
                 <div className="mt-2 overflow-hidden rounded-lg border border-border/70 bg-background/70 dark:bg-black/25 sm:ml-16">
-                    <div className="flex items-center justify-between gap-3 border-b border-border/60 px-3 py-2">
+                    <div className="flex items-center gap-2 border-b border-border/60 px-3 py-2">
                         <span className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground/60">Evidence</span>
                         {typeof line.exitCode === "number" && (
                             <span className={cn(

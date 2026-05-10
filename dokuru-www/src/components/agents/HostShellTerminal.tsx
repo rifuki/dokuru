@@ -187,13 +187,13 @@ export function HostShellTerminal({
   const shellLabel = activeShell.split("/").pop();
 
   return (
-    <div className="overflow-hidden rounded-[16px] border border-border bg-card shadow-lg">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/15 px-3 py-2 dark:bg-[#171717]">
+    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      <div className="relative flex flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2 select-none dark:bg-[#171717]">
         <div className="flex min-w-0 items-center gap-2">
           <div className="flex shrink-0 items-center gap-1.5" aria-hidden="true">
-            <span className="h-2 w-2 rounded-full bg-[#ff5f56]" />
-            <span className="h-2 w-2 rounded-full bg-[#ffbd2e]" />
-            <span className="h-2 w-2 rounded-full bg-[#27c93f]" />
+            <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57] shadow-[0_0_10px_rgba(255,95,87,0.25)]" />
+            <span className="h-2.5 w-2.5 rounded-full bg-[#ffbd2e] shadow-[0_0_10px_rgba(255,189,46,0.2)]" />
+            <span className="h-2.5 w-2.5 rounded-full bg-[#28c840] shadow-[0_0_10px_rgba(40,200,64,0.2)]" />
           </div>
           <div className="h-3.5 w-px shrink-0 bg-border/70" />
           <TerminalIcon className="h-3.5 w-3.5 shrink-0 text-primary" />
@@ -208,6 +208,8 @@ export function HostShellTerminal({
             {isConnecting ? "connecting" : isConnected ? "connected" : isDisconnected ? "disconnected" : "idle"}
           </span>
         </div>
+
+        <div className="min-w-2 flex-1" />
 
         <div className="flex items-center gap-1.5">
           <div ref={shellMenuRef} className="relative">
@@ -274,8 +276,8 @@ export function HostShellTerminal({
         </div>
       </div>
 
-      <div className="relative p-2" style={{ background: TERMINAL_BG }}>
-        <div ref={wrapperRef} className="h-[68vh] min-h-[420px] rounded-[12px]" style={{ background: TERMINAL_BG }} />
+      <div className="relative" style={{ background: TERMINAL_BG, padding: "10px 6px 4px", boxSizing: "border-box" }}>
+        <div ref={wrapperRef} className="h-[68vh] min-h-[420px]" style={{ background: TERMINAL_BG }} />
         {snapshot.status === "idle" && snapshot.chunks.length === 0 && (
           <div className="pointer-events-none absolute inset-2 flex items-center justify-center rounded-[12px] text-center">
             <div className="space-y-2 px-4 text-muted-foreground">
