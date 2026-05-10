@@ -65,10 +65,10 @@ function ContainerOverviewSkeleton() {
 
 function ContainerLogsSkeleton() {
   return (
-    <div className="overflow-hidden rounded-lg border">
-      <div className="flex items-center justify-between border-b border-white/10 bg-[#0d1117] px-4 py-2">
-        <Skeleton className="h-3 w-28 bg-white/10" />
-        <Skeleton className="h-5 w-20 rounded-full bg-white/10" />
+    <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+      <div className="flex items-center justify-between border-b border-border bg-card px-4 py-2 dark:bg-[#171717]">
+        <Skeleton className="h-3 w-28 dark:bg-white/10" />
+        <Skeleton className="h-5 w-20 rounded-full dark:bg-white/10" />
       </div>
       <div className="h-96 space-y-2 bg-[#0d1117] p-4">
         {Array.from({ length: 10 }).map((_, index) => (
@@ -94,10 +94,10 @@ function ContainerStatsSkeleton() {
 function ContainerInspectSkeleton() {
   return (
     <div className="p-5">
-      <div className="overflow-hidden rounded-lg border">
-        <div className="flex items-center justify-between border-b border-white/10 bg-[#0d1117] px-4 py-2">
-          <Skeleton className="h-3 w-36 bg-white/10" />
-          <Skeleton className="h-7 w-16 bg-white/10" />
+      <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+        <div className="flex items-center justify-between border-b border-border bg-card px-4 py-2 dark:bg-[#171717]">
+          <Skeleton className="h-3 w-36 dark:bg-white/10" />
+          <Skeleton className="h-7 w-16 dark:bg-white/10" />
         </div>
         <div className="max-h-[600px] space-y-2 bg-[#0d1117] p-4">
           {Array.from({ length: 14 }).map((_, index) => (
@@ -416,13 +416,13 @@ export function ContainerLogs({
   if (isLoading) return <ContainerLogsSkeleton />;
 
   return (
-    <div className="rounded-lg border overflow-hidden">
-      <div className="bg-[#0d1117] px-4 py-2 border-b border-white/10 flex items-center justify-between">
+    <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+      <div className="flex items-center justify-between border-b border-border bg-card px-4 py-2 dark:bg-[#171717]">
         <span className="text-xs text-muted-foreground font-mono">Container Logs</span>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setAutoScroll(!autoScroll)}
-            className="text-[10px] px-2 py-1 rounded hover:bg-white/10 transition-colors"
+            className="rounded px-2 py-1 text-[10px] transition-colors hover:bg-accent hover:text-foreground"
           >
             {autoScroll ? "Auto-scroll: ON" : "Auto-scroll: OFF"}
           </button>
@@ -1080,13 +1080,13 @@ export function ContainerInspect({
 
   return (
     <div className="p-5 overflow-x-hidden">
-      <div className="rounded-lg border overflow-hidden">
-        <div className="bg-[#0d1117] px-4 py-2 border-b border-white/10 flex items-center justify-between">
+      <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+        <div className="flex items-center justify-between border-b border-border bg-card px-4 py-2 dark:bg-[#171717]">
           <span className="text-xs text-muted-foreground font-mono">Docker Inspect JSON</span>
           <Button
             size="sm"
             variant="ghost"
-            className="h-7 text-xs px-3 hover:bg-white/10"
+            className="h-7 px-3 text-xs hover:bg-accent"
             onClick={() => navigator.clipboard.writeText(JSON.stringify(data, null, 2))}
           >
             Copy
