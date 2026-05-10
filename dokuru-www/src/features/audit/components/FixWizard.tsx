@@ -775,6 +775,7 @@ function ResultStep({
     containers,
     auditId,
     onRerunAudit,
+    onRetry,
     onClose,
 }: {
     outcome: FixOutcome;
@@ -785,6 +786,7 @@ function ResultStep({
     containers: DockerContainer[];
     auditId?: string;
     onRerunAudit: () => void;
+    onRetry: () => void;
     onClose: () => void;
 }) {
     const isApplied = outcome.status === "Applied";
@@ -917,6 +919,15 @@ function ResultStep({
                         Re-run Audit
                     </button>
                 )}
+                {!isApplied && (
+                    <button
+                        onClick={onRetry}
+                        className="audit-on-primary inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md bg-[#2496ED] px-4 text-sm font-semibold text-white transition-all hover:bg-[#1e80cc] active:scale-[0.98]"
+                    >
+                        <Wrench className="h-3.5 w-3.5" />
+                        Try Again
+                    </button>
+                )}
             </div>
         </div>
     );
@@ -941,12 +952,13 @@ interface FixWizardProps {
     onCancelApply: () => void;
     onClose: () => void;
     onRerunAudit: () => void;
+    onRetry: () => void;
     onTargetChange: (containerId: string, patch: Partial<TargetConfig>) => void;
 }
 
 export function FixWizard({
     open, step, result, outcome, preview, previewLoading, targetConfig, progressEvents, stepIndex,
-    agentId, containers, auditId, onConfirm, onCancelApply, onClose, onRerunAudit, onTargetChange,
+    agentId, containers, auditId, onConfirm, onCancelApply, onClose, onRerunAudit, onRetry, onTargetChange,
 }: FixWizardProps) {
     if (!result) return null;
     const { rule } = result;
@@ -1010,6 +1022,7 @@ export function FixWizard({
                             containers={containers}
                             auditId={auditId}
                             onRerunAudit={onRerunAudit}
+                            onRetry={onRetry}
                             onClose={onClose}
                         />
                     )}

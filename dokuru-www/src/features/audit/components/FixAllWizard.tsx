@@ -687,20 +687,28 @@ function mergeProgressEvents(base: FixProgress[], live: FixProgress[]) {
 // ── Result step ───────────────────────────────────────────────────────────────
 
 function ResultStep({
-    ruleStatuses, onRerunAudit, onClose,
+    ruleStatuses, onRerunAudit, onRetry, onClose,
 }: {
     ruleStatuses: RuleFixStatus[];
     onRerunAudit: () => void;
+    onRetry: () => void;
     onClose: () => void;
 }) {
     const selected = ruleStatuses.filter(r => r.selected);
     const applied = selected.filter(r => r.outcome?.status === "Applied").length;
-    const blocked = selected.filter(r => r.outcome?.status === "Blocked").length;
+    const cancelled = selected.filter(r => r.state === "cancelled").length;
+    const blocked = selected.filter(r => r.outcome?.status === "Blocked" && r.state !== "cancelled").length;
+    const unresolved = blocked + cancelled;
     const skipped = ruleStatuses.filter(r => r.state === "skipped").length;
     const autoTriggered = selected.filter(r => r.autoTriggered).length;
-    const allApplied = blocked === 0;
+    const allApplied = selected.length > 0 && applied === selected.length;
     const evidenceCount = selected.reduce((sum, rs) => sum + rs.progressEvents.length, 0);
     const targets = uniqueLabels(selected.flatMap(rs => rs.progressEvents.map(event => event.container_name)));
+    const unresolvedLabel = [
+        applied > 0 ? `${applied} applied` : null,
+        blocked > 0 ? `${blocked} blocked` : null,
+        cancelled > 0 ? `${cancelled} cancelled` : null,
+    ].filter(Boolean).join(", ") || "No fixes applied";
 
     return (
         <div className="flex flex-col gap-5">
@@ -717,13 +725,13 @@ function ResultStep({
                     <p className={cn("text-sm font-semibold", allApplied ? "text-emerald-400" : "text-amber-400")}>
                         {allApplied
                             ? `${applied} selected fixes applied successfully`
-                            : `${applied} applied, ${blocked} blocked`
+                            : unresolvedLabel
                         }
                     </p>
                     <p className={cn("text-xs mt-0.5", allApplied ? "text-emerald-400/70" : "text-amber-400/70")}>
                         {allApplied
                             ? `${autoTriggered > 0 ? `${autoTriggered} dependent check(s) were auto-triggered and verified. ` : ""}${skipped > 0 ? `${skipped} rule(s) were skipped by selection. ` : ""}Re-run the audit to see the updated score.`
-                            : "Blocked fixes may require elevated privileges or manual intervention."
+                            : "Fixes were not fully applied. Retry after adjusting selection, permissions, or target availability."
                         }
                     </p>
                 </div>
@@ -735,8 +743,8 @@ function ResultStep({
                     <p className="mt-1 text-xl font-bold text-[#2496ED]">{applied}</p>
                 </div>
                 <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2.5">
-                    <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/30">blocked</p>
-                    <p className="mt-1 text-xl font-bold text-rose-400">{blocked}</p>
+                    <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/30">unresolved</p>
+                    <p className="mt-1 text-xl font-bold text-rose-400">{unresolved}</p>
                 </div>
                 <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2.5">
                     <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/30">evidence</p>
@@ -784,13 +792,23 @@ function ResultStep({
                 >
                     Close
                 </button>
-                <button
-                    onClick={onRerunAudit}
-                    className="audit-on-primary flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-[#2496ED] hover:bg-[#1e80cc] px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98]"
-                >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    Re-run Audit
-                </button>
+                {allApplied ? (
+                    <button
+                        onClick={onRerunAudit}
+                        className="audit-on-primary flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-[#2496ED] hover:bg-[#1e80cc] px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98]"
+                    >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        Re-run Audit
+                    </button>
+                ) : (
+                    <button
+                        onClick={onRetry}
+                        className="audit-on-primary flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-[#2496ED] hover:bg-[#1e80cc] px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98]"
+                    >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        Try Again
+                    </button>
+                )}
             </div>
         </div>
     );
@@ -812,6 +830,7 @@ interface FixAllWizardProps {
     onCancelApply: () => void;
     onClose: () => void;
     onRerunAudit: () => void;
+    onRetry: () => void;
     onToggleRule: (ruleId: string) => void;
     onSetAllSelected: (selected: boolean) => void;
     onUpdateCgroupTarget: (key: string, patch: Partial<CgroupTargetConfig>) => void;
@@ -821,7 +840,7 @@ interface FixAllWizardProps {
 export function FixAllWizard({
     open, agentId, step, currentIndex, ruleStatuses, selectedCount,
     cgroupTargets, cgroupLoading, selectedCgroupRuleIds,
-    onConfirm, onCancelApply, onClose, onRerunAudit, onToggleRule, onSetAllSelected,
+    onConfirm, onCancelApply, onClose, onRerunAudit, onRetry, onToggleRule, onSetAllSelected,
     onUpdateCgroupTarget, onBackToConfirm,
 }: FixAllWizardProps) {
     const showConfigure = selectedCgroupRuleIds.length > 0 || step === "configure";
@@ -909,6 +928,7 @@ export function FixAllWizard({
                         <ResultStep
                             ruleStatuses={liveRuleStatuses}
                             onRerunAudit={onRerunAudit}
+                            onRetry={onRetry}
                             onClose={onClose}
                         />
                     )}

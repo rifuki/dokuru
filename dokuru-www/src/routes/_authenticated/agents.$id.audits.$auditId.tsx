@@ -1889,6 +1889,7 @@ function AuditDetailPage() {
     closeWizard,
     applyFix,
     cancelFix,
+    retryFix,
     updateTargetConfig,
   } = useFix({
     agentId: id,
@@ -1935,7 +1936,12 @@ function AuditDetailPage() {
     staleTime: 15_000,
   });
   const hasRunningFixJob = Object.values(fixJobs).some(job => job.agentId === id && job.status === "running");
-  const fixAllSessionActive = ruleStatuses.length > 0 && (fixAllStep === "applying" || fixAllStep === "result");
+  const selectedFixAllStatuses = ruleStatuses.filter(status => status.selected);
+  const fixAllResultSuccessful = fixAllStep === "result"
+    && selectedFixAllStatuses.length > 0
+    && selectedFixAllStatuses.every(status => status.outcome?.status === "Applied");
+  const fixAllResultFailed = fixAllStep === "result" && ruleStatuses.length > 0 && !fixAllResultSuccessful;
+  const fixAllSessionActive = ruleStatuses.length > 0 && (fixAllStep === "applying" || fixAllResultSuccessful);
   const fixControlsLocked = hasRunningFixJob || wizardStep === "applying" || fixAllStep === "applying";
   const fixAllButtonDisabled = fixControlsLocked && !fixAllSessionActive;
 
@@ -2085,8 +2091,10 @@ function AuditDetailPage() {
   const autoFixableResults = baseResults.filter(result => isAutoFixableResult(result) && !appliedRuleIds.has(result.rule.id));
   const fixAllButtonLabel = fixAllStep === "applying" && ruleStatuses.length > 0
     ? "View Fix All Progress"
-    : fixAllStep === "result" && ruleStatuses.length > 0
+    : fixAllResultSuccessful
     ? "View Fix All Result"
+    : fixAllResultFailed
+    ? `Retry Fix All (${autoFixableResults.length})`
     : fixControlsLocked
     ? "Fix running"
     : `Fix All (${autoFixableResults.length})`;
@@ -2627,14 +2635,16 @@ function AuditDetailPage() {
           )}
 
           {/* ── Fix All banner ───────────────────────────────── */}
-          {(autoFixableResults.length > 0 || fixAllSessionActive) && (
+          {(autoFixableResults.length > 0 || fixAllSessionActive || fixAllResultFailed) && (
             <div className="flex flex-col gap-3 rounded-xl border border-[#2496ED]/25 bg-[#2496ED]/5 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5">
               <div className="min-w-0">
                 <p className="text-sm font-bold text-[#2496ED]">
                   {fixAllStep === "applying" && ruleStatuses.length > 0
                     ? "Fix All is still running"
-                    : fixAllStep === "result" && ruleStatuses.length > 0
+                    : fixAllResultSuccessful
                     ? "Fix All result is ready"
+                    : fixAllResultFailed
+                    ? "Fix All can be retried"
                     : `${autoFixableResults.length} rule${autoFixableResults.length > 1 ? "s" : ""} can be auto-fixed`}
                 </p>
                 <p className="text-xs text-[#2496ED]/60 mt-0.5">
@@ -3031,6 +3041,7 @@ function AuditDetailPage() {
           closeWizard();
           handleRerunAudit();
         }}
+        onRetry={retryFix}
       />
       <FixAllWizard
         open={fixAllOpen}
@@ -3052,6 +3063,13 @@ function AuditDetailPage() {
         onRerunAudit={() => {
           closeFixAll();
           handleRerunAudit();
+        }}
+        onRetry={() => {
+          if (autoFixableResults.length === 0) {
+            closeFixAll();
+            return;
+          }
+          openFixAll(autoFixableResults);
         }}
       />
     </div>

@@ -248,7 +248,7 @@ function isTimestampAfter(value?: string, reference?: string) {
 function isFixJobCurrentForAudit(job: FixJobState | undefined, auditTimestamp?: string) {
     if (!job) return false;
     if (job.status === "running" || !auditTimestamp) return true;
-    return isTimestampAfter(job.completedAt ?? job.startedAt, auditTimestamp);
+    return isTimestampAfter(job.startedAt, auditTimestamp);
 }
 
 export function useFix({ agentId, agentUrl, agentAccessMode, token, auditTimestamp }: UseFixArgs) {
@@ -265,34 +265,12 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token, auditTimesta
 
     const startFixJob = useAuditStore((state) => state.startFixJob);
     const cancelFixJob = useAuditStore((state) => state.cancelFixJob);
+    const clearFixJob = useAuditStore((state) => state.clearFixJob);
     const queryClient = useQueryClient();
 
-    const openWizard = useCallback((result: AuditResult) => {
-        const state = useAuditStore.getState();
-        const existingJob = state.fixJobs[fixJobKey(agentId, result.rule.id)];
-        const existingOutcome = state.fixOutcomes[agentId]?.[result.rule.id];
-        const existingJobIsCurrent = isFixJobCurrentForAudit(existingJob, auditTimestamp);
-        setActiveResult(result);
+    const loadPreviewForResult = useCallback((result: AuditResult) => {
         setPreview(null);
         setTargetConfig({});
-        setOpen(true);
-
-        if (existingJob && existingJobIsCurrent) {
-            setStep(existingJob.status === "running" ? "applying" : "result");
-            setOutcome(existingJob.outcome ?? null);
-            setStepIndex(existingJob.stepIndex);
-            setPreviewLoading(false);
-            return;
-        }
-
-        if (existingOutcome && (!existingJob || existingJobIsCurrent)) {
-            setStep("result");
-            setOutcome(existingOutcome);
-            setStepIndex(Number.MAX_SAFE_INTEGER);
-            setPreviewLoading(false);
-            return;
-        }
-
         setStep("confirm");
         setOutcome(null);
         setStepIndex(0);
@@ -321,7 +299,42 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token, auditTimesta
             })
             .catch(() => toast.error(`Failed to load fix preview for rule ${result.rule.id}`))
             .finally(() => setPreviewLoading(false));
-    }, [agentAccessMode, agentId, agentUrl, auditTimestamp, token]);
+    }, [agentAccessMode, agentId, agentUrl, token]);
+
+    const openWizard = useCallback((result: AuditResult) => {
+        const state = useAuditStore.getState();
+        const existingJob = state.fixJobs[fixJobKey(agentId, result.rule.id)];
+        const existingOutcome = state.fixOutcomes[agentId]?.[result.rule.id];
+        const existingJobIsCurrent = isFixJobCurrentForAudit(existingJob, auditTimestamp);
+        setActiveResult(result);
+        setPreview(null);
+        setTargetConfig({});
+        setOpen(true);
+
+        if (existingJob && existingJobIsCurrent) {
+            setStep(existingJob.status === "running" ? "applying" : "result");
+            setOutcome(existingJob.outcome ?? null);
+            setStepIndex(existingJob.stepIndex);
+            setPreviewLoading(false);
+            return;
+        }
+
+        if (existingOutcome && existingJobIsCurrent) {
+            setStep("result");
+            setOutcome(existingOutcome);
+            setStepIndex(Number.MAX_SAFE_INTEGER);
+            setPreviewLoading(false);
+            return;
+        }
+
+        loadPreviewForResult(result);
+    }, [agentId, auditTimestamp, loadPreviewForResult]);
+
+    const retryFix = useCallback(() => {
+        if (!activeResult) return;
+        clearFixJob(agentId, activeResult.rule.id);
+        loadPreviewForResult(activeResult);
+    }, [activeResult, agentId, clearFixJob, loadPreviewForResult]);
 
     const updateTargetConfig = useCallback((containerId: string, patch: Partial<TargetConfig>) => {
         setTargetConfig((current) => ({
@@ -331,6 +344,15 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token, auditTimesta
     }, []);
 
     const closeWizard = useCallback(() => {
+        const ruleId = activeResult?.rule.id;
+        if (ruleId && step === "result") {
+            const job = useAuditStore.getState().fixJobs[fixJobKey(agentId, ruleId)];
+            const finalOutcome = job?.outcome ?? outcome;
+            if (job?.status !== "running" && finalOutcome?.status !== "Applied") {
+                clearFixJob(agentId, ruleId);
+            }
+        }
+
         setOpen(false);
         setTimeout(() => {
             setStep("confirm");
@@ -339,7 +361,7 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token, auditTimesta
             setPreview(null);
             setTargetConfig({});
         }, 300);
-    }, []);
+    }, [activeResult, agentId, clearFixJob, outcome, step]);
 
     const buildTargets = useCallback((ruleId: string): FixTarget[] => {
         if (!preview) return [];
@@ -451,5 +473,6 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token, auditTimesta
         closeWizard,
         applyFix,
         cancelFix,
+        retryFix,
     };
 }

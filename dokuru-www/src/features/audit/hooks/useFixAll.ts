@@ -250,28 +250,54 @@ function shouldPersistFixAllSession(state: FixAllSessionState) {
         || state.cgroupLoading;
 }
 
-function getFixAllSession(agentId: string) {
-    return fixAllSessions.get(agentId) ?? EMPTY_FIX_ALL_SESSION;
+function fixAllSessionKey(agentId: string, auditTimestamp?: string) {
+    return `${agentId}:${auditTimestamp ?? "pending"}`;
 }
 
-function subscribeFixAllSession(agentId: string, listener: () => void) {
-    const listeners = fixAllSessionListeners.get(agentId) ?? new Set<() => void>();
+function getFixAllSession(sessionKey: string) {
+    return fixAllSessions.get(sessionKey) ?? EMPTY_FIX_ALL_SESSION;
+}
+
+function subscribeFixAllSession(sessionKey: string, listener: () => void) {
+    const listeners = fixAllSessionListeners.get(sessionKey) ?? new Set<() => void>();
     listeners.add(listener);
-    fixAllSessionListeners.set(agentId, listeners);
+    fixAllSessionListeners.set(sessionKey, listeners);
     return () => {
         listeners.delete(listener);
-        if (listeners.size === 0) fixAllSessionListeners.delete(agentId);
+        if (listeners.size === 0) fixAllSessionListeners.delete(sessionKey);
     };
 }
 
-function publishFixAllSession(agentId: string) {
-    fixAllSessionListeners.get(agentId)?.forEach((listener) => listener());
+function publishFixAllSession(sessionKey: string) {
+    fixAllSessionListeners.get(sessionKey)?.forEach((listener) => listener());
+}
+
+function createFixAllSession(rules: AuditResult[]): FixAllSessionState {
+    return {
+        ...emptyFixAllSession(),
+        open: true,
+        ruleStatuses: rules.map(r => ({
+            ruleId: r.rule.id,
+            title: r.rule.title,
+            outcome: null,
+            progressEvents: [],
+            state: "pending",
+            selected: !HIGH_RISK_AUTO_FIX_RULES.has(r.rule.id),
+            highRisk: HIGH_RISK_AUTO_FIX_RULES.has(r.rule.id),
+        })),
+    };
+}
+
+function isSuccessfulFixAllResult(ruleStatuses: RuleFixStatus[]) {
+    const selected = ruleStatuses.filter(status => status.selected);
+    return selected.length > 0 && selected.every(status => status.outcome?.status === "Applied");
 }
 
 export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTimestamp }: UseFixAllArgs) {
+    const sessionKey = fixAllSessionKey(agentId, auditTimestamp);
     const session = useSyncExternalStore(
-        useCallback((listener) => subscribeFixAllSession(agentId, listener), [agentId]),
-        useCallback(() => getFixAllSession(agentId), [agentId]),
+        useCallback((listener) => subscribeFixAllSession(sessionKey, listener), [sessionKey]),
+        useCallback(() => getFixAllSession(sessionKey), [sessionKey]),
         () => EMPTY_FIX_ALL_SESSION,
     );
     const sessionRef = useRef(session);
@@ -291,35 +317,27 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
         const next = typeof updater === "function" ? updater(sessionRef.current) : updater;
         sessionRef.current = next;
         if (shouldPersistFixAllSession(next)) {
-            fixAllSessions.set(agentId, next);
+            fixAllSessions.set(sessionKey, next);
         } else {
-            fixAllSessions.delete(agentId);
+            fixAllSessions.delete(sessionKey);
         }
-        publishFixAllSession(agentId);
+        publishFixAllSession(sessionKey);
         return next;
-    }, [agentId]);
+    }, [sessionKey]);
 
     const { open, step, currentIndex, ruleStatuses, cgroupTargets, cgroupLoading } = session;
 
     const openFixAll = useCallback((rules: AuditResult[]) => {
         commitSession((current) => {
-            if ((current.step === "applying" || current.step === "result") && current.ruleStatuses.length > 0) {
+            if (current.step === "applying" && current.ruleStatuses.length > 0) {
                 return { ...current, open: true };
             }
 
-            return {
-                ...emptyFixAllSession(),
-                open: true,
-                ruleStatuses: rules.map(r => ({
-                ruleId: r.rule.id,
-                title: r.rule.title,
-                outcome: null,
-                progressEvents: [],
-                state: "pending",
-                selected: !HIGH_RISK_AUTO_FIX_RULES.has(r.rule.id),
-                highRisk: HIGH_RISK_AUTO_FIX_RULES.has(r.rule.id),
-                })),
-            };
+            if (current.step === "result" && isSuccessfulFixAllResult(current.ruleStatuses)) {
+                return { ...current, open: true };
+            }
+
+            return createFixAllSession(rules);
         });
         cancelRequestedRef.current = false;
         activeRuleRef.current = null;
@@ -360,7 +378,11 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
 
     const closeFixAll = useCallback(() => {
         commitSession((current) => {
-            if (current.step === "applying" || current.step === "result") {
+            if (current.step === "applying") {
+                return { ...current, open: false };
+            }
+
+            if (current.step === "result" && isSuccessfulFixAllResult(current.ruleStatuses)) {
                 return { ...current, open: false };
             }
 

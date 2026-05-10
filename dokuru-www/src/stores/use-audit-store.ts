@@ -208,6 +208,7 @@ interface AuditState {
     appendFixJobProgress: (agentId: string, ruleId: string, progressEvents: FixProgress[]) => void;
     completeFixJob: (agentId: string, ruleId: string, outcome: FixOutcome, progressEvents?: FixProgress[], meta?: AutoTriggeredFixJobMeta) => void;
     hydrateFixJobFromHistory: (agentId: string, entry: FixHistoryEntry) => void;
+    clearFixJob: (agentId: string, ruleId: string) => void;
     markAuditResultViewed: (agentId: string, auditId: string) => void;
     startAudit: (agent: Agent, token?: string) => Promise<AuditResponse>;
     cancelAudit: (agentId: string) => void;
@@ -250,6 +251,24 @@ export const useAuditStore = create<AuditState>((set) => ({
                 [agentId]: { ...s.fixOutcomes[agentId], [ruleId]: outcome },
             },
         })),
+
+    clearFixJob: (agentId, ruleId) =>
+        set((s) => {
+            const key = fixJobKey(agentId, ruleId);
+            const fixJobs = { ...s.fixJobs };
+            delete fixJobs[key];
+            return {
+                fixingRules: {
+                    ...s.fixingRules,
+                    [agentId]: { ...s.fixingRules[agentId], [ruleId]: false },
+                },
+                fixOutcomes: {
+                    ...s.fixOutcomes,
+                    [agentId]: { ...s.fixOutcomes[agentId], [ruleId]: null },
+                },
+                fixJobs,
+            };
+        }),
 
     startSyntheticFixJob: (agentId, ruleId, meta = {}) =>
         set((s) => {
