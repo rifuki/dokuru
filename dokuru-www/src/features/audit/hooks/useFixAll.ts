@@ -461,6 +461,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
     }, [commitSession]);
 
     const loadCgroupConfig = useCallback(async (ruleIds: CgroupRuleId[]) => {
+        if (sessionRef.current.cgroupLoading) return;
         commitSession((current) => ({ ...current, cgroupLoading: true }));
         try {
             const previews = await Promise.all(ruleIds.map(async (ruleId) => ({
@@ -548,6 +549,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
         const activeRuleStatuses = activeSession.ruleStatuses;
         const activeCgroupTargets = activeSession.cgroupTargets;
         const activeStep = activeSession.step;
+        if (activeSession.cgroupLoading) return;
         const selectedTotal = activeRuleStatuses.filter(r => r.selected).length;
         if (selectedTotal === 0) {
             toast.error("Select at least one rule to fix");

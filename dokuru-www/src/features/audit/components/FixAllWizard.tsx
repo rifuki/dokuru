@@ -292,11 +292,12 @@ function RuleEvidenceRow({
 // ── Confirm step ──────────────────────────────────────────────────────────────
 
 function ConfirmStep({
-    ruleStatuses, selectedCount, hasCgroupSelection, onConfirm, onCancel, onToggleRule, onSetAllSelected,
+    ruleStatuses, selectedCount, hasCgroupSelection, cgroupLoading, onConfirm, onCancel, onToggleRule, onSetAllSelected,
 }: {
     ruleStatuses: RuleFixStatus[];
     selectedCount: number;
     hasCgroupSelection: boolean;
+    cgroupLoading: boolean;
     onConfirm: () => void;
     onCancel: () => void;
     onToggleRule: (ruleId: string) => void;
@@ -339,6 +340,22 @@ function ConfirmStep({
                 </div>
             )}
 
+            {cgroupLoading && (
+                <div className="rounded-lg border border-[#2496ED]/25 bg-[#2496ED]/8 px-3.5 py-3">
+                    <div className="flex items-start gap-3">
+                        <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-[#2496ED]" />
+                        <div className="min-w-0 space-y-0.5">
+                            <p className="text-xs font-semibold text-[#2496ED]">
+                                Loading cgroup resource preview
+                            </p>
+                            <p className="text-xs leading-relaxed text-[#2496ED]/65">
+                                Inspecting current containers before showing editable memory, CPU, and PID values.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div>
                 <div className="mb-2 flex items-center justify-between gap-3">
                     <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/38">
@@ -348,7 +365,8 @@ function ConfirmStep({
                         <button
                             type="button"
                             onClick={() => onSetAllSelected(true)}
-                            className="text-xs font-medium text-[#2496ED]/75 hover:text-[#2496ED]"
+                            disabled={cgroupLoading}
+                            className="text-xs font-medium text-[#2496ED]/75 hover:text-[#2496ED] disabled:pointer-events-none disabled:opacity-40"
                         >
                             Select all
                         </button>
@@ -356,7 +374,8 @@ function ConfirmStep({
                         <button
                             type="button"
                             onClick={() => onSetAllSelected(false)}
-                            className="text-xs font-medium text-white/35 hover:text-white/70"
+                            disabled={cgroupLoading}
+                            className="text-xs font-medium text-white/35 hover:text-white/70 disabled:pointer-events-none disabled:opacity-40"
                         >
                             Clear
                         </button>
@@ -368,7 +387,7 @@ function ConfirmStep({
                             key={rs.ruleId}
                             rs={rs}
                             showOutcome={false}
-                            selectable
+                            selectable={!cgroupLoading}
                             onToggle={onToggleRule}
                         />
                     ))}
@@ -378,16 +397,22 @@ function ConfirmStep({
             <div className="flex items-center gap-3 pt-1">
                 <button
                     onClick={onCancel}
-                    className="h-9 flex-1 rounded-md border border-white/12 bg-white/[0.03] px-4 text-sm font-medium text-white/60 transition-all hover:bg-white/[0.07] hover:text-white/90"
+                    disabled={cgroupLoading}
+                    className="h-9 flex-1 rounded-md border border-white/12 bg-white/[0.03] px-4 text-sm font-medium text-white/60 transition-all hover:bg-white/[0.07] hover:text-white/90 disabled:pointer-events-none disabled:opacity-45"
                 >
                     Cancel
                 </button>
                 <button
                     onClick={onConfirm}
-                    disabled={selectedCount === 0}
+                    disabled={selectedCount === 0 || cgroupLoading}
                     className="audit-on-primary inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-md bg-[#2496ED] px-4 text-sm font-semibold text-white transition-all hover:bg-[#1e80cc] active:scale-[0.98] disabled:bg-white/10 disabled:text-white/25 disabled:shadow-none"
                 >
-                    {hasCgroupSelection ? "Configure Resources" : `Apply ${selectedCount} Selected`}
+                    {cgroupLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    {cgroupLoading
+                        ? "Loading resources..."
+                        : hasCgroupSelection
+                        ? "Configure Resources"
+                        : `Apply ${selectedCount} Selected`}
                 </button>
             </div>
         </div>
@@ -904,6 +929,7 @@ export function FixAllWizard({
                             ruleStatuses={liveRuleStatuses}
                             selectedCount={selectedCount}
                             hasCgroupSelection={selectedCgroupRuleIds.length > 0}
+                            cgroupLoading={cgroupLoading}
                             onConfirm={onConfirm}
                             onCancel={onClose}
                             onToggleRule={onToggleRule}
