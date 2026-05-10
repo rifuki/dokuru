@@ -110,6 +110,7 @@ function cgroupTargetsForRule(
     ruleId: string,
     targets: CgroupTargetConfig[],
     currentTargets?: Map<string, FixPreviewTarget>,
+    selectedConcreteRuleIds: CgroupRuleId[] = [],
 ): FixTarget[] {
     if (!isBulkCgroupRule(ruleId)) return [];
 
@@ -129,9 +130,7 @@ function cgroupTargetsForRule(
                 compose_service: currentTarget?.compose_service ?? target.composeService,
             };
 
-            if (ruleId === "5.11" || ruleId === "5.25") payload.memory = Math.max(MIN_CGROUP_VALUES.memoryMb, target.memoryMb) * 1024 * 1024;
-            if (ruleId === "5.12") payload.cpu_shares = Math.max(MIN_CGROUP_VALUES.cpuShares, target.cpuShares);
-            if (ruleId === "5.29") payload.pids_limit = Math.max(MIN_CGROUP_VALUES.pidsLimit, target.pidsLimit);
+            applyConfiguredCgroupPayloadValues(payload, ruleId, target, selectedConcreteRuleIds);
             return [payload];
         });
 
@@ -153,13 +152,54 @@ function cgroupTargetsForRule(
             compose_service: target.compose_service,
         };
 
-        if (ruleId === "5.11" || ruleId === "5.25") payload.memory = target.suggestion?.memory ?? fallback.memoryMb * 1024 * 1024;
-        if (ruleId === "5.12") payload.cpu_shares = target.suggestion?.cpu_shares ?? fallback.cpuShares;
-        if (ruleId === "5.29") payload.pids_limit = target.suggestion?.pids_limit ?? fallback.pidsLimit;
+        applyFreshCgroupPayloadValues(payload, ruleId, target, fallback, selectedConcreteRuleIds);
         return [payload];
     });
 
     return [...configuredTargets, ...freshTargets];
+}
+
+function cgroupValueRuleIds(ruleId: CgroupRuleId, selectedConcreteRuleIds: CgroupRuleId[]) {
+    return ruleId === "5.25" && selectedConcreteRuleIds.length > 0
+        ? selectedConcreteRuleIds
+        : [ruleId];
+}
+
+function applyConfiguredCgroupPayloadValues(
+    payload: FixTarget,
+    ruleId: CgroupRuleId,
+    target: CgroupTargetConfig,
+    selectedConcreteRuleIds: CgroupRuleId[],
+) {
+    const valueRuleIds = cgroupValueRuleIds(ruleId, selectedConcreteRuleIds);
+    if (valueRuleIds.includes("5.11") || valueRuleIds.includes("5.25")) {
+        payload.memory = Math.max(MIN_CGROUP_VALUES.memoryMb, target.memoryMb) * 1024 * 1024;
+    }
+    if (valueRuleIds.includes("5.12")) {
+        payload.cpu_shares = Math.max(MIN_CGROUP_VALUES.cpuShares, target.cpuShares);
+    }
+    if (valueRuleIds.includes("5.29")) {
+        payload.pids_limit = Math.max(MIN_CGROUP_VALUES.pidsLimit, target.pidsLimit);
+    }
+}
+
+function applyFreshCgroupPayloadValues(
+    payload: FixTarget,
+    ruleId: CgroupRuleId,
+    target: FixPreviewTarget,
+    fallback: ReturnType<typeof getSuggestedLimits>,
+    selectedConcreteRuleIds: CgroupRuleId[],
+) {
+    const valueRuleIds = cgroupValueRuleIds(ruleId, selectedConcreteRuleIds);
+    if (valueRuleIds.includes("5.11") || valueRuleIds.includes("5.25")) {
+        payload.memory = target.suggestion?.memory ?? fallback.memoryMb * 1024 * 1024;
+    }
+    if (valueRuleIds.includes("5.12")) {
+        payload.cpu_shares = target.suggestion?.cpu_shares ?? fallback.cpuShares;
+    }
+    if (valueRuleIds.includes("5.29")) {
+        payload.pids_limit = target.suggestion?.pids_limit ?? fallback.pidsLimit;
+    }
 }
 
 function invalidCgroupTarget(ruleIds: CgroupRuleId[], targets: CgroupTargetConfig[]) {
@@ -453,7 +493,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
         }
     }, [agentAccessMode, agentId, agentUrl, commitSession, token]);
 
-    const refreshCgroupTargetsForRule = useCallback(async (ruleId: CgroupRuleId) => {
+    const refreshCgroupTargetsForRule = useCallback(async (ruleId: CgroupRuleId, concreteRuleIds: CgroupRuleId[]) => {
         const preview = agentAccessMode === "relay"
             ? await agentApi.previewFix(agentId, ruleId)
             : await agentDirectApi.previewFix(agentUrl, ruleId, token);
@@ -466,6 +506,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
             ruleId,
             sessionRef.current.cgroupTargets,
             currentTargets,
+            concreteRuleIds,
         );
     }, [agentAccessMode, agentId, agentUrl, token]);
 
@@ -564,10 +605,10 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
             activeRuleRef.current = ruleId;
 
             try {
-                let targets = cgroupTargetsForRule(ruleId, activeCgroupTargets);
+                let targets = cgroupTargetsForRule(ruleId, activeCgroupTargets, undefined, selectedConcreteCgroupRuleIds);
 
                 if (isBulkCgroupRule(ruleId)) {
-                    const refreshedTargets = await refreshCgroupTargetsForRule(ruleId);
+                    const refreshedTargets = await refreshCgroupTargetsForRule(ruleId, selectedConcreteCgroupRuleIds);
                     targets = refreshedTargets;
                     updated[i].progressEvents = [refreshProgress(
                         ruleId,
@@ -698,6 +739,53 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
                     updated[nextIndex].state = "cancelled";
                 }
                 break;
+            }
+        }
+
+        if (!cancelRequestedRef.current && selectedConcreteCgroupRuleIds.length > 0) {
+            for (const ruleId of selectedConcreteCgroupRuleIds) {
+                const index = updated.findIndex((status) => status.ruleId === ruleId && status.selected);
+                if (index < 0 || updated[index].outcome?.status !== "Applied") continue;
+
+                activeRuleRef.current = ruleId;
+                const running = verifyProgress(
+                    ruleId,
+                    "in_progress",
+                    `Running real ${ruleId} verification across current containers after Fix All`,
+                );
+                updated[index] = {
+                    ...updated[index],
+                    progressEvents: [...updated[index].progressEvents, running],
+                };
+                appendFixJobProgress(agentId, ruleId, [running]);
+                commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
+
+                try {
+                    const verified = await verifyRuleNow(ruleId);
+                    updated[index] = {
+                        ...updated[index],
+                        outcome: verified.outcome,
+                        progressEvents: [...updated[index].progressEvents, verified.progressEvent],
+                    };
+                } catch (error) {
+                    const message = error instanceof Error ? error.message : "Real cgroup verification failed";
+                    const outcome: FixOutcome = {
+                        rule_id: ruleId,
+                        status: "Blocked",
+                        message,
+                        requires_restart: false,
+                        restart_command: undefined,
+                        requires_elevation: false,
+                    };
+                    updated[index] = {
+                        ...updated[index],
+                        outcome,
+                        progressEvents: [...updated[index].progressEvents, verifyProgress(ruleId, "error", message)],
+                    };
+                }
+
+                completeFixJob(agentId, ruleId, updated[index].outcome!, updated[index].progressEvents);
+                commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
             }
         }
 

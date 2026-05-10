@@ -1309,12 +1309,27 @@ function isFullyAppliedOutcome(outcome?: FixOutcome | null) {
   return outcome?.status === "Applied" && !/\bFailed\s+\d+:/i.test(outcome.message);
 }
 
+function fixHistoryEntryCoversAuditResult(entry: FixHistoryEntry, result?: AuditResult) {
+  if (!result || result.status !== "Fail") return true;
+  const affectedCount = result.affected.length;
+  const targetCount = entry.request.targets?.length ?? 0;
+  return affectedCount === 0 || targetCount === 0 || targetCount >= affectedCount;
+}
+
 function latestAppliedFixesAfterAudit(history: FixHistoryEntry[], audit?: AuditResponse | null) {
-  const latest = new Map<string, FixHistoryEntry>();
+  const latestByRule = new Map<string, FixHistoryEntry>();
   const sorted = [...history].sort((a, b) => (Date.parse(b.timestamp) || 0) - (Date.parse(a.timestamp) || 0));
   for (const entry of sorted) {
     const ruleId = entry.request.rule_id;
-    if (latest.has(ruleId) || !isFullyAppliedOutcome(entry.outcome) || !isAfterAudit(entry, audit)) continue;
+    if (latestByRule.has(ruleId) || !isAfterAudit(entry, audit)) continue;
+    latestByRule.set(ruleId, entry);
+  }
+
+  const resultByRule = new Map((audit?.results ?? []).map((result) => [result.rule.id, result]));
+  const latest = new Map<string, FixHistoryEntry>();
+  for (const [ruleId, entry] of latestByRule) {
+    if (!isFullyAppliedOutcome(entry.outcome)) continue;
+    if (!fixHistoryEntryCoversAuditResult(entry, resultByRule.get(ruleId))) continue;
     latest.set(ruleId, entry);
   }
   return latest;
@@ -2028,9 +2043,13 @@ function AuditDetailPage() {
   for (const result of baseResults) {
     const ruleId = result.rule.id;
     const job = fixJobs[fixJobKey(id, ruleId)];
-    if (job?.status === "applied" && isFixJobAfterAudit(job, auditData)) {
-      appliedRuleIds.add(ruleId);
-      if (isAutoTriggeredFixJob(job)) autoTriggeredRuleIds.add(ruleId);
+    if (job && isFixJobAfterAudit(job, auditData)) {
+      if (job.status === "applied") {
+        appliedRuleIds.add(ruleId);
+        if (isAutoTriggeredFixJob(job)) autoTriggeredRuleIds.add(ruleId);
+      } else if (job.status === "blocked" || job.status === "failed" || job.status === "cancelled") {
+        appliedRuleIds.delete(ruleId);
+      }
     }
   }
   const forecastRuleIds = appliedRuleIds;

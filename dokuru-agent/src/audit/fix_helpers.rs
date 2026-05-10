@@ -5205,10 +5205,11 @@ fn emit_compose_up_progress(
 
 fn cgroup_update_detail(rule_id: &str, target: &FixTarget) -> String {
     match rule_id {
-        "5.11" | "5.25" => format!(
+        "5.11" => format!(
             "memory={} bytes",
             target.memory.unwrap_or(DEFAULT_MEMORY_BYTES)
         ),
+        "5.25" => cgroup_requested_update_parts(rule_id, target).join(", "),
         "5.12" => format!(
             "cpu_shares={}",
             target.cpu_shares.unwrap_or(DEFAULT_CPU_SHARES)
@@ -5229,10 +5230,11 @@ fn cgroup_update_detail(rule_id: &str, target: &FixTarget) -> String {
 
 fn docker_update_command(rule_id: &str, target: &FixTarget, container: &str) -> String {
     match rule_id {
-        "5.11" | "5.25" => format!(
+        "5.11" => format!(
             "docker update --memory={} --memory-swap=-1 {container}",
             compose_memory_value(target.memory.unwrap_or(DEFAULT_MEMORY_BYTES))
         ),
+        "5.25" => docker_update_command_for_requested_cgroup_values(rule_id, target, container),
         "5.12" => format!(
             "docker update --cpu-shares={} {container}",
             target.cpu_shares.unwrap_or(DEFAULT_CPU_SHARES)
@@ -5249,6 +5251,82 @@ fn docker_update_command(rule_id: &str, target: &FixTarget, container: &str) -> 
         ),
         _ => format!("docker update {container}"),
     }
+}
+
+const fn has_explicit_cgroup_value(target: &FixTarget) -> bool {
+    target.memory.is_some() || target.cpu_shares.is_some() || target.pids_limit.is_some()
+}
+
+fn should_set_memory_for_rule(rule_id: &str, target: &FixTarget) -> bool {
+    matches!(rule_id, "5.11" | "cgroup_all")
+        || (rule_id == "5.25" && (target.memory.is_some() || !has_explicit_cgroup_value(target)))
+}
+
+fn should_set_cpu_for_rule(rule_id: &str, target: &FixTarget) -> bool {
+    matches!(rule_id, "5.12" | "cgroup_all") || (rule_id == "5.25" && target.cpu_shares.is_some())
+}
+
+fn should_set_pids_for_rule(rule_id: &str, target: &FixTarget) -> bool {
+    matches!(rule_id, "5.29" | "cgroup_all") || (rule_id == "5.25" && target.pids_limit.is_some())
+}
+
+fn cgroup_requested_update_parts(rule_id: &str, target: &FixTarget) -> Vec<String> {
+    let mut parts = Vec::new();
+    if should_set_memory_for_rule(rule_id, target) {
+        parts.push(format!(
+            "memory={} bytes",
+            target.memory.unwrap_or(DEFAULT_MEMORY_BYTES)
+        ));
+    }
+    if should_set_cpu_for_rule(rule_id, target) {
+        parts.push(format!(
+            "cpu_shares={}",
+            target.cpu_shares.unwrap_or(DEFAULT_CPU_SHARES)
+        ));
+    }
+    if should_set_pids_for_rule(rule_id, target) {
+        parts.push(format!(
+            "pids_limit={}",
+            target.pids_limit.unwrap_or(DEFAULT_PIDS_LIMIT)
+        ));
+    }
+    if parts.is_empty() {
+        parts.push("resource update".to_string());
+    }
+    parts
+}
+
+fn docker_update_command_for_requested_cgroup_values(
+    rule_id: &str,
+    target: &FixTarget,
+    container: &str,
+) -> String {
+    let mut args = Vec::new();
+    if should_set_memory_for_rule(rule_id, target) {
+        args.push(format!(
+            "--memory={}",
+            compose_memory_value(target.memory.unwrap_or(DEFAULT_MEMORY_BYTES))
+        ));
+        args.push("--memory-swap=-1".to_string());
+    }
+    if should_set_cpu_for_rule(rule_id, target) {
+        args.push(format!(
+            "--cpu-shares={}",
+            target.cpu_shares.unwrap_or(DEFAULT_CPU_SHARES)
+        ));
+    }
+    if should_set_pids_for_rule(rule_id, target) {
+        args.push(format!(
+            "--pids-limit={}",
+            target.pids_limit.unwrap_or(DEFAULT_PIDS_LIMIT)
+        ));
+    }
+
+    if args.is_empty() {
+        return format!("docker update {container}");
+    }
+
+    format!("docker update {} {container}", args.join(" "))
 }
 
 fn compose_memory_value(bytes: i64) -> String {
@@ -5270,7 +5348,7 @@ fn update_options(
 
     let mut options = UpdateContainerOptions::<String>::default();
 
-    if matches!(rule_id, "5.11" | "5.25" | "cgroup_all") {
+    if should_set_memory_for_rule(rule_id, target) {
         let memory = target.memory.unwrap_or(DEFAULT_MEMORY_BYTES);
         if memory <= 0 {
             return Err(eyre::eyre!("memory must be greater than zero"));
@@ -5281,7 +5359,7 @@ fn update_options(
         options.memory_swap = Some(-1);
     }
 
-    if matches!(rule_id, "5.12" | "cgroup_all") {
+    if should_set_cpu_for_rule(rule_id, target) {
         let cpu_shares = target.cpu_shares.unwrap_or(DEFAULT_CPU_SHARES);
         if cpu_shares <= 0 {
             return Err(eyre::eyre!("cpu_shares must be greater than zero"));
@@ -5291,7 +5369,7 @@ fn update_options(
         options.cpu_shares = Some(cpu_shares);
     }
 
-    if matches!(rule_id, "5.29" | "cgroup_all") {
+    if should_set_pids_for_rule(rule_id, target) {
         let pids_limit = target.pids_limit.unwrap_or(DEFAULT_PIDS_LIMIT);
         if pids_limit <= 0 {
             return Err(eyre::eyre!("pids_limit must be greater than zero"));
@@ -5327,21 +5405,21 @@ fn verify_cgroup_host_config(
     target: &FixTarget,
     host_config: &bollard::models::HostConfig,
 ) -> eyre::Result<()> {
-    if matches!(rule_id, "5.11" | "5.25" | "cgroup_all") {
+    if should_set_memory_for_rule(rule_id, target) {
         let expected = target.memory.unwrap_or(DEFAULT_MEMORY_BYTES);
         if host_config.memory.unwrap_or(0) != expected {
             return Err(eyre::eyre!("memory limit did not update to {expected}"));
         }
     }
 
-    if matches!(rule_id, "5.12" | "cgroup_all") {
+    if should_set_cpu_for_rule(rule_id, target) {
         let expected = target.cpu_shares.unwrap_or(DEFAULT_CPU_SHARES);
         if host_config.cpu_shares.unwrap_or(0) != expected {
             return Err(eyre::eyre!("CPU shares did not update to {expected}"));
         }
     }
 
-    if matches!(rule_id, "5.29" | "cgroup_all") {
+    if should_set_pids_for_rule(rule_id, target) {
         let expected = target.pids_limit.unwrap_or(DEFAULT_PIDS_LIMIT);
         if host_config.pids_limit.unwrap_or(0) != expected {
             return Err(eyre::eyre!("PIDs limit did not update to {expected}"));
@@ -7076,7 +7154,7 @@ fn apply_dokuru_override_service_lines(
             set_service_value_text(lines, block, "userns_mode", "!reset null")
                 | set_service_value_text(lines, block, "userns", "!reset null")
         }
-        "5.11" | "5.25" => set_service_value_text(
+        "5.11" => set_service_value_text(
             lines,
             block,
             "mem_limit",
@@ -7086,6 +7164,7 @@ fn apply_dokuru_override_service_lines(
                     .unwrap_or(DEFAULT_MEMORY_BYTES),
             ),
         ),
+        "5.25" => set_cgroup_usage_service_values(lines, block, target),
         "5.12" => set_service_value_text(
             lines,
             block,
@@ -7197,7 +7276,7 @@ fn update_compose_service_lines(
         "5.17" => remove_service_keys_text(lines, block, &["ipc"]),
         "5.21" => remove_service_keys_text(lines, block, &["uts"]),
         "5.31" => remove_service_keys_text(lines, block, &["userns_mode", "userns"]),
-        "5.11" | "5.25" => set_service_value_text(
+        "5.11" => set_service_value_text(
             lines,
             block,
             "mem_limit",
@@ -7207,6 +7286,7 @@ fn update_compose_service_lines(
                     .unwrap_or(DEFAULT_MEMORY_BYTES),
             ),
         ),
+        "5.25" => set_cgroup_usage_service_values(lines, block, target),
         "5.12" => set_service_value_text(
             lines,
             block,
@@ -7248,6 +7328,35 @@ fn set_cgroup_all_service_values(
     set_service_value_text(lines, block, "mem_limit", &memory)
         | set_service_value_text(lines, block, "cpu_shares", &cpu_shares)
         | set_service_value_text(lines, block, "pids_limit", &pids_limit)
+}
+
+fn set_cgroup_usage_service_values(
+    lines: &mut Vec<String>,
+    block: &mut ComposeServiceBlock,
+    target: Option<&FixTarget>,
+) -> bool {
+    let memory = target.and_then(|target| target.memory);
+    let cpu_shares = target.and_then(|target| target.cpu_shares);
+    let pids_limit = target.and_then(|target| target.pids_limit);
+    let has_explicit = memory.is_some() || cpu_shares.is_some() || pids_limit.is_some();
+    let mut changed = false;
+
+    if memory.is_some() || !has_explicit {
+        changed |= set_service_value_text(
+            lines,
+            block,
+            "mem_limit",
+            &compose_memory_value(memory.unwrap_or(DEFAULT_MEMORY_BYTES)),
+        );
+    }
+    if let Some(cpu_shares) = cpu_shares {
+        changed |= set_service_value_text(lines, block, "cpu_shares", &cpu_shares.to_string());
+    }
+    if let Some(pids_limit) = pids_limit {
+        changed |= set_service_value_text(lines, block, "pids_limit", &pids_limit.to_string());
+    }
+
+    changed
 }
 
 fn set_healthcheck_text(lines: &mut Vec<String>, block: &mut ComposeServiceBlock) -> bool {
@@ -9117,16 +9226,15 @@ services:
             ("5.25", "mem_limit", "512m"),
             ("5.29", "pids_limit", "200"),
         ];
-        let target = FixTarget {
-            container_id: "abc".to_string(),
-            memory: Some(512 * 1024 * 1024),
-            cpu_shares: Some(1024),
-            pids_limit: Some(200),
-            strategy: Some("compose_update".to_string()),
-            user: None,
-        };
-
         for (rule_id, key, value) in cases {
+            let target = FixTarget {
+                container_id: "abc".to_string(),
+                memory: matches!(rule_id, "5.11" | "5.25").then_some(512 * 1024 * 1024),
+                cpu_shares: (rule_id == "5.12").then_some(1024),
+                pids_limit: (rule_id == "5.29").then_some(200),
+                strategy: Some("compose_update".to_string()),
+                user: None,
+            };
             let input = "services:\n  web:\n    image: nginx\n    ports:\n      - \"8080:80\"\n";
             let expected = format!(
                 "services:\n  web:\n    image: nginx\n    ports:\n      - \"8080:80\"\n    {key}: {value}\n"
@@ -9203,6 +9311,52 @@ services:
             upsert_dokuru_override_content(None, "web", "cgroup_all", Some(&target)).unwrap();
 
         assert_eq!(rendered, expected);
+    }
+
+    #[test]
+    fn cgroup_usage_rule_can_carry_selected_resource_values() {
+        let target = FixTarget {
+            container_id: "abc".to_string(),
+            memory: Some(512 * 1024 * 1024),
+            cpu_shares: Some(1024),
+            pids_limit: Some(200),
+            strategy: Some(STRATEGY_DOKURU_OVERRIDE.to_string()),
+            user: None,
+        };
+        let expected = r#"# Managed by Dokuru. Keep this file after the base compose files.
+
+services:
+  web:
+    mem_limit: 512m
+    cpu_shares: 1024
+    pids_limit: 200
+"#;
+
+        let rendered = upsert_dokuru_override_content(None, "web", "5.25", Some(&target)).unwrap();
+
+        assert_eq!(rendered, expected);
+        assert_eq!(
+            docker_update_command("5.25", &target, "web-1"),
+            "docker update --memory=512m --memory-swap=-1 --cpu-shares=1024 --pids-limit=200 web-1"
+        );
+    }
+
+    #[test]
+    fn cgroup_usage_rule_keeps_memory_default_when_no_values_selected() {
+        let target = FixTarget {
+            container_id: "abc".to_string(),
+            memory: None,
+            cpu_shares: None,
+            pids_limit: None,
+            strategy: Some(STRATEGY_DOKURU_OVERRIDE.to_string()),
+            user: None,
+        };
+
+        let rendered = upsert_dokuru_override_content(None, "web", "5.25", Some(&target)).unwrap();
+
+        assert!(rendered.contains("mem_limit: 256m"));
+        assert!(!rendered.contains("cpu_shares"));
+        assert!(!rendered.contains("pids_limit"));
     }
 
     #[test]
