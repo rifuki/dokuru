@@ -127,6 +127,7 @@ const DOCKER_ROOT_PARTITION_FIX_STEPS: u8 = 9;
 const MIN_DOCKER_ROOT_LV_BYTES: u64 = 10 * 1024 * 1024 * 1024;
 const DOCKER_ROOT_LV_HEADROOM_BYTES: u64 = 1024 * 1024 * 1024;
 const USERNS_SNAPSHOT_PATH: &str = "/tmp/dokuru-userns-remap-snapshot.json";
+const USERNS_IMAGE_ARCHIVE_PATH: &str = "/tmp/dokuru-userns-remap-images.tar";
 const USERNS_REMAP_RULE_ID: &str = "2.10";
 const USERNS_REMAP_TOTAL_STEPS: u8 = 9;
 const DAEMON_NO_NEW_PRIVILEGES_RULE_ID: &str = "2.15";
@@ -1868,9 +1869,11 @@ struct UsernsSnapshotState {
     snapshots: Vec<ContainerSnapshot>,
     bind_paths: Vec<String>,
     volume_mounts: Vec<VolumeMountSnapshot>,
+    image_names: Vec<String>,
 }
 
 struct UsernsRecoverySummary {
+    image_result: UsernsRecoveryResult,
     volume_result: UsernsRecoveryResult,
     bind_result: UsernsRecoveryResult,
     restart_result: UsernsRecoveryResult,
@@ -2047,6 +2050,186 @@ fn docker_socket_non_root_selection(
         user: uid_gid_user(1000, gid),
         source: format!("Docker socket group {gid}"),
     })
+}
+
+async fn archive_userns_images(image_names: &[String], progress: Option<&ProgressSender>) {
+    if image_names.is_empty() {
+        send_progress(
+            progress,
+            userns_progress_event(
+                1,
+                "archive_images",
+                "done",
+                Some("No container images to archive before userns-remap".to_string()),
+                None,
+            ),
+        );
+        return;
+    }
+
+    let command_text = format!(
+        "docker save -o {} {}",
+        USERNS_IMAGE_ARCHIVE_PATH,
+        image_names.join(" ")
+    );
+    send_progress(
+        progress,
+        userns_progress_event(
+            1,
+            "archive_images",
+            "in_progress",
+            Some(format!(
+                "Archiving {} image(s) before Docker switches to the remapped data root",
+                image_names.len()
+            )),
+            Some(command_text.clone()),
+        ),
+    );
+
+    let mut command = Command::new("docker");
+    command.arg("save").arg("-o").arg(USERNS_IMAGE_ARCHIVE_PATH);
+    for image in image_names {
+        command.arg(image);
+    }
+
+    match command.output().await {
+        Ok(output) if output.status.success() => {
+            send_progress(
+                progress,
+                userns_progress_event(
+                    1,
+                    "archive_images",
+                    "done",
+                    Some(format!(
+                        "Archived {} image(s) to {} for local reload after userns-remap",
+                        image_names.len(),
+                        USERNS_IMAGE_ARCHIVE_PATH
+                    )),
+                    Some(command_text),
+                ),
+            );
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            send_progress(
+                progress,
+                userns_progress_event(
+                    1,
+                    "archive_images",
+                    "error",
+                    Some(format!(
+                        "Image archive failed; recovery may need local images or manual pull: {}",
+                        if stderr.is_empty() { stdout } else { stderr }
+                    )),
+                    Some(command_text),
+                ),
+            );
+        }
+        Err(error) => {
+            send_progress(
+                progress,
+                userns_progress_event(
+                    1,
+                    "archive_images",
+                    "error",
+                    Some(format!(
+                        "Image archive command failed; recovery may need local images or manual pull: {error}"
+                    )),
+                    Some(command_text),
+                ),
+            );
+        }
+    }
+}
+
+async fn load_archived_userns_images(progress: Option<&ProgressSender>) -> UsernsRecoveryResult {
+    let mut result = UsernsRecoveryResult::default();
+    if tokio::fs::metadata(USERNS_IMAGE_ARCHIVE_PATH)
+        .await
+        .is_err()
+    {
+        result.skipped += 1;
+        send_progress(
+            progress,
+            userns_progress_event(
+                7,
+                "load_images",
+                "done",
+                Some("No archived images found to load into remapped Docker root".to_string()),
+                None,
+            ),
+        );
+        return result;
+    }
+
+    let command_text = format!("docker load -i {USERNS_IMAGE_ARCHIVE_PATH}");
+    send_progress(
+        progress,
+        userns_progress_event(
+            7,
+            "load_images",
+            "in_progress",
+            Some("Loading archived images into the remapped Docker data root".to_string()),
+            Some(command_text.clone()),
+        ),
+    );
+
+    match run_cmd("docker", &["load", "-i", USERNS_IMAGE_ARCHIVE_PATH]).await {
+        Ok((stdout, stderr, true)) => {
+            result.completed += 1;
+            let mut event = userns_progress_event(
+                7,
+                "load_images",
+                "done",
+                Some("Archived images loaded into remapped Docker root".to_string()),
+                Some(command_text),
+            );
+            if !stdout.trim().is_empty() {
+                event.stdout = Some(stdout);
+            }
+            if !stderr.trim().is_empty() {
+                event.stderr = Some(stderr);
+            }
+            send_progress(progress, event);
+            let _ = tokio::fs::remove_file(USERNS_IMAGE_ARCHIVE_PATH).await;
+        }
+        Ok((stdout, stderr, _)) => {
+            let detail = if stderr.trim().is_empty() {
+                stdout
+            } else {
+                stderr
+            };
+            result.failed.push(format!("image load failed: {detail}"));
+            send_progress(
+                progress,
+                userns_progress_event(
+                    7,
+                    "load_images",
+                    "error",
+                    Some(format!("Failed to load archived images: {detail}")),
+                    Some(command_text),
+                ),
+            );
+        }
+        Err(error) => {
+            result
+                .failed
+                .push(format!("image load command failed: {error}"));
+            send_progress(
+                progress,
+                userns_progress_event(
+                    7,
+                    "load_images",
+                    "error",
+                    Some(format!("Failed to run docker load: {error}")),
+                    Some(command_text),
+                ),
+            );
+        }
+    }
+
+    result
 }
 
 fn explicit_target_non_root_user(target: &FixTarget) -> Option<String> {
@@ -2438,6 +2621,21 @@ fn unique_volume_mounts(snapshots: &[ContainerSnapshot]) -> Vec<VolumeMountSnaps
             target_gid,
         })
         .collect()
+}
+
+fn unique_image_names(snapshots: &[ContainerSnapshot]) -> Vec<String> {
+    let mut images = snapshots
+        .iter()
+        .filter_map(|snapshot| snapshot.inspect.as_ref())
+        .filter_map(|inspect| inspect.config.as_ref())
+        .filter_map(|config| config.image.as_deref())
+        .map(str::trim)
+        .filter(|image| !image.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    images.sort();
+    images.dedup();
+    images
 }
 
 fn subid_start(path: &str, user: &str) -> Option<u32> {
@@ -2885,6 +3083,8 @@ fn compose_project_up_command_text(
     parts.push("-p".to_string());
     parts.push(target.project.clone());
     parts.push("up".to_string());
+    parts.push("--pull".to_string());
+    parts.push("never".to_string());
     parts.push("-d".to_string());
     parts.extend(target.services.iter().cloned());
     parts.join(" ")
@@ -2913,7 +3113,7 @@ fn compose_project_up_command(
         command.arg("-f").arg(compose_path);
     }
     command.arg("-p").arg(&target.project);
-    command.arg("up").arg("-d");
+    command.arg("up").arg("--pull").arg("never").arg("-d");
     for service in &target.services {
         command.arg(service);
     }
@@ -2970,7 +3170,7 @@ fn send_compose_recovery_heartbeat(
             "restart_containers",
             "in_progress",
             Some(format!(
-                "Waiting for detached Compose recovery for project '{}' ({} service(s)); image pulls can take several minutes on small VPS instances",
+                "Waiting for detached Compose recovery for project '{}' ({} service(s)); using locally loaded images and refusing registry pulls",
                 target.project,
                 target.services.len()
             )),
@@ -3203,6 +3403,7 @@ async fn snapshot_userns_recovery_state(
     let bind_paths = unique_snapshot_values(&snapshots, |snapshot| &snapshot.bind_mount_paths);
     let volume_names = unique_snapshot_values(&snapshots, |snapshot| &snapshot.named_volume_names);
     let volume_mounts = unique_volume_mounts(&snapshots);
+    let image_names = unique_image_names(&snapshots);
     let host_userns_count = snapshots
         .iter()
         .filter(|snapshot| snapshot.uses_host_userns)
@@ -3229,6 +3430,7 @@ async fn snapshot_userns_recovery_state(
         snapshots,
         bind_paths,
         volume_mounts,
+        image_names,
     }
 }
 
@@ -3449,6 +3651,8 @@ async fn recover_userns_state(
     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
     let (uid, gid) = dockremap_uid_gid();
 
+    let image_result = load_archived_userns_images(progress).await;
+
     send_progress(
         progress,
         userns_progress_event(
@@ -3488,20 +3692,22 @@ async fn recover_userns_state(
             "restart_containers",
             "in_progress",
             Some("Restarting Compose stacks and standalone containers from snapshot".to_string()),
-            Some("docker compose up -d".to_string()),
+            Some("docker compose up --pull never -d".to_string()),
         ),
     );
     let restart_result = restart_recovered_containers(docker, &state.snapshots, progress).await;
 
-    let failures = volume_result
+    let failures = image_result
         .failed
         .iter()
+        .chain(&volume_result.failed)
         .chain(&bind_result.failed)
         .chain(&restart_result.failed)
         .cloned()
         .collect();
 
     UsernsRecoverySummary {
+        image_result,
         volume_result,
         bind_result,
         restart_result,
@@ -3510,6 +3716,7 @@ async fn recover_userns_state(
 }
 
 fn userns_final_outcome(summary: &UsernsRecoverySummary) -> FixOutcome {
+    let images = summary.image_result.completed;
     let volumes = summary.volume_result.completed;
     let binds = summary.bind_result.completed;
     let restarts = summary.restart_result.completed;
@@ -3518,7 +3725,7 @@ fn userns_final_outcome(summary: &UsernsRecoverySummary) -> FixOutcome {
         return applied(
             USERNS_REMAP_RULE_ID,
             &format!(
-                "userns-remap enabled and recovery completed: migrated {volumes} volume(s), fixed {binds} bind mount path(s), restarted/recreated {restarts} container group(s)"
+                "userns-remap enabled and recovery completed: loaded {images} image archive(s), migrated {volumes} volume(s), fixed {binds} bind mount path(s), restarted/recreated {restarts} container group(s)"
             ),
             false,
         );
@@ -3528,7 +3735,7 @@ fn userns_final_outcome(summary: &UsernsRecoverySummary) -> FixOutcome {
         rule_id: USERNS_REMAP_RULE_ID.to_string(),
         status: FixStatus::Guided,
         message: format!(
-            "userns-remap enabled, but recovery needs manual attention. Completed: {volumes} volume(s), {binds} bind path(s), {restarts} container group(s). Failed {}: {}",
+            "userns-remap enabled, but recovery needs manual attention. Completed: {images} image archive(s), {volumes} volume(s), {binds} bind path(s), {restarts} container group(s). Failed {}: {}",
             summary.failures.len(),
             summary
                 .failures
@@ -3549,6 +3756,8 @@ pub async fn apply_userns_remap_fix_with_progress(
     progress: Option<&ProgressSender>,
 ) -> eyre::Result<FixOutcome> {
     let state = snapshot_userns_recovery_state(docker, progress).await;
+
+    archive_userns_images(&state.image_names, progress).await;
 
     create_dockremap_user(progress).await;
 
@@ -9428,6 +9637,25 @@ services:
         assert_eq!(
             path,
             PathBuf::from("/srv/dokuru-lab/docker-compose.override.yaml")
+        );
+    }
+
+    #[test]
+    fn userns_compose_recovery_refuses_registry_pulls() {
+        let target = ComposeRecoveryTarget {
+            project: "dokuru-lab".to_string(),
+            working_dir: Some(PathBuf::from("/srv/dokuru-lab")),
+            config_files: Some("/srv/dokuru-lab/docker-compose.yaml".to_string()),
+            services: vec!["web".to_string(), "api".to_string()],
+        };
+        let command = compose_project_up_command_text(
+            &target,
+            &[PathBuf::from("/srv/dokuru-lab/docker-compose.yaml")],
+        );
+
+        assert_eq!(
+            command,
+            "docker compose -f /srv/dokuru-lab/docker-compose.yaml -p dokuru-lab up --pull never -d web api"
         );
     }
 
