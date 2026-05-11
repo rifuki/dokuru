@@ -3326,6 +3326,206 @@ fn add_container_uid_gid_to_userns_base(base: (u32, u32), uid: u32, gid: u32) ->
     )
 }
 
+fn is_local_volume_driver(driver: Option<&str>) -> bool {
+    driver
+        .map(str::trim)
+        .is_none_or(|driver| driver.is_empty() || driver == "local")
+}
+
+fn has_userns_sensitive_device_access(inspect: &ContainerInspectResponse) -> bool {
+    let Some(host_config) = inspect.host_config.as_ref() else {
+        return false;
+    };
+
+    host_config
+        .devices
+        .as_ref()
+        .is_some_and(|devices| !devices.is_empty())
+        || host_config
+            .device_requests
+            .as_ref()
+            .is_some_and(|requests| !requests.is_empty())
+        || host_config
+            .device_cgroup_rules
+            .as_ref()
+            .is_some_and(|rules| !rules.is_empty())
+}
+
+fn has_external_volume_driver(inspect: &ContainerInspectResponse) -> Option<String> {
+    if let Some(driver) = inspect
+        .host_config
+        .as_ref()
+        .and_then(|host_config| host_config.volume_driver.as_deref())
+        .filter(|driver| !is_local_volume_driver(Some(driver)))
+    {
+        return Some(format!("volume_driver={driver}"));
+    }
+
+    inspect.mounts.as_ref()?.iter().find_map(|mount| {
+        matches!(mount.typ, Some(MountPointTypeEnum::VOLUME))
+            .then(|| mount.driver.as_deref())
+            .flatten()
+            .filter(|driver| !is_local_volume_driver(Some(driver)))
+            .map(|driver| {
+                let name = mount.name.as_deref().unwrap_or("<unnamed>");
+                format!("volume {name} uses driver {driver}")
+            })
+    })
+}
+
+fn userns_preflight_blockers(snapshots: &[ContainerSnapshot]) -> Vec<String> {
+    let mut blockers = Vec::new();
+
+    for snapshot in snapshots.iter().filter(|snapshot| snapshot.was_running) {
+        let Some(inspect) = snapshot.inspect.as_ref() else {
+            continue;
+        };
+
+        let mut reasons = Vec::new();
+        if let Some(host_config) = inspect.host_config.as_ref() {
+            let userns_mode = host_config.userns_mode.as_deref().unwrap_or_default();
+            if userns_mode == "host" {
+                reasons.push(
+                    "UsernsMode=host opt-out (fix rule 5.31 first; userns-remap will not isolate this workload)"
+                        .to_string(),
+                );
+            }
+
+            if userns_mode != "host" {
+                if host_config.network_mode.as_deref() == Some("host") {
+                    reasons.push(
+                        "NetworkMode=host is incompatible with daemon userns-remap (fix rule 5.10 first)"
+                            .to_string(),
+                    );
+                }
+
+                if host_config.pid_mode.as_deref() == Some("host") {
+                    reasons.push(
+                        "PidMode=host is incompatible with daemon userns-remap (fix rule 5.16 first)"
+                            .to_string(),
+                    );
+                }
+
+                if host_config.privileged == Some(true) {
+                    reasons.push(
+                        "Privileged=true is incompatible with userns-remap unless userns=host, which would bypass isolation (fix rule 5.5 first)"
+                            .to_string(),
+                    );
+                }
+            }
+        }
+
+        if let Some(driver) = has_external_volume_driver(inspect) {
+            reasons.push(format!(
+                "External volume/storage driver may not honor daemon UID/GID remapping ({driver})"
+            ));
+        }
+
+        if has_userns_sensitive_device_access(inspect) {
+            reasons.push(
+                "Host device access/GPU requests can break under userns-remap and need manual device policy review (fix rule 5.18 first)"
+                    .to_string(),
+            );
+        }
+
+        if let Some(mounts) = inspect.mounts.as_ref() {
+            for mount in mounts {
+                if !matches!(mount.typ, Some(MountPointTypeEnum::BIND)) || mount.rw == Some(false) {
+                    continue;
+                }
+
+                let source = mount.source.as_deref().unwrap_or_default();
+                let destination = mount.destination.as_deref().unwrap_or_default();
+                if [source, destination].into_iter().any(is_docker_socket_path) {
+                    reasons.push(
+                        "Writable Docker socket bind would lose access or require restoring a host-root escape primitive"
+                            .to_string(),
+                    );
+                    continue;
+                }
+
+                if !is_safe_userns_bind_path(source) {
+                    reasons.push(format!(
+                        "Unsafe writable bind mount cannot be auto-owned for remapped root: {source} -> {destination}"
+                    ));
+                }
+            }
+        }
+
+        if !reasons.is_empty() {
+            reasons.sort();
+            reasons.dedup();
+            blockers.push(format!("{}: {}", snapshot.name, reasons.join("; ")));
+        }
+    }
+
+    blockers
+}
+
+fn userns_preflight_blocked_outcome(blockers: &[String]) -> FixOutcome {
+    FixOutcome {
+        rule_id: USERNS_REMAP_RULE_ID.to_string(),
+        status: FixStatus::Blocked,
+        message: format!(
+            "userns-remap was not applied because {} running workload(s) use Docker features known to break or bypass daemon userns-remap. Resolve these first: {}",
+            blockers.len(),
+            blockers
+                .iter()
+                .take(6)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("; ")
+        ),
+        requires_restart: false,
+        restart_command: None,
+        requires_elevation: true,
+    }
+}
+
+fn preflight_userns_known_incompatibilities(
+    state: &UsernsSnapshotState,
+    progress: Option<&ProgressSender>,
+) -> Option<FixOutcome> {
+    let blockers = userns_preflight_blockers(&state.snapshots);
+    if blockers.is_empty() {
+        send_progress(
+            progress,
+            userns_progress_event(
+                1,
+                "preflight_userns_incompatibilities",
+                "done",
+                Some(
+                    "No known runtime incompatibilities blocking userns-remap recovery".to_string(),
+                ),
+                None,
+            ),
+        );
+        return None;
+    }
+
+    let detail = format!(
+        "Blocked before Docker restart: {}",
+        blockers
+            .iter()
+            .take(6)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("; ")
+    );
+    send_progress(
+        progress,
+        userns_progress_event(
+            1,
+            "preflight_userns_incompatibilities",
+            "error",
+            Some(detail),
+            Some("fix incompatible containers, then rerun rule 2.10".to_string()),
+        ),
+    );
+
+    Some(userns_preflight_blocked_outcome(&blockers))
+}
+
 fn is_safe_userns_bind_path(path: &str) -> bool {
     let path = Path::new(path);
     if !path.is_absolute() || path == Path::new("/") {
@@ -4500,6 +4700,10 @@ pub async fn apply_userns_remap_fix_with_progress(
     progress: Option<&ProgressSender>,
 ) -> eyre::Result<FixOutcome> {
     let state = snapshot_userns_recovery_state(docker, progress).await;
+
+    if let Some(outcome) = preflight_userns_known_incompatibilities(&state, progress) {
+        return Ok(outcome);
+    }
 
     let image_recovery_mode = archive_userns_images(&state.image_names, progress).await;
 
@@ -9918,6 +10122,163 @@ services:
         assert!(!should_chown_runtime_bind_path(
             "/home/app/current/Caddyfile"
         ));
+    }
+
+    fn userns_snapshot_with_inspect(
+        name: &str,
+        inspect: ContainerInspectResponse,
+    ) -> ContainerSnapshot {
+        ContainerSnapshot {
+            id: name.to_string(),
+            name: name.to_string(),
+            was_running: true,
+            bind_mount_paths: Vec::new(),
+            named_volume_names: Vec::new(),
+            named_volume_mounts: Vec::new(),
+            compose_working_dir: None,
+            compose_config_files: None,
+            compose_project: None,
+            compose_service: None,
+            is_compose_managed: false,
+            uses_host_userns: false,
+            inspect: Some(inspect),
+        }
+    }
+
+    #[test]
+    fn userns_preflight_blocks_host_namespace_and_privileged_workloads() {
+        let inspect = serde_json::from_value(serde_json::json!({
+            "HostConfig": {
+                "NetworkMode": "host",
+                "PidMode": "host",
+                "Privileged": true
+            }
+        }))
+        .unwrap();
+        let snapshots = vec![userns_snapshot_with_inspect("legacy-api", inspect)];
+        let blockers = userns_preflight_blockers(&snapshots);
+
+        assert_eq!(blockers.len(), 1);
+        assert!(blockers[0].contains("NetworkMode=host"));
+        assert!(blockers[0].contains("PidMode=host"));
+        assert!(blockers[0].contains("Privileged=true"));
+    }
+
+    #[test]
+    fn userns_preflight_blocks_docker_socket_and_external_volume_drivers() {
+        let inspect = serde_json::from_value(serde_json::json!({
+            "HostConfig": {
+                "VolumeDriver": "nfs"
+            },
+            "Mounts": [
+                {
+                    "Type": "bind",
+                    "Source": "/var/run/docker.sock",
+                    "Destination": "/var/run/docker.sock",
+                    "RW": true
+                },
+                {
+                    "Type": "volume",
+                    "Name": "remote-data",
+                    "Driver": "rexray",
+                    "Source": "/var/lib/docker/volumes/remote-data/_data",
+                    "Destination": "/data",
+                    "RW": true
+                }
+            ]
+        }))
+        .unwrap();
+        let snapshots = vec![userns_snapshot_with_inspect("runner", inspect)];
+        let blockers = userns_preflight_blockers(&snapshots);
+
+        assert_eq!(blockers.len(), 1);
+        assert!(blockers[0].contains("Docker socket"));
+        assert!(blockers[0].contains("volume_driver=nfs"));
+    }
+
+    #[test]
+    fn userns_preflight_allows_safe_runtime_binds_and_readonly_config_binds() {
+        let inspect = serde_json::from_value(serde_json::json!({
+            "HostConfig": {
+                "NetworkMode": "bridge"
+            },
+            "Mounts": [
+                {
+                    "Type": "bind",
+                    "Source": "/srv/app/data",
+                    "Destination": "/app/data",
+                    "RW": true
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/etc/example.conf",
+                    "Destination": "/app/config/example.conf",
+                    "RW": false
+                }
+            ]
+        }))
+        .unwrap();
+        let snapshots = vec![userns_snapshot_with_inspect("web", inspect)];
+
+        assert!(userns_preflight_blockers(&snapshots).is_empty());
+    }
+
+    #[test]
+    fn userns_preflight_blocks_unsafe_writable_system_binds() {
+        let inspect = serde_json::from_value(serde_json::json!({
+            "Mounts": [
+                {
+                    "Type": "bind",
+                    "Source": "/etc",
+                    "Destination": "/host-etc",
+                    "RW": true
+                }
+            ]
+        }))
+        .unwrap();
+        let snapshots = vec![userns_snapshot_with_inspect("host-writer", inspect)];
+        let blockers = userns_preflight_blockers(&snapshots);
+
+        assert_eq!(blockers.len(), 1);
+        assert!(blockers[0].contains("Unsafe writable bind mount"));
+    }
+
+    #[test]
+    fn userns_preflight_blocks_explicit_userns_host_opt_out() {
+        let inspect = serde_json::from_value(serde_json::json!({
+            "HostConfig": {
+                "UsernsMode": "host",
+                "NetworkMode": "host"
+            }
+        }))
+        .unwrap();
+        let snapshots = vec![userns_snapshot_with_inspect("host-userns", inspect)];
+        let blockers = userns_preflight_blockers(&snapshots);
+
+        assert_eq!(blockers.len(), 1);
+        assert!(blockers[0].contains("UsernsMode=host"));
+        assert!(!blockers[0].contains("NetworkMode=host is incompatible"));
+    }
+
+    #[test]
+    fn userns_preflight_blocks_host_device_access() {
+        let inspect = serde_json::from_value(serde_json::json!({
+            "HostConfig": {
+                "Devices": [
+                    {
+                        "PathOnHost": "/dev/kmsg",
+                        "PathInContainer": "/dev/kmsg",
+                        "CgroupPermissions": "rwm"
+                    }
+                ]
+            }
+        }))
+        .unwrap();
+        let snapshots = vec![userns_snapshot_with_inspect("device-user", inspect)];
+        let blockers = userns_preflight_blockers(&snapshots);
+
+        assert_eq!(blockers.len(), 1);
+        assert!(blockers[0].contains("Host device access"));
     }
 
     #[test]
