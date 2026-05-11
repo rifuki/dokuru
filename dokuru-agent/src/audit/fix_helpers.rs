@@ -3151,7 +3151,7 @@ async fn snapshot_all_containers(docker: &Docker) -> Vec<ContainerSnapshot> {
         if let Some(mounts) = &inspect.mounts {
             for mount in mounts {
                 match mount.typ {
-                    Some(MountPointTypeEnum::BIND) => {
+                    Some(MountPointTypeEnum::BIND) if mount.rw != Some(false) => {
                         if let Some(source) =
                             mount.source.as_ref().filter(|source| !source.is_empty())
                         {
@@ -3485,22 +3485,9 @@ async fn fix_bind_mount_permissions(
         return result;
     }
 
-    if let Some(error) = ensure_setfacl_available().await {
-        result.failed.push(format!(
-            "setfacl is required to preserve host ownership while granting remapped UID access: {error}"
-        ));
-        send_progress(
-            progress,
-            userns_progress_event(
-                8,
-                "fix_bind_mount_permissions",
-                "error",
-                Some(result.failed.join("; ")),
-                Some("install acl package or run setfacl manually".to_string()),
-            ),
-        );
-        return result;
-    }
+    let acl_error = ensure_setfacl_available().await;
+    let acl_available = acl_error.is_none();
+    let mut runtime_chown_without_host_acl = 0usize;
 
     for path in bind_paths {
         if !is_safe_userns_bind_path(path) {
@@ -3513,8 +3500,22 @@ async fn fix_bind_mount_permissions(
             continue;
         };
 
-        match recover_bind_mount_access(path, &metadata, uid, gid).await {
-            Ok((_, _, true)) => result.completed += 1,
+        let is_runtime_path = should_chown_runtime_bind_path(path);
+        if !is_runtime_path && !acl_available {
+            result.failed.push(format!(
+                "{path}: setfacl is required to grant remapped UID access without changing host ownership: {}",
+                acl_error.as_deref().unwrap_or("setfacl unavailable")
+            ));
+            continue;
+        }
+
+        match recover_bind_mount_access_with_acl(path, &metadata, uid, gid, acl_available).await {
+            Ok((_, _, true)) => {
+                result.completed += 1;
+                if is_runtime_path && !acl_available {
+                    runtime_chown_without_host_acl += 1;
+                }
+            }
             Ok((_, stderr, _)) => result
                 .failed
                 .push(format!("{path}: recovery failed: {stderr}")),
@@ -3530,10 +3531,17 @@ async fn fix_bind_mount_permissions(
         "error"
     };
     let detail = if result.failed.is_empty() {
-        format!(
+        let mut detail = format!(
             "Granted remapped UID access on {} bind mount path(s), skipped {} unsafe/missing path(s)",
             result.completed, result.skipped
-        )
+        );
+        if runtime_chown_without_host_acl > 0 {
+            let _ = write!(
+                detail,
+                "; chowned {runtime_chown_without_host_acl} runtime path(s) without host-owner ACL preservation because setfacl was unavailable"
+            );
+        }
+        detail
     } else {
         format!(
             "Granted remapped UID access on {} path(s), skipped {}, failed {}: {}",
@@ -3562,8 +3570,25 @@ async fn recover_bind_mount_access(
     uid: u32,
     gid: u32,
 ) -> std::io::Result<(String, String, bool)> {
+    recover_bind_mount_access_with_acl(path, metadata, uid, gid, true).await
+}
+
+async fn recover_bind_mount_access_with_acl(
+    path: &str,
+    metadata: &std::fs::Metadata,
+    uid: u32,
+    gid: u32,
+    acl_available: bool,
+) -> std::io::Result<(String, String, bool)> {
     if should_chown_runtime_bind_path(path) {
-        return chown_runtime_bind_path_preserving_host_access(path, metadata, uid, gid).await;
+        return chown_runtime_bind_path_preserving_host_access(
+            path,
+            metadata,
+            uid,
+            gid,
+            acl_available,
+        )
+        .await;
     }
 
     grant_acl_user_access(path, metadata, uid).await
@@ -3592,6 +3617,7 @@ async fn chown_runtime_bind_path_preserving_host_access(
     metadata: &std::fs::Metadata,
     uid: u32,
     gid: u32,
+    preserve_host_acl: bool,
 ) -> std::io::Result<(String, String, bool)> {
     let host_uid = metadata.uid();
     let owner = format!("{uid}:{gid}");
@@ -3602,6 +3628,10 @@ async fn chown_runtime_bind_path_preserving_host_access(
     };
 
     if !chown_result.2 {
+        return Ok(chown_result);
+    }
+
+    if !preserve_host_acl {
         return Ok(chown_result);
     }
 
@@ -4379,7 +4409,7 @@ async fn recover_userns_state(
             "fix_bind_mount_permissions",
             "in_progress",
             Some(format!(
-                "Recovering {} bind mount path(s): ACL for normal paths, runtime data dirs chowned to remap UID with host-owner ACL preserved",
+                "Recovering {} writable bind mount path(s): runtime data dirs are chowned to remap UID; ACL preserves host-owner access when available",
                 state.bind_paths.len()
             )),
             Some(format!(
@@ -9867,6 +9897,27 @@ services:
             non_root_mount_host_uid_gid(&action, None, 70, 70),
             (100_070, 100_070)
         );
+    }
+
+    #[test]
+    fn userns_runtime_bind_paths_are_chown_recovered() {
+        for path in [
+            "/home/app/current/data",
+            "/home/app/current/uploads",
+            "/srv/app/logs",
+            "/srv/app/postgres_data",
+            "/srv/app/cache",
+        ] {
+            assert!(
+                should_chown_runtime_bind_path(path),
+                "{path} should be recovered by chown so userns-remap does not require setfacl"
+            );
+        }
+
+        assert!(!should_chown_runtime_bind_path("/home/app/current/config"));
+        assert!(!should_chown_runtime_bind_path(
+            "/home/app/current/Caddyfile"
+        ));
     }
 
     #[test]
