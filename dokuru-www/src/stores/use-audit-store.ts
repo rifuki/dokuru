@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { toast } from "sonner";
 import { agentApi } from "@/lib/api/agent";
 import { agentDirectApi, type AuditResponse, type AuditResult, type AuditStreamMessage, type FixHistoryEntry, type FixOutcome, type FixProgress, type FixTarget } from "@/lib/api/agent-direct";
+import { appendFixProgressEvents, coalesceFixProgressEvents } from "@/lib/fix-progress-events";
 import { LOCAL_AGENT_ID } from "@/lib/local-agent";
 import type { Agent } from "@/types/agent";
 
@@ -309,7 +310,7 @@ export const useAuditStore = create<AuditState>((set) => ({
                     ...s.fixJobs,
                     [key]: {
                         ...current,
-                        progressEvents: [...current.progressEvents, ...progressEvents],
+                        progressEvents: appendFixProgressEvents(current.progressEvents, progressEvents),
                     },
                 },
             };
@@ -319,6 +320,7 @@ export const useAuditStore = create<AuditState>((set) => ({
         set((s) => {
             const key = fixJobKey(agentId, ruleId);
             const currentJob = s.fixJobs[key];
+            const normalizedEvents = coalesceFixProgressEvents(progressEvents);
             const status: FixJobStatus = isFullyAppliedOutcome(outcome)
                 ? "applied"
                 : outcome.status === "Blocked"
@@ -342,8 +344,8 @@ export const useAuditStore = create<AuditState>((set) => ({
                         status,
                         outcome,
                         error: status === "applied" ? undefined : outcome.message,
-                        progressEvents,
-                        stepIndex: finalFixStepIndex(status, progressEvents),
+                        progressEvents: normalizedEvents,
+                        stepIndex: finalFixStepIndex(status, normalizedEvents),
                         startedAt: currentJob?.startedAt ?? completedAt,
                         completedAt,
                         autoTriggered: meta.autoTriggered ?? currentJob?.autoTriggered,
@@ -386,7 +388,7 @@ export const useAuditStore = create<AuditState>((set) => ({
                         status,
                         outcome: entry.outcome,
                         error: status === "applied" ? undefined : entry.outcome.message,
-                        progressEvents: entry.progress_events ?? [],
+                        progressEvents: coalesceFixProgressEvents(entry.progress_events ?? []),
                         stepIndex: Number.MAX_SAFE_INTEGER,
                         startedAt: entry.timestamp,
                         completedAt: entry.timestamp,
@@ -726,7 +728,7 @@ export const useAuditStore = create<AuditState>((set) => ({
                 ? agentApi.fixStreamUrl(request.agentId, payload)
                 : agentDirectApi.fixStreamUrl(request.agentUrl, payload, request.token);
             const socket = new WebSocket(url);
-            const streamEvents: FixProgress[] = [...initialProgressEvents];
+            let streamEvents: FixProgress[] = [...initialProgressEvents];
             let settled = false;
             fixSockets.set(key, socket);
 
@@ -902,7 +904,7 @@ export const useAuditStore = create<AuditState>((set) => ({
                 try {
                     const message = JSON.parse(String(event.data)) as FixStreamMessage;
                     if (message.type === "progress") {
-                        streamEvents.push(message.data);
+                        streamEvents = appendFixProgressEvents(streamEvents, [message.data]);
                         set((s) => ({
                             fixJobs: {
                                 ...s.fixJobs,

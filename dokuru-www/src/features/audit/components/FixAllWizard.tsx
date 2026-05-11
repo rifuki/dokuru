@@ -13,6 +13,7 @@ import { ResizableSheetContent } from "@/features/audit/components/ResizableShee
 import { ProgressEventsPanel } from "@/features/audit/components/ProgressEventsPanel";
 import { CGROUP_RESOURCE_MINIMUMS, CgroupTargetEditor, type CgroupResourceField } from "@/features/audit/components/CgroupTargetControls";
 import type { FixProgress } from "@/lib/api/agent-direct";
+import { appendFixProgressEvents, coalesceFixProgressEvents } from "@/lib/fix-progress-events";
 import { fixJobKey, useAuditStore } from "@/stores/use-audit-store";
 
 // ── Step indicator ────────────────────────────────────────────────────────────
@@ -215,7 +216,8 @@ function RuleEvidenceRow({
     const [expanded, setExpanded] = useState(defaultExpanded);
     const isActive = rs.state === "applying";
     const isRecreate = isContainerRecreateRule(rs.ruleId);
-    const eventCount = rs.progressEvents.length;
+    const evidenceEvents = coalesceFixProgressEvents(rs.progressEvents);
+    const eventCount = evidenceEvents.length;
     const summary = rs.state === "skipped"
         ? "Skipped by selection"
         : rs.state === "cancelled"
@@ -277,7 +279,7 @@ function RuleEvidenceRow({
             {expanded && (
                 <div className="px-3 pb-3 pl-10">
                     <ProgressEventsPanel
-                        progressEvents={rs.progressEvents}
+                        progressEvents={evidenceEvents}
                         title={`rule ${rs.ruleId} terminal transcript`}
                         emptyMessage={rs.state === "pending" ? "Waiting for this rule to start" : "No streamed evidence captured"}
                         className="shadow-none"
@@ -684,29 +686,8 @@ function uniqueLabels(values: Array<string | undefined | null>) {
     return Array.from(new Set(values.map(value => value?.trim()).filter(Boolean))) as string[];
 }
 
-function progressEventKey(event: FixProgress) {
-    return [
-        event.rule_id,
-        event.container_name,
-        event.step,
-        event.total_steps,
-        event.action,
-        event.status,
-        event.detail,
-        event.command,
-        event.stdout,
-        event.stderr,
-    ].join("\0");
-}
-
 function mergeProgressEvents(base: FixProgress[], live: FixProgress[]) {
-    const seen = new Set<string>();
-    return [...base, ...live].filter((event) => {
-        const key = progressEventKey(event);
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-    });
+    return appendFixProgressEvents(base, live);
 }
 
 // ── Result step ───────────────────────────────────────────────────────────────
@@ -727,8 +708,9 @@ function ResultStep({
     const skipped = ruleStatuses.filter(r => r.state === "skipped").length;
     const autoTriggered = selected.filter(r => r.autoTriggered).length;
     const allApplied = selected.length > 0 && applied === selected.length;
-    const evidenceCount = selected.reduce((sum, rs) => sum + rs.progressEvents.length, 0);
-    const targets = uniqueLabels(selected.flatMap(rs => rs.progressEvents.map(event => event.container_name)));
+    const selectedEvidence = selected.map(rs => coalesceFixProgressEvents(rs.progressEvents));
+    const evidenceCount = selectedEvidence.reduce((sum, events) => sum + events.length, 0);
+    const targets = uniqueLabels(selectedEvidence.flatMap(events => events.map(event => event.container_name)));
     const unresolvedLabel = [
         applied > 0 ? `${applied} applied` : null,
         blocked > 0 ? `${blocked} blocked` : null,

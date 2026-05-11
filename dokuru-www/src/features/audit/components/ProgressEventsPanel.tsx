@@ -4,6 +4,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FixProgress } from "@/lib/api/agent-direct";
+import { coalesceFixProgressEvents } from "@/lib/fix-progress-events";
 
 export function CopyButton({ text }: { text: string }) {
     const [copied, setCopied] = useState(false);
@@ -89,6 +90,14 @@ function ProgressEventRow({
 
             {expanded && hasStructuredExtras && (
                 <div className="mt-3 min-w-0 space-y-2.5 pb-1 pr-1 sm:ml-[90px]">
+                    {event.detail && hasStructuredExtras && (
+                        <div className="flex min-w-0 items-start gap-2 rounded-lg border border-white/8 bg-black/35 px-3 py-2.5 shadow-inner">
+                            <pre className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[10px] leading-relaxed text-white/55">
+                                {event.detail}
+                            </pre>
+                            <CopyButton text={event.detail} />
+                        </div>
+                    )}
                     {event.command && (
                         <div className="flex min-w-0 items-start gap-2 rounded-lg border border-[#2496ED]/20 bg-[#06111a] px-3 py-2.5 shadow-inner">
                             <pre className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[10px] leading-relaxed text-[#58b8ff]">
@@ -148,8 +157,9 @@ export function ProgressEventsPanel({
 
     if (progressEvents.length === 0 && !emptyMessage) return null;
 
-    const hasErrors = progressEvents.some(e => e.status === "error");
-    const displayedEvents = filterError ? progressEvents.filter(e => e.status === "error") : progressEvents;
+    const normalizedEvents = coalesceFixProgressEvents(progressEvents);
+    const hasErrors = normalizedEvents.some(e => e.status === "error");
+    const displayedEvents = filterError ? normalizedEvents.filter(e => e.status === "error") : normalizedEvents;
 
     return (
         <div className={cn("overflow-hidden rounded-xl border border-white/10 bg-[#030507] shadow-xl", className)}>

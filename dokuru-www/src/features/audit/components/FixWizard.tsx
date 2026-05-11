@@ -17,6 +17,7 @@ import {
 } from "@/features/audit/hooks/useFix";
 import { ResizableSheetContent } from "@/features/audit/components/ResizableSheetContent";
 import { CopyButton, ProgressEventsPanel } from "@/features/audit/components/ProgressEventsPanel";
+import { coalesceFixProgressEvents } from "@/lib/fix-progress-events";
 import {
     CGROUP_RESOURCE_MINIMUMS,
     CgroupTargetEditor,
@@ -791,10 +792,11 @@ function ResultStep({
 }) {
     const isApplied = outcome.status === "Applied";
     const isBlocked = outcome.status === "Blocked";
-    const isAutoTriggered = progressEvents.some(event => event.action === "auto_trigger_verify_audit_rule" && event.rule_id === result.rule.id);
+    const evidenceEvents = coalesceFixProgressEvents(progressEvents);
+    const isAutoTriggered = evidenceEvents.some(event => event.action === "auto_trigger_verify_audit_rule" && event.rule_id === result.rule.id);
     const affectedItems = result.affected.length > 0
         ? result.affected
-        : Array.from(new Set(progressEvents.map(event => event.container_name).filter(Boolean)));
+        : Array.from(new Set(evidenceEvents.map(event => event.container_name).filter(Boolean)));
 
     return (
         <div className="flex flex-col gap-5">
@@ -830,7 +832,7 @@ function ResultStep({
                 <div className="mt-4 grid grid-cols-3 gap-2">
                     <div className="rounded-lg border border-white/8 bg-black/20 px-3 py-2">
                         <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/28">events</p>
-                        <p className="mt-1 text-lg font-bold text-white">{progressEvents.length}</p>
+                        <p className="mt-1 text-lg font-bold text-white">{evidenceEvents.length}</p>
                     </div>
                     <div className="rounded-lg border border-white/8 bg-black/20 px-3 py-2">
                         <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/28">affected</p>
@@ -838,7 +840,7 @@ function ResultStep({
                     </div>
                     <div className="rounded-lg border border-white/8 bg-black/20 px-3 py-2">
                         <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/28">mode</p>
-                        <p className="mt-1 truncate text-sm font-semibold text-[#2496ED]">{progressModeLabel(progressEvents)}</p>
+                        <p className="mt-1 truncate text-sm font-semibold text-[#2496ED]">{progressModeLabel(evidenceEvents)}</p>
                     </div>
                 </div>
             </div>
