@@ -382,9 +382,9 @@ function ruleStatusTone(status: "Pass" | "Fail" | "Error") {
   }
 
   return {
-    borderLeft: "border-l-amber-500/60",
+    borderLeft: "border-l-muted-foreground/40",
     cardTone: "border-border bg-card/95 hover:bg-muted/[0.08]",
-    icon: "text-amber-400",
+    icon: "text-muted-foreground",
   };
 }
 
@@ -396,7 +396,7 @@ function RuleStatusBadge({ status, fixedAfterAudit = false, autoTriggered = fals
   } : {
     Pass: { label: "Passed", cls: "border-emerald-500/20 bg-emerald-500/10 text-emerald-400", dot: "bg-emerald-400" },
     Fail: { label: "Needs fix", cls: "border-rose-500/25 bg-rose-500/10 text-rose-400", dot: "bg-rose-400" },
-    Error: { label: "Error", cls: "border-amber-500/20 bg-amber-500/10 text-amber-400", dot: "bg-amber-400" },
+    Error: { label: "Skipped", cls: "border-border bg-muted/30 text-muted-foreground", dot: "bg-muted-foreground/60" },
   }[status];
 
   return (
@@ -904,7 +904,7 @@ function AuditBreakdownRow({
         <span className="shrink-0 text-xs text-muted-foreground/60 font-mono">
           {passed}<span className="text-muted-foreground/40">/</span>{total}
           {hasProjection && <span className="text-[#2496ED]"> → {projectedPassed}<span className="text-[#2496ED]/50">/</span>{total}</span>}
-          {errors > 0 && <span className="ml-1 text-amber-400">· {errors} err</span>}
+          {errors > 0 && <span className="ml-1 text-muted-foreground/55">· {errors} skipped</span>}
         </span>
       </div>
       <div className="h-2 bg-muted/40 rounded-full overflow-hidden">
@@ -1429,7 +1429,12 @@ function scoreBand(score: number) {
 function statusClass(status: AuditResult["status"]) {
   if (status === "Pass") return "pass";
   if (status === "Fail") return "fail";
-  return "error";
+  return "skipped";
+}
+
+function statusLabel(status: AuditResult["status"]) {
+  if (status === "Error") return "Skipped";
+  return status;
 }
 
 function severityClass(severity: string) {
@@ -1596,7 +1601,7 @@ function buildAuditDocumentHtml({
         <strong>${escapeHtml(result.rule.title)}</strong>
         <p>${escapeHtml(result.message)}</p>
       </td>
-      <td><span class="pill ${statusClass(result.status)}">${escapeHtml(result.status)}</span></td>
+      <td><span class="pill ${statusClass(result.status)}">${escapeHtml(statusLabel(result.status))}</span></td>
       <td><span class="pill ${severityClass(result.rule.severity)}">${escapeHtml(result.rule.severity)}</span></td>
       <td>${escapeHtml(result.affected.length || "-")}</td>
     </tr>
@@ -1609,7 +1614,7 @@ function buildAuditDocumentHtml({
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dokuru Audit Report - ${escapeHtml(audit.hostname)}</title>
   <style>
-    :root { --ink:#111827; --muted:#6b7280; --line:#d9dee7; --soft:#f5f7fb; --brand:#2496ed; --brand-fail:#e11d48; --pass:#059669; --fail:#e11d48; --warn:#d97706; color-scheme: light; }
+    :root { --ink:#111827; --muted:#6b7280; --line:#d9dee7; --soft:#f5f7fb; --brand:#2496ed; --brand-fail:#e11d48; --pass:#059669; --fail:#e11d48; color-scheme: light; }
     * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     body { margin: 0; background: #e9edf3; color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     .page { max-width: 980px; margin: 24px auto; background: #fff; border: 1px solid var(--line); box-shadow: 0 24px 70px rgba(15,23,42,.12); }
@@ -1630,7 +1635,7 @@ function buildAuditDocumentHtml({
     .metric { border:1px solid var(--line); border-radius:16px; padding:14px; background:var(--soft); }
     .metric span { display:block; color:var(--muted); font-size:11px; font-weight:900; letter-spacing:.16em; text-transform:uppercase; }
     .metric strong { display:block; margin-top:8px; font-size:28px; line-height:1; }
-    .metric.pass strong { color:var(--pass); } .metric.fail strong { color:var(--fail); } .metric.warn strong { color:var(--warn); }
+    .metric.pass strong { color:var(--pass); } .metric.fail strong { color:var(--fail); } .metric.skip strong { color:var(--muted); }
     .section { margin-top:26px; break-inside: avoid; }
     .section h2 { margin:0 0 6px; font-size:20px; letter-spacing:-.03em; }
     .section .lead { margin:0 0 12px; color:var(--muted); font-size:13px; }
@@ -1644,7 +1649,7 @@ function buildAuditDocumentHtml({
     .mini-bar span { display:block; height:100%; border-radius:999px; background:var(--brand); }
     .gain { display:inline-block; margin-top:3px; color:var(--brand); font-size:10px; font-weight:800; }
     .pill { display:inline-flex; border-radius:999px; padding:4px 8px; font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:.08em; border:1px solid transparent; }
-    .pill.pass { color:#047857; background:#ecfdf5; border-color:#a7f3d0; } .pill.fail { color:#be123c; background:#fff1f2; border-color:#fecdd3; } .pill.error { color:#b45309; background:#fffbeb; border-color:#fde68a; }
+    .pill.pass { color:#047857; background:#ecfdf5; border-color:#a7f3d0; } .pill.fail { color:#be123c; background:#fff1f2; border-color:#fecdd3; } .pill.skipped { color:#64748b; background:#f8fafc; border-color:#cbd5e1; }
     .pill.high { color:#be123c; background:#fff1f2; border-color:#fecdd3; } .pill.medium { color:#b45309; background:#fffbeb; border-color:#fde68a; } .pill.low { color:#475569; background:#f1f5f9; border-color:#cbd5e1; }
     .rule-row.fail td:first-child { color:var(--fail); } .rule-row.pass td:first-child { color:var(--pass); }
     .empty { color:var(--muted); font-style:italic; text-align:center; padding:22px 8px; }
@@ -1682,7 +1687,7 @@ function buildAuditDocumentHtml({
           <div class="score-track"><div class="score-fill"></div></div>
           <div class="projected">
             <span>${projectedScore ? `Projected after fully applied fixes: <strong>~${escapeHtml(projectedScore)}/100</strong>` : "No post-audit fixes included in this report."}</span>
-            <span>${escapeHtml(totalCheckCount)} total checks${errorResults.length > 0 ? ` · ${escapeHtml(scoredCheckCount)} scored · ${escapeHtml(errorResults.length)} errors` : ""}</span>
+            <span>${escapeHtml(totalCheckCount)} total checks${errorResults.length > 0 ? ` · ${escapeHtml(scoredCheckCount)} scored · ${escapeHtml(errorResults.length)} skipped` : ""}</span>
           </div>
         </div>
       </div>
@@ -1691,7 +1696,7 @@ function buildAuditDocumentHtml({
       <div class="metrics">
         ${summaryCard("Passed", passedResults.length, "pass")}
         ${summaryCard("Failed", failedResults.length, "fail")}
-        ${summaryCard("Errors", errorResults.length, "warn")}
+        ${summaryCard("Skipped", errorResults.length, "skip")}
         ${summaryCard("Containers", audit.total_containers, "")}
       </div>
 
@@ -1710,13 +1715,13 @@ function buildAuditDocumentHtml({
       <section class="section">
         <h2>Security Pillars</h2>
         <p class="lead">Control coverage grouped by Dokuru security area.</p>
-        <table><thead><tr><th>Pillar</th><th>Pass</th><th>Fail</th><th>Error</th><th>Coverage</th><th></th></tr></thead><tbody>${groupRows(pillarSummaries, pillarProjections)}</tbody></table>
+        <table><thead><tr><th>Pillar</th><th>Pass</th><th>Fail</th><th>Skipped</th><th>Coverage</th><th></th></tr></thead><tbody>${groupRows(pillarSummaries, pillarProjections)}</tbody></table>
       </section>
 
       <section class="section">
         <h2>CIS Sections</h2>
         <p class="lead">Benchmark sections sorted as rendered in the audit result.</p>
-        <table><thead><tr><th>Section</th><th>Pass</th><th>Fail</th><th>Error</th><th>Coverage</th><th></th></tr></thead><tbody>${groupRows(sectionSummaries, sectionProjections)}</tbody></table>
+        <table><thead><tr><th>Section</th><th>Pass</th><th>Fail</th><th>Skipped</th><th>Coverage</th><th></th></tr></thead><tbody>${groupRows(sectionSummaries, sectionProjections)}</tbody></table>
       </section>
 
       <section class="section">
@@ -2051,7 +2056,7 @@ function AuditDetailPage() {
   const displayErrorTotal = baseResults.length > 0 ? resultErrorTotal : 0;
   const evaluatedRuleTotal = displayPassedTotal + displayFailedTotal;
   const ruleCountSummary = displayErrorTotal > 0
-    ? `${checkRuleTotal} total checks · ${evaluatedRuleTotal} scored · ${displayErrorTotal} errors`
+    ? `${checkRuleTotal} total checks · ${evaluatedRuleTotal} scored · ${displayErrorTotal} skipped`
     : `${checkRuleTotal} total checks`;
   const appliedHistoryByRule = latestAppliedFixesAfterAudit(fixHistoryEntries, auditData);
   const appliedRuleIds = new Set<string>(appliedHistoryByRule.keys());
@@ -2490,15 +2495,16 @@ function AuditDetailPage() {
                     type="button"
                     onClick={() => setStatusFilter(f => f === "Error" ? "all" : "Error")}
                     aria-pressed={statusFilter === "Error"}
+                    title="Skipped means Dokuru could not evaluate this check in the current audit context."
                     className={cn(
                       "flex min-h-[76px] flex-col items-center justify-center rounded-[12px] border px-2 py-2.5 text-center transition-all duration-200 sm:min-h-[84px] sm:px-3",
                       statusFilter === "Error"
-                        ? "border-amber-500/45 bg-amber-500/15 ring-1 ring-amber-500/25"
-                        : "border-amber-500/25 bg-amber-500/5 hover:border-amber-500/35 hover:bg-amber-500/10"
+                        ? "border-border bg-muted/45 ring-1 ring-border/60"
+                        : "border-border bg-muted/20 hover:bg-muted/35"
                     )}
                   >
-                    <span className="text-2xl font-black leading-none text-amber-400 sm:text-3xl">{displayErrorTotal}</span>
-                    <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Error</span>
+                    <span className="text-2xl font-black leading-none text-muted-foreground sm:text-3xl">{displayErrorTotal}</span>
+                    <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Skipped</span>
                   </button>
                   <div className="flex min-h-[76px] flex-col items-center justify-center rounded-[12px] border border-border bg-muted/20 px-2 py-2.5 text-center sm:min-h-[84px] sm:px-3">
                     <span className="block text-2xl font-black leading-none text-foreground/80 sm:text-3xl">{checkRuleTotal}</span>
@@ -2812,11 +2818,12 @@ function AuditDetailPage() {
               {statusCounts.errors > 0 && (
                 <button
                   onClick={() => setStatusFilter(f => f === "Error" ? "all" : "Error")}
+                  title="Skipped means Dokuru could not evaluate this check in the current audit context."
                   className={cn("shrink-0 inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-bold transition-all",
-                    statusFilter === "Error" ? "bg-amber-500/10 text-amber-400 border-amber-500/30" : "bg-muted/20 border-border text-muted-foreground hover:bg-muted/40")}
+                    statusFilter === "Error" ? "bg-muted/45 text-foreground border-border" : "bg-muted/20 border-border text-muted-foreground hover:bg-muted/40")}
                 >
-                  <AlertTriangle className="h-3 w-3" />
-                  Error
+                  <Shield className="h-3 w-3" />
+                  Skipped
                   <span className="font-mono text-[10px] opacity-70">{statusCounts.errors}</span>
                 </button>
               )}
