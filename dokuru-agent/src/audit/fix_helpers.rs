@@ -2517,8 +2517,7 @@ fn slow_archive_abort_reason(
 
     let estimated_total_seconds = estimated_bytes
         .checked_mul(elapsed.as_secs())
-        .map(|estimate| estimate.div_ceil(bytes_written))
-        .unwrap_or(u64::MAX);
+        .map_or(u64::MAX, |estimate| estimate.div_ceil(bytes_written));
     (estimated_total_seconds > USERNS_IMAGE_ARCHIVE_MAX_SECONDS).then(|| {
         format!(
             "local image archive ETA is ~{}s for {} MiB, above the {}s smart threshold; switching to registry pull before Docker restart",
