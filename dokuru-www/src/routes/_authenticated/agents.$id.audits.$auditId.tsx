@@ -870,6 +870,7 @@ function AuditBreakdownRow({
   label,
   total,
   passed,
+  errors = 0,
   fixedCount = 0,
   fixedRuleIds = [],
   autoTriggeredCount = 0,
@@ -878,6 +879,7 @@ function AuditBreakdownRow({
   label: string;
   total: number;
   passed: number;
+  errors?: number;
   fixedCount?: number;
   fixedRuleIds?: string[];
   autoTriggeredCount?: number;
@@ -902,6 +904,7 @@ function AuditBreakdownRow({
         <span className="shrink-0 text-xs text-muted-foreground/60 font-mono">
           {passed}<span className="text-muted-foreground/40">/</span>{total}
           {hasProjection && <span className="text-[#2496ED]"> → {projectedPassed}<span className="text-[#2496ED]/50">/</span>{total}</span>}
+          {errors > 0 && <span className="ml-1 text-amber-400">· {errors} err</span>}
         </span>
       </div>
       <div className="h-2 bg-muted/40 rounded-full overflow-hidden">
@@ -924,7 +927,7 @@ function AuditBreakdownRow({
   );
 }
 
-function SectionHeader({ section, total, passed, fixedCount, fixedRuleIds, autoTriggeredCount }: { section: string; total: number; passed: number; fixedCount?: number; fixedRuleIds?: string[]; autoTriggeredCount?: number }) {
+function SectionHeader({ section, total, passed, errors, fixedCount, fixedRuleIds, autoTriggeredCount }: { section: string; total: number; passed: number; errors?: number; fixedCount?: number; fixedRuleIds?: string[]; autoTriggeredCount?: number }) {
   const meta = sectionMeta(section);
   return (
     <AuditBreakdownRow
@@ -936,6 +939,7 @@ function SectionHeader({ section, total, passed, fixedCount, fixedRuleIds, autoT
       label={meta.label}
       total={total}
       passed={passed}
+      errors={errors}
       fixedCount={fixedCount}
       fixedRuleIds={fixedRuleIds}
       autoTriggeredCount={autoTriggeredCount}
@@ -1526,6 +1530,8 @@ function buildAuditDocumentHtml({
   const failedResults = results.filter(result => result.status === "Fail");
   const passedResults = results.filter(result => result.status === "Pass");
   const errorResults = results.filter(result => result.status === "Error");
+  const totalCheckCount = results.length;
+  const scoredCheckCount = passedResults.length + failedResults.length;
   const generatedAt = new Date();
   const scoreColor = scoreBarColor(audit.summary.score);
   const projectedScore = projectedFixScore && projectedFixScore.fixedCount > 0 ? projectedFixScore.projectedScore : null;
@@ -1555,6 +1561,7 @@ function buildAuditDocumentHtml({
       <td>${escapeHtml(group.label)}${projection ? `<br><span class="gain">+${escapeHtml(projection.fixedCount)} fixed: ${escapeHtml(projection.ruleIds.join(", "))}</span>` : ""}</td>
       <td>${escapeHtml(group.passed)}/${escapeHtml(group.total)}${projection ? ` → ${escapeHtml(projectedPassed)}/${escapeHtml(group.total)}` : ""}</td>
       <td>${escapeHtml(group.failed)}</td>
+      <td>${escapeHtml(group.errors)}</td>
       <td>
         <div class="mini-bar"><span style="width:${projection ? projectedPercent : group.percent}%;${projection ? `background:linear-gradient(90deg, var(--brand-fail) 0%, var(--brand-fail) 72%, var(--brand) 100%)` : ""}"></span></div>
       </td>
@@ -1675,7 +1682,7 @@ function buildAuditDocumentHtml({
           <div class="score-track"><div class="score-fill"></div></div>
           <div class="projected">
             <span>${projectedScore ? `Projected after fully applied fixes: <strong>~${escapeHtml(projectedScore)}/100</strong>` : "No post-audit fixes included in this report."}</span>
-            <span>${escapeHtml(audit.summary.total)} rules audited</span>
+            <span>${escapeHtml(totalCheckCount)} total checks${errorResults.length > 0 ? ` · ${escapeHtml(scoredCheckCount)} scored · ${escapeHtml(errorResults.length)} not evaluated` : ""}</span>
           </div>
         </div>
       </div>
@@ -1703,13 +1710,13 @@ function buildAuditDocumentHtml({
       <section class="section">
         <h2>Security Pillars</h2>
         <p class="lead">Control coverage grouped by Dokuru security area.</p>
-        <table><thead><tr><th>Pillar</th><th>Pass</th><th>Fail</th><th>Coverage</th><th></th></tr></thead><tbody>${groupRows(pillarSummaries, pillarProjections)}</tbody></table>
+        <table><thead><tr><th>Pillar</th><th>Pass</th><th>Fail</th><th>Error</th><th>Coverage</th><th></th></tr></thead><tbody>${groupRows(pillarSummaries, pillarProjections)}</tbody></table>
       </section>
 
       <section class="section">
         <h2>CIS Sections</h2>
         <p class="lead">Benchmark sections sorted as rendered in the audit result.</p>
-        <table><thead><tr><th>Section</th><th>Pass</th><th>Fail</th><th>Coverage</th><th></th></tr></thead><tbody>${groupRows(sectionSummaries, sectionProjections)}</tbody></table>
+        <table><thead><tr><th>Section</th><th>Pass</th><th>Fail</th><th>Error</th><th>Coverage</th><th></th></tr></thead><tbody>${groupRows(sectionSummaries, sectionProjections)}</tbody></table>
       </section>
 
       <section class="section">
@@ -2034,13 +2041,18 @@ function AuditDetailPage() {
   const baseResults = sortAuditResults(report?.sorted_results?.length ? report.sorted_results : auditData?.results ?? []);
   const resultPassedTotal = baseResults.filter(result => result.status === "Pass").length;
   const resultFailedTotal = baseResults.filter(result => result.status === "Fail").length;
+  const resultErrorTotal = baseResults.filter(result => result.status === "Error").length;
   const scoredRuleTotal = auditData
     ? auditData.summary.total || auditData.summary.passed + auditData.summary.failed
     : baseResults.filter(result => result.status === "Pass" || result.status === "Fail").length;
   const checkRuleTotal = baseResults.length || scoredRuleTotal;
-  const displayPassedTotal = resultPassedTotal || auditData?.summary.passed || 0;
-  const displayFailedTotal = resultFailedTotal || auditData?.summary.failed || 0;
-  const ruleCountSummary = `${checkRuleTotal} checks`;
+  const displayPassedTotal = baseResults.length > 0 ? resultPassedTotal : auditData?.summary.passed ?? 0;
+  const displayFailedTotal = baseResults.length > 0 ? resultFailedTotal : auditData?.summary.failed ?? 0;
+  const displayErrorTotal = baseResults.length > 0 ? resultErrorTotal : 0;
+  const evaluatedRuleTotal = displayPassedTotal + displayFailedTotal;
+  const ruleCountSummary = displayErrorTotal > 0
+    ? `${checkRuleTotal} total checks · ${evaluatedRuleTotal} scored · ${displayErrorTotal} not evaluated`
+    : `${checkRuleTotal} total checks`;
   const appliedHistoryByRule = latestAppliedFixesAfterAudit(fixHistoryEntries, auditData);
   const appliedRuleIds = new Set<string>(appliedHistoryByRule.keys());
   const autoTriggeredRuleIds = new Set<string>();
@@ -2066,9 +2078,9 @@ function AuditDetailPage() {
   const sectionProjections = groupProjectionFromFixes(baseResults, forecastRuleIds, result => result.rule.section, autoTriggeredRuleIds);
   const sectionSummaries = groupSummariesFromResults(baseResults, result => result.rule.section, key => key);
   const sections = sectionSummaries.map(section => section.key);
-  const sectionStats: Record<string, { total: number; passed: number; percent: number }> = Object.fromEntries(sectionSummaries.map(section => [
+  const sectionStats: Record<string, { total: number; passed: number; errors: number; percent: number }> = Object.fromEntries(sectionSummaries.map(section => [
     section.key,
-    { total: section.total, passed: section.passed, percent: section.percent },
+    { total: section.total, passed: section.passed, errors: section.errors, percent: section.percent },
   ]));
 
   // Sort sections: worst pass% first, so problem areas appear at top
@@ -2425,7 +2437,7 @@ function AuditDetailPage() {
                   <p className="mt-2 text-xs text-muted-foreground">CIS Docker Benchmark v1.8.0 · {ruleCountSummary}</p>
                 </div>
 
-                <div className="mt-5 grid grid-cols-3 gap-2">
+                <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
                   <button
                     type="button"
                     onClick={() => setStatusFilter(f => f === "Pass" ? "all" : "Pass")}
@@ -2474,13 +2486,28 @@ function AuditDetailPage() {
                       </span>
                     )}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter(f => f === "Error" ? "all" : "Error")}
+                    aria-pressed={statusFilter === "Error"}
+                    className={cn(
+                      "flex min-h-[76px] flex-col items-center justify-center rounded-[12px] border px-2 py-2.5 text-center transition-all duration-200 sm:min-h-[84px] sm:px-3",
+                      statusFilter === "Error"
+                        ? "border-amber-500/45 bg-amber-500/15 ring-1 ring-amber-500/25"
+                        : "border-amber-500/25 bg-amber-500/5 hover:border-amber-500/35 hover:bg-amber-500/10"
+                    )}
+                  >
+                    <span className="text-2xl font-black leading-none text-amber-400 sm:text-3xl">{displayErrorTotal}</span>
+                    <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Error</span>
+                    <span className="mt-0.5 text-[10px] font-medium text-muted-foreground/60">not evaluated</span>
+                  </button>
                   <div className="flex min-h-[76px] flex-col items-center justify-center rounded-[12px] border border-border bg-muted/20 px-2 py-2.5 text-center sm:min-h-[84px] sm:px-3">
                     <span className="block text-2xl font-black leading-none text-foreground/80 sm:text-3xl">{checkRuleTotal}</span>
                     <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                      Checks
+                      Total
                     </span>
                     <span className="mt-0.5 text-[10px] font-medium text-muted-foreground/60">
-                      audited
+                      checks
                     </span>
                   </div>
                 </div>
@@ -2558,6 +2585,7 @@ function AuditDetailPage() {
                           label={meta.name}
                           total={pillarSummary.total}
                           passed={pillarSummary.passed}
+                          errors={pillarSummary.errors}
                           fixedCount={projection?.fixedCount}
                           fixedRuleIds={projection?.ruleIds}
                           autoTriggeredCount={projection?.autoTriggeredCount}
@@ -2569,6 +2597,7 @@ function AuditDetailPage() {
                       <SectionHeader key={s} section={s}
                         total={sectionStats[s]?.total ?? 0}
                         passed={sectionStats[s]?.passed ?? 0}
+                        errors={sectionStats[s]?.errors ?? 0}
                         fixedCount={sectionProjections.get(s)?.fixedCount}
                         fixedRuleIds={sectionProjections.get(s)?.ruleIds}
                         autoTriggeredCount={sectionProjections.get(s)?.autoTriggeredCount}
