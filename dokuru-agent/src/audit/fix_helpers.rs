@@ -558,6 +558,44 @@ fn joined_command_outputs(outputs: &[Option<String>]) -> Option<String> {
     (!chunks.is_empty()).then(|| chunks.join("\n\n"))
 }
 
+fn format_command_evidence(command: &str, stdout: &str, stderr: &str, success: bool) -> String {
+    let mut evidence = format!(
+        "$ {command}\nstatus: {}",
+        if success { "ok" } else { "failed" }
+    );
+    let stdout = stdout.trim();
+    let stderr = stderr.trim();
+    if stdout.is_empty() && stderr.is_empty() {
+        evidence.push_str("\n(no output)");
+    } else {
+        if !stdout.is_empty() {
+            let _ = write!(evidence, "\nstdout:\n{stdout}");
+        }
+        if !stderr.is_empty() {
+            let _ = write!(evidence, "\nstderr:\n{stderr}");
+        }
+    }
+    evidence
+}
+
+fn command_result_evidence(command: &str, result: &FixCommandResult) -> String {
+    format_command_evidence(command, &result.stdout, &result.stderr, result.success)
+}
+
+fn run_cmd_evidence(command: &str, stdout: &str, stderr: &str, success: bool) -> String {
+    format_command_evidence(command, stdout, stderr, success)
+}
+
+fn joined_evidence(lines: &[String]) -> Option<String> {
+    let chunks = lines
+        .iter()
+        .map(String::as_str)
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>();
+    (!chunks.is_empty()).then(|| chunks.join("\n\n"))
+}
+
 fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\"'\"'"))
 }
@@ -1790,16 +1828,15 @@ async fn verify_daemon_no_new_privileges(
                     .map(|options| options.join(", "))
                     .unwrap_or_default();
                 if security_options_include_no_new_privileges(info.security_options.as_deref()) {
-                    send_progress(
-                        progress,
-                        daemon_no_new_privileges_progress_event(
-                            3,
-                            "verify_daemon_security_options",
-                            "done",
-                            Some(format!("Verified SecurityOptions: {raw}")),
-                            None,
-                        ),
+                    let mut event = daemon_no_new_privileges_progress_event(
+                        3,
+                        "verify_daemon_security_options",
+                        "done",
+                        Some(format!("Verified SecurityOptions: {raw}")),
+                        Some("docker info --format '{{ .SecurityOptions }}'".to_string()),
                     );
+                    event.stdout = Some(raw);
+                    send_progress(progress, event);
                     return true;
                 }
                 last_detail = format!("SecurityOptions did not include no-new-privileges: {raw}");
@@ -1811,16 +1848,14 @@ async fn verify_daemon_no_new_privileges(
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }
 
-    send_progress(
-        progress,
-        daemon_no_new_privileges_progress_event(
-            3,
-            "verify_daemon_security_options",
-            "error",
-            Some(last_detail),
-            None,
-        ),
+    let event = daemon_no_new_privileges_progress_event(
+        3,
+        "verify_daemon_security_options",
+        "error",
+        Some(last_detail),
+        Some("docker info --format '{{ .SecurityOptions }}'".to_string()),
     );
+    send_progress(progress, event);
     false
 }
 
@@ -1852,7 +1887,7 @@ async fn restart_docker_for_no_new_privileges(
                 "restart_docker",
                 "done",
                 Some("Docker daemon restarted".to_string()),
-                None,
+                Some("systemctl restart docker".to_string()),
             );
             event.stdout = (!stdout.is_empty()).then_some(stdout);
             event.stderr = (!stderr.is_empty()).then_some(stderr);
@@ -1865,7 +1900,7 @@ async fn restart_docker_for_no_new_privileges(
                 "restart_docker",
                 "error",
                 Some("Docker restart failed after daemon.json update".to_string()),
-                None,
+                Some("systemctl restart docker".to_string()),
             );
             event.stdout = (!stdout.is_empty()).then_some(stdout);
             event.stderr = (!stderr.is_empty()).then_some(stderr.clone());
@@ -1883,7 +1918,7 @@ async fn restart_docker_for_no_new_privileges(
                     "restart_docker",
                     "error",
                     Some(error.to_string()),
-                    None,
+                    Some("systemctl restart docker".to_string()),
                 ),
             );
             Some(blocked(
@@ -1905,7 +1940,7 @@ pub async fn apply_daemon_no_new_privileges_fix_with_progress(
             "write_daemon_json",
             "in_progress",
             Some("Writing no-new-privileges to /etc/docker/daemon.json".to_string()),
-            Some(r#"{"no-new-privileges":true} -> /etc/docker/daemon.json"#.to_string()),
+            None,
         ),
     );
 
@@ -1926,16 +1961,15 @@ pub async fn apply_daemon_no_new_privileges_fix_with_progress(
         ));
     }
 
-    send_progress(
-        progress,
-        daemon_no_new_privileges_progress_event(
-            1,
-            "write_daemon_json",
-            "done",
-            Some("no-new-privileges: true written to daemon.json".to_string()),
-            None,
-        ),
+    let mut event = daemon_no_new_privileges_progress_event(
+        1,
+        "write_daemon_json",
+        "done",
+        Some("no-new-privileges: true written to daemon.json".to_string()),
+        None,
     );
+    event.stdout = Some(r#"/etc/docker/daemon.json: "no-new-privileges" = true"#.to_string());
+    send_progress(progress, event);
 
     if let Some(outcome) = restart_docker_for_no_new_privileges(progress).await {
         return Ok(outcome);
@@ -2757,16 +2791,16 @@ async fn wait_for_userns_archive(
             let _ = child.kill().await;
             let _ = child.wait().await;
             let _ = tokio::fs::remove_file(USERNS_IMAGE_ARCHIVE_PATH).await;
-            send_progress(
-                progress,
-                userns_progress_event(
-                    1,
-                    "archive_images",
-                    "done",
-                    Some(reason),
-                    Some(command_text.to_string()),
-                ),
+            let mut event = userns_progress_event(
+                1,
+                "archive_images",
+                "done",
+                Some(reason),
+                Some(command_text.to_string()),
             );
+            event.stdout = command_output(stdout);
+            event.stderr = command_output(stderr);
+            send_progress(progress, event);
             return Err(UsernsImageRecoveryMode::RegistryFallback);
         }
 
@@ -2840,19 +2874,19 @@ async fn run_monitored_userns_image_archive(
 
     if status.success() {
         let archived_bytes = archive_file_size().await;
-        send_progress(
-            progress,
-            userns_progress_event(
-                1,
-                "archive_images",
-                "done",
-                Some(format!(
-                    "Archived {image_count} image(s) to {USERNS_IMAGE_ARCHIVE_PATH} ({} MiB) for local reload after userns-remap",
-                    mib(archived_bytes)
-                )),
-                Some(command_text),
-            ),
+        let mut event = userns_progress_event(
+            1,
+            "archive_images",
+            "done",
+            Some(format!(
+                "Archived {image_count} image(s) to {USERNS_IMAGE_ARCHIVE_PATH} ({} MiB) for local reload after userns-remap",
+                mib(archived_bytes)
+            )),
+            Some(command_text),
         );
+        event.stdout = command_output(&stdout);
+        event.stderr = command_output(&stderr);
+        send_progress(progress, event);
         return UsernsImageRecoveryMode::LocalArchive;
     }
 
@@ -2863,18 +2897,18 @@ async fn run_monitored_userns_image_archive(
     };
 
     let _ = tokio::fs::remove_file(USERNS_IMAGE_ARCHIVE_PATH).await;
-    send_progress(
-        progress,
-        userns_progress_event(
-            1,
-            "archive_images",
-            "error",
-            Some(format!(
-                "Image archive failed before Docker restart; recovery may pull images if needed: {detail}"
-            )),
-            Some(command_text),
-        ),
+    let mut event = userns_progress_event(
+        1,
+        "archive_images",
+        "error",
+        Some(format!(
+            "Image archive failed before Docker restart; recovery may pull images if needed: {detail}"
+        )),
+        Some(command_text),
     );
+    event.stdout = command_output(&stdout);
+    event.stderr = command_output(&stderr);
+    send_progress(progress, event);
     UsernsImageRecoveryMode::RegistryFallback
 }
 
@@ -2971,21 +3005,21 @@ async fn load_archived_userns_images(progress: Option<&ProgressSender>) -> Usern
         }
         Ok((stdout, stderr, _)) => {
             let detail = if stderr.trim().is_empty() {
-                stdout
+                stdout.clone()
             } else {
-                stderr
+                stderr.clone()
             };
             result.failed.push(format!("image load failed: {detail}"));
-            send_progress(
-                progress,
-                userns_progress_event(
-                    7,
-                    "load_images",
-                    "error",
-                    Some(format!("Failed to load archived images: {detail}")),
-                    Some(command_text),
-                ),
+            let mut event = userns_progress_event(
+                7,
+                "load_images",
+                "error",
+                Some(format!("Failed to load archived images: {detail}")),
+                Some(command_text),
             );
+            event.stdout = command_output(&stdout);
+            event.stderr = command_output(&stderr);
+            send_progress(progress, event);
         }
         Err(error) => {
             result
@@ -3736,6 +3770,10 @@ fn is_safe_userns_bind_path(path: &str) -> bool {
     .all(|blocked| path != blocked && !path.starts_with(blocked))
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "userns volume recovery records each filesystem command and its evidence"
+)]
 async fn migrate_named_volumes(
     volume_mounts: &[VolumeMountSnapshot],
     remap_owner: (u32, u32),
@@ -3762,6 +3800,7 @@ async fn migrate_named_volumes(
         remap_owner.0, remap_owner.1
     );
     let timestamp = chrono::Utc::now().format("%Y%m%d%H%M%S");
+    let mut evidence = Vec::new();
 
     for mount in volume_mounts {
         let name = &mount.name;
@@ -3781,19 +3820,30 @@ async fn migrate_named_volumes(
         let owner = format!("{}:{}", host_owner.0, host_owner.1);
 
         if !Path::new(&old_path).exists() {
+            evidence.push(format!("skip volume {name}: {old_path} does not exist"));
             result.skipped += 1;
             continue;
         }
 
+        let mkdir_command = format!("mkdir -p {}", shell_quote(&new_dir));
         match run_cmd("mkdir", &["-p", &new_dir]).await {
-            Ok((_, _, true)) => {}
-            Ok((_, stderr, _)) => {
+            Ok((stdout, stderr, true)) => {
+                evidence.push(run_cmd_evidence(&mkdir_command, &stdout, &stderr, true));
+            }
+            Ok((stdout, stderr, _)) => {
+                evidence.push(run_cmd_evidence(&mkdir_command, &stdout, &stderr, false));
                 result
                     .failed
                     .push(format!("{name}: create target directory failed: {stderr}"));
                 continue;
             }
             Err(error) => {
+                evidence.push(format_command_evidence(
+                    &mkdir_command,
+                    "",
+                    &error.to_string(),
+                    false,
+                ));
                 result
                     .failed
                     .push(format!("{name}: create target directory failed: {error}"));
@@ -3803,16 +3853,64 @@ async fn migrate_named_volumes(
 
         if Path::new(&new_path).exists() {
             let backup = format!("{new_dir}/_data.dokuru-backup-{timestamp}");
-            let _ = run_cmd("mv", &[&new_path, &backup]).await;
+            let mv_command = format!("mv {} {}", shell_quote(&new_path), shell_quote(&backup));
+            match run_cmd("mv", &[&new_path, &backup]).await {
+                Ok((stdout, stderr, success)) => {
+                    evidence.push(run_cmd_evidence(&mv_command, &stdout, &stderr, success));
+                }
+                Err(error) => evidence.push(format_command_evidence(
+                    &mv_command,
+                    "",
+                    &error.to_string(),
+                    false,
+                )),
+            }
         }
 
+        let cp_command = format!(
+            "cp -a {} {}",
+            shell_quote(&old_path),
+            shell_quote(&new_path)
+        );
         match run_cmd("cp", &["-a", &old_path, &new_path]).await {
-            Ok((_, _, true)) => {
-                let _ = run_cmd("chown", &["-R", &owner, &new_path]).await;
-                result.completed += 1;
+            Ok((stdout, stderr, true)) => {
+                evidence.push(run_cmd_evidence(&cp_command, &stdout, &stderr, true));
+                let chown_command = format!("chown -R {owner} {}", shell_quote(&new_path));
+                match run_cmd("chown", &["-R", &owner, &new_path]).await {
+                    Ok((stdout, stderr, true)) => {
+                        evidence.push(run_cmd_evidence(&chown_command, &stdout, &stderr, true));
+                        result.completed += 1;
+                    }
+                    Ok((stdout, stderr, _)) => {
+                        evidence.push(run_cmd_evidence(&chown_command, &stdout, &stderr, false));
+                        result
+                            .failed
+                            .push(format!("{name}: chown failed: {stderr}"));
+                    }
+                    Err(error) => {
+                        evidence.push(format_command_evidence(
+                            &chown_command,
+                            "",
+                            &error.to_string(),
+                            false,
+                        ));
+                        result.failed.push(format!("{name}: chown failed: {error}"));
+                    }
+                }
             }
-            Ok((_, stderr, _)) => result.failed.push(format!("{name}: copy failed: {stderr}")),
-            Err(error) => result.failed.push(format!("{name}: copy failed: {error}")),
+            Ok((stdout, stderr, _)) => {
+                evidence.push(run_cmd_evidence(&cp_command, &stdout, &stderr, false));
+                result.failed.push(format!("{name}: copy failed: {stderr}"));
+            }
+            Err(error) => {
+                evidence.push(format_command_evidence(
+                    &cp_command,
+                    "",
+                    &error.to_string(),
+                    false,
+                ));
+                result.failed.push(format!("{name}: copy failed: {error}"));
+            }
         }
     }
 
@@ -3841,13 +3939,22 @@ async fn migrate_named_volumes(
                 .join("; ")
         )
     };
-    send_progress(
-        progress,
-        userns_progress_event(7, "migrate_named_volumes", status, Some(detail), None),
+    let mut event = userns_progress_event(
+        7,
+        "migrate_named_volumes",
+        status,
+        Some(detail),
+        Some("cp -a /var/lib/docker/volumes/<name>/_data /var/lib/docker/<uid>.<gid>/volumes/<name>/_data".to_string()),
     );
+    event.stdout = joined_evidence(&evidence);
+    send_progress(progress, event);
     result
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "userns bind recovery records each ACL/chown command and its evidence"
+)]
 async fn fix_bind_mount_permissions(
     bind_paths: &[String],
     uid: u32,
@@ -3872,20 +3979,28 @@ async fn fix_bind_mount_permissions(
     let acl_error = ensure_setfacl_available_for_userns(progress).await;
     let acl_available = acl_error.is_none();
     let mut runtime_chown_without_host_acl = 0usize;
+    let mut evidence = Vec::new();
 
     for path in bind_paths {
         if !is_safe_userns_bind_path(path) {
+            evidence.push(format!("skip bind path {path}: unsafe host path"));
             result.skipped += 1;
             continue;
         }
 
         let Ok(metadata) = tokio::fs::metadata(path).await else {
+            evidence.push(format!(
+                "skip bind path {path}: path does not exist or is inaccessible"
+            ));
             result.skipped += 1;
             continue;
         };
 
         let is_runtime_path = should_chown_runtime_bind_path(path);
         if !is_runtime_path && !acl_available {
+            evidence.push(format!(
+                "skip bind path {path}: setfacl unavailable and changing host ownership would be unsafe"
+            ));
             result.failed.push(format!(
                 "{path}: setfacl is required to grant remapped UID access without changing host ownership: {}",
                 acl_error.as_deref().unwrap_or("setfacl unavailable")
@@ -3893,19 +4008,32 @@ async fn fix_bind_mount_permissions(
             continue;
         }
 
+        let command = bind_recovery_command_text(path, &metadata, uid, gid, acl_available);
         match recover_bind_mount_access_with_acl(path, &metadata, uid, gid, acl_available).await {
-            Ok((_, _, true)) => {
+            Ok((stdout, stderr, true)) => {
+                evidence.push(run_cmd_evidence(&command, &stdout, &stderr, true));
                 result.completed += 1;
                 if is_runtime_path && !acl_available {
                     runtime_chown_without_host_acl += 1;
                 }
             }
-            Ok((_, stderr, _)) => result
-                .failed
-                .push(format!("{path}: recovery failed: {stderr}")),
-            Err(error) => result
-                .failed
-                .push(format!("{path}: recovery failed: {error}")),
+            Ok((stdout, stderr, _)) => {
+                evidence.push(run_cmd_evidence(&command, &stdout, &stderr, false));
+                result
+                    .failed
+                    .push(format!("{path}: recovery failed: {stderr}"));
+            }
+            Err(error) => {
+                evidence.push(format_command_evidence(
+                    &command,
+                    "",
+                    &error.to_string(),
+                    false,
+                ));
+                result
+                    .failed
+                    .push(format!("{path}: recovery failed: {error}"));
+            }
         }
     }
 
@@ -3941,11 +4069,46 @@ async fn fix_bind_mount_permissions(
                 .join("; ")
         )
     };
-    send_progress(
-        progress,
-        userns_progress_event(8, "fix_bind_mount_permissions", status, Some(detail), None),
+    let mut event = userns_progress_event(
+        8,
+        "fix_bind_mount_permissions",
+        status,
+        Some(detail),
+        Some(format!(
+            "setfacl -R -m u:{uid}:rwX -m d:u:{uid}:rwX <bind-paths>; chown -R {uid}:{gid} <runtime-data-bind-paths>"
+        )),
     );
+    event.stdout = joined_evidence(&evidence);
+    send_progress(progress, event);
     result
+}
+
+fn bind_recovery_command_text(
+    path: &str,
+    metadata: &std::fs::Metadata,
+    uid: u32,
+    gid: u32,
+    acl_available: bool,
+) -> String {
+    let is_runtime_path = should_chown_runtime_bind_path(path);
+    let path = shell_quote(path);
+    let recursive = if metadata.is_dir() { "-R " } else { "" };
+    if is_runtime_path {
+        let chown = format!("chown {recursive}{uid}:{gid} {path}");
+        if !acl_available {
+            return chown;
+        }
+        let host_uid = metadata.uid();
+        if metadata.is_dir() {
+            format!("{chown}; setfacl -R -m u:{host_uid}:rwX -m d:u:{host_uid}:rwX {path}")
+        } else {
+            format!("{chown}; setfacl -m u:{host_uid}:rwX {path}")
+        }
+    } else if metadata.is_dir() {
+        format!("setfacl -R -m u:{uid}:rwX -m d:u:{uid}:rwX {path}")
+    } else {
+        format!("setfacl -m u:{uid}:rwX {path}")
+    }
 }
 
 async fn recover_bind_mount_access(
@@ -4152,15 +4315,31 @@ async fn try_install_setfacl_with(
         Some(command_text.clone()),
     );
 
-    let installer_failed = run_setfacl_install_commands(cmd, commands, errors).await;
+    let (installer_failed, installer_evidence) =
+        run_setfacl_install_commands(cmd, commands, errors).await;
     if !installer_failed && command_available("setfacl").await {
-        send_setfacl_progress(
-            progress,
+        let mut event = userns_progress_event(
+            8,
+            "ensure_setfacl",
             "done",
-            "acl package installed; setfacl is available for bind mount recovery",
+            Some("acl package installed; setfacl is available for bind mount recovery".to_string()),
             Some(command_text),
         );
+        event.stdout = joined_evidence(&installer_evidence);
+        send_progress(progress, event);
         return true;
+    }
+
+    if installer_failed {
+        let mut event = userns_progress_event(
+            8,
+            "ensure_setfacl",
+            "error",
+            Some(format!("Installing acl package with {cmd} failed")),
+            Some(command_text),
+        );
+        event.stdout = joined_evidence(&installer_evidence);
+        send_progress(progress, event);
     }
 
     if !installer_failed {
@@ -4175,21 +4354,32 @@ async fn run_setfacl_install_commands(
     cmd: &str,
     commands: Vec<Vec<&str>>,
     errors: &mut Vec<String>,
-) -> bool {
+) -> (bool, Vec<String>) {
+    let mut evidence = Vec::new();
     for args in commands {
+        let command_text = format!("{cmd} {}", args.join(" "));
         match run_cmd(cmd, &args).await {
-            Ok((_, _, true)) => {}
-            Ok((_, stderr, _)) => {
+            Ok((stdout, stderr, true)) => {
+                evidence.push(run_cmd_evidence(&command_text, &stdout, &stderr, true));
+            }
+            Ok((stdout, stderr, _)) => {
+                evidence.push(run_cmd_evidence(&command_text, &stdout, &stderr, false));
                 errors.push(format!("{cmd} {}: {}", args.join(" "), stderr.trim()));
-                return true;
+                return (true, evidence);
             }
             Err(error) => {
+                evidence.push(format_command_evidence(
+                    &command_text,
+                    "",
+                    &error.to_string(),
+                    false,
+                ));
                 errors.push(format!("{cmd} {}: {error}", args.join(" ")));
-                return true;
+                return (true, evidence);
             }
         }
     }
-    false
+    (false, evidence)
 }
 
 fn emit_setfacl_install_failure(progress: Option<&ProgressSender>, errors: &[String]) {
@@ -4628,6 +4818,7 @@ async fn snapshot_userns_recovery_state(
 }
 
 async fn create_dockremap_user(progress: Option<&ProgressSender>) {
+    let command_text = "useradd -r -s /bin/false dockremap || id -u dockremap";
     send_progress(
         progress,
         userns_progress_event(
@@ -4635,23 +4826,32 @@ async fn create_dockremap_user(progress: Option<&ProgressSender>) {
             "create_dockremap_user",
             "in_progress",
             Some("Creating dockremap system user".to_string()),
-            Some("useradd -r -s /bin/false dockremap".to_string()),
+            Some(command_text.to_string()),
         ),
     );
-    let _ = run_cmd("useradd", &["-r", "-s", "/bin/false", "dockremap"]).await;
-    send_progress(
-        progress,
-        userns_progress_event(
-            2,
-            "create_dockremap_user",
-            "done",
-            Some("dockremap user ready".to_string()),
-            None,
-        ),
+    let useradd = capture_command("useradd", &["-r", "-s", "/bin/false", "dockremap"]).await;
+    let id_check = capture_command("id", &["-u", "dockremap"]).await;
+    let ready = useradd.success || id_check.success;
+    let mut event = userns_progress_event(
+        2,
+        "create_dockremap_user",
+        if ready { "done" } else { "error" },
+        Some(if ready {
+            "dockremap user ready".to_string()
+        } else {
+            "dockremap user could not be created or found".to_string()
+        }),
+        Some(command_text.to_string()),
     );
+    event.stdout = joined_evidence(&[
+        command_result_evidence("useradd -r -s /bin/false dockremap", &useradd),
+        command_result_evidence("id -u dockremap", &id_check),
+    ]);
+    send_progress(progress, event);
 }
 
 async fn create_subid_files(progress: Option<&ProgressSender>) {
+    let command_text = "touch /etc/subuid /etc/subgid";
     send_progress(
         progress,
         userns_progress_event(
@@ -4659,23 +4859,29 @@ async fn create_subid_files(progress: Option<&ProgressSender>) {
             "create_subid_files",
             "in_progress",
             Some("Ensuring /etc/subuid and /etc/subgid exist".to_string()),
-            Some("touch /etc/subuid /etc/subgid".to_string()),
+            Some(command_text.to_string()),
         ),
     );
-    let _ = run_cmd("touch", &["/etc/subuid", "/etc/subgid"]).await;
-    send_progress(
-        progress,
-        userns_progress_event(
-            3,
-            "create_subid_files",
-            "done",
-            Some("/etc/subuid and /etc/subgid ready".to_string()),
-            None,
-        ),
+    let result = capture_command("touch", &["/etc/subuid", "/etc/subgid"]).await;
+    let mut event = userns_progress_event(
+        3,
+        "create_subid_files",
+        if result.success { "done" } else { "error" },
+        Some(if result.success {
+            "/etc/subuid and /etc/subgid ready".to_string()
+        } else {
+            "/etc/subuid and /etc/subgid could not be created".to_string()
+        }),
+        Some(command_text.to_string()),
     );
+    event.stdout = Some(command_result_evidence(command_text, &result));
+    send_progress(progress, event);
 }
 
 async fn map_dockremap_ranges(progress: Option<&ProgressSender>) {
+    let uid_command = "usermod --add-subuids 100000-165535 dockremap";
+    let gid_command = "usermod --add-subgids 100000-165535 dockremap";
+    let command_text = format!("{uid_command} && {gid_command}");
     send_progress(
         progress,
         userns_progress_event(
@@ -4683,24 +4889,31 @@ async fn map_dockremap_ranges(progress: Option<&ProgressSender>) {
             "map_uid_gid_ranges",
             "in_progress",
             Some("Mapping UID/GID ranges for dockremap".to_string()),
-            Some(
-                "usermod --add-subuids 100000-165535 --add-subgids 100000-165535 dockremap"
-                    .to_string(),
-            ),
+            Some(command_text.clone()),
         ),
     );
-    let _ = run_cmd("usermod", &["--add-subuids", "100000-165535", "dockremap"]).await;
-    let _ = run_cmd("usermod", &["--add-subgids", "100000-165535", "dockremap"]).await;
-    send_progress(
-        progress,
-        userns_progress_event(
-            4,
-            "map_uid_gid_ranges",
-            "done",
-            Some("UID/GID ranges mapped".to_string()),
-            None,
-        ),
+    let uid_result =
+        capture_command("usermod", &["--add-subuids", "100000-165535", "dockremap"]).await;
+    let gid_result =
+        capture_command("usermod", &["--add-subgids", "100000-165535", "dockremap"]).await;
+    let mapped = subid_start("/etc/subuid", "dockremap").is_some()
+        && subid_start("/etc/subgid", "dockremap").is_some();
+    let mut event = userns_progress_event(
+        4,
+        "map_uid_gid_ranges",
+        if mapped { "done" } else { "error" },
+        Some(if mapped {
+            "UID/GID ranges mapped".to_string()
+        } else {
+            "UID/GID ranges were not found after usermod".to_string()
+        }),
+        Some(command_text),
     );
+    event.stdout = joined_evidence(&[
+        command_result_evidence(uid_command, &uid_result),
+        command_result_evidence(gid_command, &gid_result),
+    ]);
+    send_progress(progress, event);
 }
 
 fn write_userns_daemon_json(progress: Option<&ProgressSender>) -> Option<FixOutcome> {
@@ -4711,22 +4924,22 @@ fn write_userns_daemon_json(progress: Option<&ProgressSender>) -> Option<FixOutc
             "write_daemon_json",
             "in_progress",
             Some("Writing userns-remap to /etc/docker/daemon.json".to_string()),
-            Some(r#"{"userns-remap":"default"} -> /etc/docker/daemon.json"#.to_string()),
+            None,
         ),
     );
 
     match merge_daemon_json("userns-remap", serde_json::Value::String("default".into())) {
         Ok(()) => {
-            send_progress(
-                progress,
-                userns_progress_event(
-                    5,
-                    "write_daemon_json",
-                    "done",
-                    Some("userns-remap: default written to daemon.json".to_string()),
-                    None,
-                ),
+            let mut event = userns_progress_event(
+                5,
+                "write_daemon_json",
+                "done",
+                Some("userns-remap: default written to daemon.json".to_string()),
+                None,
             );
+            event.stdout =
+                Some(r#"/etc/docker/daemon.json: "userns-remap" = "default""#.to_string());
+            send_progress(progress, event);
             None
         }
         Err(error) => {
@@ -4760,80 +4973,119 @@ async fn restart_docker_for_userns(progress: Option<&ProgressSender>) -> Option<
         ),
     );
 
-    match run_cmd("systemctl", &["restart", "docker"]).await {
-        Ok((_, _, true)) => {
-            let socket_detail = normalize_docker_socket_permissions().await;
-            send_progress(
-                progress,
-                userns_progress_event(
-                    6,
-                    "restart_docker",
-                    "done",
-                    Some(socket_detail.map_or_else(
-                        || "Docker daemon restarted with userns-remap enabled; docker socket permissions are root:docker 660".to_string(),
-                        |detail| format!(
-                            "Docker daemon restarted with userns-remap enabled; docker socket permission normalization skipped/failed: {detail}"
-                        ),
-                    )),
-                    None,
+    let restart = capture_command("systemctl", &["restart", "docker"]).await;
+    if restart.success {
+        let socket_evidence = normalize_docker_socket_permissions().await;
+        let mut event = userns_progress_event(
+            6,
+            "restart_docker",
+            "done",
+            Some(socket_evidence.detail.map_or_else(
+                || "Docker daemon restarted with userns-remap enabled; docker socket permissions are root:docker 660".to_string(),
+                |detail| format!(
+                    "Docker daemon restarted with userns-remap enabled; docker socket permission normalization skipped/failed: {detail}"
                 ),
-            );
-            None
-        }
-        Ok((_, stderr, _)) => {
-            send_progress(
-                progress,
-                userns_progress_event(6, "restart_docker", "error", Some(stderr.clone()), None),
-            );
-            Some(blocked(
-                USERNS_REMAP_RULE_ID,
-                &format!("daemon.json updated but Docker restart failed: {stderr}"),
-            ))
-        }
-        Err(error) => {
-            send_progress(
-                progress,
-                userns_progress_event(6, "restart_docker", "error", Some(error.to_string()), None),
-            );
-            Some(blocked(
-                USERNS_REMAP_RULE_ID,
-                &format!("daemon.json updated but restart command failed: {error}"),
-            ))
-        }
+            )),
+            Some("systemctl restart docker".to_string()),
+        );
+        event.stdout = joined_evidence(&[
+            command_result_evidence("systemctl restart docker", &restart),
+            socket_evidence.output.unwrap_or_default(),
+        ]);
+        send_progress(progress, event);
+        None
+    } else {
+        let detail = if restart.stderr.trim().is_empty() {
+            restart.stdout.trim().to_string()
+        } else {
+            restart.stderr.trim().to_string()
+        };
+        let mut event = userns_progress_event(
+            6,
+            "restart_docker",
+            "error",
+            Some(detail.clone()),
+            Some("systemctl restart docker".to_string()),
+        );
+        event.stdout = command_output(&restart.stdout);
+        event.stderr = command_output(&restart.stderr);
+        send_progress(progress, event);
+        Some(blocked(
+            USERNS_REMAP_RULE_ID,
+            &format!("daemon.json updated but Docker restart failed: {detail}"),
+        ))
     }
 }
 
-async fn normalize_docker_socket_permissions() -> Option<String> {
+#[derive(Default)]
+struct SocketPermissionEvidence {
+    detail: Option<String>,
+    output: Option<String>,
+}
+
+async fn normalize_docker_socket_permissions() -> SocketPermissionEvidence {
     const DOCKER_SOCKET: &str = "/var/run/docker.sock";
 
     if !Path::new(DOCKER_SOCKET).exists() {
-        return Some("/var/run/docker.sock does not exist".to_string());
+        return SocketPermissionEvidence {
+            detail: Some("/var/run/docker.sock does not exist".to_string()),
+            output: None,
+        };
     }
 
-    match run_cmd("getent", &["group", "docker"]).await {
-        Ok((_, _, true)) => {}
-        Ok((_, stderr, _)) => {
-            return Some(format!("docker group not found: {stderr}"));
-        }
-        Err(error) => {
-            return Some(format!("failed to check docker group: {error}"));
-        }
+    let mut evidence = Vec::new();
+
+    let getent = capture_command("getent", &["group", "docker"]).await;
+    evidence.push(command_result_evidence("getent group docker", &getent));
+    if !getent.success {
+        let detail = if getent.stderr.trim().is_empty() {
+            getent.stdout.trim().to_string()
+        } else {
+            getent.stderr.trim().to_string()
+        };
+        return SocketPermissionEvidence {
+            detail: Some(format!("docker group not found: {detail}")),
+            output: joined_evidence(&evidence),
+        };
     }
 
     let mut failures = Vec::new();
-    match run_cmd("chgrp", &["docker", DOCKER_SOCKET]).await {
-        Ok((_, _, true)) => {}
-        Ok((_, stderr, _)) => failures.push(format!("chgrp failed: {stderr}")),
-        Err(error) => failures.push(format!("chgrp failed: {error}")),
+    let chgrp = capture_command("chgrp", &["docker", DOCKER_SOCKET]).await;
+    evidence.push(command_result_evidence(
+        "chgrp docker /var/run/docker.sock",
+        &chgrp,
+    ));
+    if !chgrp.success {
+        failures.push(format!(
+            "chgrp failed: {}",
+            if chgrp.stderr.trim().is_empty() {
+                chgrp.stdout.trim()
+            } else {
+                chgrp.stderr.trim()
+            }
+        ));
     }
 
-    match run_cmd("chmod", &["660", DOCKER_SOCKET]).await {
-        Ok((_, _, true)) => {}
-        Ok((_, stderr, _)) => failures.push(format!("chmod failed: {stderr}")),
-        Err(error) => failures.push(format!("chmod failed: {error}")),
+    let chmod = capture_command("chmod", &["660", DOCKER_SOCKET]).await;
+    evidence.push(command_result_evidence(
+        "chmod 660 /var/run/docker.sock",
+        &chmod,
+    ));
+    if !chmod.success {
+        failures.push(format!(
+            "chmod failed: {}",
+            if chmod.stderr.trim().is_empty() {
+                chmod.stdout.trim()
+            } else {
+                chmod.stderr.trim()
+            }
+        ));
     }
 
-    (!failures.is_empty()).then(|| failures.join("; "))
+    SocketPermissionEvidence {
+        detail: (!failures.is_empty()).then(|| failures.join("; ")),
+        output: joined_evidence(&evidence),
+    }
 }
 
 async fn load_userns_images_for_recovery(
@@ -4882,7 +5134,7 @@ async fn load_userns_images_for_recovery(
                 "Archived image load failed; Compose recovery will allow registry pulls instead of refusing pulls"
                     .to_string(),
             ),
-            Some("docker compose up -d".to_string()),
+            None,
         ),
     );
 
@@ -4947,12 +5199,7 @@ async fn recover_userns_state(
             "restart_containers",
             "in_progress",
             Some("Restarting Compose stacks and standalone containers from snapshot".to_string()),
-            Some(match restart_image_recovery_mode {
-                UsernsImageRecoveryMode::LocalArchive => {
-                    "docker compose up --pull never -d".to_string()
-                }
-                UsernsImageRecoveryMode::RegistryFallback => "docker compose up -d".to_string(),
-            }),
+            None,
         ),
     );
     let restart_result = restart_recovered_containers(
