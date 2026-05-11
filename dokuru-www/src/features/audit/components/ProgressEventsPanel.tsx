@@ -17,9 +17,9 @@ export function CopyButton({ text }: { text: string }) {
         <button
             type="button"
             onClick={handleCopy}
-            className="inline-flex items-center gap-1 text-[10px] font-mono text-white/40 transition-colors hover:text-white/70"
+            className="inline-flex h-6 shrink-0 items-center justify-center gap-1 rounded-md border border-white/10 bg-white/[0.035] px-2 font-mono text-[10px] leading-none text-white/45 transition-colors hover:border-white/20 hover:bg-white/[0.07] hover:text-white/75"
         >
-            {copied ? <Check size={11} strokeWidth={2.5} /> : <Copy size={11} />}
+            {copied ? <Check className="h-3 w-3 shrink-0" strokeWidth={2.5} /> : <Copy className="h-3 w-3 shrink-0" />}
             {copied ? "copied" : "copy"}
         </button>
     );
@@ -90,13 +90,11 @@ function ProgressEventRow({
             {expanded && hasStructuredExtras && (
                 <div className="mt-3 min-w-0 space-y-2.5 pb-1 pr-1 sm:ml-[90px]">
                     {event.command && (
-                        <div className="group/cmd relative">
-                            <pre className="max-w-full whitespace-pre-wrap break-words rounded-lg border border-[#2496ED]/20 bg-[#06111a] px-3 py-2.5 pr-12 text-[10px] text-[#58b8ff] shadow-inner">
+                        <div className="flex min-w-0 items-start gap-2 rounded-lg border border-[#2496ED]/20 bg-[#06111a] px-3 py-2.5 shadow-inner">
+                            <pre className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[10px] leading-relaxed text-[#58b8ff]">
                                 <span className="select-none text-[#2496ED]/40">$ </span>{event.command}
                             </pre>
-                            <div className="absolute right-1.5 top-1.5 opacity-0 transition-opacity group-hover/cmd:opacity-100">
-                                <CopyButton text={event.command} />
-                            </div>
+                            <CopyButton text={event.command} />
                         </div>
                     )}
                     {(event.stdout || event.stderr) && (
@@ -105,26 +103,22 @@ function ProgressEventRow({
                             isError ? "border-rose-500/20 bg-[#1a0505]" : "border-white/8 bg-black/45",
                         )}>
                             {event.stdout && (
-                                <div className="group/out relative border-b border-white/5 last:border-0">
-                                    <pre className="whitespace-pre-wrap break-words px-3 py-2.5 text-[10px] text-emerald-300/80">
+                                <div className="flex min-w-0 items-start gap-2 border-b border-white/5 px-3 py-2.5 last:border-0">
+                                    <pre className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[10px] leading-relaxed text-emerald-300/80">
                                         {event.stdout}
                                     </pre>
-                                    <div className="absolute right-1.5 top-1.5 opacity-0 transition-opacity group-hover/out:opacity-100">
-                                        <CopyButton text={event.stdout} />
-                                    </div>
+                                    <CopyButton text={event.stdout} />
                                 </div>
                             )}
                             {event.stderr && (
-                                <div className="group/err relative">
+                                <div className="flex min-w-0 items-start gap-2 px-3 py-2.5">
                                     <pre className={cn(
-                                        "whitespace-pre-wrap break-words px-3 py-2.5 text-[10px] font-medium",
+                                        "min-w-0 flex-1 whitespace-pre-wrap break-words text-[10px] font-medium leading-relaxed",
                                         isError ? "text-rose-300/90" : "text-white/55",
                                     )}>
                                         {event.stderr}
                                     </pre>
-                                    <div className="absolute right-1.5 top-1.5 opacity-0 transition-opacity group-hover/err:opacity-100">
-                                        <CopyButton text={event.stderr} />
-                                    </div>
+                                    <CopyButton text={event.stderr} />
                                 </div>
                             )}
                         </div>

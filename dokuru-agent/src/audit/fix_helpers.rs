@@ -3970,7 +3970,11 @@ pub async fn preview_fix(docker: &Docker, rule_id: &str) -> eyre::Result<FixPrev
         let Some(id) = container.id.as_deref() else {
             continue;
         };
-        let inspect = docker.inspect_container(id, None).await?;
+        let inspect = match docker.inspect_container(id, None).await {
+            Ok(inspect) => inspect,
+            Err(error) if is_missing_container_error(&error) => continue,
+            Err(error) => return Err(error.into()),
+        };
         let violates = if supports_cgroup_resource_fix(rule_id) {
             default_target_for_rule(docker, rule_id, container)
                 .await
@@ -4023,6 +4027,14 @@ pub async fn preview_fix(docker: &Docker, rule_id: &str) -> eyre::Result<FixPrev
             || supports_docker_root_partition_fix(rule_id),
         steps: fix_steps(rule_id),
     })
+}
+
+fn is_missing_container_error(error: &impl std::fmt::Display) -> bool {
+    let message = error.to_string().to_ascii_lowercase();
+    message.contains("no such container")
+        || message.contains("not found")
+        || message.contains("status code: 404")
+        || message.contains("status_code: 404")
 }
 
 fn preview_target_from_inspect(

@@ -228,6 +228,36 @@ function cancelledOutcome(ruleId: string): FixOutcome {
     };
 }
 
+function responseMessage(data: unknown): string | null {
+    if (!data || typeof data !== "object") return null;
+    const record = data as Record<string, unknown>;
+    const message = ["message", "error", "detail", "details", "debug"]
+        .map((key) => record[key])
+        .find((value): value is string => typeof value === "string" && value.trim().length > 0)
+        ?.trim();
+    const details = ["details", "debug"]
+        .map((key) => record[key])
+        .find((value): value is string => typeof value === "string" && value.trim().length > 0 && value.trim() !== message)
+        ?.trim();
+    return details && message ? `${message}: ${details}` : message ?? null;
+}
+
+function fixErrorMessage(error: unknown): string {
+    const response = (error as { response?: { data?: unknown; status?: number } })?.response;
+    const serverMessage = responseMessage(response?.data)
+        ?? responseMessage(error);
+    if (serverMessage) return serverMessage;
+    if (response?.status) return `Agent request failed with HTTP ${response.status}`;
+    return error instanceof Error ? error.message : "Failed to reach agent";
+}
+
+function verificationFailureMessage(ruleId: string, result: AuditResult): string {
+    const affected = Array.isArray(result.affected) && result.affected.length > 0
+        ? ` (${result.affected.slice(0, 4).join(", ")}${result.affected.length > 4 ? ", ..." : ""})`
+        : "";
+    return `${ruleId} still fails real verification: ${result.message}${affected}`;
+}
+
 function refreshProgress(ruleId: string, status: FixProgress["status"], detail: string): FixProgress {
     return {
         rule_id: ruleId,
@@ -528,7 +558,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
             status: passed ? "Applied" : "Blocked",
             message: passed
                 ? `${ruleId} passed real verification after selected fixes`
-                : `${ruleId} still fails real verification: ${result.message}`,
+                : verificationFailureMessage(ruleId, result),
             requires_restart: false,
             restart_command: undefined,
             requires_elevation: false,
@@ -716,7 +746,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
                     : {
                         rule_id: ruleId,
                         status: "Blocked",
-                        message: error instanceof Error ? error.message : "Failed to reach agent",
+                        message: fixErrorMessage(error),
                         requires_restart: false,
                         restart_command: undefined,
                         requires_elevation: false,
@@ -770,7 +800,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
                         progressEvents: [...updated[index].progressEvents, verified.progressEvent],
                     };
                 } catch (error) {
-                    const message = error instanceof Error ? error.message : "Real cgroup verification failed";
+                    const message = fixErrorMessage(error) || "Real cgroup verification failed";
                     const outcome: FixOutcome = {
                         rule_id: ruleId,
                         status: "Blocked",
