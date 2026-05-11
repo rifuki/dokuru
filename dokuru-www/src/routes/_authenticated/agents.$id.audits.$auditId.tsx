@@ -1682,7 +1682,7 @@ function buildAuditDocumentHtml({
           <div class="score-track"><div class="score-fill"></div></div>
           <div class="projected">
             <span>${projectedScore ? `Projected after fully applied fixes: <strong>~${escapeHtml(projectedScore)}/100</strong>` : "No post-audit fixes included in this report."}</span>
-            <span>${escapeHtml(totalCheckCount)} total checks${errorResults.length > 0 ? ` · ${escapeHtml(scoredCheckCount)} scored · ${escapeHtml(errorResults.length)} not evaluated` : ""}</span>
+            <span>${escapeHtml(totalCheckCount)} total checks${errorResults.length > 0 ? ` · ${escapeHtml(scoredCheckCount)} scored · ${escapeHtml(errorResults.length)} errors` : ""}</span>
           </div>
         </div>
       </div>
@@ -2051,7 +2051,7 @@ function AuditDetailPage() {
   const displayErrorTotal = baseResults.length > 0 ? resultErrorTotal : 0;
   const evaluatedRuleTotal = displayPassedTotal + displayFailedTotal;
   const ruleCountSummary = displayErrorTotal > 0
-    ? `${checkRuleTotal} total checks · ${evaluatedRuleTotal} scored · ${displayErrorTotal} not evaluated`
+    ? `${checkRuleTotal} total checks · ${evaluatedRuleTotal} scored · ${displayErrorTotal} errors`
     : `${checkRuleTotal} total checks`;
   const appliedHistoryByRule = latestAppliedFixesAfterAudit(fixHistoryEntries, auditData);
   const appliedRuleIds = new Set<string>(appliedHistoryByRule.keys());
@@ -2499,15 +2499,11 @@ function AuditDetailPage() {
                   >
                     <span className="text-2xl font-black leading-none text-amber-400 sm:text-3xl">{displayErrorTotal}</span>
                     <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Error</span>
-                    <span className="mt-0.5 text-[10px] font-medium text-muted-foreground/60">not evaluated</span>
                   </button>
                   <div className="flex min-h-[76px] flex-col items-center justify-center rounded-[12px] border border-border bg-muted/20 px-2 py-2.5 text-center sm:min-h-[84px] sm:px-3">
                     <span className="block text-2xl font-black leading-none text-foreground/80 sm:text-3xl">{checkRuleTotal}</span>
                     <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                       Total
-                    </span>
-                    <span className="mt-0.5 text-[10px] font-medium text-muted-foreground/60">
-                      checks
                     </span>
                   </div>
                 </div>
