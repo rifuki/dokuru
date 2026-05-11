@@ -9821,6 +9821,9 @@ pub async fn record_fix_history(
         container_rollback_targets,
         host_file_rollback_targets,
         progress_events,
+        rollback_outcome: None,
+        rollback_progress_events: Vec::new(),
+        rolled_back_at: None,
         rollback_note,
     };
 
@@ -9848,7 +9851,101 @@ pub async fn list_fix_history() -> Vec<FixHistoryEntry> {
     fix_history_snapshot().await
 }
 
+fn rollback_progress_event(
+    rule_id: &str,
+    target: impl Into<String>,
+    step: u8,
+    action: &str,
+    status: &str,
+    detail: Option<String>,
+    command: Option<String>,
+) -> FixProgress {
+    FixProgress {
+        rule_id: rule_id.to_string(),
+        container_name: target.into(),
+        step,
+        total_steps: 5,
+        action: action.to_string(),
+        status: status.to_string(),
+        detail,
+        command,
+        stdout: None,
+        stderr: None,
+    }
+}
+
+fn rollback_cgroup_command(target: &FixTarget) -> String {
+    let mut args = vec!["docker".to_string(), "update".to_string()];
+    if let Some(memory) = target.memory {
+        args.push(format!("--memory={memory}"));
+        args.push("--memory-swap=-1".to_string());
+    }
+    if let Some(cpu_shares) = target.cpu_shares {
+        args.push(format!("--cpu-shares={cpu_shares}"));
+    }
+    if let Some(pids_limit) = target.pids_limit {
+        args.push(format!("--pids-limit={pids_limit}"));
+    }
+    args.push(target.container_id.clone());
+    args.join(" ")
+}
+
+pub async fn record_rollback_result(
+    history_id: &str,
+    outcome: FixOutcome,
+    progress_events: Vec<FixProgress>,
+) {
+    if FIX_HISTORY.read().await.is_empty() {
+        let persisted = read_persisted_fix_history().await;
+        if !persisted.is_empty() {
+            let mut history = FIX_HISTORY.write().await;
+            if history.is_empty() {
+                *history = persisted;
+            }
+        }
+    }
+
+    let history = {
+        let mut history = FIX_HISTORY.write().await;
+        if let Some(entry) = history.iter_mut().find(|entry| entry.id == history_id) {
+            if entry
+                .rollback_outcome
+                .as_ref()
+                .is_some_and(|current| current.status == FixStatus::Applied)
+                && outcome.status != FixStatus::Applied
+            {
+                return;
+            }
+            let applied = outcome.status == FixStatus::Applied;
+            entry.rollback_outcome = Some(outcome.clone());
+            entry.rollback_progress_events = progress_events;
+            entry.rolled_back_at = Some(chrono::Utc::now().to_rfc3339());
+            if applied {
+                entry.rollback_supported = false;
+                entry.rollback_note =
+                    Some("Rollback already applied for this fix history entry".to_string());
+            }
+        }
+        history.clone()
+    };
+    write_persisted_fix_history(&history).await;
+}
+
 pub async fn rollback_fix(docker: &Docker, request: &RollbackRequest) -> eyre::Result<FixOutcome> {
+    let outcome = rollback_fix_with_progress(docker, request, None).await?;
+    record_rollback_result(&request.history_id, outcome.clone(), Vec::new()).await;
+    Ok(outcome)
+}
+
+#[expect(
+    clippy::too_many_lines,
+    reason = "rollback streams explicit step-by-step evidence for every target type"
+)]
+pub async fn rollback_fix_with_progress(
+    docker: &Docker,
+    request: &RollbackRequest,
+    progress: Option<&ProgressSender>,
+) -> eyre::Result<FixOutcome> {
     let entry = {
         let history = fix_history_snapshot().await;
         history
@@ -9857,8 +9954,62 @@ pub async fn rollback_fix(docker: &Docker, request: &RollbackRequest) -> eyre::R
             .cloned()
     };
     let Some(entry) = entry else {
+        send_progress(
+            progress,
+            rollback_progress_event(
+                "rollback",
+                "fix history",
+                1,
+                "load_rollback_snapshot",
+                "error",
+                Some("Fix history entry not found".to_string()),
+                None,
+            ),
+        );
         return Ok(blocked("rollback", "Fix history entry not found"));
     };
+
+    if entry
+        .rollback_outcome
+        .as_ref()
+        .is_some_and(|outcome| outcome.status == FixStatus::Applied)
+    {
+        send_progress(
+            progress,
+            rollback_progress_event(
+                &entry.request.rule_id,
+                "fix history",
+                1,
+                "load_rollback_snapshot",
+                "done",
+                Some("Rollback was already applied for this fix history entry".to_string()),
+                None,
+            ),
+        );
+        return Ok(blocked(
+            &entry.request.rule_id,
+            "Rollback was already applied for this fix history entry",
+        ));
+    }
+
+    send_progress(
+        progress,
+        rollback_progress_event(
+            &entry.request.rule_id,
+            "fix history",
+            1,
+            "load_rollback_snapshot",
+            "done",
+            Some(format!(
+                "Loaded rollback snapshot: {} host/source, {} compose, {} container, {} cgroup target(s)",
+                entry.host_file_rollback_targets.len(),
+                entry.compose_rollback_targets.len(),
+                entry.container_rollback_targets.len(),
+                entry.rollback_targets.len()
+            )),
+            None,
+        ),
+    );
 
     if !entry.rollback_supported
         || (entry.rollback_targets.is_empty()
@@ -9866,6 +10017,18 @@ pub async fn rollback_fix(docker: &Docker, request: &RollbackRequest) -> eyre::R
             && entry.container_rollback_targets.is_empty()
             && entry.host_file_rollback_targets.is_empty())
     {
+        send_progress(
+            progress,
+            rollback_progress_event(
+                &entry.request.rule_id,
+                "rollback snapshot",
+                1,
+                "validate_rollback_snapshot",
+                "error",
+                Some("No captured rollback targets remain for this history entry".to_string()),
+                None,
+            ),
+        );
         return Ok(blocked(
             &entry.request.rule_id,
             "Rollback is only supported when previous cgroup limits, Compose backups, container snapshots, or host file snapshots were captured",
@@ -9876,21 +10039,46 @@ pub async fn rollback_fix(docker: &Docker, request: &RollbackRequest) -> eyre::R
     let mut failed = Vec::new();
 
     rollback_host_file_targets(
+        &entry.request.rule_id,
         &entry.host_file_rollback_targets,
         &mut restored,
         &mut failed,
+        progress,
     )
     .await;
-    rollback_compose_targets(&entry.compose_rollback_targets, &mut restored, &mut failed).await;
+    rollback_compose_targets(
+        &entry.request.rule_id,
+        &entry.compose_rollback_targets,
+        &mut restored,
+        &mut failed,
+        progress,
+    )
+    .await;
     rollback_container_targets(
         docker,
+        &entry.request.rule_id,
         &entry.container_rollback_targets,
         &mut restored,
         &mut failed,
+        progress,
     )
     .await;
 
     for target in &entry.rollback_targets {
+        let label = container_label(docker, &target.container_id).await;
+        let command = rollback_cgroup_command(target);
+        send_progress(
+            progress,
+            rollback_progress_event(
+                &entry.request.rule_id,
+                label.clone(),
+                5,
+                "restore_cgroup_limits",
+                "in_progress",
+                Some("Restoring captured cgroup resource limits".to_string()),
+                Some(command.clone()),
+            ),
+        );
         let options = UpdateContainerOptions::<String> {
             memory: target.memory,
             memory_swap: target.memory.map(|_| -1i64),
@@ -9900,10 +10088,37 @@ pub async fn rollback_fix(docker: &Docker, request: &RollbackRequest) -> eyre::R
             pids_limit: target.pids_limit,
             ..Default::default()
         };
-        let label = container_label(docker, &target.container_id).await;
         match docker.update_container(&target.container_id, options).await {
-            Ok(()) => restored.push(label),
-            Err(error) => failed.push(format!("{label}: {error}")),
+            Ok(()) => {
+                send_progress(
+                    progress,
+                    rollback_progress_event(
+                        &entry.request.rule_id,
+                        label.clone(),
+                        5,
+                        "restore_cgroup_limits",
+                        "done",
+                        Some("Captured cgroup limits restored".to_string()),
+                        Some(command),
+                    ),
+                );
+                restored.push(label);
+            }
+            Err(error) => {
+                send_progress(
+                    progress,
+                    rollback_progress_event(
+                        &entry.request.rule_id,
+                        label.clone(),
+                        5,
+                        "restore_cgroup_limits",
+                        "error",
+                        Some(error.to_string()),
+                        Some(command),
+                    ),
+                );
+                failed.push(format!("{label}: {error}"));
+            }
         }
     }
 
@@ -9915,24 +10130,32 @@ pub async fn rollback_fix(docker: &Docker, request: &RollbackRequest) -> eyre::R
         let _ = write!(message, ". Failed {}: {}", failed.len(), failed.join("; "));
     }
 
-    Ok(FixOutcome {
+    let outcome = FixOutcome {
         rule_id: entry.request.rule_id,
-        status: if restored.is_empty() && !failed.is_empty() {
-            FixStatus::Blocked
-        } else {
+        status: if failed.is_empty() {
             FixStatus::Applied
+        } else {
+            FixStatus::Blocked
         },
         message,
         requires_restart: false,
         restart_command: None,
         requires_elevation: false,
-    })
+    };
+
+    Ok(outcome)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "host-file rollback emits granular evidence for restore, restart, and reload steps"
+)]
 async fn rollback_host_file_targets(
+    rule_id: &str,
     targets: &[HostFileRollbackTarget],
     restored: &mut Vec<String>,
     failed: &mut Vec<String>,
+    progress: Option<&ProgressSender>,
 ) {
     let mut seen = HashSet::<String>::new();
     let mut restored_daemon_json = false;
@@ -9942,6 +10165,30 @@ async fn rollback_host_file_targets(
         if !seen.insert(target.path.clone()) {
             continue;
         }
+        let command = if target.existed {
+            target.backup_path.as_ref().map_or_else(
+                || format!("restore snapshot -> {}", target.path),
+                |backup| format!("cp {} {}", shell_quote(backup), shell_quote(&target.path)),
+            )
+        } else {
+            format!("rm -f {}", shell_quote(&target.path))
+        };
+        send_progress(
+            progress,
+            rollback_progress_event(
+                rule_id,
+                target.path.clone(),
+                2,
+                "restore_host_file",
+                "in_progress",
+                Some(if target.existed {
+                    "Restoring captured host/source file snapshot".to_string()
+                } else {
+                    "Removing file created by the fix".to_string()
+                }),
+                Some(command.clone()),
+            ),
+        );
         match restore_host_file_target(target).await {
             Ok(label) => {
                 if target.path == DAEMON_JSON_PATH {
@@ -9950,42 +10197,182 @@ async fn rollback_host_file_targets(
                 if target.path == AUDIT_RULES_PATH {
                     restored_audit_rules = true;
                 }
+                send_progress(
+                    progress,
+                    rollback_progress_event(
+                        rule_id,
+                        target.path.clone(),
+                        2,
+                        "restore_host_file",
+                        "done",
+                        Some(label.clone()),
+                        Some(command),
+                    ),
+                );
                 restored.push(label);
             }
-            Err(error) => failed.push(format!("{} (host file): {error}", target.path)),
+            Err(error) => {
+                send_progress(
+                    progress,
+                    rollback_progress_event(
+                        rule_id,
+                        target.path.clone(),
+                        2,
+                        "restore_host_file",
+                        "error",
+                        Some(error.to_string()),
+                        Some(command),
+                    ),
+                );
+                failed.push(format!("{} (host file): {error}", target.path));
+            }
         }
     }
 
     if restored_daemon_json {
+        send_progress(
+            progress,
+            rollback_progress_event(
+                rule_id,
+                "Docker daemon",
+                2,
+                "restart_docker_after_rollback",
+                "in_progress",
+                Some("Restarting Docker after daemon.json rollback".to_string()),
+                Some("systemctl restart docker".to_string()),
+            ),
+        );
         match run_cmd("systemctl", &["restart", "docker"]).await {
-            Ok((_, _, true)) => {
+            Ok((stdout, stderr, true)) => {
+                let mut event = rollback_progress_event(
+                    rule_id,
+                    "Docker daemon",
+                    2,
+                    "restart_docker_after_rollback",
+                    "done",
+                    Some("Docker daemon restarted after file rollback".to_string()),
+                    Some("systemctl restart docker".to_string()),
+                );
+                event.stdout = command_output(&stdout);
+                event.stderr = command_output(&stderr);
+                send_progress(progress, event);
                 restored.push("Docker daemon restarted after file rollback".to_string());
             }
-            Ok((_, stderr, _)) => failed.push(format!(
-                "Docker daemon restart after file rollback failed: {}",
-                stderr.trim()
-            )),
-            Err(error) => failed.push(format!(
-                "Docker daemon restart after file rollback failed: {error}"
-            )),
+            Ok((stdout, stderr, _)) => {
+                let mut event = rollback_progress_event(
+                    rule_id,
+                    "Docker daemon",
+                    2,
+                    "restart_docker_after_rollback",
+                    "error",
+                    Some("Docker daemon restart after file rollback failed".to_string()),
+                    Some("systemctl restart docker".to_string()),
+                );
+                event.stdout = command_output(&stdout);
+                event.stderr = command_output(&stderr);
+                send_progress(progress, event);
+                failed.push(format!(
+                    "Docker daemon restart after file rollback failed: {}",
+                    stderr.trim()
+                ));
+            }
+            Err(error) => {
+                send_progress(
+                    progress,
+                    rollback_progress_event(
+                        rule_id,
+                        "Docker daemon",
+                        2,
+                        "restart_docker_after_rollback",
+                        "error",
+                        Some(error.to_string()),
+                        Some("systemctl restart docker".to_string()),
+                    ),
+                );
+                failed.push(format!(
+                    "Docker daemon restart after file rollback failed: {error}"
+                ));
+            }
         }
     }
 
     if restored_audit_rules {
-        let reloaded = capture_command("systemctl", &["reload-or-restart", "auditd"])
-            .await
-            .success
-            || capture_command("auditctl", &["-R", AUDIT_RULES_PATH])
-                .await
-                .success
-            || capture_command("service", &["auditd", "reload"])
-                .await
-                .success;
+        let command = format!(
+            "systemctl reload-or-restart auditd || auditctl -R {} || service auditd reload",
+            shell_quote(AUDIT_RULES_PATH)
+        );
+        send_progress(
+            progress,
+            rollback_progress_event(
+                rule_id,
+                "auditd",
+                2,
+                "reload_auditd_after_rollback",
+                "in_progress",
+                Some("Reloading auditd after audit rules rollback".to_string()),
+                Some(command.clone()),
+            ),
+        );
+        let mut event = rollback_progress_event(
+            rule_id,
+            "auditd",
+            2,
+            "reload_auditd_after_rollback",
+            "error",
+            Some("auditd reload after file rollback did not complete".to_string()),
+            Some(command),
+        );
+        let systemctl = capture_command("systemctl", &["reload-or-restart", "auditd"]).await;
+        let auditctl = if systemctl.success {
+            None
+        } else {
+            Some(capture_command("auditctl", &["-R", AUDIT_RULES_PATH]).await)
+        };
+        let service = if systemctl.success || auditctl.as_ref().is_some_and(|result| result.success)
+        {
+            None
+        } else {
+            Some(capture_command("service", &["auditd", "reload"]).await)
+        };
+        let reloaded = systemctl.success
+            || auditctl.as_ref().is_some_and(|result| result.success)
+            || service.as_ref().is_some_and(|result| result.success);
         if reloaded {
+            event.status = "done".to_string();
+            event.detail = Some("auditd reloaded after file rollback".to_string());
             restored.push("auditd reloaded after file rollback".to_string());
         } else {
             failed.push("auditd reload after file rollback did not complete".to_string());
         }
+        let stdout = [
+            command_output(&systemctl.stdout),
+            auditctl
+                .as_ref()
+                .and_then(|result| command_output(&result.stdout)),
+            service
+                .as_ref()
+                .and_then(|result| command_output(&result.stdout)),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join("\n");
+        let stderr = [
+            command_output(&systemctl.stderr),
+            auditctl
+                .as_ref()
+                .and_then(|result| command_output(&result.stderr)),
+            service
+                .as_ref()
+                .and_then(|result| command_output(&result.stderr)),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join("\n");
+        event.stdout = command_output(&stdout);
+        event.stderr = command_output(&stderr);
+        send_progress(progress, event);
     }
 }
 
@@ -10038,10 +10425,16 @@ async fn restore_host_file_target(target: &HostFileRollbackTarget) -> eyre::Resu
     }
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "compose rollback emits granular evidence for file restore and service recreation"
+)]
 async fn rollback_compose_targets(
+    rule_id: &str,
     targets: &[ComposeRollbackTarget],
     restored: &mut Vec<String>,
     failed: &mut Vec<String>,
+    progress: Option<&ProgressSender>,
 ) {
     let mut seen = HashSet::<String>::new();
 
@@ -10056,8 +10449,46 @@ async fn rollback_compose_targets(
 
         let label = format!("{}:{} (compose)", target.project, target.service);
         let compose_path = PathBuf::from(&target.compose_path);
+        let snapshot_command = target.backup_path.as_ref().map_or_else(
+            || format!("rm -f {}", shell_quote(&target.compose_path)),
+            |backup| {
+                format!(
+                    "cp {} {}",
+                    shell_quote(backup),
+                    shell_quote(&target.compose_path)
+                )
+            },
+        );
+        send_progress(
+            progress,
+            rollback_progress_event(
+                rule_id,
+                label.clone(),
+                3,
+                "restore_compose_snapshot",
+                "in_progress",
+                Some(if target.backup_path.is_some() {
+                    "Restoring Compose YAML from captured snapshot".to_string()
+                } else {
+                    "Removing Dokuru-created Compose override".to_string()
+                }),
+                Some(snapshot_command.clone()),
+            ),
+        );
         if let Some(backup_path) = target.backup_path.as_ref().map(PathBuf::from) {
             if tokio::fs::metadata(&backup_path).await.is_err() {
+                send_progress(
+                    progress,
+                    rollback_progress_event(
+                        rule_id,
+                        label.clone(),
+                        3,
+                        "restore_compose_snapshot",
+                        "error",
+                        Some(format!("backup file missing: {}", backup_path.display())),
+                        Some(snapshot_command),
+                    ),
+                );
                 failed.push(format!(
                     "{label}: backup file missing: {}",
                     backup_path.display()
@@ -10066,6 +10497,18 @@ async fn rollback_compose_targets(
             }
 
             if let Err(error) = tokio::fs::copy(&backup_path, &compose_path).await {
+                send_progress(
+                    progress,
+                    rollback_progress_event(
+                        rule_id,
+                        label.clone(),
+                        3,
+                        "restore_compose_snapshot",
+                        "error",
+                        Some(error.to_string()),
+                        Some(snapshot_command),
+                    ),
+                );
                 failed.push(format!(
                     "{label}: failed to restore {} from {}: {error}",
                     compose_path.display(),
@@ -10077,6 +10520,18 @@ async fn rollback_compose_targets(
             if let Err(error) = tokio::fs::remove_file(&compose_path).await
                 && error.kind() != std::io::ErrorKind::NotFound
             {
+                send_progress(
+                    progress,
+                    rollback_progress_event(
+                        rule_id,
+                        label.clone(),
+                        3,
+                        "restore_compose_snapshot",
+                        "error",
+                        Some(error.to_string()),
+                        Some(snapshot_command),
+                    ),
+                );
                 failed.push(format!(
                     "{label}: failed to remove {}: {error}",
                     compose_path.display()
@@ -10084,9 +10539,37 @@ async fn rollback_compose_targets(
                 continue;
             }
         } else {
+            send_progress(
+                progress,
+                rollback_progress_event(
+                    rule_id,
+                    label.clone(),
+                    3,
+                    "restore_compose_snapshot",
+                    "error",
+                    Some("compose rollback action was not captured".to_string()),
+                    None,
+                ),
+            );
             failed.push(format!("{label}: compose rollback action was not captured"));
             continue;
         }
+
+        send_progress(
+            progress,
+            rollback_progress_event(
+                rule_id,
+                label.clone(),
+                3,
+                "restore_compose_snapshot",
+                "done",
+                Some(format!(
+                    "Restored Compose rollback file {}",
+                    compose_path.display()
+                )),
+                Some(snapshot_command),
+            ),
+        );
 
         let ctx = ComposeContext {
             project: target.project.clone(),
@@ -10097,28 +10580,116 @@ async fn rollback_compose_targets(
         let compose_paths = resolve_compose_files(&ctx)
             .await
             .unwrap_or_else(|_| vec![compose_path.clone()]);
+        let compose_command = compose_up_command_text(&ctx, &compose_paths);
+        send_progress(
+            progress,
+            rollback_progress_event(
+                rule_id,
+                label.clone(),
+                3,
+                "recreate_compose_service",
+                "in_progress",
+                Some("Recreating Compose service after rollback".to_string()),
+                Some(compose_command.clone()),
+            ),
+        );
 
         match run_compose_up_capture(&ctx, &compose_paths).await {
-            Ok(_) => restored.push(label),
-            Err(error) => failed.push(format!(
-                "{label}: restored {} but docker compose up failed: {error}",
-                compose_path.display()
-            )),
+            Ok((stdout, stderr)) => {
+                let mut event = rollback_progress_event(
+                    rule_id,
+                    label.clone(),
+                    3,
+                    "recreate_compose_service",
+                    "done",
+                    Some("Compose service recreated after rollback".to_string()),
+                    Some(compose_command),
+                );
+                event.stdout = command_output(&stdout);
+                event.stderr = command_output(&stderr);
+                send_progress(progress, event);
+                restored.push(label);
+            }
+            Err(error) => {
+                send_progress(
+                    progress,
+                    rollback_progress_event(
+                        rule_id,
+                        label.clone(),
+                        3,
+                        "recreate_compose_service",
+                        "error",
+                        Some(error.to_string()),
+                        Some(compose_command),
+                    ),
+                );
+                failed.push(format!(
+                    "{label}: restored {} but docker compose up failed: {error}",
+                    compose_path.display()
+                ));
+            }
         }
     }
 }
 
 async fn rollback_container_targets(
     docker: &Docker,
+    rule_id: &str,
     targets: &[ContainerRollbackTarget],
     restored: &mut Vec<String>,
     failed: &mut Vec<String>,
+    progress: Option<&ProgressSender>,
 ) {
     for target in targets {
         let label = format!("{} (container snapshot)", target.container_name);
+        let command = format!(
+            "docker recreate {} from snapshot {}",
+            shell_quote(&target.container_name),
+            shell_quote(&target.snapshot_path)
+        );
+        send_progress(
+            progress,
+            rollback_progress_event(
+                rule_id,
+                label.clone(),
+                4,
+                "recreate_container_snapshot",
+                "in_progress",
+                Some("Recreating standalone container from captured inspect snapshot".to_string()),
+                Some(command.clone()),
+            ),
+        );
         match rollback_container_target(docker, target).await {
-            Ok(()) => restored.push(label),
-            Err(error) => failed.push(format!("{label}: {error}")),
+            Ok(()) => {
+                send_progress(
+                    progress,
+                    rollback_progress_event(
+                        rule_id,
+                        label.clone(),
+                        4,
+                        "recreate_container_snapshot",
+                        "done",
+                        Some("Container snapshot restored".to_string()),
+                        Some(command),
+                    ),
+                );
+                restored.push(label);
+            }
+            Err(error) => {
+                send_progress(
+                    progress,
+                    rollback_progress_event(
+                        rule_id,
+                        label.clone(),
+                        4,
+                        "recreate_container_snapshot",
+                        "error",
+                        Some(error.to_string()),
+                        Some(command),
+                    ),
+                );
+                failed.push(format!("{label}: {error}"));
+            }
         }
     }
 }

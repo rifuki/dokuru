@@ -53,6 +53,10 @@ pub fn agent_routes() -> Router<AppState> {
         .route("/{id}/fix/preview", get(audit_handlers::relay_fix_preview))
         .route("/{id}/fix/verify", post(audit_handlers::relay_fix_verify))
         .route("/{id}/fix/stream", get(audit_handlers::relay_fix_stream_ws))
+        .route(
+            "/{id}/fix/rollback/stream",
+            get(audit_handlers::relay_fix_rollback_stream_ws),
+        )
         .route("/{id}/fix/history", get(audit_handlers::relay_fix_history))
         .route(
             "/{id}/fix/rollback",

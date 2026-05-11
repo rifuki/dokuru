@@ -23,8 +23,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { agentApi } from "@/lib/api/agent";
-import { agentDirectApi, type FixHistoryEntry, type FixOutcome, type FixTarget } from "@/lib/api/agent-direct";
+import { agentDirectApi, type FixHistoryEntry, type FixOutcome, type FixProgress, type FixTarget } from "@/lib/api/agent-direct";
+import { ProgressEventsPanel } from "@/features/audit/components/ProgressEventsPanel";
+import { appendFixProgressEvents } from "@/lib/fix-progress-events";
 import { LOCAL_AGENT_ID } from "@/lib/local-agent";
+
+type FixStreamMessage =
+    | { type: "progress"; data: FixProgress }
+    | { type: "outcome"; data: FixOutcome }
+    | { type: "error"; message: string };
 
 interface FixHistoryPanelProps {
     agentId: string;
@@ -82,6 +89,8 @@ export function FixHistoryPanel({
 }: FixHistoryPanelProps) {
     const [rollingBackId, setRollingBackId] = useState<string | null>(null);
     const [confirmEntry, setConfirmEntry] = useState<FixHistoryEntry | null>(null);
+    const [rollbackProgress, setRollbackProgress] = useState<Record<string, FixProgress[]>>({});
+    const [rollbackOutcomes, setRollbackOutcomes] = useState<Record<string, FixOutcome>>({});
 
     const historyQuery = useQuery({
         queryKey: ["fix-history", agentAccessMode, agentId, agentUrl, token],
@@ -99,10 +108,62 @@ export function FixHistoryPanel({
 
     const rollback = useCallback(async (entry: FixHistoryEntry) => {
         setRollingBackId(entry.id);
+        setRollbackProgress(current => ({
+            ...current,
+            [entry.id]: entry.rollback_progress_events ?? [],
+        }));
         try {
-            const outcome = agentAccessMode === "relay"
-                ? await agentApi.rollbackFix(agentId, entry.id)
-                : await agentDirectApi.rollbackFix(agentUrl, entry.id, token);
+            const outcome = await new Promise<FixOutcome>((resolve, reject) => {
+                const url = agentAccessMode === "relay"
+                    ? agentApi.rollbackFixStreamUrl(agentId, entry.id)
+                    : agentDirectApi.rollbackFixStreamUrl(agentUrl, entry.id, token);
+                const socket = new WebSocket(url);
+                let settled = false;
+
+                socket.onmessage = (event) => {
+                    try {
+                        const message = JSON.parse(String(event.data)) as FixStreamMessage;
+                        if (message.type === "progress") {
+                            setRollbackProgress(current => ({
+                                ...current,
+                                [entry.id]: appendFixProgressEvents(current[entry.id] ?? [], [message.data]),
+                            }));
+                            return;
+                        }
+
+                        if (message.type === "outcome") {
+                            settled = true;
+                            setRollbackOutcomes(current => ({ ...current, [entry.id]: message.data }));
+                            socket.close();
+                            resolve(message.data);
+                            return;
+                        }
+
+                        if (message.type === "error") {
+                            settled = true;
+                            socket.close();
+                            reject(new Error(message.message));
+                        }
+                    } catch (error) {
+                        settled = true;
+                        socket.close();
+                        reject(error instanceof Error ? error : new Error("Invalid rollback stream message"));
+                    }
+                };
+
+                socket.onerror = () => {
+                    if (!settled) {
+                        settled = true;
+                        reject(new Error("Rollback progress stream failed"));
+                    }
+                };
+                socket.onclose = () => {
+                    if (!settled) {
+                        settled = true;
+                        reject(new Error("Rollback progress stream closed before completion"));
+                    }
+                };
+            });
 
             if (outcome.status === "Applied") {
                 toast.success(outcome.message);
@@ -130,7 +191,7 @@ export function FixHistoryPanel({
                         <div>
                             <h3 className="text-base font-bold tracking-tight">Fix History & Rollback</h3>
                             <p className="text-sm text-muted-foreground">
-                                Agent-side remediation log. Rollback restores captured cgroup values or Compose snapshots.
+                                Agent-side remediation log. Rollback restores captured host, Compose, container, or cgroup snapshots.
                             </p>
                         </div>
                     </div>
@@ -160,6 +221,11 @@ export function FixHistoryPanel({
                             const status = statusStyles(entry.outcome);
                             const StatusIcon = status.icon;
                             const rollingBack = rollingBackId === entry.id;
+                            const rollbackOutcome = rollbackOutcomes[entry.id] ?? entry.rollback_outcome;
+                            const rollbackEvents = rollbackProgress[entry.id] ?? entry.rollback_progress_events ?? [];
+                            const rollbackApplied = rollbackOutcome?.status === "Applied";
+                            const rollbackBlocked = rollbackOutcome?.status === "Blocked";
+                            const canRollback = entry.rollback_supported && !rollbackApplied;
 
                             return (
                                 <div key={entry.id} className="flex flex-col gap-3 px-5 py-4">
@@ -185,19 +251,34 @@ export function FixHistoryPanel({
                                                     no snapshot
                                                 </span>
                                             )}
+                                            {rollbackApplied && (
+                                                <span className="inline-flex items-center gap-1.5 rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-xs font-bold text-emerald-400">
+                                                    <CheckCircle2 className="h-3 w-3" />
+                                                    rolled back
+                                                </span>
+                                            )}
+                                            {rollbackBlocked && (
+                                                <span className="inline-flex items-center gap-1.5 rounded border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-xs font-bold text-amber-400">
+                                                    <ShieldAlert className="h-3 w-3" />
+                                                    rollback blocked
+                                                </span>
+                                            )}
                                         </div>
 
                                         <div className="flex-shrink-0">
-                                            {entry.rollback_supported && (
+                                            {(entry.rollback_supported || rollbackApplied) && (
                                                 <Button
                                                     variant="secondary"
                                                     size="sm"
                                                     onClick={() => setConfirmEntry(entry)}
-                                                    disabled={rollingBack}
-                                                    className="h-8 gap-1.5 px-3 text-xs font-bold shadow-sm transition-all hover:bg-primary hover:text-primary-foreground"
+                                                    disabled={rollingBack || !canRollback}
+                                                    className={cn(
+                                                        "h-8 gap-1.5 px-3 text-xs font-bold shadow-sm transition-all",
+                                                        canRollback && "hover:bg-primary hover:text-primary-foreground",
+                                                    )}
                                                 >
                                                     {rollingBack ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-                                                    Rollback
+                                                    {rollbackApplied ? "Rolled back" : rollingBack ? "Rolling back" : "Rollback"}
                                                 </Button>
                                             )}
                                         </div>
@@ -280,6 +361,27 @@ export function FixHistoryPanel({
                                             <p className="text-xs text-muted-foreground/70">
                                                 {entry.rollback_note}
                                             </p>
+                                        )}
+
+                                        {(rollingBack || rollbackEvents.length > 0) && (
+                                            <ProgressEventsPanel
+                                                progressEvents={rollbackEvents}
+                                                title={`rollback ${entry.request.rule_id} evidence stream`}
+                                                emptyMessage="Waiting for rollback evidence"
+                                                className="shadow-none"
+                                                maxHeightClassName="max-h-[260px]"
+                                            />
+                                        )}
+
+                                        {rollbackOutcome && (
+                                            <div className={cn(
+                                                "rounded-lg border px-3 py-2 text-xs leading-relaxed",
+                                                rollbackOutcome.status === "Applied"
+                                                    ? "border-emerald-500/20 bg-emerald-500/8 text-emerald-200/80"
+                                                    : "border-amber-500/20 bg-amber-500/8 text-amber-100/80",
+                                            )}>
+                                                {rollbackOutcome.message}
+                                            </div>
                                         )}
                                     </div>
                                 </div>

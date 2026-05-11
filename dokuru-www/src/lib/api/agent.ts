@@ -137,6 +137,17 @@ export const agentApi = {
     return url.toString();
   },
 
+  rollbackFixStreamUrl: (id: string, historyId: string): string => {
+    if (IS_LOCAL_AGENT_MODE && id === LOCAL_AGENT_ID) {
+      return agentDirectApi.rollbackFixStreamUrl(localAgentRootUrl(), historyId, getLocalAgentToken());
+    }
+    const url = new URL(`${wsApiUrl}/agents/${id}/fix/rollback/stream`);
+    url.searchParams.set("payload", JSON.stringify({ history_id: historyId }));
+    const accessToken = useAuthStore.getState().accessToken;
+    if (accessToken) url.searchParams.set("access_token", accessToken);
+    return url.toString();
+  },
+
   getAuditById: async (id: string, auditId: string): Promise<AuditResponse> => {
     if (IS_LOCAL_AGENT_MODE && id === LOCAL_AGENT_ID) {
       const response = await axios.get(`${localAgentRootUrl()}/audit/history/${auditId}`, { headers: localAgentHeaders() });

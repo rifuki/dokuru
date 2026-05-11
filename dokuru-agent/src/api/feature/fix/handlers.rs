@@ -113,6 +113,14 @@ pub async fn stream_fix(
     ws.on_upgrade(move |socket| handle_fix_socket(socket, state, query.payload))
 }
 
+pub async fn stream_rollback(
+    State(state): State<AppState>,
+    Query(query): Query<FixStreamQuery>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    ws.on_upgrade(move |socket| handle_rollback_socket(socket, state, query.payload))
+}
+
 async fn handle_fix_socket(socket: WebSocket, state: AppState, payload: String) {
     let (mut sender, mut receiver) = socket.split();
     let request = match serde_json::from_str::<FixRequest>(&payload) {
@@ -200,6 +208,95 @@ async fn handle_fix_socket(socket: WebSocket, state: AppState, payload: String) 
                 &mut sender,
                 &FixStreamMessage::Error {
                     message: "Fix task ended before returning an outcome".to_string(),
+                },
+            )
+            .await;
+        }
+    }
+}
+
+async fn handle_rollback_socket(socket: WebSocket, state: AppState, payload: String) {
+    let (mut sender, mut receiver) = socket.split();
+    let request = match serde_json::from_str::<RollbackRequest>(&payload) {
+        Ok(request) => request,
+        Err(error) => {
+            send_stream_message(
+                &mut sender,
+                &FixStreamMessage::Error {
+                    message: format!("Invalid rollback request: {error}"),
+                },
+            )
+            .await;
+            return;
+        }
+    };
+
+    let (progress_tx, mut progress_rx) = mpsc::unbounded_channel::<FixProgress>();
+    let (outcome_tx, outcome_rx) = oneshot::channel::<eyre::Result<FixOutcome>>();
+    let docker = state.docker.clone();
+    let request_for_task = request.clone();
+
+    let rollback_task = tokio::spawn(async move {
+        let outcome =
+            fix_helpers::rollback_fix_with_progress(&docker, &request_for_task, Some(&progress_tx))
+                .await;
+        let _ = outcome_tx.send(outcome);
+    });
+
+    tokio::pin!(outcome_rx);
+    let mut progress_events = Vec::new();
+    let final_outcome = loop {
+        tokio::select! {
+            incoming = receiver.next() => {
+                match incoming {
+                    None | Some(Err(_) | Ok(Message::Close(_))) => {
+                        rollback_task.abort();
+                        return;
+                    }
+                    Some(Ok(_)) => {}
+                }
+            }
+            progress = progress_rx.recv() => {
+                if let Some(progress) = progress {
+                    progress_events.push(progress.clone());
+                    send_stream_message(&mut sender, &FixStreamMessage::Progress { data: progress }).await;
+                }
+            }
+            outcome = &mut outcome_rx => {
+                break outcome;
+            }
+        }
+    };
+
+    while let Ok(progress) = progress_rx.try_recv() {
+        progress_events.push(progress.clone());
+        send_stream_message(&mut sender, &FixStreamMessage::Progress { data: progress }).await;
+    }
+
+    match final_outcome {
+        Ok(Ok(outcome)) => {
+            fix_helpers::record_rollback_result(
+                &request.history_id,
+                outcome.clone(),
+                progress_events,
+            )
+            .await;
+            send_stream_message(&mut sender, &FixStreamMessage::Outcome { data: outcome }).await;
+        }
+        Ok(Err(error)) => {
+            send_stream_message(
+                &mut sender,
+                &FixStreamMessage::Error {
+                    message: error.to_string(),
+                },
+            )
+            .await;
+        }
+        Err(_) => {
+            send_stream_message(
+                &mut sender,
+                &FixStreamMessage::Error {
+                    message: "Rollback task ended before returning an outcome".to_string(),
                 },
             )
             .await;

@@ -212,6 +212,12 @@ pub struct FixHistoryEntry {
     pub host_file_rollback_targets: Vec<HostFileRollbackTarget>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub progress_events: Vec<FixProgress>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub rollback_outcome: Option<FixOutcome>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rollback_progress_events: Vec<FixProgress>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub rolled_back_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rollback_note: Option<String>,
 }

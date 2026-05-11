@@ -15,6 +15,8 @@ pub fn routes() -> Router<AppState> {
         .route("/audit/fix/verify", post(handlers::verify_fix))
         .route("/fix/stream", get(handlers::stream_fix))
         .route("/audit/fix/stream", get(handlers::stream_fix))
+        .route("/fix/rollback/stream", get(handlers::stream_rollback))
+        .route("/audit/fix/rollback/stream", get(handlers::stream_rollback))
         .route("/fix/history", get(handlers::list_history))
         .route("/audit/fix/history", get(handlers::list_history))
         .route("/fix/rollback", post(handlers::rollback_fix))

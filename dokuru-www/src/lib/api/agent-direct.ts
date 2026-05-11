@@ -154,6 +154,9 @@ export interface FixHistoryEntry {
     note?: string;
   }>;
   progress_events?: FixProgress[];
+  rollback_outcome?: FixOutcome;
+  rollback_progress_events?: FixProgress[];
+  rolled_back_at?: string;
   rollback_note?: string;
 }
 
@@ -330,6 +333,14 @@ export const agentDirectApi = {
     const url = new URL(`${agentUrl}/fix/stream`);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     url.searchParams.set("payload", JSON.stringify({ rule_id: request.rule_id, targets: request.targets ?? [] }));
+    if (token) url.searchParams.set("token", token);
+    return url.toString();
+  },
+
+  rollbackFixStreamUrl: (agentUrl: string, historyId: string, token?: string): string => {
+    const url = new URL(`${agentUrl}/fix/rollback/stream`);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    url.searchParams.set("payload", JSON.stringify({ history_id: historyId }));
     if (token) url.searchParams.set("token", token);
     return url.toString();
   },

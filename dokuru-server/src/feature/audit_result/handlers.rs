@@ -295,6 +295,41 @@ pub async fn relay_fix_stream_ws(
     })
 }
 
+pub async fn relay_fix_rollback_stream_ws(
+    State(state): State<AppState>,
+    Extension(auth_user): Extension<AuthUser>,
+    Path(agent_id): Path<Uuid>,
+    Query(query): Query<RelayFixStreamQuery>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    let agent = match require_relay_agent(&state, auth_user.user_id, agent_id).await {
+        Ok(agent) => agent,
+        Err(error) => return error.into_response(),
+    };
+    let payload = match serde_json::from_str::<serde_json::Value>(&query.payload) {
+        Ok(payload) => payload,
+        Err(error) => {
+            return ApiError::default()
+                .with_code(StatusCode::BAD_REQUEST)
+                .with_message("Invalid rollback stream payload")
+                .with_debug(error.to_string())
+                .into_response();
+        }
+    };
+    let registry = state.agent_registry.clone();
+
+    ws.on_upgrade(move |socket| {
+        relay::proxy_stream_to_websocket(
+            socket,
+            registry,
+            agent.id,
+            "fix_rollback_progress",
+            payload,
+            relay::RelayStreamMode::Text,
+        )
+    })
+}
+
 pub async fn relay_docker_request(
     State(state): State<AppState>,
     Extension(auth_user): Extension<AuthUser>,
