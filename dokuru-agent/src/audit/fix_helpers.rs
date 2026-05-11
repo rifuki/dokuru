@@ -1910,6 +1910,12 @@ struct UsernsRecoveryResult {
     failed: Vec<String>,
 }
 
+struct UsernsImageLoadState {
+    result: UsernsRecoveryResult,
+    restart_mode: UsernsImageRecoveryMode,
+    fell_back_to_registry: bool,
+}
+
 struct UsernsSnapshotState {
     snapshots: Vec<ContainerSnapshot>,
     bind_paths: Vec<String>,
@@ -2329,7 +2335,7 @@ fn choose_userns_image_recovery_plan(
     }
 }
 
-fn mib(bytes: u64) -> u64 {
+const fn mib(bytes: u64) -> u64 {
     bytes / 1024 / 1024
 }
 
@@ -2433,8 +2439,7 @@ async fn plan_userns_image_recovery(
 async fn archive_file_size() -> u64 {
     tokio::fs::metadata(USERNS_IMAGE_ARCHIVE_PATH)
         .await
-        .map(|metadata| metadata.len())
-        .unwrap_or(0)
+        .map_or(0, |metadata| metadata.len())
 }
 
 fn format_archive_progress_detail(
@@ -2444,16 +2449,19 @@ fn format_archive_progress_detail(
     allow_slow_fallback: bool,
 ) -> String {
     let elapsed_seconds = elapsed.as_secs().max(1);
-    let speed_mib = bytes_written as f64 / 1024.0 / 1024.0 / elapsed_seconds as f64;
+    let bytes_per_second = bytes_written / elapsed_seconds;
+    let speed_mib_tenths = bytes_per_second.saturating_mul(10) / 1024 / 1024;
     let mut detail = format!(
-        "Archiving images: wrote {} MiB in {}s ({speed_mib:.1} MiB/s)",
+        "Archiving images: wrote {} MiB in {}s ({}.{:01} MiB/s)",
         mib(bytes_written),
-        elapsed.as_secs()
+        elapsed.as_secs(),
+        speed_mib_tenths / 10,
+        speed_mib_tenths % 10
     );
     if let Some(estimated) = estimated_bytes.filter(|estimated| *estimated > 0) {
         let remaining = estimated.saturating_sub(bytes_written);
-        let eta_seconds = if speed_mib > 0.0 {
-            (remaining as f64 / 1024.0 / 1024.0 / speed_mib).ceil() as u64
+        let eta_seconds = if bytes_per_second > 0 {
+            remaining.div_ceil(bytes_per_second)
         } else {
             0
         };
@@ -2467,8 +2475,7 @@ fn format_archive_progress_detail(
     if allow_slow_fallback {
         let _ = write!(
             detail,
-            "; will switch to registry pull before Docker restart if ETA stays above {}s",
-            USERNS_IMAGE_ARCHIVE_MAX_SECONDS
+            "; will switch to registry pull before Docker restart if ETA stays above {USERNS_IMAGE_ARCHIVE_MAX_SECONDS}s"
         );
     } else {
         detail.push_str("; local archive is required because registry recovery is not trusted");
@@ -2508,12 +2515,10 @@ fn slow_archive_abort_reason(
         return None;
     }
 
-    let speed_bytes_per_second = bytes_written as f64 / elapsed.as_secs_f64();
-    if speed_bytes_per_second <= 0.0 {
-        return None;
-    }
-
-    let estimated_total_seconds = (estimated_bytes as f64 / speed_bytes_per_second).ceil() as u64;
+    let estimated_total_seconds = estimated_bytes
+        .checked_mul(elapsed.as_secs())
+        .map(|estimate| estimate.div_ceil(bytes_written))
+        .unwrap_or(u64::MAX);
     (estimated_total_seconds > USERNS_IMAGE_ARCHIVE_MAX_SECONDS).then(|| {
         format!(
             "local image archive ETA is ~{}s for {} MiB, above the {}s smart threshold; switching to registry pull before Docker restart",
@@ -2536,6 +2541,98 @@ fn drain_archive_output_lines(
         } else {
             stderr.push_str(&line);
             stderr.push('\n');
+        }
+    }
+}
+
+async fn wait_for_userns_archive(
+    child: &mut tokio::process::Child,
+    line_rx: &mut mpsc::UnboundedReceiver<(&'static str, String)>,
+    stdout: &mut String,
+    stderr: &mut String,
+    plan: UsernsImageRecoveryPlan,
+    command_text: &str,
+    progress: Option<&ProgressSender>,
+) -> Result<std::process::ExitStatus, UsernsImageRecoveryMode> {
+    let started_at = Instant::now();
+    let heartbeat = Duration::from_secs(USERNS_IMAGE_ARCHIVE_MONITOR_INTERVAL_SECS);
+    let mut last_growth_at = started_at;
+    let mut last_size = 0u64;
+    let mut heartbeat_count = 0usize;
+
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return Ok(status),
+            Ok(None) => {}
+            Err(error) => {
+                let _ = child.kill().await;
+                let _ = tokio::fs::remove_file(USERNS_IMAGE_ARCHIVE_PATH).await;
+                send_progress(
+                    progress,
+                    userns_progress_event(
+                        1,
+                        "archive_images",
+                        "error",
+                        Some(format!(
+                            "Could not monitor image archive; recovery may pull images if needed: {error}"
+                        )),
+                        Some(command_text.to_string()),
+                    ),
+                );
+                return Err(UsernsImageRecoveryMode::RegistryFallback);
+            }
+        }
+
+        tokio::time::sleep(heartbeat).await;
+        drain_archive_output_lines(line_rx, stdout, stderr);
+
+        let size = archive_file_size().await;
+        let now = Instant::now();
+        if size > last_size {
+            last_size = size;
+            last_growth_at = now;
+        }
+        heartbeat_count += 1;
+
+        if let Some(reason) = slow_archive_abort_reason(
+            plan.estimated_bytes,
+            size,
+            now.duration_since(started_at),
+            now.duration_since(last_growth_at),
+            plan.allow_slow_fallback,
+        ) {
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+            let _ = tokio::fs::remove_file(USERNS_IMAGE_ARCHIVE_PATH).await;
+            send_progress(
+                progress,
+                userns_progress_event(
+                    1,
+                    "archive_images",
+                    "done",
+                    Some(reason),
+                    Some(command_text.to_string()),
+                ),
+            );
+            return Err(UsernsImageRecoveryMode::RegistryFallback);
+        }
+
+        if heartbeat_count.is_multiple_of(2) {
+            send_progress(
+                progress,
+                userns_progress_event(
+                    1,
+                    "archive_images",
+                    "in_progress",
+                    Some(format_archive_progress_detail(
+                        size,
+                        plan.estimated_bytes,
+                        now.duration_since(started_at),
+                        plan.allow_slow_fallback,
+                    )),
+                    Some(command_text.to_string()),
+                ),
+            );
         }
     }
 }
@@ -2568,88 +2665,22 @@ async fn run_monitored_userns_image_archive(
     };
 
     let mut line_rx = pipe_child_output(&mut child);
-    let started_at = Instant::now();
-    let heartbeat = Duration::from_secs(USERNS_IMAGE_ARCHIVE_MONITOR_INTERVAL_SECS);
-    let mut last_growth_at = started_at;
-    let mut last_size = 0u64;
-    let mut heartbeat_count = 0usize;
     let mut stdout = String::new();
     let mut stderr = String::new();
 
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) => {}
-            Err(error) => {
-                let _ = child.kill().await;
-                let _ = tokio::fs::remove_file(USERNS_IMAGE_ARCHIVE_PATH).await;
-                send_progress(
-                    progress,
-                    userns_progress_event(
-                        1,
-                        "archive_images",
-                        "error",
-                        Some(format!(
-                            "Could not monitor image archive; recovery may pull images if needed: {error}"
-                        )),
-                        Some(command_text),
-                    ),
-                );
-                return UsernsImageRecoveryMode::RegistryFallback;
-            }
-        }
-
-        tokio::time::sleep(heartbeat).await;
-        drain_archive_output_lines(&mut line_rx, &mut stdout, &mut stderr);
-
-        let size = archive_file_size().await;
-        let now = Instant::now();
-        if size > last_size {
-            last_size = size;
-            last_growth_at = now;
-        }
-        heartbeat_count += 1;
-
-        if let Some(reason) = slow_archive_abort_reason(
-            plan.estimated_bytes,
-            size,
-            now.duration_since(started_at),
-            now.duration_since(last_growth_at),
-            plan.allow_slow_fallback,
-        ) {
-            let _ = child.kill().await;
-            let _ = child.wait().await;
-            let _ = tokio::fs::remove_file(USERNS_IMAGE_ARCHIVE_PATH).await;
-            send_progress(
-                progress,
-                userns_progress_event(
-                    1,
-                    "archive_images",
-                    "done",
-                    Some(reason),
-                    Some(command_text),
-                ),
-            );
-            return UsernsImageRecoveryMode::RegistryFallback;
-        }
-
-        if heartbeat_count % 2 == 0 {
-            send_progress(
-                progress,
-                userns_progress_event(
-                    1,
-                    "archive_images",
-                    "in_progress",
-                    Some(format_archive_progress_detail(
-                        size,
-                        plan.estimated_bytes,
-                        now.duration_since(started_at),
-                        plan.allow_slow_fallback,
-                    )),
-                    Some(command_text.clone()),
-                ),
-            );
-        }
+    let status = match wait_for_userns_archive(
+        &mut child,
+        &mut line_rx,
+        &mut stdout,
+        &mut stderr,
+        plan,
+        &command_text,
+        progress,
+    )
+    .await
+    {
+        Ok(status) => status,
+        Err(mode) => return mode,
     };
 
     drain_archive_output_lines(&mut line_rx, &mut stdout, &mut stderr);
@@ -4255,20 +4286,11 @@ async fn normalize_docker_socket_permissions() -> Option<String> {
     (!failures.is_empty()).then(|| failures.join("; "))
 }
 
-async fn recover_userns_state(
-    docker: &Docker,
-    state: &UsernsSnapshotState,
+async fn load_userns_images_for_recovery(
     image_recovery_mode: UsernsImageRecoveryMode,
     progress: Option<&ProgressSender>,
-) -> UsernsRecoverySummary {
-    tokio::time::sleep(Duration::from_secs(3)).await;
-    let (uid, gid) = dockremap_uid_gid();
-
-    let mut restart_image_recovery_mode = image_recovery_mode;
-    let mut image_load_fell_back_to_registry = false;
-    let image_result = if image_recovery_mode == UsernsImageRecoveryMode::LocalArchive {
-        load_archived_userns_images(progress).await
-    } else {
+) -> UsernsImageLoadState {
+    if image_recovery_mode != UsernsImageRecoveryMode::LocalArchive {
         let mut result = UsernsRecoveryResult::default();
         result.skipped += 1;
         send_progress(
@@ -4284,28 +4306,57 @@ async fn recover_userns_state(
                 None,
             ),
         );
-        result
-    };
-
-    if image_recovery_mode == UsernsImageRecoveryMode::LocalArchive
-        && !image_result.failed.is_empty()
-    {
-        restart_image_recovery_mode = UsernsImageRecoveryMode::RegistryFallback;
-        image_load_fell_back_to_registry = true;
-        send_progress(
-            progress,
-            userns_progress_event(
-                7,
-                "load_images",
-                "done",
-                Some(
-                    "Archived image load failed; Compose recovery will allow registry pulls instead of refusing pulls"
-                        .to_string(),
-                ),
-                Some("docker compose up -d".to_string()),
-            ),
-        );
+        return UsernsImageLoadState {
+            result,
+            restart_mode: image_recovery_mode,
+            fell_back_to_registry: false,
+        };
     }
+
+    let result = load_archived_userns_images(progress).await;
+    if result.failed.is_empty() {
+        return UsernsImageLoadState {
+            result,
+            restart_mode: image_recovery_mode,
+            fell_back_to_registry: false,
+        };
+    }
+
+    send_progress(
+        progress,
+        userns_progress_event(
+            7,
+            "load_images",
+            "done",
+            Some(
+                "Archived image load failed; Compose recovery will allow registry pulls instead of refusing pulls"
+                    .to_string(),
+            ),
+            Some("docker compose up -d".to_string()),
+        ),
+    );
+
+    UsernsImageLoadState {
+        result,
+        restart_mode: UsernsImageRecoveryMode::RegistryFallback,
+        fell_back_to_registry: true,
+    }
+}
+
+async fn recover_userns_state(
+    docker: &Docker,
+    state: &UsernsSnapshotState,
+    image_recovery_mode: UsernsImageRecoveryMode,
+    progress: Option<&ProgressSender>,
+) -> UsernsRecoverySummary {
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    let (uid, gid) = dockremap_uid_gid();
+
+    let UsernsImageLoadState {
+        result: image_result,
+        restart_mode: restart_image_recovery_mode,
+        fell_back_to_registry: image_load_fell_back_to_registry,
+    } = load_userns_images_for_recovery(image_recovery_mode, progress).await;
 
     send_progress(
         progress,
