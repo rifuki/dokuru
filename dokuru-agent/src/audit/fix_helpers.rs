@@ -3685,7 +3685,7 @@ async fn fix_bind_mount_permissions(
         return result;
     }
 
-    let acl_error = ensure_setfacl_available().await;
+    let acl_error = ensure_setfacl_available_for_userns(progress).await;
     let acl_available = acl_error.is_none();
     let mut runtime_chown_without_host_acl = 0usize;
 
@@ -3861,25 +3861,140 @@ fn should_chown_runtime_bind_path(path: &str) -> bool {
 }
 
 async fn ensure_setfacl_available() -> Option<String> {
+    ensure_setfacl_available_with_progress(None).await
+}
+
+async fn ensure_setfacl_available_for_userns(progress: Option<&ProgressSender>) -> Option<String> {
+    ensure_setfacl_available_with_progress(progress).await
+}
+
+async fn ensure_setfacl_available_with_progress(
+    progress: Option<&ProgressSender>,
+) -> Option<String> {
     if command_available("setfacl").await {
+        send_progress(
+            progress,
+            userns_progress_event(
+                8,
+                "ensure_setfacl",
+                "done",
+                Some(
+                    "setfacl is already installed; preserving host-owner ACLs during bind recovery"
+                        .to_string(),
+                ),
+                Some("which setfacl".to_string()),
+            ),
+        );
         return None;
     }
 
-    let installers: [(&str, &[&str]); 4] = [
-        ("apt-get", &["install", "-y", "acl"]),
-        ("dnf", &["install", "-y", "acl"]),
-        ("yum", &["install", "-y", "acl"]),
-        ("apk", &["add", "acl"]),
+    send_progress(
+        progress,
+        userns_progress_event(
+            8,
+            "ensure_setfacl",
+            "in_progress",
+            Some("setfacl not found; installing the acl package so Dokuru can preserve host-owner access while granting remapped UID access".to_string()),
+            Some("apt-get update && apt-get install -y acl || dnf install -y acl || yum install -y acl || apk add acl".to_string()),
+        ),
+    );
+
+    let installers: Vec<(&str, Vec<Vec<&str>>)> = vec![
+        (
+            "apt-get",
+            vec![vec!["update"], vec!["install", "-y", "acl"]],
+        ),
+        ("dnf", vec![vec!["install", "-y", "acl"]]),
+        ("yum", vec![vec!["install", "-y", "acl"]]),
+        ("apk", vec![vec!["add", "acl"]]),
     ];
     let mut errors = Vec::new();
 
-    for (cmd, args) in installers {
-        match run_cmd(cmd, args).await {
-            Ok((_, _, true)) if command_available("setfacl").await => return None,
-            Ok((_, stderr, _)) => errors.push(format!("{cmd}: {}", stderr.trim())),
-            Err(error) => errors.push(format!("{cmd}: {error}")),
+    for (cmd, commands) in installers {
+        if !command_available(cmd).await {
+            continue;
+        }
+
+        let command_text = commands
+            .iter()
+            .map(|args| format!("{cmd} {}", args.join(" ")))
+            .collect::<Vec<_>>()
+            .join(" && ");
+        send_progress(
+            progress,
+            userns_progress_event(
+                8,
+                "ensure_setfacl",
+                "in_progress",
+                Some(format!("Installing acl package with {cmd}")),
+                Some(command_text.clone()),
+            ),
+        );
+
+        let mut installer_failed = false;
+        for args in commands {
+            match run_cmd(cmd, &args).await {
+                Ok((_, _, true)) => {}
+                Ok((_, stderr, _)) => {
+                    installer_failed = true;
+                    errors.push(format!("{cmd} {}: {}", args.join(" "), stderr.trim()));
+                    break;
+                }
+                Err(error) => {
+                    installer_failed = true;
+                    errors.push(format!("{cmd} {}: {error}", args.join(" ")));
+                    break;
+                }
+            }
+        }
+
+        if !installer_failed && command_available("setfacl").await {
+            send_progress(
+                progress,
+                userns_progress_event(
+                    8,
+                    "ensure_setfacl",
+                    "done",
+                    Some(
+                        "acl package installed; setfacl is available for bind mount recovery"
+                            .to_string(),
+                    ),
+                    Some(command_text),
+                ),
+            );
+            return None;
+        }
+
+        if !installer_failed {
+            errors.push(format!(
+                "{cmd}: install completed but setfacl is still unavailable"
+            ));
         }
     }
+
+    if errors.is_empty() {
+        errors.push("no supported package manager found (apt-get, dnf, yum, apk)".to_string());
+    }
+
+    let detail = format!(
+        "Could not auto-install acl/setfacl: {}. Runtime data bind mounts will fall back to chown; non-runtime writable binds remain blocked until setfacl is installed.",
+        errors
+            .iter()
+            .take(4)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("; ")
+    );
+    send_progress(
+        progress,
+        userns_progress_event(
+            8,
+            "ensure_setfacl",
+            "error",
+            Some(detail),
+            Some("install acl package manually, then rerun rule 2.10".to_string()),
+        ),
+    );
 
     Some(errors.join("; "))
 }
