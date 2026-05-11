@@ -390,9 +390,9 @@ function createFixAllSession(rules: AuditResult[]): FixAllSessionState {
     };
 }
 
-function isSuccessfulFixAllResult(ruleStatuses: RuleFixStatus[]) {
-    const selected = ruleStatuses.filter(status => status.selected);
-    return selected.length > 0 && selected.every(status => status.outcome?.status === "Applied");
+function sameFixAllRuleSet(ruleStatuses: RuleFixStatus[], rules: AuditResult[]) {
+    if (ruleStatuses.length !== rules.length) return false;
+    return ruleStatuses.every((status, index) => status.ruleId === rules[index]?.rule.id);
 }
 
 export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTimestamp }: UseFixAllArgs) {
@@ -433,11 +433,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
 
     const openFixAll = useCallback((rules: AuditResult[]) => {
         commitSession((current) => {
-            if (current.step === "applying" && current.ruleStatuses.length > 0) {
-                return { ...current, open: true };
-            }
-
-            if (current.step === "result" && isSuccessfulFixAllResult(current.ruleStatuses)) {
+            if (current.ruleStatuses.length > 0 && sameFixAllRuleSet(current.ruleStatuses, rules)) {
                 return { ...current, open: true };
             }
 
@@ -482,11 +478,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
 
     const closeFixAll = useCallback(() => {
         commitSession((current) => {
-            if (current.step === "applying") {
-                return { ...current, open: false };
-            }
-
-            if (current.step === "result" && isSuccessfulFixAllResult(current.ruleStatuses)) {
+            if (current.ruleStatuses.length > 0) {
                 return { ...current, open: false };
             }
 
