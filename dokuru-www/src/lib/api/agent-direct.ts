@@ -144,6 +144,15 @@ export interface FixHistoryEntry {
     original_user?: string;
     snapshot_note?: string;
   }>;
+  host_file_rollback_targets?: Array<{
+    path: string;
+    backup_path?: string;
+    existed: boolean;
+    mode?: number;
+    uid?: number;
+    gid?: number;
+    note?: string;
+  }>;
   progress_events?: FixProgress[];
   rollback_note?: string;
 }

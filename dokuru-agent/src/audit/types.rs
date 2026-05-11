@@ -209,6 +209,8 @@ pub struct FixHistoryEntry {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub container_rollback_targets: Vec<ContainerRollbackTarget>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub host_file_rollback_targets: Vec<HostFileRollbackTarget>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub progress_events: Vec<FixProgress>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rollback_note: Option<String>,
@@ -240,6 +242,22 @@ pub struct ContainerRollbackTarget {
     pub original_user: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub snapshot_note: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HostFileRollbackTarget {
+    pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub backup_path: Option<String>,
+    pub existed: bool,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub mode: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub uid: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub gid: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub note: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

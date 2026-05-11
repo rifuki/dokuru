@@ -1,8 +1,8 @@
 /// Shared helpers for `fix_fn` implementations
 use crate::audit::types::{
     ComposeRollbackTarget, ContainerRollbackTarget, FixHistoryEntry, FixOutcome, FixPreview,
-    FixPreviewTarget, FixProgress, FixRequest, FixStatus, FixTarget, ResourceSuggestion,
-    RollbackRequest,
+    FixPreviewTarget, FixProgress, FixRequest, FixStatus, FixTarget, HostFileRollbackTarget,
+    ResourceSuggestion, RollbackRequest,
 };
 use bollard::{
     Docker,
@@ -36,6 +36,7 @@ pub struct RollbackPlan {
     pub cgroup_targets: Vec<FixTarget>,
     pub compose_backups: Vec<ComposeRollbackTarget>,
     pub container_snapshots: Vec<ContainerRollbackTarget>,
+    pub host_file_snapshots: Vec<HostFileRollbackTarget>,
 }
 
 static FIX_HISTORY: LazyLock<RwLock<Vec<FixHistoryEntry>>> =
@@ -98,6 +99,106 @@ async fn write_secure_json_file<T: serde::Serialize + Sync + ?Sized>(
     Ok(())
 }
 
+fn fix_snapshot_dir() -> PathBuf {
+    dokuru_data_dir().join(FIX_SNAPSHOT_DIR)
+}
+
+fn safe_file_snapshot_name(path: &Path) -> String {
+    let safe = path
+        .to_string_lossy()
+        .trim_start_matches('/')
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.') {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+
+    if safe.is_empty() {
+        "host-file".to_string()
+    } else {
+        safe
+    }
+}
+
+fn host_file_snapshot_path(path: &Path) -> PathBuf {
+    let timestamp = chrono::Utc::now().format("%Y%m%d%H%M%S");
+    fix_snapshot_dir().join(format!(
+        "{}.{}.{}.bak",
+        safe_file_snapshot_name(path),
+        timestamp,
+        Uuid::new_v4()
+    ))
+}
+
+async fn capture_host_file_rollback_target(
+    path: &Path,
+    note: &str,
+) -> eyre::Result<HostFileRollbackTarget> {
+    let path_text = path.to_string_lossy().to_string();
+    let metadata = match tokio::fs::metadata(path).await {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(HostFileRollbackTarget {
+                path: path_text,
+                backup_path: None,
+                existed: false,
+                mode: None,
+                uid: None,
+                gid: None,
+                note: Some(note.to_string()),
+            });
+        }
+        Err(error) => return Err(error.into()),
+    };
+
+    if !metadata.is_file() {
+        return Err(eyre::eyre!(
+            "{} exists but is not a regular file",
+            path.display()
+        ));
+    }
+
+    let backup_path = host_file_snapshot_path(path);
+    if let Some(parent) = backup_path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    tokio::fs::copy(path, &backup_path).await?;
+    tokio::fs::set_permissions(&backup_path, std::fs::Permissions::from_mode(0o600)).await?;
+
+    Ok(HostFileRollbackTarget {
+        path: path_text,
+        backup_path: Some(backup_path.to_string_lossy().to_string()),
+        existed: true,
+        mode: Some(metadata.mode() & 0o7777),
+        uid: Some(metadata.uid()),
+        gid: Some(metadata.gid()),
+        note: Some(note.to_string()),
+    })
+}
+
+async fn push_host_file_snapshot(
+    snapshots: &mut Vec<HostFileRollbackTarget>,
+    seen: &mut HashSet<String>,
+    path: PathBuf,
+    note: &str,
+) {
+    let key = path.to_string_lossy().to_string();
+    if !seen.insert(key) {
+        return;
+    }
+
+    match capture_host_file_rollback_target(&path, note).await {
+        Ok(snapshot) => snapshots.push(snapshot),
+        Err(error) => {
+            tracing::warn!(path = %path.display(), %error, "Failed to capture host file rollback snapshot");
+        }
+    }
+}
+
 async fn fix_history_snapshot() -> Vec<FixHistoryEntry> {
     let history = FIX_HISTORY.read().await.clone();
     if !history.is_empty() {
@@ -147,6 +248,9 @@ const STRATEGY_DOCKERFILE_UPDATE: &str = "dockerfile_update";
 const DEFAULT_COMPOSE_OVERRIDE_FILENAME: &str = "docker-compose.override.yml";
 const COMPOSE_BACKUP_DIR: &str = "compose-backups";
 const CONTAINER_SNAPSHOT_DIR: &str = "container-snapshots";
+const FIX_SNAPSHOT_DIR: &str = "fix-snapshots";
+const SUBUID_PATH: &str = "/etc/subuid";
+const SUBGID_PATH: &str = "/etc/subgid";
 const COMPOSE_FILENAMES: &[&str] = &[
     "compose.yaml",
     "docker-compose.yaml",
@@ -9272,38 +9376,134 @@ async fn container_rollback_targets_for_request(
     Ok(snapshots)
 }
 
+async fn host_file_rollback_targets_for_request(
+    docker: &Docker,
+    request: &FixRequest,
+) -> Vec<HostFileRollbackTarget> {
+    let mut snapshots = Vec::new();
+    let mut seen = HashSet::<String>::new();
+
+    if supports_audit_rule_fix(&request.rule_id) {
+        push_host_file_snapshot(
+            &mut snapshots,
+            &mut seen,
+            PathBuf::from(AUDIT_RULES_PATH),
+            "Audit rule file before remediation",
+        )
+        .await;
+    }
+
+    if supports_daemon_no_new_privileges_fix(&request.rule_id)
+        || supports_userns_remap_fix(&request.rule_id)
+    {
+        push_host_file_snapshot(
+            &mut snapshots,
+            &mut seen,
+            PathBuf::from(DAEMON_JSON_PATH),
+            "Docker daemon configuration before remediation",
+        )
+        .await;
+        push_host_file_snapshot(
+            &mut snapshots,
+            &mut seen,
+            PathBuf::from(AUDIT_RULES_PATH),
+            "Audit rule file before daemon remediation side effects",
+        )
+        .await;
+    }
+
+    if supports_userns_remap_fix(&request.rule_id) {
+        push_host_file_snapshot(
+            &mut snapshots,
+            &mut seen,
+            PathBuf::from(SUBUID_PATH),
+            "Subuid map before userns-remap remediation",
+        )
+        .await;
+        push_host_file_snapshot(
+            &mut snapshots,
+            &mut seen,
+            PathBuf::from(SUBGID_PATH),
+            "Subgid map before userns-remap remediation",
+        )
+        .await;
+    }
+
+    capture_dockerfile_rollback_targets(docker, request, &mut snapshots, &mut seen).await;
+    snapshots
+}
+
+async fn capture_dockerfile_rollback_targets(
+    docker: &Docker,
+    request: &FixRequest,
+    snapshots: &mut Vec<HostFileRollbackTarget>,
+    seen: &mut HashSet<String>,
+) {
+    if !supports_image_config_fix(&request.rule_id) || request.targets.is_empty() {
+        return;
+    }
+
+    for target in request
+        .targets
+        .iter()
+        .filter(|target| is_dockerfile_source_strategy(target.strategy.as_deref()))
+    {
+        let inspect = match docker.inspect_container(&target.container_id, None).await {
+            Ok(inspect) => inspect,
+            Err(error) => {
+                tracing::warn!(container_id = %target.container_id, %error, "Failed to inspect Dockerfile rollback target");
+                continue;
+            }
+        };
+        if !container_violates_rule(&inspect, &request.rule_id) {
+            continue;
+        }
+        let Some(ctx) = compose_context_from_inspect(&inspect) else {
+            continue;
+        };
+        match resolve_dockerfile_source(&ctx).await {
+            Ok(Some(source)) => {
+                push_host_file_snapshot(
+                    snapshots,
+                    seen,
+                    source.path,
+                    "Dockerfile before source remediation",
+                )
+                .await;
+            }
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!(service = %ctx.service, project = %ctx.project, %error, "Failed to resolve Dockerfile rollback target");
+            }
+        }
+    }
+}
+
 pub async fn rollback_plan_for_request(
     docker: &Docker,
     request: &FixRequest,
 ) -> eyre::Result<RollbackPlan> {
-    if !supports_cgroup_resource_fix(&request.rule_id) {
-        if supports_namespace_fix(&request.rule_id) {
-            return namespace_rollback_plan(docker, request).await;
+    let host_file_snapshots = host_file_rollback_targets_for_request(docker, request).await;
+    let mut plan = if supports_cgroup_resource_fix(&request.rule_id) {
+        cgroup_rollback_plan(docker, request).await?
+    } else if supports_namespace_fix(&request.rule_id) {
+        namespace_rollback_plan(docker, request).await?
+    } else if supports_privileged_fix(&request.rule_id)
+        || supports_image_config_fix(&request.rule_id)
+        || supports_runtime_isolation_fix(&request.rule_id)
+    {
+        RollbackPlan {
+            cgroup_targets: Vec::new(),
+            compose_backups: compose_rollback_targets_for_request(docker, request).await?,
+            container_snapshots: container_rollback_targets_for_request(docker, request).await?,
+            host_file_snapshots: Vec::new(),
         }
+    } else {
+        RollbackPlan::default()
+    };
 
-        if supports_privileged_fix(&request.rule_id) || supports_image_config_fix(&request.rule_id)
-        {
-            return Ok(RollbackPlan {
-                cgroup_targets: Vec::new(),
-                compose_backups: compose_rollback_targets_for_request(docker, request).await?,
-                container_snapshots: container_rollback_targets_for_request(docker, request)
-                    .await?,
-            });
-        }
-
-        if supports_runtime_isolation_fix(&request.rule_id) {
-            return Ok(RollbackPlan {
-                cgroup_targets: Vec::new(),
-                compose_backups: compose_rollback_targets_for_request(docker, request).await?,
-                container_snapshots: container_rollback_targets_for_request(docker, request)
-                    .await?,
-            });
-        }
-
-        return Ok(RollbackPlan::default());
-    }
-
-    cgroup_rollback_plan(docker, request).await
+    plan.host_file_snapshots = host_file_snapshots;
+    Ok(plan)
 }
 
 async fn namespace_rollback_plan(
@@ -9315,6 +9515,7 @@ async fn namespace_rollback_plan(
             cgroup_targets: Vec::new(),
             compose_backups: compose_rollback_targets_for_rule(docker, &request.rule_id).await?,
             container_snapshots: container_rollback_targets_for_request(docker, request).await?,
+            host_file_snapshots: Vec::new(),
         });
     }
 
@@ -9352,6 +9553,7 @@ async fn namespace_rollback_plan(
         cgroup_targets: Vec::new(),
         compose_backups: compose_targets,
         container_snapshots: container_rollback_targets_for_request(docker, request).await?,
+        host_file_snapshots: Vec::new(),
     })
 }
 
@@ -9410,6 +9612,7 @@ async fn cgroup_rollback_plan(docker: &Docker, request: &FixRequest) -> eyre::Re
         cgroup_targets,
         compose_backups: compose_targets,
         container_snapshots: Vec::new(),
+        host_file_snapshots: Vec::new(),
     })
 }
 
@@ -9578,16 +9781,26 @@ pub async fn record_fix_history(
         cgroup_targets: rollback_targets,
         compose_backups,
         container_snapshots: container_rollback_targets,
+        host_file_snapshots: host_file_rollback_targets,
     } = rollback_plan;
     let compose_rollback_targets = compose_backups;
     let has_compose_rollback = compose_rollback_targets
         .iter()
         .any(|target| target.backup_path.is_some() || target.delete_on_rollback);
     let has_container_rollback = !container_rollback_targets.is_empty();
-    let rollback_supported = outcome.status == FixStatus::Applied
-        && (!rollback_targets.is_empty() || has_compose_rollback || has_container_rollback);
+    let has_host_file_rollback = !host_file_rollback_targets.is_empty();
+    let rollback_supported = !rollback_targets.is_empty()
+        || has_compose_rollback
+        || has_container_rollback
+        || has_host_file_rollback;
     let rollback_note = rollback_supported.then(|| {
-        if has_compose_rollback && has_container_rollback {
+        if has_host_file_rollback
+            && (has_compose_rollback || has_container_rollback || !rollback_targets.is_empty())
+        {
+            "Rollback restores host/source file snapshots plus captured runtime targets".to_string()
+        } else if has_host_file_rollback {
+            "Rollback restores host/source files captured before the fix".to_string()
+        } else if has_compose_rollback && has_container_rollback {
             "Rollback restores backed up Compose YAML and full standalone container snapshots".to_string()
         } else if has_compose_rollback {
             "Rollback restores backed up Compose YAML or removes Dokuru override files, then recreates services".to_string()
@@ -9606,6 +9819,7 @@ pub async fn record_fix_history(
         rollback_targets,
         compose_rollback_targets,
         container_rollback_targets,
+        host_file_rollback_targets,
         progress_events,
         rollback_note,
     };
@@ -9649,17 +9863,24 @@ pub async fn rollback_fix(docker: &Docker, request: &RollbackRequest) -> eyre::R
     if !entry.rollback_supported
         || (entry.rollback_targets.is_empty()
             && entry.compose_rollback_targets.is_empty()
-            && entry.container_rollback_targets.is_empty())
+            && entry.container_rollback_targets.is_empty()
+            && entry.host_file_rollback_targets.is_empty())
     {
         return Ok(blocked(
             &entry.request.rule_id,
-            "Rollback is only supported when previous cgroup limits, Compose backups, or container snapshots were captured",
+            "Rollback is only supported when previous cgroup limits, Compose backups, container snapshots, or host file snapshots were captured",
         ));
     }
 
     let mut restored = Vec::new();
     let mut failed = Vec::new();
 
+    rollback_host_file_targets(
+        &entry.host_file_rollback_targets,
+        &mut restored,
+        &mut failed,
+    )
+    .await;
     rollback_compose_targets(&entry.compose_rollback_targets, &mut restored, &mut failed).await;
     rollback_container_targets(
         docker,
@@ -9706,6 +9927,115 @@ pub async fn rollback_fix(docker: &Docker, request: &RollbackRequest) -> eyre::R
         restart_command: None,
         requires_elevation: false,
     })
+}
+
+async fn rollback_host_file_targets(
+    targets: &[HostFileRollbackTarget],
+    restored: &mut Vec<String>,
+    failed: &mut Vec<String>,
+) {
+    let mut seen = HashSet::<String>::new();
+    let mut restored_daemon_json = false;
+    let mut restored_audit_rules = false;
+
+    for target in targets {
+        if !seen.insert(target.path.clone()) {
+            continue;
+        }
+        match restore_host_file_target(target).await {
+            Ok(label) => {
+                if target.path == DAEMON_JSON_PATH {
+                    restored_daemon_json = true;
+                }
+                if target.path == AUDIT_RULES_PATH {
+                    restored_audit_rules = true;
+                }
+                restored.push(label);
+            }
+            Err(error) => failed.push(format!("{} (host file): {error}", target.path)),
+        }
+    }
+
+    if restored_daemon_json {
+        match run_cmd("systemctl", &["restart", "docker"]).await {
+            Ok((_, _, true)) => {
+                restored.push("Docker daemon restarted after file rollback".to_string());
+            }
+            Ok((_, stderr, _)) => failed.push(format!(
+                "Docker daemon restart after file rollback failed: {}",
+                stderr.trim()
+            )),
+            Err(error) => failed.push(format!(
+                "Docker daemon restart after file rollback failed: {error}"
+            )),
+        }
+    }
+
+    if restored_audit_rules {
+        let reloaded = capture_command("systemctl", &["reload-or-restart", "auditd"])
+            .await
+            .success
+            || capture_command("auditctl", &["-R", AUDIT_RULES_PATH])
+                .await
+                .success
+            || capture_command("service", &["auditd", "reload"])
+                .await
+                .success;
+        if reloaded {
+            restored.push("auditd reloaded after file rollback".to_string());
+        } else {
+            failed.push("auditd reload after file rollback did not complete".to_string());
+        }
+    }
+}
+
+async fn restore_host_file_target(target: &HostFileRollbackTarget) -> eyre::Result<String> {
+    let path = PathBuf::from(&target.path);
+    if target.existed {
+        let backup_path = target
+            .backup_path
+            .as_ref()
+            .map(PathBuf::from)
+            .ok_or_else(|| eyre::eyre!("snapshot existed but backup path is missing"))?;
+        if tokio::fs::metadata(&backup_path).await.is_err() {
+            return Err(eyre::eyre!(
+                "backup file missing: {}",
+                backup_path.display()
+            ));
+        }
+        if let Some(parent) = path.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        tokio::fs::copy(&backup_path, &path).await?;
+        if let Some(mode) = target.mode {
+            tokio::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).await?;
+        }
+        if let (Some(uid), Some(gid)) = (target.uid, target.gid) {
+            let owner = format!("{uid}:{gid}");
+            match run_cmd("chown", &[&owner, &target.path]).await {
+                Ok((_, _, true)) => {}
+                Ok((_, stderr, _)) => {
+                    return Err(eyre::eyre!(
+                        "restored file but failed to restore owner: {}",
+                        stderr.trim()
+                    ));
+                }
+                Err(error) => {
+                    return Err(eyre::eyre!(
+                        "restored file but failed to restore owner: {error}"
+                    ));
+                }
+            }
+        }
+        Ok(format!("{} (host file snapshot)", target.path))
+    } else {
+        if let Err(error) = tokio::fs::remove_file(&path).await
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            return Err(error.into());
+        }
+        Ok(format!("{} (removed created host file)", target.path))
+    }
 }
 
 async fn rollback_compose_targets(
