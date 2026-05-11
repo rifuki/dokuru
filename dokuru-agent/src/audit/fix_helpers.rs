@@ -536,6 +536,28 @@ fn command_output(output: &str) -> Option<String> {
     (!trimmed.is_empty()).then(|| trimmed.to_string())
 }
 
+fn labelled_command_output(command: &str, stdout: &str, stderr: &str) -> Option<String> {
+    let mut parts = Vec::new();
+    if let Some(stdout) = command_output(stdout) {
+        parts.push(stdout);
+    }
+    if let Some(stderr) = command_output(stderr) {
+        parts.push(format!("stderr:\n{stderr}"));
+    }
+    (!parts.is_empty()).then(|| format!("{command}\n{}", parts.join("\n")))
+}
+
+fn joined_command_outputs(outputs: &[Option<String>]) -> Option<String> {
+    let chunks = outputs
+        .iter()
+        .filter_map(|output| {
+            let trimmed = output.as_deref()?.trim();
+            (!trimmed.is_empty()).then(|| trimmed.to_string())
+        })
+        .collect::<Vec<_>>();
+    (!chunks.is_empty()).then(|| chunks.join("\n\n"))
+}
+
 fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\"'\"'"))
 }
@@ -2213,11 +2235,18 @@ fn parse_df_available_bytes(stdout: &str) -> Option<u64> {
     available_kib.checked_mul(1024)
 }
 
-async fn tmp_available_bytes() -> Option<u64> {
-    let (stdout, _, true) = run_cmd("df", &["-Pk", "/tmp"]).await.ok()? else {
-        return None;
-    };
-    parse_df_available_bytes(&stdout)
+async fn tmp_available_bytes() -> (Option<u64>, Option<String>) {
+    match run_cmd("df", &["-Pk", "/tmp"]).await {
+        Ok((stdout, stderr, true)) => (
+            parse_df_available_bytes(&stdout),
+            labelled_command_output("df -Pk /tmp", &stdout, &stderr),
+        ),
+        Ok((stdout, stderr, _)) => (
+            None,
+            labelled_command_output("df -Pk /tmp", &stdout, &stderr),
+        ),
+        Err(error) => (None, Some(format!("df -Pk /tmp\n{error}"))),
+    }
 }
 
 fn parse_image_inspect_sizes(stdout: &str) -> Option<u64> {
@@ -2235,7 +2264,9 @@ fn parse_image_inspect_sizes(stdout: &str) -> Option<u64> {
         .try_fold(0u64, |total, size| total.checked_add(*size))
 }
 
-async fn estimate_userns_image_archive_bytes(image_names: &[String]) -> Option<u64> {
+async fn estimate_userns_image_archive_bytes(
+    image_names: &[String],
+) -> (Option<u64>, Option<String>) {
     let mut command = Command::new("docker");
     command
         .arg("image")
@@ -2245,11 +2276,20 @@ async fn estimate_userns_image_archive_bytes(image_names: &[String]) -> Option<u
     for image in image_names {
         command.arg(image);
     }
-    let output = command.output().await.ok()?;
+    let Ok(output) = command.output().await else {
+        return (None, None);
+    };
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    let evidence = labelled_command_output(
+        "docker image inspect --format '{{.Id}} {{.Size}}' <images>",
+        &stdout,
+        &stderr,
+    );
     if !output.status.success() {
-        return None;
+        return (None, evidence);
     }
-    parse_image_inspect_sizes(&String::from_utf8_lossy(&output.stdout))
+    (parse_image_inspect_sizes(&stdout), evidence)
 }
 
 fn userns_image_recovery_preference() -> UsernsImageRecoveryPreference {
@@ -2296,9 +2336,9 @@ fn parse_image_repo_digest_presence(stdout: &str, expected_count: usize) -> Opti
         .collect()
 }
 
-async fn all_userns_images_have_registry_digest(image_names: &[String]) -> bool {
+async fn all_userns_images_have_registry_digest(image_names: &[String]) -> (bool, Option<String>) {
     if image_names.is_empty() {
-        return true;
+        return (true, None);
     }
 
     let mut command = Command::new("docker");
@@ -2312,23 +2352,28 @@ async fn all_userns_images_have_registry_digest(image_names: &[String]) -> bool 
     }
 
     let Ok(output) = command.output().await else {
-        return false;
+        return (false, None);
     };
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    let evidence = labelled_command_output(
+        "docker image inspect --format '{{.Id}} {{json .RepoDigests}}' <images>",
+        &stdout,
+        &stderr,
+    );
     if !output.status.success() {
-        return false;
+        return (false, evidence);
     }
 
-    let Some(digest_presence) = parse_image_repo_digest_presence(
-        &String::from_utf8_lossy(&output.stdout),
-        image_names.len(),
-    ) else {
-        return false;
+    let Some(digest_presence) = parse_image_repo_digest_presence(&stdout, image_names.len()) else {
+        return (false, evidence);
     };
 
-    digest_presence
+    let all_pullable = digest_presence
         .into_iter()
         .zip(image_names)
-        .all(|(has_repo_digest, image)| has_repo_digest || image_ref_has_registry_digest(image))
+        .all(|(has_repo_digest, image)| has_repo_digest || image_ref_has_registry_digest(image));
+    (all_pullable, evidence)
 }
 
 fn choose_userns_image_recovery_plan(
@@ -2496,15 +2541,22 @@ async fn plan_userns_image_recovery(
     progress: Option<&ProgressSender>,
 ) -> UsernsImageRecoveryPlan {
     let preference = userns_image_recovery_preference();
-    let (estimated_bytes, available_bytes, all_images_pullable) = if image_names.is_empty() {
-        (None, None, true)
-    } else {
-        tokio::join!(
-            estimate_userns_image_archive_bytes(image_names),
-            tmp_available_bytes(),
-            all_userns_images_have_registry_digest(image_names),
-        )
-    };
+    let (estimated_bytes, available_bytes, all_images_pullable, evidence_stdout) =
+        if image_names.is_empty() {
+            (None, None, true, None)
+        } else {
+            let (estimate, available, pullable) = tokio::join!(
+                estimate_userns_image_archive_bytes(image_names),
+                tmp_available_bytes(),
+                all_userns_images_have_registry_digest(image_names),
+            );
+            (
+                estimate.0,
+                available.0,
+                pullable.0,
+                joined_command_outputs(&[available.1, estimate.1, pullable.1]),
+            )
+        };
 
     let plan = choose_userns_image_recovery_plan(
         image_names.len(),
@@ -2527,16 +2579,15 @@ async fn plan_userns_image_recovery(
         "done"
     };
 
-    send_progress(
-        progress,
-        userns_progress_event(
-            1,
-            "archive_images",
-            status,
-            Some(userns_image_recovery_plan_detail(plan, image_names.len())),
-            command,
-        ),
+    let mut event = userns_progress_event(
+        1,
+        "archive_images",
+        status,
+        Some(userns_image_recovery_plan_detail(plan, image_names.len())),
+        command,
     );
+    event.stdout = evidence_stdout;
+    send_progress(progress, event);
     plan
 }
 
@@ -2564,16 +2615,15 @@ fn format_archive_progress_detail(
     );
     if let Some(estimated) = estimated_bytes.filter(|estimated| *estimated > 0) {
         let remaining = estimated.saturating_sub(bytes_written);
-        let eta_seconds = if bytes_per_second > 0 {
-            remaining.div_ceil(bytes_per_second)
+        let eta = if bytes_per_second > 0 {
+            format!("~{}s", remaining.div_ceil(bytes_per_second))
         } else {
-            0
+            "unknown".to_string()
         };
         let _ = write!(
             detail,
-            "; estimated total {} MiB, ETA ~{}s",
+            "; estimated total {} MiB, ETA {eta}",
             mib(estimated),
-            eta_seconds
         );
     }
     if allow_slow_fallback {
@@ -3363,6 +3413,36 @@ fn unique_image_names(snapshots: &[ContainerSnapshot]) -> Vec<String> {
     images
 }
 
+fn snapshot_container_output(snapshots: &[ContainerSnapshot]) -> Option<String> {
+    let lines = snapshots
+        .iter()
+        .map(|snapshot| {
+            let id = snapshot.id.chars().take(12).collect::<String>();
+            let image = snapshot
+                .inspect
+                .as_ref()
+                .and_then(|inspect| inspect.config.as_ref())
+                .and_then(|config| config.image.as_deref())
+                .unwrap_or("<unknown>");
+            let compose = match (&snapshot.compose_project, &snapshot.compose_service) {
+                (Some(project), Some(service)) => format!("{project}/{service}"),
+                _ => "standalone".to_string(),
+            };
+            format!(
+                "{id} name={} image={} running={} binds={} volumes={} compose={} userns_host={}",
+                snapshot.name,
+                image,
+                snapshot.was_running,
+                snapshot.bind_mount_paths.len(),
+                snapshot.named_volume_names.len(),
+                compose,
+                snapshot.uses_host_userns
+            )
+        })
+        .collect::<Vec<_>>();
+    (!lines.is_empty()).then(|| lines.join("\n"))
+}
+
 fn subid_start(path: &str, user: &str) -> Option<u32> {
     std::fs::read_to_string(path)
         .ok()?
@@ -3975,13 +4055,21 @@ async fn ensure_setfacl_available_for_userns(progress: Option<&ProgressSender>) 
 async fn ensure_setfacl_available_with_progress(
     progress: Option<&ProgressSender>,
 ) -> Option<String> {
-    if command_available("setfacl").await {
-        send_setfacl_progress(
-            progress,
+    let setfacl_check = capture_command("which", &["setfacl"]).await;
+    if setfacl_check.success {
+        let mut event = userns_progress_event(
+            8,
+            "ensure_setfacl",
             "done",
-            "setfacl is already installed; preserving host-owner ACLs during bind recovery",
+            Some(
+                "setfacl is already installed; preserving host-owner ACLs during bind recovery"
+                    .to_string(),
+            ),
             Some("which setfacl".to_string()),
         );
+        event.stdout = command_output(&setfacl_check.stdout);
+        event.stderr = command_output(&setfacl_check.stderr);
+        send_progress(progress, event);
         return None;
     }
 
@@ -4309,11 +4397,7 @@ fn record_compose_output_line(
         Some(format!("Compose project '{}': {line}", target.project)),
         Some(command_text.to_string()),
     );
-    if stream == "stdout" {
-        event.stdout = Some(line);
-    } else {
-        event.stderr = Some(line);
-    }
+    event.stdout = Some(line);
     send_progress(progress, event);
 }
 
@@ -4518,23 +4602,22 @@ async fn snapshot_userns_recovery_state(
         .iter()
         .filter(|snapshot| snapshot.uses_host_userns)
         .count();
-    send_progress(
-        progress,
-        userns_progress_event(
-            1,
-            "snapshot_containers",
-            "done",
-            Some(format!(
-                "Snapshotted {} container(s), {} bind mount(s), {} named volume(s), {} userns=host container(s). Snapshot saved to {}",
-                snapshots.len(),
-                bind_paths.len(),
-                volume_names.len(),
-                host_userns_count,
-                USERNS_SNAPSHOT_PATH
-            )),
-            None,
-        ),
+    let mut event = userns_progress_event(
+        1,
+        "snapshot_containers",
+        "done",
+        Some(format!(
+            "Snapshotted {} container(s), {} bind mount(s), {} named volume(s), {} userns=host container(s). Snapshot saved to {}",
+            snapshots.len(),
+            bind_paths.len(),
+            volume_names.len(),
+            host_userns_count,
+            USERNS_SNAPSHOT_PATH
+        )),
+        Some("docker inspect $(docker ps -aq)".to_string()),
     );
+    event.stdout = snapshot_container_output(&snapshots);
+    send_progress(progress, event);
 
     UsernsSnapshotState {
         snapshots,

@@ -42,15 +42,15 @@ function detailBlockLabel(status: FixProgress["status"]) {
 function silentCommandNote(event: FixProgress) {
     if (!event.command || !event.detail || event.stdout || event.stderr) return null;
     if (event.status === "in_progress") {
-        return "No stdout/stderr has been emitted yet; this progress detail comes from Dokuru's live monitor.";
+        return "No command output has been captured yet; this progress line comes from Dokuru's live monitor.";
     }
     if (event.status === "done") {
-        return "Command emitted no stdout/stderr; the result detail above is Dokuru's observed outcome.";
+        return "Command finished without output; the result detail above is Dokuru's observed outcome.";
     }
     if (event.status === "error") {
-        return "Command emitted no stdout/stderr; the error detail above is the captured failure.";
+        return "Command emitted no output; the error detail above is the captured failure.";
     }
-    return "Command emitted no stdout/stderr; Dokuru recorded the status detail above.";
+    return "Command emitted no output; Dokuru recorded the status detail above.";
 }
 
 function ProgressEventRow({
@@ -64,8 +64,11 @@ function ProgressEventRow({
 }) {
     const detailCanExpand = Boolean(event.detail && event.detail.length > 72);
     const noStdoutNote = silentCommandNote(event);
-    const silentCommandWithDetail = Boolean(event.command && event.detail && !event.stdout && !event.stderr);
-    const [expanded, setExpanded] = useState(isError || silentCommandWithDetail);
+    const combinedOutput = [event.stdout, event.stderr].filter(Boolean).join("\n").trim();
+    const hasCapturedOutput = Boolean(combinedOutput);
+    const defaultExpanded = isError || hasCapturedOutput;
+    const [expandedOverride, setExpandedOverride] = useState<boolean | null>(null);
+    const expanded = expandedOverride ?? defaultExpanded;
     const hasStructuredExtras = Boolean(event.command || event.stdout || event.stderr || noStdoutNote);
     const hasExtras = hasStructuredExtras || detailCanExpand;
     const statusLabel = progressStatusLabel(event.status);
@@ -88,7 +91,7 @@ function ProgressEventRow({
                     "grid w-full min-w-0 grid-cols-[88px_minmax(0,1fr)_18px] items-start gap-2 rounded-md text-left transition-colors disabled:cursor-default",
                     hasExtras && "-mx-1 -my-1 cursor-pointer px-1 py-1 hover:bg-white/[0.03] sm:-mx-2 sm:px-2",
                 )}
-                onClick={() => hasExtras && setExpanded(e => !e)}
+                onClick={() => hasExtras && setExpandedOverride(current => !(current ?? defaultExpanded))}
             >
                 <span className={cn("pt-0.5 text-[10px] uppercase tracking-[0.08em]", tone)}>{statusLabel}</span>
                 <div className="min-w-0 space-y-0.5 text-white/52">
@@ -121,14 +124,13 @@ function ProgressEventRow({
             {expanded && hasStructuredExtras && (
                 <div className="mt-3 min-w-0 space-y-2.5 pb-1 pr-1 sm:ml-[90px]">
                     {event.detail && hasStructuredExtras && (
-                        <div className="flex min-w-0 items-start gap-2 rounded-lg border border-white/8 bg-black/35 px-3 py-2.5 shadow-inner">
+                        <div className="rounded-lg border border-white/8 bg-black/35 px-3 py-2.5 shadow-inner">
                             <div className="min-w-0 flex-1 space-y-1.5">
                                 <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/28">{detailBlockLabel(event.status)}</p>
                                 <pre className="whitespace-pre-wrap break-words text-[10px] leading-relaxed text-white/60">
                                     {event.detail}
                                 </pre>
                             </div>
-                            <CopyButton text={event.detail} />
                         </div>
                     )}
                     {event.command && (
@@ -142,11 +144,19 @@ function ProgressEventRow({
                             <CopyButton text={event.command} />
                         </div>
                     )}
-                    {(event.stdout || event.stderr) && (
-                        <div className={cn(
-                            "overflow-hidden rounded-lg border shadow-inner",
-                            isError ? "border-rose-500/20 bg-[#1a0505]" : "border-white/8 bg-black/45",
-                        )}>
+                    {!isError && combinedOutput && (
+                        <div className="flex min-w-0 items-start gap-2 rounded-lg border border-white/8 bg-black/45 px-3 py-2.5 shadow-inner">
+                            <div className="min-w-0 flex-1 space-y-1.5">
+                                <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-emerald-300/35">output</p>
+                                <pre className="whitespace-pre-wrap break-words text-[10px] leading-relaxed text-white/62">
+                                    {combinedOutput}
+                                </pre>
+                            </div>
+                            <CopyButton text={combinedOutput} />
+                        </div>
+                    )}
+                    {isError && (event.stdout || event.stderr) && (
+                        <div className="overflow-hidden rounded-lg border border-rose-500/20 bg-[#1a0505] shadow-inner">
                             {event.stdout && (
                                 <div className="flex min-w-0 items-start gap-2 border-b border-white/5 px-3 py-2.5 last:border-0">
                                     <div className="min-w-0 flex-1 space-y-1.5">
@@ -161,11 +171,8 @@ function ProgressEventRow({
                             {event.stderr && (
                                 <div className="flex min-w-0 items-start gap-2 px-3 py-2.5">
                                     <div className="min-w-0 flex-1 space-y-1.5">
-                                        <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/28">stderr</p>
-                                        <pre className={cn(
-                                            "whitespace-pre-wrap break-words text-[10px] font-medium leading-relaxed",
-                                            isError ? "text-rose-300/90" : "text-white/55",
-                                        )}>
+                                        <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-rose-300/45">stderr</p>
+                                        <pre className="whitespace-pre-wrap break-words text-[10px] font-medium leading-relaxed text-rose-300/90">
                                             {event.stderr}
                                         </pre>
                                     </div>
