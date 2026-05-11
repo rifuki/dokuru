@@ -53,6 +53,14 @@ impl Section2 {
         ]
     }
 
+    fn userns_enabled_message(running_containers: usize) -> String {
+        if running_containers == 0 {
+            return "✓ User namespace remapping is enabled at the Docker daemon. No running containers were available to validate recreated workload UID maps; start workloads and rerun runtime checks".into();
+        }
+
+        "✓ User namespace remapping is enabled at the Docker daemon. Workload recovery/recreation is separate; verify running containers with runtime checks".into()
+    }
+
     /// 2.10 - Ensure that user namespace support is enabled
     fn rule_2_10() -> RuleDefinition {
         RuleDefinition {
@@ -88,11 +96,7 @@ impl Section2 {
                         },
                         status: if enabled { CheckStatus::Pass } else { CheckStatus::Fail },
                         message: if enabled {
-                            if running_containers == 0 {
-                                "✓ User namespace remapping is enabled at the Docker daemon. No running containers were available to validate recreated workload UID maps; start workloads and rerun runtime checks".into()
-                            } else {
-                                "✓ User namespace remapping is enabled at the Docker daemon. Workload recovery/recreation is separate; verify running containers with runtime checks".into()
-                            }
+                            Self::userns_enabled_message(running_containers)
                         } else {
                             "✗ User namespace remapping is NOT enabled - containers run as root on host (HIGH RISK)".into()
                         },
