@@ -38,6 +38,8 @@ const MIN_CGROUP_VALUES = {
     cpuShares: 128,
     pidsLimit: 50,
 } as const;
+const CGROUP_REFRESH_ATTEMPTS = 3;
+const CGROUP_REFRESH_RETRY_MS = 600;
 
 export type CgroupRuleId = typeof CGROUP_RULE_IDS[number];
 
@@ -67,6 +69,10 @@ function selectedCgroupRules(ruleStatuses: RuleFixStatus[]): CgroupRuleId[] {
 
 function concreteCgroupRuleIds(ruleIds: CgroupRuleId[]) {
     return ruleIds.filter((ruleId) => (CGROUP_RESOURCE_RULE_IDS as readonly string[]).includes(ruleId));
+}
+
+function sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function cgroupTargetKey(target: FixPreviewTarget) {
@@ -525,20 +531,34 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
     }, [agentAccessMode, agentId, agentUrl, commitSession, token]);
 
     const refreshCgroupTargetsForRule = useCallback(async (ruleId: CgroupRuleId, concreteRuleIds: CgroupRuleId[]) => {
-        const preview = agentAccessMode === "relay"
-            ? await agentApi.previewFix(agentId, ruleId)
-            : await agentDirectApi.previewFix(agentUrl, ruleId, token);
-        const currentTargets = new Map<string, FixPreviewTarget>();
-        for (const target of preview.targets) {
-            currentTargets.set(cgroupTargetKey(target), target);
-            if (target.container_name) currentTargets.set(`name:${target.container_name}`, target);
+        const configuredCount = sessionRef.current.cgroupTargets.filter((target) => target.ruleIds.includes(ruleId)).length;
+        let refreshedTargets: FixTarget[] = [];
+
+        for (let attempt = 1; attempt <= CGROUP_REFRESH_ATTEMPTS; attempt += 1) {
+            const preview = agentAccessMode === "relay"
+                ? await agentApi.previewFix(agentId, ruleId)
+                : await agentDirectApi.previewFix(agentUrl, ruleId, token);
+            const currentTargets = new Map<string, FixPreviewTarget>();
+            for (const target of preview.targets) {
+                currentTargets.set(cgroupTargetKey(target), target);
+                if (target.container_name) currentTargets.set(`name:${target.container_name}`, target);
+            }
+
+            refreshedTargets = cgroupTargetsForRule(
+                ruleId,
+                sessionRef.current.cgroupTargets,
+                currentTargets,
+                concreteRuleIds,
+            );
+
+            if (ruleId === "5.25" || refreshedTargets.length >= configuredCount || attempt === CGROUP_REFRESH_ATTEMPTS) {
+                return refreshedTargets;
+            }
+
+            await sleep(CGROUP_REFRESH_RETRY_MS);
         }
-        return cgroupTargetsForRule(
-            ruleId,
-            sessionRef.current.cgroupTargets,
-            currentTargets,
-            concreteRuleIds,
-        );
+
+        return refreshedTargets;
     }, [agentAccessMode, agentId, agentUrl, token]);
 
     const refreshPreviewTargetsForRule = useCallback(async (ruleId: string) => {
