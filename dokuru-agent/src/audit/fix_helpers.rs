@@ -12030,7 +12030,14 @@ services:
 
         let mut restored = Vec::new();
         let mut failed = Vec::new();
-        rollback_compose_targets(&plan.compose_backups, &mut restored, &mut failed).await;
+        rollback_compose_targets(
+            "4.6",
+            &plan.compose_backups,
+            &mut restored,
+            &mut failed,
+            None,
+        )
+        .await;
         assert!(failed.is_empty(), "rollback failed: {failed:?}");
         assert!(!restored.is_empty());
         assert!(!override_path.exists());
@@ -12092,9 +12099,11 @@ services:
         let mut failed = Vec::new();
         rollback_container_targets(
             &docker,
+            "4.1",
             &plan.container_snapshots,
             &mut restored,
             &mut failed,
+            None,
         )
         .await;
         assert!(failed.is_empty(), "rollback failed: {failed:?}");
