@@ -10520,26 +10520,25 @@ async fn rollback_host_file_targets(
             ),
         );
         match restore_host_file_target(target).await {
-            Ok(label) => {
+            Ok(result) => {
                 if target.path == DAEMON_JSON_PATH {
                     restored_daemon_json = true;
                 }
                 if target.path == AUDIT_RULES_PATH {
                     restored_audit_rules = true;
                 }
-                send_progress(
-                    progress,
-                    rollback_progress_event(
-                        rule_id,
-                        target.path.clone(),
-                        2,
-                        "restore_host_file",
-                        "done",
-                        Some(label.clone()),
-                        Some(command),
-                    ),
+                let mut event = rollback_progress_event(
+                    rule_id,
+                    target.path.clone(),
+                    2,
+                    "restore_host_file",
+                    "done",
+                    Some(result.label.clone()),
+                    Some(command),
                 );
-                restored.push(label);
+                event.stdout = joined_evidence(&result.evidence);
+                send_progress(progress, event);
+                restored.push(result.label);
             }
             Err(error) => {
                 send_progress(
@@ -10667,47 +10666,119 @@ async fn rollback_host_file_targets(
         let reloaded = systemctl.success
             || auditctl.as_ref().is_some_and(|result| result.success)
             || service.as_ref().is_some_and(|result| result.success);
+        let mut attempted = vec![command_result_evidence(
+            "systemctl reload-or-restart auditd",
+            &systemctl,
+        )];
+        if let Some(auditctl) = &auditctl {
+            attempted.push(command_result_evidence(
+                &format!("auditctl -R {}", shell_quote(AUDIT_RULES_PATH)),
+                auditctl,
+            ));
+        }
+        if let Some(service) = &service {
+            attempted.push(command_result_evidence("service auditd reload", service));
+        }
+
         if reloaded {
             event.status = "done".to_string();
             event.detail = Some("auditd reloaded after file rollback".to_string());
             restored.push("auditd reloaded after file rollback".to_string());
+            event.stdout = joined_evidence(&attempted);
+        } else if auditd_reload_not_applicable(&systemctl, auditctl.as_ref(), service.as_ref()) {
+            event.status = "done".to_string();
+            event.detail = Some(
+                "auditd is not installed on this host; no audit rule reload is needed after rollback"
+                    .to_string(),
+            );
+            event.stdout = joined_evidence(&attempted);
         } else {
             failed.push("auditd reload after file rollback did not complete".to_string());
+            let stdout = [
+                command_output(&systemctl.stdout),
+                auditctl
+                    .as_ref()
+                    .and_then(|result| command_output(&result.stdout)),
+                service
+                    .as_ref()
+                    .and_then(|result| command_output(&result.stdout)),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join("\n");
+            let stderr = [
+                command_output(&systemctl.stderr),
+                auditctl
+                    .as_ref()
+                    .and_then(|result| command_output(&result.stderr)),
+                service
+                    .as_ref()
+                    .and_then(|result| command_output(&result.stderr)),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join("\n");
+            event.stdout = command_output(&stdout);
+            event.stderr = command_output(&stderr);
         }
-        let stdout = [
-            command_output(&systemctl.stdout),
-            auditctl
-                .as_ref()
-                .and_then(|result| command_output(&result.stdout)),
-            service
-                .as_ref()
-                .and_then(|result| command_output(&result.stdout)),
-        ]
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>()
-        .join("\n");
-        let stderr = [
-            command_output(&systemctl.stderr),
-            auditctl
-                .as_ref()
-                .and_then(|result| command_output(&result.stderr)),
-            service
-                .as_ref()
-                .and_then(|result| command_output(&result.stderr)),
-        ]
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>()
-        .join("\n");
-        event.stdout = command_output(&stdout);
-        event.stderr = command_output(&stderr);
         send_progress(progress, event);
     }
 }
 
-async fn restore_host_file_target(target: &HostFileRollbackTarget) -> eyre::Result<String> {
+fn auditd_reload_not_applicable(
+    systemctl: &FixCommandResult,
+    auditctl: Option<&FixCommandResult>,
+    service: Option<&FixCommandResult>,
+) -> bool {
+    let systemctl_text = command_result_text(systemctl);
+    let auditctl_text = auditctl.map_or_else(String::new, command_result_text);
+    let service_text = service.map_or_else(String::new, command_result_text);
+
+    let systemd_has_no_auditd = contains_any(
+        &systemctl_text,
+        &[
+            "unit auditd.service not found",
+            "auditd.service could not be found",
+        ],
+    );
+    let service_has_no_auditd = contains_any(
+        &service_text,
+        &["auditd: unrecognized service", "auditd: service not found"],
+    );
+    let auditctl_not_applicable = auditctl.is_none()
+        || contains_any(
+            &auditctl_text,
+            &[
+                "no such file or directory",
+                "os error 2",
+                "command not found",
+                "no such file",
+            ],
+        );
+
+    systemd_has_no_auditd && service_has_no_auditd && auditctl_not_applicable
+}
+
+fn command_result_text(result: &FixCommandResult) -> String {
+    format!("{}\n{}", result.stdout, result.stderr).to_ascii_lowercase()
+}
+
+fn contains_any(text: &str, needles: &[&str]) -> bool {
+    needles.iter().any(|needle| text.contains(needle))
+}
+
+struct HostFileRestoreResult {
+    label: String,
+    evidence: Vec<String>,
+}
+
+async fn restore_host_file_target(
+    target: &HostFileRollbackTarget,
+) -> eyre::Result<HostFileRestoreResult> {
     let path = PathBuf::from(&target.path);
+    let mut evidence = Vec::new();
     if target.existed {
         let backup_path = target
             .backup_path
@@ -10724,34 +10795,72 @@ async fn restore_host_file_target(target: &HostFileRollbackTarget) -> eyre::Resu
             tokio::fs::create_dir_all(parent).await?;
         }
         tokio::fs::copy(&backup_path, &path).await?;
+        evidence.push(format_command_evidence(
+            &format!(
+                "cp {} {}",
+                shell_quote(&backup_path.display().to_string()),
+                shell_quote(&target.path)
+            ),
+            "",
+            "",
+            true,
+        ));
         if let Some(mode) = target.mode {
             tokio::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).await?;
+            evidence.push(format_command_evidence(
+                &format!("chmod {mode:o} {}", shell_quote(&target.path)),
+                "",
+                "",
+                true,
+            ));
         }
         if let (Some(uid), Some(gid)) = (target.uid, target.gid) {
             let owner = format!("{uid}:{gid}");
+            let chown_command = format!("chown {owner} {}", shell_quote(&target.path));
             match run_cmd("chown", &[&owner, &target.path]).await {
-                Ok((_, _, true)) => {}
-                Ok((_, stderr, _)) => {
+                Ok((stdout, stderr, true)) => {
+                    evidence.push(run_cmd_evidence(&chown_command, &stdout, &stderr, true));
+                }
+                Ok((stdout, stderr, _)) => {
+                    evidence.push(run_cmd_evidence(&chown_command, &stdout, &stderr, false));
                     return Err(eyre::eyre!(
                         "restored file but failed to restore owner: {}",
                         stderr.trim()
                     ));
                 }
                 Err(error) => {
+                    evidence.push(format_command_evidence(
+                        &chown_command,
+                        "",
+                        &error.to_string(),
+                        false,
+                    ));
                     return Err(eyre::eyre!(
                         "restored file but failed to restore owner: {error}"
                     ));
                 }
             }
         }
-        Ok(format!("{} (host file snapshot)", target.path))
+        Ok(HostFileRestoreResult {
+            label: format!("{} (host file snapshot)", target.path),
+            evidence,
+        })
     } else {
         if let Err(error) = tokio::fs::remove_file(&path).await
             && error.kind() != std::io::ErrorKind::NotFound
         {
             return Err(error.into());
         }
-        Ok(format!("{} (removed created host file)", target.path))
+        evidence.push(format_command_evidence(
+            &format!("rm -f {}", shell_quote(&target.path)),
+            "",
+            "",
+            true,
+        ));
+        Ok(HostFileRestoreResult {
+            label: format!("{} (removed created host file)", target.path),
+            evidence,
+        })
     }
 }
 
@@ -11202,6 +11311,58 @@ mod tests {
         assert_eq!(outcome.status, FixStatus::Blocked);
         assert!(outcome.message.contains("fixed-container"));
         assert!(outcome.message.contains("Failed 1"));
+    }
+
+    #[test]
+    fn missing_auditd_is_not_a_rollback_reload_failure() {
+        let systemctl = FixCommandResult {
+            stdout: String::new(),
+            stderr: "Failed to reload-or-restart auditd.service: Unit auditd.service not found."
+                .to_string(),
+            success: false,
+        };
+        let auditctl = FixCommandResult {
+            stdout: String::new(),
+            stderr: "No such file or directory (os error 2)".to_string(),
+            success: false,
+        };
+        let service = FixCommandResult {
+            stdout: String::new(),
+            stderr: "auditd: unrecognized service".to_string(),
+            success: false,
+        };
+
+        assert!(auditd_reload_not_applicable(
+            &systemctl,
+            Some(&auditctl),
+            Some(&service)
+        ));
+    }
+
+    #[test]
+    fn auditd_permission_errors_still_block_rollback_reload() {
+        let systemctl = FixCommandResult {
+            stdout: String::new(),
+            stderr: "Failed to reload-or-restart auditd.service: Unit auditd.service not found."
+                .to_string(),
+            success: false,
+        };
+        let auditctl = FixCommandResult {
+            stdout: String::new(),
+            stderr: "Operation not permitted".to_string(),
+            success: false,
+        };
+        let service = FixCommandResult {
+            stdout: String::new(),
+            stderr: "auditd: unrecognized service".to_string(),
+            success: false,
+        };
+
+        assert!(!auditd_reload_not_applicable(
+            &systemctl,
+            Some(&auditctl),
+            Some(&service)
+        ));
     }
 
     #[test]
