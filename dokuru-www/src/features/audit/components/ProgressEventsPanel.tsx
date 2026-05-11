@@ -26,6 +26,33 @@ export function CopyButton({ text }: { text: string }) {
     );
 }
 
+function progressStatusLabel(status: FixProgress["status"]) {
+    if (status === "in_progress") return "progress";
+    if (status === "done") return "result";
+    return status;
+}
+
+function detailBlockLabel(status: FixProgress["status"]) {
+    if (status === "in_progress") return "progress detail";
+    if (status === "done") return "result detail";
+    if (status === "error") return "error detail";
+    return "event detail";
+}
+
+function silentCommandNote(event: FixProgress) {
+    if (!event.command || !event.detail || event.stdout || event.stderr) return null;
+    if (event.status === "in_progress") {
+        return "No stdout/stderr has been emitted yet; this progress detail comes from Dokuru's live monitor.";
+    }
+    if (event.status === "done") {
+        return "Command emitted no stdout/stderr; the result detail above is Dokuru's observed outcome.";
+    }
+    if (event.status === "error") {
+        return "Command emitted no stdout/stderr; the error detail above is the captured failure.";
+    }
+    return "Command emitted no stdout/stderr; Dokuru recorded the status detail above.";
+}
+
 function ProgressEventRow({
     event,
     isError,
@@ -35,10 +62,13 @@ function ProgressEventRow({
     isError: boolean;
     showRuleId: boolean;
 }) {
-    const [expanded, setExpanded] = useState(isError);
     const detailCanExpand = Boolean(event.detail && event.detail.length > 72);
-    const hasStructuredExtras = Boolean(event.command || event.stdout || event.stderr);
+    const noStdoutNote = silentCommandNote(event);
+    const silentCommandWithDetail = Boolean(event.command && event.detail && !event.stdout && !event.stderr);
+    const [expanded, setExpanded] = useState(isError || silentCommandWithDetail);
+    const hasStructuredExtras = Boolean(event.command || event.stdout || event.stderr || noStdoutNote);
     const hasExtras = hasStructuredExtras || detailCanExpand;
+    const statusLabel = progressStatusLabel(event.status);
 
     const tone = event.status === "done"
         ? "text-emerald-400"
@@ -60,7 +90,7 @@ function ProgressEventRow({
                 )}
                 onClick={() => hasExtras && setExpanded(e => !e)}
             >
-                <span className={cn("pt-0.5 text-[10px] uppercase tracking-[0.08em]", tone)}>{event.status}</span>
+                <span className={cn("pt-0.5 text-[10px] uppercase tracking-[0.08em]", tone)}>{statusLabel}</span>
                 <div className="min-w-0 space-y-0.5 text-white/52">
                     <div className="flex min-w-0 items-center gap-1.5">
                         {showRuleId && event.rule_id && (
@@ -92,17 +122,23 @@ function ProgressEventRow({
                 <div className="mt-3 min-w-0 space-y-2.5 pb-1 pr-1 sm:ml-[90px]">
                     {event.detail && hasStructuredExtras && (
                         <div className="flex min-w-0 items-start gap-2 rounded-lg border border-white/8 bg-black/35 px-3 py-2.5 shadow-inner">
-                            <pre className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[10px] leading-relaxed text-white/55">
-                                {event.detail}
-                            </pre>
+                            <div className="min-w-0 flex-1 space-y-1.5">
+                                <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/28">{detailBlockLabel(event.status)}</p>
+                                <pre className="whitespace-pre-wrap break-words text-[10px] leading-relaxed text-white/60">
+                                    {event.detail}
+                                </pre>
+                            </div>
                             <CopyButton text={event.detail} />
                         </div>
                     )}
                     {event.command && (
                         <div className="flex min-w-0 items-start gap-2 rounded-lg border border-[#2496ED]/20 bg-[#06111a] px-3 py-2.5 shadow-inner">
-                            <pre className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[10px] leading-relaxed text-[#58b8ff]">
-                                <span className="select-none text-[#2496ED]/40">$ </span>{event.command}
-                            </pre>
+                            <div className="min-w-0 flex-1 space-y-1.5">
+                                <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#2496ED]/45">command</p>
+                                <pre className="whitespace-pre-wrap break-words text-[10px] leading-relaxed text-[#58b8ff]">
+                                    <span className="select-none text-[#2496ED]/40">$ </span>{event.command}
+                                </pre>
+                            </div>
                             <CopyButton text={event.command} />
                         </div>
                     )}
@@ -113,23 +149,34 @@ function ProgressEventRow({
                         )}>
                             {event.stdout && (
                                 <div className="flex min-w-0 items-start gap-2 border-b border-white/5 px-3 py-2.5 last:border-0">
-                                    <pre className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[10px] leading-relaxed text-emerald-300/80">
-                                        {event.stdout}
-                                    </pre>
+                                    <div className="min-w-0 flex-1 space-y-1.5">
+                                        <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-emerald-300/35">stdout</p>
+                                        <pre className="whitespace-pre-wrap break-words text-[10px] leading-relaxed text-emerald-300/80">
+                                            {event.stdout}
+                                        </pre>
+                                    </div>
                                     <CopyButton text={event.stdout} />
                                 </div>
                             )}
                             {event.stderr && (
                                 <div className="flex min-w-0 items-start gap-2 px-3 py-2.5">
-                                    <pre className={cn(
-                                        "min-w-0 flex-1 whitespace-pre-wrap break-words text-[10px] font-medium leading-relaxed",
-                                        isError ? "text-rose-300/90" : "text-white/55",
-                                    )}>
-                                        {event.stderr}
-                                    </pre>
+                                    <div className="min-w-0 flex-1 space-y-1.5">
+                                        <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/28">stderr</p>
+                                        <pre className={cn(
+                                            "whitespace-pre-wrap break-words text-[10px] font-medium leading-relaxed",
+                                            isError ? "text-rose-300/90" : "text-white/55",
+                                        )}>
+                                            {event.stderr}
+                                        </pre>
+                                    </div>
                                     <CopyButton text={event.stderr} />
                                 </div>
                             )}
+                        </div>
+                    )}
+                    {noStdoutNote && (
+                        <div className="rounded-lg border border-white/8 bg-white/[0.025] px-3 py-2 text-[10px] leading-relaxed text-white/38">
+                            {noStdoutNote}
                         </div>
                     )}
                 </div>
@@ -140,7 +187,7 @@ function ProgressEventRow({
 
 export function ProgressEventsPanel({
     progressEvents,
-    title = "live terminal transcript",
+    title = "live evidence stream",
     showRuleId = false,
     emptyMessage,
     className,

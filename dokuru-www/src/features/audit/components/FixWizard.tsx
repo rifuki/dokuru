@@ -883,7 +883,7 @@ function ResultStep({
                 </div>
             )}
 
-            <ProgressEventsPanel progressEvents={progressEvents} title="terminal transcript" />
+            <ProgressEventsPanel progressEvents={progressEvents} title="evidence stream" />
 
             {/* Restart command */}
             {outcome.restart_command && (

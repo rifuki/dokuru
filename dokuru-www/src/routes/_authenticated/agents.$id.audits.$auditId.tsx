@@ -2454,18 +2454,8 @@ function AuditDetailPage() {
                         : "border-[#00d9a5]/25 bg-[#00d9a5]/5 hover:bg-[#00d9a5]/10 hover:border-[#00d9a5]/35"
                     )}
                   >
-                    <span className="flex items-baseline justify-center gap-1.5">
-                      <span className="text-2xl font-black leading-none text-[#00d9a5] sm:text-3xl">{displayPassedTotal}</span>
-                      {hasProjectedFixes && projectedFixScore && (
-                        <span className="font-mono text-xs font-bold text-[#00d9a5]">→ {Math.min(checkRuleTotal, displayPassedTotal + projectedFixScore.fixedCount)}</span>
-                      )}
-                    </span>
+                    <span className="text-2xl font-black leading-none text-[#00d9a5] sm:text-3xl">{displayPassedTotal}</span>
                     <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pass</span>
-                    {hasProjectedFixes && projectedFixScore && (
-                      <span className="mt-0.5 font-mono text-[10px] font-semibold text-[#00d9a5]/85">
-                        +{projectedFixScore.fixedCount} after fixes{autoTriggeredProjectionCount > 0 ? ` (${autoTriggeredProjectionCount} auto)` : ""}
-                      </span>
-                    )}
                   </button>
                   <button
                     type="button"
@@ -2478,18 +2468,8 @@ function AuditDetailPage() {
                         : "bg-rose-500/5 border-rose-500/25 hover:bg-rose-500/10 hover:border-rose-500/35"
                     )}
                   >
-                    <span className="flex items-baseline justify-center gap-1.5">
-                      <span className="text-2xl font-black leading-none text-rose-400 sm:text-3xl">{displayFailedTotal}</span>
-                      {hasProjectedFixes && projectedFixScore && (
-                        <span className="font-mono text-xs font-bold text-rose-300/80">→ {Math.max(0, displayFailedTotal - projectedFixScore.fixedCount)}</span>
-                      )}
-                    </span>
+                    <span className="text-2xl font-black leading-none text-rose-400 sm:text-3xl">{displayFailedTotal}</span>
                     <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Fail</span>
-                    {hasProjectedFixes && projectedFixScore && (
-                      <span className="mt-0.5 font-mono text-[10px] font-semibold text-rose-300/75">
-                        -{projectedFixScore.fixedCount} after fixes{autoTriggeredProjectionCount > 0 ? ` (${autoTriggeredProjectionCount} auto)` : ""}
-                      </span>
-                    )}
                   </button>
                   <button
                     type="button"

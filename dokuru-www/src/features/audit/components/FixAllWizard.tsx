@@ -280,7 +280,7 @@ function RuleEvidenceRow({
                 <div className="px-3 pb-3 pl-10">
                     <ProgressEventsPanel
                         progressEvents={evidenceEvents}
-                        title={`rule ${rs.ruleId} terminal transcript`}
+                        title={`rule ${rs.ruleId} evidence stream`}
                         emptyMessage={rs.state === "pending" ? "Waiting for this rule to start" : "No streamed evidence captured"}
                         className="shadow-none"
                         maxHeightClassName="max-h-[240px]"
@@ -665,7 +665,7 @@ function ApplyingStep({
             <div className="overflow-hidden rounded-xl border border-white/8 bg-white/[0.02]">
                 <div className="flex items-center justify-between gap-3 border-b border-white/6 bg-white/[0.025] px-3 py-2">
                     <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/35">Selected queue & evidence</span>
-                    <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/30">expand any rule for terminal</span>
+                    <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/30">expand any rule for evidence</span>
                 </div>
                 <div className="divide-y divide-white/6">
                     {selected.map((rs, index) => (
