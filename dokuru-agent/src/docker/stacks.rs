@@ -539,6 +539,69 @@ fn push_unique_path(paths: &mut Vec<PathBuf>, path: PathBuf) {
     }
 }
 
+fn push_config_file_candidates(
+    paths: &mut Vec<PathBuf>,
+    config_files: Option<&str>,
+    working_dir: Option<&str>,
+) {
+    for path in config_file_paths(config_files, working_dir) {
+        push_unique_path(paths, path);
+    }
+}
+
+fn push_working_dir_compose_candidates(paths: &mut Vec<PathBuf>, working_dir: &str) {
+    let base = PathBuf::from(working_dir);
+    for filename in COMPOSE_FILENAMES {
+        push_unique_path(paths, base.join(filename));
+    }
+}
+
+fn push_stack_entry_action_candidates(
+    paths: &mut Vec<PathBuf>,
+    working_dir: &mut Option<String>,
+    entry: &StackCacheEntry,
+    include_working_dir_candidates: bool,
+) {
+    if working_dir.is_none() {
+        working_dir.clone_from(&entry.working_dir);
+    }
+    push_config_file_candidates(paths, entry.config_file.as_deref(), working_dir.as_deref());
+    if include_working_dir_candidates && let Some(working_dir) = working_dir.as_deref() {
+        push_working_dir_compose_candidates(paths, working_dir);
+    }
+    push_dokuru_override_candidate(paths, working_dir.as_deref(), entry.config_file.as_deref());
+}
+
+fn push_dokuru_override_candidate(
+    paths: &mut Vec<PathBuf>,
+    working_dir: Option<&str>,
+    config_files: Option<&str>,
+) {
+    let configured_files = config_files.filter(|value| !value.trim().is_empty());
+    let path = configured_files
+        .and_then(|config_files| stack_dokuru_override_path(working_dir, Some(config_files)))
+        .or_else(|| stack_dokuru_override_path_from_paths(working_dir, paths));
+
+    if let Some(path) = path {
+        push_unique_path(paths, path);
+    }
+}
+
+fn stack_dokuru_override_path_from_paths(
+    working_dir: Option<&str>,
+    compose_paths: &[PathBuf],
+) -> Option<PathBuf> {
+    let filename = compose_override_filename(compose_paths.first().map(PathBuf::as_path));
+
+    if let Some(working_dir) = working_dir.filter(|value| !value.trim().is_empty()) {
+        return Some(PathBuf::from(working_dir).join(filename));
+    }
+
+    compose_paths
+        .first()
+        .and_then(|path| path.parent().map(|parent| parent.join(filename)))
+}
+
 fn requested_compose_path(raw: &str, working_dir: Option<&str>) -> Option<PathBuf> {
     let raw = raw.trim();
     if raw.is_empty() {
@@ -1263,9 +1326,8 @@ async fn stack_compose_command_context(
         .await
         .and_then(|list| list.into_iter().find(|entry| entry.name == name))
     {
-        for path in config_file_paths(Some(&entry.config_files), None) {
-            push_unique_path(&mut paths, path);
-        }
+        push_config_file_candidates(&mut paths, Some(&entry.config_files), None);
+        push_dokuru_override_candidate(&mut paths, None, Some(&entry.config_files));
     }
 
     match docker
@@ -1291,18 +1353,23 @@ async fn stack_compose_command_context(
                 ))
             }) {
                 working_dir = detected_working_dir;
-                for path in config_file_paths(config_files.as_deref(), working_dir.as_deref()) {
-                    push_unique_path(&mut paths, path);
-                }
+                push_config_file_candidates(
+                    &mut paths,
+                    config_files.as_deref(),
+                    working_dir.as_deref(),
+                );
 
                 if paths.is_empty()
                     && let Some(working_dir) = &working_dir
                 {
-                    let base = PathBuf::from(working_dir);
-                    for filename in COMPOSE_FILENAMES {
-                        push_unique_path(&mut paths, base.join(filename));
-                    }
+                    push_working_dir_compose_candidates(&mut paths, working_dir);
                 }
+
+                push_dokuru_override_candidate(
+                    &mut paths,
+                    working_dir.as_deref(),
+                    config_files.as_deref(),
+                );
             }
         }
         Err(error) => {
@@ -1316,27 +1383,11 @@ async fn stack_compose_command_context(
     }
 
     if let Some(entry) = cached_stack_entry(name).await {
-        if working_dir.is_none() {
-            working_dir.clone_from(&entry.working_dir);
-        }
-        for path in config_file_paths(entry.config_file.as_deref(), working_dir.as_deref()) {
-            push_unique_path(&mut paths, path);
-        }
-        if let Some(working_dir) = &working_dir {
-            let base = PathBuf::from(working_dir);
-            for filename in COMPOSE_FILENAMES {
-                push_unique_path(&mut paths, base.join(filename));
-            }
-        }
+        push_stack_entry_action_candidates(&mut paths, &mut working_dir, &entry, true);
     }
 
     if let Some(entry) = scanned_stack_entry(name).await {
-        if working_dir.is_none() {
-            working_dir.clone_from(&entry.working_dir);
-        }
-        for path in config_file_paths(entry.config_file.as_deref(), working_dir.as_deref()) {
-            push_unique_path(&mut paths, path);
-        }
+        push_stack_entry_action_candidates(&mut paths, &mut working_dir, &entry, false);
     }
 
     if paths.is_empty() {
@@ -1439,9 +1490,9 @@ async fn write_compose_content(
 #[cfg(test)]
 mod tests {
     use super::{
-        ComposeStackAction, DEFAULT_COMPOSE_OVERRIDE_FILENAME, config_files_include_path,
-        requested_compose_path, stack_compose_command_args, stack_dokuru_override_path,
-        write_compose_content,
+        ComposeStackAction, DEFAULT_COMPOSE_OVERRIDE_FILENAME, config_file_paths,
+        config_files_include_path, push_dokuru_override_candidate, requested_compose_path,
+        stack_compose_command_args, stack_dokuru_override_path, write_compose_content,
     };
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1523,6 +1574,43 @@ mod tests {
             Some(PathBuf::from("/srv/app/docker-compose.yml")),
         );
         assert_eq!(requested_compose_path("  ", Some("/srv/app")), None);
+    }
+
+    #[test]
+    fn dokuru_override_candidate_is_appended_after_base_compose_file() {
+        let mut paths = config_file_paths(Some("docker-compose.yaml"), Some("/srv/app"));
+
+        push_dokuru_override_candidate(&mut paths, Some("/srv/app"), Some("docker-compose.yaml"));
+
+        assert_eq!(
+            paths,
+            [
+                PathBuf::from("/srv/app/docker-compose.yaml"),
+                PathBuf::from("/srv/app/docker-compose.override.yaml"),
+            ]
+        );
+    }
+
+    #[test]
+    fn dokuru_override_candidate_is_not_duplicated_when_already_active() {
+        let mut paths = config_file_paths(
+            Some("docker-compose.yaml,docker-compose.override.yaml"),
+            Some("/srv/app"),
+        );
+
+        push_dokuru_override_candidate(
+            &mut paths,
+            Some("/srv/app"),
+            Some("docker-compose.yaml,docker-compose.override.yaml"),
+        );
+
+        assert_eq!(
+            paths,
+            [
+                PathBuf::from("/srv/app/docker-compose.yaml"),
+                PathBuf::from("/srv/app/docker-compose.override.yaml"),
+            ]
+        );
     }
 
     #[test]
