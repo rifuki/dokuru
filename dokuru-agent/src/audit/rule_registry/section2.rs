@@ -66,8 +66,9 @@ impl Section2 {
             scored: true,
 
             audit_command: Some("docker info --format '{{ .SecurityOptions }}'".into()),
-            check_fn: |docker, _containers| {
+            check_fn: |docker, containers| {
                 let docker = docker.clone();
+                let running_containers = containers.len();
                 Box::pin(async move {
                     let info = docker.info().await?;
                     let enabled = info
@@ -87,7 +88,11 @@ impl Section2 {
                         },
                         status: if enabled { CheckStatus::Pass } else { CheckStatus::Fail },
                         message: if enabled {
-                            "✓ User namespace remapping is enabled - container root is mapped to unprivileged host user".into()
+                            if running_containers == 0 {
+                                "✓ User namespace remapping is enabled at the Docker daemon. No running containers were available to validate recreated workload UID maps; start workloads and rerun runtime checks".into()
+                            } else {
+                                "✓ User namespace remapping is enabled at the Docker daemon. Workload recovery/recreation is separate; verify running containers with runtime checks".into()
+                            }
                         } else {
                             "✗ User namespace remapping is NOT enabled - containers run as root on host (HIGH RISK)".into()
                         },

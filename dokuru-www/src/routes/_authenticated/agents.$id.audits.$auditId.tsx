@@ -268,6 +268,7 @@ const KNOWN_AUTO_FIX_RULE_IDS = new Set([
   "4.1", "4.6",
   "5.4", "5.5", "5.10", "5.11", "5.12", "5.16", "5.17", "5.18", "5.21", "5.22", "5.25", "5.29", "5.31",
 ]);
+const CGROUP_RESOURCE_RULE_IDS = new Set(["5.11", "5.12", "5.25", "5.29"]);
 
 function remediationKindForResult(result: AuditResult): AuditResult["remediation_kind"] {
   return result.remediation_kind ?? (KNOWN_AUTO_FIX_RULE_IDS.has(result.rule.id) ? "auto" : "manual");
@@ -1306,13 +1307,16 @@ function isFixJobAfterAudit(job: { completedAt?: string; startedAt?: string } | 
 }
 
 function isFullyAppliedOutcome(outcome?: FixOutcome | null) {
-  return outcome?.status === "Applied" && !/\bFailed\s+\d+:/i.test(outcome.message);
+  if (outcome?.status !== "Applied" || /\bFailed\s+\d+:/i.test(outcome.message)) return false;
+  if (CGROUP_RESOURCE_RULE_IDS.has(outcome.rule_id) && /No (current )?(cgroup )?targets|No containers needed cgroup/i.test(outcome.message)) return false;
+  return true;
 }
 
 function fixHistoryEntryCoversAuditResult(entry: FixHistoryEntry, result?: AuditResult) {
   if (!result || result.status !== "Fail") return true;
   const affectedCount = result.affected.length;
   const targetCount = entry.request.targets?.length ?? 0;
+  if (CGROUP_RESOURCE_RULE_IDS.has(entry.request.rule_id) && targetCount === 0) return affectedCount === 0;
   return affectedCount === 0 || targetCount === 0 || targetCount >= affectedCount;
 }
 

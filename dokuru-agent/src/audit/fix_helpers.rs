@@ -4664,6 +4664,13 @@ pub async fn apply_default_cgroup_resource_fix_with_progress(
     progress: Option<&ProgressSender>,
 ) -> eyre::Result<FixOutcome> {
     let containers = docker.list_containers::<String>(None).await?;
+    if containers.is_empty() {
+        return Ok(blocked(
+            rule_id,
+            "No running containers to update; start workloads and rerun the cgroup fix",
+        ));
+    }
+
     let mut targets = Vec::new();
 
     for container in &containers {

@@ -664,40 +664,21 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
                     commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
 
                     if (targets.length === 0) {
-                        const cgroupUsageCoveredBySelectedResources = ruleId === "5.25" && selectedConcreteCgroupRuleIds.length > 0;
-                        if (cgroupUsageCoveredBySelectedResources) {
-                            const running = verifyProgress(
-                                ruleId,
-                                "in_progress",
-                                "Running real 5.25 verification after selected cgroup limit fixes",
-                            );
-                            startSyntheticFixJob(agentId, ruleId);
-                            appendFixJobProgress(agentId, ruleId, [...updated[i].progressEvents, running]);
-                            updated[i].progressEvents = [...updated[i].progressEvents, running];
-                            commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
+                        const running = verifyProgress(
+                            ruleId,
+                            "in_progress",
+                            `Running real ${ruleId} verification before treating empty cgroup preview as fixed`,
+                        );
+                        startSyntheticFixJob(agentId, ruleId);
+                        appendFixJobProgress(agentId, ruleId, [...updated[i].progressEvents, running]);
+                        updated[i].progressEvents = [...updated[i].progressEvents, running];
+                        commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
 
-                            const verified = await verifyRuleNow(ruleId);
-                            updated[i].outcome = verified.outcome;
-                            updated[i].progressEvents = [...updated[i].progressEvents, verified.progressEvent];
-                            updated[i].state = "done";
-                            completeFixJob(agentId, ruleId, verified.outcome, updated[i].progressEvents);
-                            commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
-                            activeRuleRef.current = null;
-                            appliedIndex += 1;
-                            continue;
-                        }
-
-                        const outcome = {
-                            rule_id: ruleId,
-                            status: "Applied",
-                            message: "No current cgroup targets still need this rule",
-                            requires_restart: false,
-                            restart_command: undefined,
-                            requires_elevation: false,
-                        } satisfies FixOutcome;
-                        updated[i].outcome = outcome;
+                        const verified = await verifyRuleNow(ruleId);
+                        updated[i].outcome = verified.outcome;
+                        updated[i].progressEvents = [...updated[i].progressEvents, verified.progressEvent];
                         updated[i].state = "done";
-                        completeFixJob(agentId, ruleId, outcome, updated[i].progressEvents);
+                        completeFixJob(agentId, ruleId, verified.outcome, updated[i].progressEvents);
                         commitSession((current) => ({ ...current, ruleStatuses: [...updated] }));
                         activeRuleRef.current = null;
                         appliedIndex += 1;
