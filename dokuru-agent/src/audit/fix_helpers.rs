@@ -3872,103 +3872,30 @@ async fn ensure_setfacl_available_with_progress(
     progress: Option<&ProgressSender>,
 ) -> Option<String> {
     if command_available("setfacl").await {
-        send_progress(
+        send_setfacl_progress(
             progress,
-            userns_progress_event(
-                8,
-                "ensure_setfacl",
-                "done",
-                Some(
-                    "setfacl is already installed; preserving host-owner ACLs during bind recovery"
-                        .to_string(),
-                ),
-                Some("which setfacl".to_string()),
-            ),
+            "done",
+            "setfacl is already installed; preserving host-owner ACLs during bind recovery",
+            Some("which setfacl".to_string()),
         );
         return None;
     }
 
-    send_progress(
+    send_setfacl_progress(
         progress,
-        userns_progress_event(
-            8,
-            "ensure_setfacl",
-            "in_progress",
-            Some("setfacl not found; installing the acl package so Dokuru can preserve host-owner access while granting remapped UID access".to_string()),
-            Some("apt-get update && apt-get install -y acl || dnf install -y acl || yum install -y acl || apk add acl".to_string()),
-        ),
+        "in_progress",
+        "setfacl not found; installing the acl package so Dokuru can preserve host-owner access while granting remapped UID access",
+        Some("apt-get update && apt-get install -y acl || dnf install -y acl || yum install -y acl || apk add acl".to_string()),
     );
 
-    let installers: Vec<(&str, Vec<Vec<&str>>)> = vec![
-        (
-            "apt-get",
-            vec![vec!["update"], vec!["install", "-y", "acl"]],
-        ),
-        ("dnf", vec![vec!["install", "-y", "acl"]]),
-        ("yum", vec![vec!["install", "-y", "acl"]]),
-        ("apk", vec![vec!["add", "acl"]]),
-    ];
     let mut errors = Vec::new();
 
-    for (cmd, commands) in installers {
+    for (cmd, commands) in setfacl_installers() {
         if !command_available(cmd).await {
             continue;
         }
-
-        let command_text = commands
-            .iter()
-            .map(|args| format!("{cmd} {}", args.join(" ")))
-            .collect::<Vec<_>>()
-            .join(" && ");
-        send_progress(
-            progress,
-            userns_progress_event(
-                8,
-                "ensure_setfacl",
-                "in_progress",
-                Some(format!("Installing acl package with {cmd}")),
-                Some(command_text.clone()),
-            ),
-        );
-
-        let mut installer_failed = false;
-        for args in commands {
-            match run_cmd(cmd, &args).await {
-                Ok((_, _, true)) => {}
-                Ok((_, stderr, _)) => {
-                    installer_failed = true;
-                    errors.push(format!("{cmd} {}: {}", args.join(" "), stderr.trim()));
-                    break;
-                }
-                Err(error) => {
-                    installer_failed = true;
-                    errors.push(format!("{cmd} {}: {error}", args.join(" ")));
-                    break;
-                }
-            }
-        }
-
-        if !installer_failed && command_available("setfacl").await {
-            send_progress(
-                progress,
-                userns_progress_event(
-                    8,
-                    "ensure_setfacl",
-                    "done",
-                    Some(
-                        "acl package installed; setfacl is available for bind mount recovery"
-                            .to_string(),
-                    ),
-                    Some(command_text),
-                ),
-            );
+        if try_install_setfacl_with(cmd, commands, progress, &mut errors).await {
             return None;
-        }
-
-        if !installer_failed {
-            errors.push(format!(
-                "{cmd}: install completed but setfacl is still unavailable"
-            ));
         }
     }
 
@@ -3976,6 +3903,104 @@ async fn ensure_setfacl_available_with_progress(
         errors.push("no supported package manager found (apt-get, dnf, yum, apk)".to_string());
     }
 
+    emit_setfacl_install_failure(progress, &errors);
+
+    Some(errors.join("; "))
+}
+
+fn setfacl_installers() -> Vec<(&'static str, Vec<Vec<&'static str>>)> {
+    vec![
+        (
+            "apt-get",
+            vec![vec!["update"], vec!["install", "-y", "acl"]],
+        ),
+        ("dnf", vec![vec!["install", "-y", "acl"]]),
+        ("yum", vec![vec!["install", "-y", "acl"]]),
+        ("apk", vec![vec!["add", "acl"]]),
+    ]
+}
+
+fn setfacl_command_text(cmd: &str, commands: &[Vec<&str>]) -> String {
+    commands
+        .iter()
+        .map(|args| format!("{cmd} {}", args.join(" ")))
+        .collect::<Vec<_>>()
+        .join(" && ")
+}
+
+fn send_setfacl_progress(
+    progress: Option<&ProgressSender>,
+    status: &str,
+    detail: &str,
+    command: Option<String>,
+) {
+    send_progress(
+        progress,
+        userns_progress_event(
+            8,
+            "ensure_setfacl",
+            status,
+            Some(detail.to_string()),
+            command,
+        ),
+    );
+}
+
+async fn try_install_setfacl_with(
+    cmd: &str,
+    commands: Vec<Vec<&str>>,
+    progress: Option<&ProgressSender>,
+    errors: &mut Vec<String>,
+) -> bool {
+    let command_text = setfacl_command_text(cmd, &commands);
+    send_setfacl_progress(
+        progress,
+        "in_progress",
+        &format!("Installing acl package with {cmd}"),
+        Some(command_text.clone()),
+    );
+
+    let installer_failed = run_setfacl_install_commands(cmd, commands, errors).await;
+    if !installer_failed && command_available("setfacl").await {
+        send_setfacl_progress(
+            progress,
+            "done",
+            "acl package installed; setfacl is available for bind mount recovery",
+            Some(command_text),
+        );
+        return true;
+    }
+
+    if !installer_failed {
+        errors.push(format!(
+            "{cmd}: install completed but setfacl is still unavailable"
+        ));
+    }
+    false
+}
+
+async fn run_setfacl_install_commands(
+    cmd: &str,
+    commands: Vec<Vec<&str>>,
+    errors: &mut Vec<String>,
+) -> bool {
+    for args in commands {
+        match run_cmd(cmd, &args).await {
+            Ok((_, _, true)) => {}
+            Ok((_, stderr, _)) => {
+                errors.push(format!("{cmd} {}: {}", args.join(" "), stderr.trim()));
+                return true;
+            }
+            Err(error) => {
+                errors.push(format!("{cmd} {}: {error}", args.join(" ")));
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn emit_setfacl_install_failure(progress: Option<&ProgressSender>, errors: &[String]) {
     let detail = format!(
         "Could not auto-install acl/setfacl: {}. Runtime data bind mounts will fall back to chown; non-runtime writable binds remain blocked until setfacl is installed.",
         errors
@@ -3985,18 +4010,12 @@ async fn ensure_setfacl_available_with_progress(
             .collect::<Vec<_>>()
             .join("; ")
     );
-    send_progress(
+    send_setfacl_progress(
         progress,
-        userns_progress_event(
-            8,
-            "ensure_setfacl",
-            "error",
-            Some(detail),
-            Some("install acl package manually, then rerun rule 2.10".to_string()),
-        ),
+        "error",
+        &detail,
+        Some("install acl package manually, then rerun rule 2.10".to_string()),
     );
-
-    Some(errors.join("; "))
 }
 
 async fn command_available(command: &str) -> bool {
