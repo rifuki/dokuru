@@ -976,139 +976,182 @@ function BeforeAfterComparison({
   const scoreDeltaTone = scoreDelta > 0 ? "text-emerald-400" : scoreDelta < 0 ? "text-rose-400" : "text-muted-foreground";
   const passDeltaTone = passDelta > 0 ? "text-emerald-400" : passDelta < 0 ? "text-rose-400" : "text-muted-foreground/60";
   const failDeltaTone = failDelta < 0 ? "text-emerald-400" : failDelta > 0 ? "text-rose-400" : "text-muted-foreground/60";
+  const [expanded, setExpanded] = useState(false);
+  const changedCount = fixedRules.length + regressedRules.length;
 
   return (
     <div className="rounded-2xl border border-border bg-card dark:bg-gradient-to-br dark:from-[#0A0A0B] dark:to-[#111113] overflow-hidden">
-      <div className="flex flex-col gap-4 border-b border-border px-4 py-4 md:flex-row md:items-center md:justify-between md:px-5">
-        <div>
-          <h3 className="text-base font-bold tracking-tight">Before / After Comparison</h3>
-          <p className="text-sm text-muted-foreground">Compare the previous audit against the current one to track hardening progress.</p>
+      <button
+        type="button"
+        onClick={() => setExpanded(open => !open)}
+        aria-expanded={expanded}
+        className="flex w-full flex-col gap-3 px-4 py-4 text-left transition-colors hover:bg-muted/20 md:flex-row md:items-center md:justify-between md:px-5"
+      >
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h3 className="text-base font-bold tracking-tight">Before / After Comparison</h3>
+            <span className="rounded-full border border-border bg-muted/20 px-2 py-0.5 font-mono text-[10px] text-muted-foreground/70">
+              {before.summary.score} → {after.summary.score}
+            </span>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {changedCount > 0
+              ? `${fixedRules.length} fixed, ${regressedRules.length} regressed since previous audit.`
+              : "No rule status changes from the previous audit."}
+          </p>
         </div>
-        <span className="inline-flex w-fit items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs font-bold text-muted-foreground">
-          <ArrowLeftRight className="h-3.5 w-3.5" />
-          score delta <span className={scoreDeltaTone}>{signed(scoreDelta)}</span>
+        <span className="flex shrink-0 items-center gap-2">
+          <span className="inline-flex w-fit items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs font-bold text-muted-foreground">
+            <ArrowLeftRight className="h-3.5 w-3.5" />
+            score delta <span className={scoreDeltaTone}>{signed(scoreDelta)}</span>
+          </span>
+          {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
         </span>
-      </div>
+      </button>
 
-      <div className="grid grid-cols-1 divide-y divide-border md:grid-cols-2 md:divide-x md:divide-y-0">
-        <div className="space-y-5 p-4 sm:p-5">
-          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Before</p>
-            <span className="text-xs font-mono text-muted-foreground/60">{fmtDate(before.timestamp)}</span>
-          </div>
-          <div className="grid gap-3 lg:grid-cols-[132px_1fr] lg:items-stretch">
-            <div className="flex min-h-[92px] flex-col justify-center rounded-[12px] border border-border/80 bg-muted/20 px-4 py-3">
-              <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Score</p>
-              <div className="mt-2 flex items-end gap-2">
-                <span className={cn("text-4xl font-black tabular-nums leading-none", scoreTone(before.summary.score))}>
-                  {before.summary.score}
-                </span>
-                <span className="pb-1 text-sm font-mono text-muted-foreground">/100</span>
+      {expanded && (
+        <>
+          <div className="grid grid-cols-1 divide-y divide-border border-t border-border md:grid-cols-2 md:divide-x md:divide-y-0">
+            <div className="space-y-5 p-4 sm:p-5">
+              <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Before</p>
+                <span className="text-xs font-mono text-muted-foreground/60">{fmtDate(before.timestamp)}</span>
+              </div>
+              <div className="grid gap-3 lg:grid-cols-[132px_1fr] lg:items-stretch">
+                <div className="flex min-h-[92px] flex-col justify-center rounded-[12px] border border-border/80 bg-muted/20 px-4 py-3">
+                  <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Score</p>
+                  <div className="mt-2 flex items-end gap-2">
+                    <span className={cn("text-4xl font-black tabular-nums leading-none", scoreTone(before.summary.score))}>
+                      {before.summary.score}
+                    </span>
+                    <span className="pb-1 text-sm font-mono text-muted-foreground">/100</span>
+                  </div>
+                </div>
+                <div className="grid min-h-[92px] grid-cols-3 divide-x divide-border overflow-hidden rounded-[12px] border border-border/80 bg-muted/20">
+                  <div className="flex flex-col items-center justify-center px-4 py-3 text-center">
+                    <p className="text-xl font-black leading-none text-emerald-400">{before.summary.passed}</p>
+                    <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Pass</p>
+                  </div>
+                  <div className="flex flex-col items-center justify-center px-4 py-3 text-center">
+                    <p className="text-xl font-black leading-none text-rose-400">{before.summary.failed}</p>
+                    <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fail</p>
+                  </div>
+                  <div className="flex flex-col items-center justify-center px-4 py-3 text-center">
+                    <p className="text-xl font-black leading-none text-foreground/80">{before.summary.total}</p>
+                    <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Total</p>
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="grid min-h-[92px] grid-cols-3 divide-x divide-border overflow-hidden rounded-[12px] border border-border/80 bg-muted/20">
-              <div className="flex flex-col items-center justify-center px-4 py-3 text-center">
-                <p className="text-xl font-black leading-none text-emerald-400">{before.summary.passed}</p>
-                <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Pass</p>
-              </div>
-              <div className="flex flex-col items-center justify-center px-4 py-3 text-center">
-                <p className="text-xl font-black leading-none text-rose-400">{before.summary.failed}</p>
-                <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fail</p>
-              </div>
-              <div className="flex flex-col items-center justify-center px-4 py-3 text-center">
-                <p className="text-xl font-black leading-none text-foreground/80">{before.summary.total}</p>
-                <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Total</p>
-              </div>
-            </div>
-          </div>
-        </div>
 
-        <div className="space-y-5 p-4 sm:p-5">
-          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">After</p>
-            <span className="text-xs font-mono text-muted-foreground/60">{fmtDate(after.timestamp)}</span>
-          </div>
-          <div className="grid gap-3 lg:grid-cols-[132px_1fr] lg:items-stretch">
-            <div className="flex min-h-[92px] flex-col justify-center rounded-[12px] border border-border/80 bg-muted/20 px-4 py-3">
-              <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Score</p>
-              <div className="mt-2 flex items-end gap-2">
-                <span className={cn("text-4xl font-black tabular-nums leading-none", scoreTone(after.summary.score))}>
-                  {after.summary.score}
-                </span>
-                <span className="pb-1 text-sm font-mono text-muted-foreground">/100</span>
+            <div className="space-y-5 p-4 sm:p-5">
+              <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">After</p>
+                <span className="text-xs font-mono text-muted-foreground/60">{fmtDate(after.timestamp)}</span>
+              </div>
+              <div className="grid gap-3 lg:grid-cols-[132px_1fr] lg:items-stretch">
+                <div className="flex min-h-[92px] flex-col justify-center rounded-[12px] border border-border/80 bg-muted/20 px-4 py-3">
+                  <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Score</p>
+                  <div className="mt-2 flex items-end gap-2">
+                    <span className={cn("text-4xl font-black tabular-nums leading-none", scoreTone(after.summary.score))}>
+                      {after.summary.score}
+                    </span>
+                    <span className="pb-1 text-sm font-mono text-muted-foreground">/100</span>
+                  </div>
+                </div>
+                <div className="grid min-h-[92px] grid-cols-3 divide-x divide-border overflow-hidden rounded-[12px] border border-border/80 bg-muted/20">
+                  <div className="flex flex-col items-center justify-center px-4 py-3 text-center">
+                    <p className="text-xl font-black leading-none text-emerald-400">
+                      {after.summary.passed}
+                      {passDelta !== 0 && <span className={cn("ml-1 text-xs font-bold", passDeltaTone)}>{signed(passDelta)}</span>}
+                    </p>
+                    <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Pass</p>
+                  </div>
+                  <div className="flex flex-col items-center justify-center px-4 py-3 text-center">
+                    <p className="text-xl font-black leading-none text-rose-400">
+                      {after.summary.failed}
+                      {failDelta !== 0 && <span className={cn("ml-1 text-xs font-bold", failDeltaTone)}>{signed(failDelta)}</span>}
+                    </p>
+                    <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fail</p>
+                  </div>
+                  <div className="flex flex-col items-center justify-center px-4 py-3 text-center">
+                    <p className="text-xl font-black leading-none text-emerald-400">{fixedRules.length}</p>
+                    <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fixed</p>
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="grid min-h-[92px] grid-cols-3 divide-x divide-border overflow-hidden rounded-[12px] border border-border/80 bg-muted/20">
-              <div className="flex flex-col items-center justify-center px-4 py-3 text-center">
-                <p className="text-xl font-black leading-none text-emerald-400">
-                  {after.summary.passed}
-                  {passDelta !== 0 && <span className={cn("ml-1 text-xs font-bold", passDeltaTone)}>{signed(passDelta)}</span>}
-                </p>
-                <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Pass</p>
-              </div>
-              <div className="flex flex-col items-center justify-center px-4 py-3 text-center">
-                <p className="text-xl font-black leading-none text-rose-400">
-                  {after.summary.failed}
-                  {failDelta !== 0 && <span className={cn("ml-1 text-xs font-bold", failDeltaTone)}>{signed(failDelta)}</span>}
-                </p>
-                <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fail</p>
-              </div>
-              <div className="flex flex-col items-center justify-center px-4 py-3 text-center">
-                <p className="text-xl font-black leading-none text-emerald-400">{fixedRules.length}</p>
-                <p className="mt-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Fixed</p>
-              </div>
-            </div>
           </div>
-        </div>
-      </div>
 
-      <div className="border-t border-border px-4 py-4 sm:px-5">
-        {fixedRules.length === 0 && regressedRules.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No rule status changes from the previous audit.</p>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm font-bold text-emerald-400">
-                <ShieldCheck className="h-4 w-4" />
-                Fixed rules ({fixedRules.length})
-              </div>
-              {fixedRules.length > 0 ? (
+          <div className="border-t border-border px-4 py-4 sm:px-5">
+            {fixedRules.length === 0 && regressedRules.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No rule status changes from the previous audit.</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  {fixedRules.slice(0, 5).map(result => (
-                    <div key={result.rule.id} className="flex items-center gap-2 rounded-lg border border-border/80 bg-muted/20 px-3 py-2">
-                      <span className="font-mono text-xs font-black text-emerald-400">{result.rule.id}</span>
-                      <span className="min-w-0 truncate text-sm text-muted-foreground">{result.rule.title}</span>
+                  <div className="flex items-center gap-2 text-sm font-bold text-emerald-400">
+                    <ShieldCheck className="h-4 w-4" />
+                    Fixed rules ({fixedRules.length})
+                  </div>
+                  {fixedRules.length > 0 ? (
+                    <div className="space-y-2">
+                      {fixedRules.slice(0, 5).map(result => (
+                        <div key={result.rule.id} className="flex items-center gap-2 rounded-lg border border-border/80 bg-muted/20 px-3 py-2">
+                          <span className="font-mono text-xs font-black text-emerald-400">{result.rule.id}</span>
+                          <span className="min-w-0 truncate text-sm text-muted-foreground">{result.rule.title}</span>
+                        </div>
+                      ))}
+                      {fixedRules.length > 5 && (
+                        <p className="text-xs text-muted-foreground">+{fixedRules.length - 5} more fixed rules.</p>
+                      )}
                     </div>
-                  ))}
-                  {fixedRules.length > 5 && (
-                    <p className="text-xs text-muted-foreground">+{fixedRules.length - 5} more fixed rules.</p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No rules have been fixed yet.</p>
                   )}
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No rules have been fixed yet.</p>
-              )}
-            </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm font-bold text-rose-400">
-                <ShieldX className="h-4 w-4" />
-                Regressed rules ({regressedRules.length})
-              </div>
-              {regressedRules.length > 0 ? (
                 <div className="space-y-2">
-                  {regressedRules.slice(0, 5).map(result => (
-                    <div key={result.rule.id} className="flex items-center gap-2 rounded-lg border border-border/80 bg-muted/20 px-3 py-2">
-                      <span className="font-mono text-xs font-black text-rose-400">{result.rule.id}</span>
-                      <span className="min-w-0 truncate text-sm text-muted-foreground">{result.rule.title}</span>
+                  <div className="flex items-center gap-2 text-sm font-bold text-rose-400">
+                    <ShieldX className="h-4 w-4" />
+                    Regressed rules ({regressedRules.length})
+                  </div>
+                  {regressedRules.length > 0 ? (
+                    <div className="space-y-2">
+                      {regressedRules.slice(0, 5).map(result => (
+                        <div key={result.rule.id} className="flex items-center gap-2 rounded-lg border border-border/80 bg-muted/20 px-3 py-2">
+                          <span className="font-mono text-xs font-black text-rose-400">{result.rule.id}</span>
+                          <span className="min-w-0 truncate text-sm text-muted-foreground">{result.rule.title}</span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No rules regressed from pass to fail.</p>
+                  )}
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No rules regressed from pass to fail.</p>
+              </div>
               )}
-            </div>
           </div>
-        )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function BeforeAfterComparisonSkeleton() {
+  return (
+    <div className="rounded-2xl border border-border bg-card px-4 py-4 dark:bg-[#0A0A0B] md:px-5">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-5 w-16 rounded-full" />
+          </div>
+          <Skeleton className="h-4 w-full max-w-sm" />
+        </div>
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-8 w-32 rounded-lg" />
+          <Skeleton className="h-4 w-4 rounded" />
+        </div>
       </div>
     </div>
   );
@@ -2085,6 +2128,10 @@ function AuditDetailPage() {
     const currentTime = Date.parse(auditData.timestamp);
     return sortedHistory.find(audit => audit.id !== auditData.id && Date.parse(audit.timestamp) < currentTime) ?? null;
   })() : null;
+  const comparisonHistoryLoading = !!auditData
+    && !previousAudit
+    && !auditHistoryQuery.isError
+    && (auditHistoryQuery.isLoading || (auditHistoryQuery.isFetching && auditHistory.length <= 1));
 
   const report = auditReport?.report;
   const baseResults = sortAuditResults(report?.sorted_results?.length ? report.sorted_results : auditData?.results ?? []);
@@ -2740,13 +2787,15 @@ function AuditDetailPage() {
             </div>
           )}
 
-          {previousAudit && (
+          {previousAudit ? (
             <BeforeAfterComparison
               before={previousAudit}
               after={auditData}
               fmtDate={fmtDate}
             />
-          )}
+          ) : comparisonHistoryLoading ? (
+            <BeforeAfterComparisonSkeleton />
+          ) : null}
 
           {shouldShowFixHistory && agent && (
             <FixHistoryPanel
