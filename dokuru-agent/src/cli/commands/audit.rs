@@ -473,6 +473,10 @@ fn fix_target_from_preview(
             .user
             .clone()
             .or_else(|| target.suggested_user.clone()),
+        container_name: Some(target.container_name.clone()),
+        image: Some(target.image.clone()),
+        compose_project: target.compose_project.clone(),
+        compose_service: target.compose_service.clone(),
     }
 }
 

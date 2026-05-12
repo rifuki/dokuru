@@ -139,7 +139,7 @@ pub struct FixRequest {
     pub targets: Vec<FixTarget>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FixTarget {
     pub container_id: String,
     #[serde(default)]
@@ -152,6 +152,14 @@ pub struct FixTarget {
     pub strategy: Option<String>,
     #[serde(default)]
     pub user: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub container_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compose_project: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compose_service: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

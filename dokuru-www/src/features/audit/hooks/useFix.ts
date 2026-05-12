@@ -371,6 +371,10 @@ export function useFix({ agentId, agentUrl, agentAccessMode, token, auditTimesta
             const base: FixTarget = {
                 container_id: target.container_id,
                 strategy,
+                container_name: target.container_name,
+                image: target.image,
+                compose_project: target.compose_project,
+                compose_service: target.compose_service,
             };
             if (ruleId === "5.11") base.memory = Math.max(1, config?.memoryMb ?? 256) * 1024 * 1024;
             if (ruleId === "5.12") base.cpu_shares = Math.max(2, config?.cpuShares ?? 512);

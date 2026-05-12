@@ -174,6 +174,25 @@ mod tests {
     }
 
     #[test]
+    fn fix_target_preserves_compose_metadata() {
+        let target: FixTarget = serde_json::from_value(serde_json::json!({
+            "container_id": "old-id",
+            "memory": 536870912,
+            "strategy": "dokuru_override",
+            "container_name": "dokuru-lab-api",
+            "image": "node:20-alpine",
+            "compose_project": "dokuru-lab",
+            "compose_service": "checkout-api"
+        }))
+        .unwrap();
+
+        assert_eq!(target.container_name.as_deref(), Some("dokuru-lab-api"));
+        assert_eq!(target.image.as_deref(), Some("node:20-alpine"));
+        assert_eq!(target.compose_project.as_deref(), Some("dokuru-lab"));
+        assert_eq!(target.compose_service.as_deref(), Some("checkout-api"));
+    }
+
+    #[test]
     fn test_severity_ordering() {
         // Test that we can compare severities
         assert_eq!(Severity::High, Severity::High);

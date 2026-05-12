@@ -5326,6 +5326,7 @@ pub async fn preview_fix(docker: &Docker, rule_id: &str) -> eyre::Result<FixPrev
                 pids_limit: None,
                 strategy: Some(target.strategy.clone()),
                 user: None,
+                ..Default::default()
             };
             let selection =
                 selected_non_root_user_for_target(docker, id, &inspect, &fix_target).await;
@@ -5530,6 +5531,7 @@ async fn default_target_for_rule(
             .then_some(DEFAULT_PIDS_LIMIT),
         strategy: Some(strategy.to_string()),
         user: None,
+        ..Default::default()
     })
 }
 
@@ -5714,6 +5716,7 @@ async fn default_image_config_targets(
             pids_limit: None,
             strategy: Some(strategy.to_string()),
             user: None,
+            ..Default::default()
         };
         if rule_id == "4.1" {
             target.user = Some(
@@ -6457,37 +6460,60 @@ async fn apply_cgroup_target(
     progress: Option<&ProgressSender>,
     compose_services: &mut HashSet<String>,
 ) -> Result<Option<String>, String> {
-    let container_label = container_label(docker, &target.container_id).await;
+    let original_target_id = target.container_id.clone();
+    let fallback_label = target_display_label(target);
+    let lookup_command = target_lookup_command(target);
+    let resolved = match resolve_current_fix_target(docker, target).await {
+        Ok(resolved) => resolved,
+        Err(error) => {
+            send_progress(
+                progress,
+                FixProgress {
+                    rule_id: rule_id.to_string(),
+                    container_name: fallback_label.clone(),
+                    step: 1,
+                    total_steps: 3,
+                    action: "inspect_current_cgroup".to_string(),
+                    status: "error".to_string(),
+                    detail: Some(
+                        "Failed to resolve current container before cgroup update".to_string(),
+                    ),
+                    command: Some(lookup_command.clone()),
+                    stdout: None,
+                    stderr: Some(error.to_string()),
+                },
+            );
+            return Err(format!("{fallback_label}: inspect failed: {error}"));
+        }
+    };
+    let target = resolved.target;
+    let container_label = container_inspect_name(&resolved.inspect, &target.container_id);
+    if resolved.refreshed {
+        send_progress(
+            progress,
+            FixProgress {
+                rule_id: rule_id.to_string(),
+                container_name: container_label.clone(),
+                step: 1,
+                total_steps: 3,
+                action: "refresh_current_target".to_string(),
+                status: "done".to_string(),
+                detail: Some(format!(
+                    "Resolved stale target {} to current container {}",
+                    short_id(&original_target_id),
+                    container_label
+                )),
+                command: Some(lookup_command.clone()),
+                stdout: Some(target.container_id.clone()),
+                stderr: None,
+            },
+        );
+    }
+
     if is_dokuru_override_strategy(target.strategy.as_deref())
         || is_compose_source_strategy(target.strategy.as_deref())
     {
-        let inspect = match docker.inspect_container(&target.container_id, None).await {
-            Ok(inspect) => inspect,
-            Err(error) => {
-                send_progress(
-                    progress,
-                    FixProgress {
-                        rule_id: rule_id.to_string(),
-                        container_name: container_label.clone(),
-                        step: 1,
-                        total_steps: 3,
-                        action: "inspect_current_cgroup".to_string(),
-                        status: "error".to_string(),
-                        detail: Some(
-                            "Failed to inspect current container before cgroup update".to_string(),
-                        ),
-                        command: Some(format!(
-                            "docker inspect {}",
-                            shell_quote(&target.container_id)
-                        )),
-                        stdout: None,
-                        stderr: Some(error.to_string()),
-                    },
-                );
-                return Err(format!("{container_label}: inspect failed: {error}"));
-            }
-        };
-        let Some(ctx) = compose_context_from_inspect(&inspect) else {
+        let Some(ctx) = compose_context_from_inspect(&resolved.inspect) else {
             return Err(format!(
                 "{container_label}: compose strategy requested but container has no Compose metadata"
             ));
@@ -6497,9 +6523,9 @@ async fn apply_cgroup_target(
         }
 
         let result = if is_dokuru_override_strategy(target.strategy.as_deref()) {
-            apply_compose_cgroup_override_fix(docker, rule_id, target, &ctx, progress).await
+            apply_compose_cgroup_override_fix(docker, rule_id, &target, &ctx, progress).await
         } else {
-            apply_compose_cgroup_resource_fix(docker, rule_id, target, &ctx, progress).await
+            apply_compose_cgroup_resource_fix(docker, rule_id, &target, &ctx, progress).await
         };
 
         return result
@@ -6507,9 +6533,170 @@ async fn apply_cgroup_target(
             .map_err(|error| format!("{container_label}: compose update failed: {error}"));
     }
 
-    apply_standalone_cgroup_target(docker, rule_id, target, progress, &container_label)
+    apply_standalone_cgroup_target(docker, rule_id, &target, progress, &container_label)
         .await
         .map(Some)
+}
+
+struct ResolvedFixTarget {
+    target: FixTarget,
+    inspect: ContainerInspectResponse,
+    refreshed: bool,
+}
+
+async fn resolve_current_fix_target(
+    docker: &Docker,
+    target: &FixTarget,
+) -> eyre::Result<ResolvedFixTarget> {
+    let mut missing = None;
+
+    if !target.container_id.trim().is_empty() {
+        match docker.inspect_container(&target.container_id, None).await {
+            Ok(inspect) => {
+                return Ok(resolved_fix_target(
+                    target,
+                    inspect,
+                    &target.container_id,
+                    false,
+                ));
+            }
+            Err(error) if is_missing_container_error(&error) => missing = Some(error.to_string()),
+            Err(error) => return Err(error.into()),
+        }
+    }
+
+    if let (Some(project), Some(service)) = (&target.compose_project, &target.compose_service)
+        && let Some((id, inspect)) = find_compose_container(docker, project, service).await?
+    {
+        return Ok(resolved_fix_target(target, inspect, &id, true));
+    }
+
+    if let Some(name) = target
+        .container_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(|name| name.trim_start_matches('/'))
+    {
+        match docker.inspect_container(name, None).await {
+            Ok(inspect) => return Ok(resolved_fix_target(target, inspect, name, true)),
+            Err(error) if is_missing_container_error(&error) => {
+                missing.get_or_insert_with(|| error.to_string());
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+
+    Err(eyre::eyre!(
+        "target container {} is no longer present{}",
+        target_display_label(target),
+        missing.map_or_else(String::new, |error| format!(": {error}"))
+    ))
+}
+
+async fn find_compose_container(
+    docker: &Docker,
+    project: &str,
+    service: &str,
+) -> eyre::Result<Option<(String, ContainerInspectResponse)>> {
+    let containers = docker.list_containers::<String>(None).await?;
+    for container in containers {
+        let Some(labels) = container.labels.as_ref() else {
+            continue;
+        };
+        if labels.get("com.docker.compose.project").map(String::as_str) != Some(project)
+            || labels.get("com.docker.compose.service").map(String::as_str) != Some(service)
+        {
+            continue;
+        }
+        let Some(id) = container.id.as_deref() else {
+            continue;
+        };
+        match docker.inspect_container(id, None).await {
+            Ok(inspect) => return Ok(Some((id.to_string(), inspect))),
+            Err(error) if is_missing_container_error(&error) => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+
+    Ok(None)
+}
+
+fn resolved_fix_target(
+    target: &FixTarget,
+    inspect: ContainerInspectResponse,
+    fallback_id: &str,
+    refreshed: bool,
+) -> ResolvedFixTarget {
+    let mut resolved = target.clone();
+    resolved.container_id = inspect
+        .id
+        .as_deref()
+        .filter(|id| !id.trim().is_empty())
+        .unwrap_or(fallback_id)
+        .to_string();
+    if resolved
+        .container_name
+        .as_deref()
+        .is_none_or(|name| name.trim().is_empty())
+    {
+        resolved.container_name = inspect
+            .name
+            .as_deref()
+            .map(|name| name.trim_start_matches('/'))
+            .filter(|name| !name.is_empty())
+            .map(str::to_string);
+    }
+    if resolved.image.is_none() {
+        resolved.image = inspect
+            .config
+            .as_ref()
+            .and_then(|config| config.image.clone());
+    }
+    if let Some(ctx) = compose_context_from_inspect(&inspect) {
+        resolved.compose_project.get_or_insert(ctx.project);
+        resolved.compose_service.get_or_insert(ctx.service);
+    }
+
+    ResolvedFixTarget {
+        target: resolved,
+        inspect,
+        refreshed,
+    }
+}
+
+fn target_display_label(target: &FixTarget) -> String {
+    target
+        .container_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map_or_else(
+            || short_id(&target.container_id),
+            |name| name.trim_start_matches('/').to_string(),
+        )
+}
+
+fn target_lookup_command(target: &FixTarget) -> String {
+    if let (Some(project), Some(service)) = (&target.compose_project, &target.compose_service) {
+        return format!(
+            "docker ps --filter label=com.docker.compose.project={} --filter label=com.docker.compose.service={} --quiet",
+            shell_quote(project),
+            shell_quote(service)
+        );
+    }
+    if let Some(name) = target
+        .container_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+    {
+        return format!(
+            "docker inspect {}",
+            shell_quote(name.trim_start_matches('/'))
+        );
+    }
+    format!("docker inspect {}", shell_quote(&target.container_id))
 }
 
 async fn apply_standalone_cgroup_target(
@@ -7616,6 +7803,7 @@ async fn default_namespace_targets(docker: &Docker, rule_id: &str) -> eyre::Resu
             pids_limit: None,
             strategy: Some(strategy.to_string()),
             user: None,
+            ..Default::default()
         });
     }
 
@@ -7867,6 +8055,7 @@ async fn default_runtime_isolation_targets(
             pids_limit: None,
             strategy: Some(strategy.to_string()),
             user: None,
+            ..Default::default()
         });
     }
 
@@ -9656,6 +9845,7 @@ async fn default_container_snapshot_targets(
             pids_limit: None,
             strategy: Some(strategy.to_string()),
             user: None,
+            ..Default::default()
         });
     }
 
@@ -9907,7 +10097,9 @@ async fn cgroup_rollback_plan(docker: &Docker, request: &FixRequest) -> eyre::Re
     let mut compose_services = HashSet::<String>::new();
 
     for target in targets {
-        let inspect = docker.inspect_container(&target.container_id, None).await?;
+        let resolved = resolve_current_fix_target(docker, &target).await?;
+        let target = resolved.target;
+        let inspect = resolved.inspect;
         let Some(host_config) = inspect.host_config.as_ref() else {
             continue;
         };
@@ -9935,6 +10127,10 @@ async fn cgroup_rollback_plan(docker: &Docker, request: &FixRequest) -> eyre::Re
             pids_limit: host_config.pids_limit,
             strategy: Some("cgroup_rollback".to_string()),
             user: None,
+            container_name: target.container_name,
+            image: target.image,
+            compose_project: target.compose_project,
+            compose_service: target.compose_service,
         });
     }
 
@@ -11533,6 +11729,7 @@ volumes:
             pids_limit: None,
             strategy: Some(STRATEGY_COMPOSE_UPDATE.to_string()),
             user: Some("70:70".to_string()),
+            ..Default::default()
         };
 
         let updated = update_compose_content(input, "db", "4.1", Some(&target))
@@ -11551,6 +11748,7 @@ volumes:
             pids_limit: None,
             strategy: Some(STRATEGY_DOKURU_OVERRIDE.to_string()),
             user: Some("70:70".to_string()),
+            ..Default::default()
         };
         let expected = r#"# Managed by Dokuru. Keep this file after the base compose files.
 
@@ -11572,6 +11770,7 @@ services:
             pids_limit: None,
             strategy: Some(STRATEGY_DOKURU_OVERRIDE.to_string()),
             user: user.map(str::to_string),
+            ..Default::default()
         }
     }
 
@@ -11986,6 +12185,7 @@ services:
             pids_limit: Some(200),
             strategy: Some("compose_update".to_string()),
             user: None,
+            ..Default::default()
         };
 
         let updated = update_compose_content(input, "web", "cgroup_all", Some(&target))
@@ -12009,6 +12209,7 @@ services:
             pids_limit: None,
             strategy: Some("compose_update".to_string()),
             user: None,
+            ..Default::default()
         };
 
         let updated = update_compose_content(input, "web", "5.11", Some(&target)).unwrap();
@@ -12114,6 +12315,7 @@ services:
                 pids_limit: (rule_id == "5.29").then_some(200),
                 strategy: Some("compose_update".to_string()),
                 user: None,
+                ..Default::default()
             };
             let input = "services:\n  web:\n    image: nginx\n    ports:\n      - \"8080:80\"\n";
             let expected = format!(
@@ -12159,6 +12361,7 @@ services:
             pids_limit: Some(200),
             strategy: Some("compose_update".to_string()),
             user: None,
+            ..Default::default()
         };
 
         let updated = update_compose_content(input, "web", "cgroup_all", Some(&target))
@@ -12177,6 +12380,7 @@ services:
             pids_limit: Some(200),
             strategy: Some(STRATEGY_DOKURU_OVERRIDE.to_string()),
             user: None,
+            ..Default::default()
         };
         let expected = r#"# Managed by Dokuru. Keep this file after the base compose files.
 
@@ -12202,6 +12406,7 @@ services:
             pids_limit: Some(200),
             strategy: Some(STRATEGY_DOKURU_OVERRIDE.to_string()),
             user: None,
+            ..Default::default()
         };
         let expected = r#"# Managed by Dokuru. Keep this file after the base compose files.
 
@@ -12230,6 +12435,7 @@ services:
             pids_limit: None,
             strategy: Some(STRATEGY_DOKURU_OVERRIDE.to_string()),
             user: None,
+            ..Default::default()
         };
 
         let rendered = upsert_dokuru_override_content(None, "web", "5.25", Some(&target)).unwrap();
@@ -12504,6 +12710,7 @@ services:
                 pids_limit: None,
                 strategy: Some(STRATEGY_DOKURU_OVERRIDE.to_string()),
                 user: None,
+                ..Default::default()
             }],
         };
         let plan = rollback_plan_for_request(&docker, &request).await.unwrap();
@@ -12571,6 +12778,7 @@ services:
                 pids_limit: None,
                 strategy: Some("recreate".to_string()),
                 user: Some(DEFAULT_NON_ROOT_USER.to_string()),
+                ..Default::default()
             }],
         };
         let plan = rollback_plan_for_request(&docker, &request).await.unwrap();
@@ -12617,6 +12825,7 @@ services:
             pids_limit: None,
             strategy: Some(STRATEGY_COMPOSE_UPDATE.to_string()),
             user: None,
+            ..Default::default()
         };
 
         let updated = update_compose_content(input, "web", "5.11", Some(&target))
@@ -12635,6 +12844,7 @@ services:
             pids_limit: Some(200),
             strategy: Some(STRATEGY_DOCKER_UPDATE.to_string()),
             user: None,
+            ..Default::default()
         };
 
         let command = docker_update_command("cgroup_all", &target, "web-1");

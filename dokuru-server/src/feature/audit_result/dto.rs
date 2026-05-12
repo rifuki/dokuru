@@ -27,6 +27,10 @@ pub struct FixTargetDto {
     pub cpu_shares: Option<i64>,
     pub pids_limit: Option<i64>,
     pub strategy: Option<String>,
+    pub container_name: Option<String>,
+    pub image: Option<String>,
+    pub compose_project: Option<String>,
+    pub compose_service: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
