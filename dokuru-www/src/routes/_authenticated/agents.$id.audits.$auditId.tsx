@@ -2693,78 +2693,59 @@ function AuditDetailPage() {
                   )}
                 </div>
 
-                {/* Remediation command */}
+                {/* Remediation queue */}
                 <div className="mt-auto border-t border-border pt-5">
-                  <div className="relative overflow-hidden rounded-[16px] border border-[#2496ED]/25 bg-[#06111A]/80 px-4 py-3 shadow-[0_18px_60px_-42px_rgba(36,150,237,0.75)]">
-                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_82%_18%,rgba(36,150,237,0.26),transparent_32%),linear-gradient(135deg,rgba(36,150,237,0.12),transparent_42%)]" />
-                    <div className="pointer-events-none absolute -left-10 top-0 h-full w-24 rotate-12 bg-white/[0.035] blur-md" />
-                    <div className="relative flex flex-col gap-3">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0">
-                          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#2496ED]/70">Remediation Command</p>
-                          <p className="mt-1 font-mono text-[11px] text-white/45">
-                            $ dokuru fix --selected --audit {auditData.id?.slice(0, 8) ?? "current"}
-                          </p>
-                        </div>
-                        {showFixAllAction && (
-                          <button
-                            type="button"
-                            onClick={() => openFixAll(autoFixableResults)}
-                            disabled={fixAllButtonDisabled}
-                            title={fixAllButtonLabel}
-                            className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-[#2496ED] px-4 text-sm font-black text-white shadow-[0_0_28px_-8px_rgba(36,150,237,0.9)] transition-all hover:bg-[#1e80cc] hover:shadow-[0_0_34px_-8px_rgba(36,150,237,1)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#2496ED]"
-                          >
-                            {fixAllStep === "applying" || (fixControlsLocked && !fixAllSessionActive) ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Wrench className="h-4 w-4" />
-                            )}
-                            {fixAllSummaryButtonLabel}
-                          </button>
-                        )}
+                  <div className="overflow-hidden rounded-[10px] border border-border bg-muted/20">
+                    <div className="flex flex-col gap-3 border-b border-border/70 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Remediation</p>
+                        <p className="mt-1 text-xs text-muted-foreground/75">
+                          {autoFixableResults.length > 0
+                            ? `${autoFixableResults.length} checks can be handled by Dokuru's agent-side fix flow.`
+                            : "No automatic fixes are available for this audit."}
+                        </p>
                       </div>
+                      {showFixAllAction && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => openFixAll(autoFixableResults)}
+                          disabled={fixAllButtonDisabled}
+                          title={fixAllButtonLabel}
+                          className="h-8 shrink-0 rounded-[8px] bg-[#2496ED] px-3 text-xs font-semibold text-white shadow-none hover:bg-[#1e80cc] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#2496ED]"
+                        >
+                          {fixAllStep === "applying" || (fixControlsLocked && !fixAllSessionActive) ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Wrench className="h-3.5 w-3.5" />
+                          )}
+                          {fixAllSummaryButtonLabel}
+                        </Button>
+                      )}
+                    </div>
 
-                      <div className="grid gap-2 sm:grid-cols-[1.15fr_1fr]">
-                        <div className="rounded-xl border border-[#2496ED]/18 bg-black/25 px-3 py-2.5">
-                          <div className="flex items-end justify-between gap-3">
-                            <div>
-                              <p className="text-3xl font-black leading-none text-[#2496ED]">
-                                {fixAllStep === "applying" && ruleStatuses.length > 0 ? fixAllCompletedCount : autoFixableResults.length}
-                              </p>
-                              <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white/38">
-                                {fixAllStep === "applying" && ruleStatuses.length > 0
-                                  ? `of ${fixAllSelectedCount} complete`
-                                  : fixAllResultSuccessful
-                                  ? "result ready"
-                                  : fixAllResultFailed
-                                  ? "retry queue"
-                                  : "auto-fixable"}
-                              </p>
-                            </div>
-                            <div className="h-12 w-12 rounded-full border border-[#2496ED]/25 bg-[#2496ED]/10 p-1">
-                              <div className="flex h-full w-full items-center justify-center rounded-full bg-[#2496ED]/15 font-mono text-[10px] font-black text-[#2496ED]">
-                                FIX
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="rounded-xl border border-rose-500/18 bg-rose-500/[0.07] px-3 py-2.5">
-                            <p className="text-2xl font-black leading-none text-rose-400">{severityFailures.high}</p>
-                            <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.16em] text-rose-100/45">Critical</p>
-                            <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/7">
-                              <div className="h-full rounded-full bg-rose-400" style={{ width: `${Math.min(100, severityFailures.high * 12)}%` }} />
-                            </div>
-                          </div>
-                          <div className="rounded-xl border border-amber-500/18 bg-amber-500/[0.07] px-3 py-2.5">
-                            <p className="text-2xl font-black leading-none text-amber-400">{severityFailures.medium}</p>
-                            <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.16em] text-amber-100/45">Medium</p>
-                            <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/7">
-                              <div className="h-full rounded-full bg-amber-400" style={{ width: `${Math.min(100, severityFailures.medium * 8)}%` }} />
-                            </div>
-                          </div>
-                        </div>
+                    <div className="grid divide-y divide-border/60 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                      <div className="px-3 py-3">
+                        <p className="font-mono text-2xl font-black leading-none text-[#2496ED]">
+                          {fixAllStep === "applying" && ruleStatuses.length > 0 ? fixAllCompletedCount : autoFixableResults.length}
+                        </p>
+                        <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                          {fixAllStep === "applying" && ruleStatuses.length > 0
+                            ? `of ${fixAllSelectedCount} complete`
+                            : fixAllResultSuccessful
+                            ? "result ready"
+                            : fixAllResultFailed
+                            ? "retry queue"
+                            : "auto-fixable"}
+                        </p>
+                      </div>
+                      <div className="px-3 py-3">
+                        <p className="font-mono text-2xl font-black leading-none text-rose-400">{severityFailures.high}</p>
+                        <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Critical</p>
+                      </div>
+                      <div className="px-3 py-3">
+                        <p className="font-mono text-2xl font-black leading-none text-amber-400">{severityFailures.medium}</p>
+                        <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Medium</p>
                       </div>
                     </div>
                   </div>
