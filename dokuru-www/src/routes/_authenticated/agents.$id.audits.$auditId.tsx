@@ -218,6 +218,11 @@ function sectionMeta(section: string) {
   return SECTION_META[section] ?? { label: section, num: "", color: "text-gray-500", bg: "bg-gray-500/10", border: "border-gray-500/30" };
 }
 
+function sectionSortRank(section: string) {
+  const match = /^S(\d+)$/.exec(sectionMeta(section).num);
+  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+}
+
 function sortAuditResults(results: AuditResult[]) {
   return [...results].sort((a, b) => {
     if (a.status !== b.status) return a.status === "Fail" ? -1 : 1;
@@ -2223,21 +2228,14 @@ function AuditDetailPage() {
   const shouldShowFixHistory = !!agent && (scopedFixHistoryEntries.length > 0 || fixHistoryQuery.isLoading || fixHistoryQuery.isFetching);
   const pillarProjections = groupProjectionFromFixes(baseResults, forecastRuleIds, result => getRulePillar(result.rule.id), autoTriggeredRuleIds);
   const sectionProjections = groupProjectionFromFixes(baseResults, forecastRuleIds, result => result.rule.section, autoTriggeredRuleIds);
-  const sectionSummaries = groupSummariesFromResults(baseResults, result => result.rule.section, key => key);
+  const sectionSummaries = groupSummariesFromResults(baseResults, result => result.rule.section, key => key)
+    .sort((a, b) => sectionSortRank(a.key) - sectionSortRank(b.key) || a.label.localeCompare(b.label));
   const sections = sectionSummaries.map(section => section.key);
   const sectionStats: Record<string, { total: number; passed: number; errors: number; percent: number }> = Object.fromEntries(sectionSummaries.map(section => [
     section.key,
     { total: section.total, passed: section.passed, errors: section.errors, percent: section.percent },
   ]));
-
-  // Sort sections: worst pass% first, so problem areas appear at top
-  const sortedSections = [...sections].sort((a, b) => {
-    const statA = sectionStats[a] ?? { total: 0, passed: 0 };
-    const statB = sectionStats[b] ?? { total: 0, passed: 0 };
-    const pctA = statA.total > 0 ? statA.passed / statA.total : 1;
-    const pctB = statB.total > 0 ? statB.passed / statB.total : 1;
-    return pctA - pctB;
-  });
+  const sortedSections = sections;
 
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const scopedResults = baseResults.filter(r => {
