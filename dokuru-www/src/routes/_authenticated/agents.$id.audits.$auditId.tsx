@@ -2544,7 +2544,7 @@ function AuditDetailPage() {
             {/* Body: score left + breakdown right */}
             <div className="grid grid-cols-1 divide-y divide-border md:grid-cols-2 md:divide-x md:divide-y-0">
               {/* Left: Score + stats */}
-              <div className="flex flex-col p-5 md:p-6">
+              <div className="flex flex-col p-5">
                 <div>
                   <div className="mb-2 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                     <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Audit Score</p>
@@ -2563,14 +2563,14 @@ function AuditDetailPage() {
                     )}
                   </div>
                   <div className="flex items-baseline gap-3">
-                    <span className={cn("text-5xl font-black tabular-nums leading-none sm:text-7xl",
+                    <span className={cn("text-5xl font-black tabular-nums leading-none sm:text-6xl",
                       auditData.summary.score >= 80 ? "text-emerald-400"
                         : auditData.summary.score >= 60 ? "text-amber-400"
                           : "text-rose-400"
                     )}>
                       {auditData.summary.score}
                     </span>
-                    <span className="text-xl text-muted-foreground/40 font-bold">/ 100</span>
+                    <span className="text-lg font-bold text-muted-foreground/40">/ 100</span>
                   </div>
                   <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted/40 shadow-inner">
                     {projectedFixScore && projectedFixScore.fixedCount > 0 && projectedFixScore.projectedScore > auditData.summary.score ? (
@@ -2595,19 +2595,19 @@ function AuditDetailPage() {
                   <p className="mt-2 text-xs text-muted-foreground">CIS Docker Benchmark v1.8.0 · {ruleCountSummary}</p>
                 </div>
 
-                <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
                   <button
                     type="button"
                     onClick={() => setStatusFilter(f => f === "Pass" ? "all" : "Pass")}
                     aria-pressed={statusFilter === "Pass"}
                     className={cn(
-                      "flex min-h-[76px] flex-col items-center justify-center rounded-[12px] border px-2 py-2.5 text-center transition-all duration-200 sm:min-h-[84px] sm:px-3",
+                      "flex min-h-[70px] flex-col items-center justify-center rounded-[10px] border px-2 py-2 text-center transition-all duration-200 sm:min-h-[76px] sm:px-3",
                       statusFilter === "Pass"
                         ? "border-[#00d9a5]/50 bg-[#00d9a5]/10 ring-1 ring-[#00d9a5]/20"
                         : "border-[#00d9a5]/25 bg-[#00d9a5]/5 hover:bg-[#00d9a5]/10 hover:border-[#00d9a5]/35"
                     )}
                   >
-                    <span className="text-2xl font-black leading-none text-[#00d9a5] sm:text-3xl">{displayPassedTotal}</span>
+                    <span className="text-2xl font-black leading-none text-[#00d9a5]">{displayPassedTotal}</span>
                     <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Pass</span>
                   </button>
                   <button
@@ -2615,13 +2615,13 @@ function AuditDetailPage() {
                     onClick={() => setStatusFilter(f => f === "Fail" ? "all" : "Fail")}
                     aria-pressed={statusFilter === "Fail"}
                     className={cn(
-                      "flex min-h-[76px] flex-col items-center justify-center rounded-[12px] border px-2 py-2.5 text-center transition-all duration-200 sm:min-h-[84px] sm:px-3",
+                      "flex min-h-[70px] flex-col items-center justify-center rounded-[10px] border px-2 py-2 text-center transition-all duration-200 sm:min-h-[76px] sm:px-3",
                       statusFilter === "Fail"
                         ? "bg-rose-500/15 border-rose-500/45 ring-1 ring-rose-500/25"
                         : "bg-rose-500/5 border-rose-500/25 hover:bg-rose-500/10 hover:border-rose-500/35"
                     )}
                   >
-                    <span className="text-2xl font-black leading-none text-rose-400 sm:text-3xl">{displayFailedTotal}</span>
+                    <span className="text-2xl font-black leading-none text-rose-400">{displayFailedTotal}</span>
                     <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Fail</span>
                   </button>
                   <button
@@ -2630,24 +2630,24 @@ function AuditDetailPage() {
                     aria-pressed={statusFilter === "Error"}
                     title="Skipped means Dokuru could not evaluate this check in the current audit context."
                     className={cn(
-                      "flex min-h-[76px] flex-col items-center justify-center rounded-[12px] border px-2 py-2.5 text-center transition-all duration-200 sm:min-h-[84px] sm:px-3",
+                      "flex min-h-[70px] flex-col items-center justify-center rounded-[10px] border px-2 py-2 text-center transition-all duration-200 sm:min-h-[76px] sm:px-3",
                       statusFilter === "Error"
                         ? "border-border bg-muted/45 ring-1 ring-border/60"
                         : "border-border bg-muted/20 hover:bg-muted/35"
                     )}
                   >
-                    <span className="text-2xl font-black leading-none text-muted-foreground sm:text-3xl">{displayErrorTotal}</span>
+                    <span className="text-2xl font-black leading-none text-muted-foreground">{displayErrorTotal}</span>
                     <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Skipped</span>
                   </button>
-                  <div className="flex min-h-[76px] flex-col items-center justify-center rounded-[12px] border border-border bg-muted/20 px-2 py-2.5 text-center sm:min-h-[84px] sm:px-3">
-                    <span className="block text-2xl font-black leading-none text-foreground/80 sm:text-3xl">{checkRuleTotal}</span>
+                  <div className="flex min-h-[70px] flex-col items-center justify-center rounded-[10px] border border-border bg-muted/20 px-2 py-2 text-center sm:min-h-[76px] sm:px-3">
+                    <span className="block text-2xl font-black leading-none text-foreground/80">{checkRuleTotal}</span>
                     <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                       Total
                     </span>
                   </div>
                 </div>
 
-                <div className="mt-5 rounded-[10px] border border-border bg-muted/20 px-3 py-3">
+                <div className="mt-4 rounded-[10px] border border-border bg-muted/20 px-3 py-2.5">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
                       <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Remediation</p>
@@ -2681,7 +2681,7 @@ function AuditDetailPage() {
               </div>
 
               {/* Right: Pillar/Section breakdown with toggle */}
-              <div className="flex flex-col p-5 md:p-6">
+              <div className="flex flex-col p-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0 flex-1">
                     <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
@@ -2719,7 +2719,7 @@ function AuditDetailPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 flex flex-1 flex-col justify-between gap-3.5">
+                <div className="mt-5 grid gap-4">
                   {viewMode === "pillar" ? (
                     pillarSummaries.map(pillarSummary => {
                       const pillar = pillarSummary.key as SecurityPillar;
