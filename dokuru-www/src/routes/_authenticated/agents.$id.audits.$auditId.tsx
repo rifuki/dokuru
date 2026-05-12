@@ -2232,6 +2232,8 @@ function AuditDetailPage() {
     : fixControlsLocked
     ? "Fix running"
     : `Fix All (${autoFixableResults.length})`;
+  const showFixAllAction = autoFixableResults.length > 0 || fixAllSessionActive || fixAllResultFailed;
+  const fixAllCompletedCount = ruleStatuses.filter(status => status.selected && status.state === "done").length;
   const auditListLayoutSignature = [
     [...appliedRuleIds].sort().join(","),
     autoFixableResults.length,
@@ -2400,10 +2402,11 @@ function AuditDetailPage() {
           </Button>
           <Button
             type="button"
+            variant="outline"
             size="sm"
             onClick={handleRerunAudit}
             disabled={!agent || auditRunning}
-            className="shrink-0"
+            className="shrink-0 border-[#2496ED]/25 text-[#2496ED] hover:text-[#2496ED]"
           >
             {auditRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             {auditRunning ? "Audit Running" : "Re-run Audit"}
@@ -2472,11 +2475,28 @@ function AuditDetailPage() {
                     </span>
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
-                  <Clock className="h-4 w-4" />
-                  <span className="font-mono font-medium">
-                    {fmtDate(auditData.timestamp).split(",")[1]?.trim() ?? fmtDate(auditData.timestamp)}
-                  </span>
+                <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:items-end lg:flex-row lg:items-center">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Clock className="h-4 w-4" />
+                    <span className="font-mono font-medium">
+                      {fmtDate(auditData.timestamp).split(",")[1]?.trim() ?? fmtDate(auditData.timestamp)}
+                    </span>
+                  </div>
+                  {showFixAllAction && (
+                    <button
+                      type="button"
+                      onClick={() => openFixAll(autoFixableResults)}
+                      disabled={fixAllButtonDisabled}
+                      className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-[#2496ED] px-3.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[#1e80cc] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#2496ED] sm:w-auto"
+                    >
+                      {fixAllStep === "applying" || (fixControlsLocked && !fixAllSessionActive) ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Wrench className="h-4 w-4" />
+                      )}
+                      {fixAllButtonLabel}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -2682,51 +2702,39 @@ function AuditDetailPage() {
                 </div>
 
                 {/* Quick Stats */}
-                <div className="mt-auto grid grid-cols-2 gap-2 border-t border-border pt-5">
+                <div className="mt-auto grid grid-cols-1 gap-2 border-t border-border pt-5 sm:grid-cols-2">
                   <div className="rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2">
-                    <p className="text-[9px] text-muted-foreground uppercase tracking-[0.14em]">Critical</p>
-                    <p className="text-lg font-black text-rose-400">{severityFailures.high}</p>
+                    <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Risk</p>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-lg font-black leading-none text-rose-400">{severityFailures.high}</p>
+                        <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">Critical</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-black leading-none text-amber-400">{severityFailures.medium}</p>
+                        <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">Medium</p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2">
-                    <p className="text-[9px] text-muted-foreground uppercase tracking-[0.14em]">Medium</p>
-                    <p className="text-lg font-black text-amber-400">{severityFailures.medium}</p>
+                  <div className="rounded-[10px] border border-[#2496ED]/25 bg-[#2496ED]/5 px-3 py-2">
+                    <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Remediation</p>
+                    <p className="mt-2 text-lg font-black leading-none text-[#2496ED]">
+                      {fixAllStep === "applying" && ruleStatuses.length > 0 ? fixAllCompletedCount : autoFixableResults.length}
+                    </p>
+                    <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
+                      {fixAllStep === "applying" && ruleStatuses.length > 0
+                        ? `of ${fixAllSelectedCount} done`
+                        : fixAllResultSuccessful
+                        ? "Result ready"
+                        : fixAllResultFailed
+                        ? "Retry available"
+                        : "Auto-fixable"}
+                    </p>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-
-          {/* ── Fix All status/action ───────────────────────── */}
-          {(autoFixableResults.length > 0 || fixAllSessionActive || fixAllResultFailed) && (
-            <div className="flex flex-col gap-3 rounded-xl border border-[#2496ED]/25 bg-[#2496ED]/5 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5">
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-[#2496ED]">
-                  {fixAllStep === "applying" && ruleStatuses.length > 0
-                    ? "Fix All is still running"
-                    : fixAllResultSuccessful
-                    ? "Fix All result is ready"
-                    : fixAllResultFailed
-                    ? "Fix All can be retried"
-                    : `${autoFixableResults.length} rule${autoFixableResults.length > 1 ? "s" : ""} can be auto-fixed`}
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Image config, namespace isolation, cgroup limits, and privileged containers in one click.
-                </p>
-              </div>
-              <button
-                onClick={() => openFixAll(autoFixableResults)}
-                disabled={fixAllButtonDisabled}
-                className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-[#2496ED] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[#1e80cc] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#2496ED] sm:w-auto"
-              >
-                {fixAllStep === "applying" || (fixControlsLocked && !fixAllSessionActive) ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Wrench className="h-4 w-4" />
-                )}
-                {fixAllButtonLabel}
-              </button>
-            </div>
-          )}
 
           {fixedResultPreviews.length > 0 && (
             <div className="rounded-xl border border-[#2496ED]/25 bg-[#2496ED]/5 px-5 py-4">
