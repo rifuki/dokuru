@@ -21,8 +21,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import {
   Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
-  Terminal, Wrench, AlertTriangle, Server,
-  ArrowLeft, Clock, Cpu, Container, BookOpen,
+  Terminal, Wrench, AlertTriangle,
+  ArrowLeft, Clock, BookOpen,
   Search, X, Layers, ArrowLeftRight, Link, FileText, Download, Printer, FileJson, RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -2233,7 +2233,6 @@ function AuditDetailPage() {
     ? "Fix running"
     : `Fix All (${autoFixableResults.length})`;
   const showFixAllAction = autoFixableResults.length > 0 || fixAllSessionActive || fixAllResultFailed;
-  const fixAllCompletedCount = ruleStatuses.filter(status => status.selected && status.state === "done").length;
   const fixAllSummaryButtonLabel = fixAllStep === "applying" && ruleStatuses.length > 0
     ? "View progress"
     : fixAllResultSuccessful
@@ -2599,15 +2598,17 @@ function AuditDetailPage() {
                   </div>
                 </div>
 
-                <div className="mt-5 overflow-hidden rounded-[10px] border border-border bg-muted/20">
-                  <div className="flex flex-col gap-3 border-b border-border/70 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="mt-5 rounded-[10px] border border-border bg-muted/20 px-3 py-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
                       <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Remediation</p>
-                      <p className="mt-1 text-xs text-muted-foreground/75">
-                        {autoFixableResults.length > 0
-                          ? `${autoFixableResults.length} checks can be handled by Dokuru's agent-side fix flow.`
-                          : "No automatic fixes are available for this audit."}
-                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground/75">
+                        <span><span className="font-mono font-bold text-[#2496ED]">{autoFixableResults.length}</span> auto-fixable</span>
+                        <span className="text-muted-foreground/35">/</span>
+                        <span><span className="font-mono font-bold text-rose-400">{severityFailures.high}</span> critical</span>
+                        <span className="text-muted-foreground/35">/</span>
+                        <span><span className="font-mono font-bold text-amber-400">{severityFailures.medium}</span> medium</span>
+                      </div>
                     </div>
                     {showFixAllAction && (
                       <Button
@@ -2626,31 +2627,6 @@ function AuditDetailPage() {
                         {fixAllSummaryButtonLabel}
                       </Button>
                     )}
-                  </div>
-
-                  <div className="grid divide-y divide-border/60 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-                    <div className="px-3 py-3">
-                      <p className="font-mono text-2xl font-black leading-none text-[#2496ED]">
-                        {fixAllStep === "applying" && ruleStatuses.length > 0 ? fixAllCompletedCount : autoFixableResults.length}
-                      </p>
-                      <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                        {fixAllStep === "applying" && ruleStatuses.length > 0
-                          ? `of ${fixAllSelectedCount} complete`
-                          : fixAllResultSuccessful
-                          ? "result ready"
-                          : fixAllResultFailed
-                          ? "retry queue"
-                          : "auto-fixable"}
-                      </p>
-                    </div>
-                    <div className="px-3 py-3">
-                      <p className="font-mono text-2xl font-black leading-none text-rose-400">{severityFailures.high}</p>
-                      <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Critical</p>
-                    </div>
-                    <div className="px-3 py-3">
-                      <p className="font-mono text-2xl font-black leading-none text-amber-400">{severityFailures.medium}</p>
-                      <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Medium</p>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -2729,23 +2705,6 @@ function AuditDetailPage() {
                       />
                     ))
                   )}
-                </div>
-
-                <div className="mt-5 grid grid-cols-2 gap-2 border-t border-border pt-5">
-                  {[
-                    { icon: Server, label: "Host", value: auditData.hostname },
-                    { icon: Cpu, label: "Docker", value: auditData.docker_version },
-                    { icon: Container, label: "Containers", value: String(auditData.total_containers) },
-                    { icon: Clock, label: "Ran", value: fmtDate(auditData.timestamp).split(",")[1]?.trim() ?? fmtDate(auditData.timestamp) },
-                  ].map(({ icon: Icon, label, value }) => (
-                    <div key={label} className="flex min-w-0 items-center gap-2 rounded-[10px] border border-border/80 bg-muted/20 px-3 py-2 transition-colors hover:bg-muted/30">
-                      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <div className="min-w-0">
-                        <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
-                        <p className="truncate text-sm font-semibold text-foreground/90">{value}</p>
-                      </div>
-                    </div>
-                  ))}
                 </div>
               </div>
             </div>
