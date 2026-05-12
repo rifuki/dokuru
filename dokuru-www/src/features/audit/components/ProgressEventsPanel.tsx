@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
-    ArrowRight, Check, ChevronRight, Copy, ShieldAlert, Terminal,
+    ArrowRight, Check, ChevronRight, Copy, GripHorizontal, ShieldAlert, Terminal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FixProgress } from "@/lib/api/agent-direct";
@@ -192,6 +192,10 @@ function ProgressEventRow({
     );
 }
 
+function clampPanelHeight(value: number, min: number, max: number) {
+    return Math.min(max, Math.max(min, Math.round(value)));
+}
+
 export function ProgressEventsPanel({
     progressEvents,
     title = "live evidence stream",
@@ -199,6 +203,11 @@ export function ProgressEventsPanel({
     emptyMessage,
     className,
     maxHeightClassName = "max-h-[300px]",
+    resizable = false,
+    storageKey = "dokuru_progress_events_panel_height",
+    defaultHeight = 360,
+    minHeight = 220,
+    maxHeight = 960,
 }: {
     progressEvents: FixProgress[];
     title?: string;
@@ -206,14 +215,58 @@ export function ProgressEventsPanel({
     emptyMessage?: string;
     className?: string;
     maxHeightClassName?: string;
+    resizable?: boolean;
+    storageKey?: string;
+    defaultHeight?: number;
+    minHeight?: number;
+    maxHeight?: number;
 }) {
     const [filterError, setFilterError] = useState(false);
+    const [panelHeight, setPanelHeight] = useState(() => {
+        if (!resizable || typeof window === "undefined") return clampPanelHeight(defaultHeight, minHeight, maxHeight);
+        const saved = Number(window.localStorage.getItem(storageKey));
+        return Number.isFinite(saved)
+            ? clampPanelHeight(saved, minHeight, maxHeight)
+            : clampPanelHeight(defaultHeight, minHeight, maxHeight);
+    });
 
     if (progressEvents.length === 0 && !emptyMessage) return null;
 
     const normalizedEvents = coalesceFixProgressEvents(progressEvents);
     const hasErrors = normalizedEvents.some(e => e.status === "error");
     const displayedEvents = filterError ? normalizedEvents.filter(e => e.status === "error") : normalizedEvents;
+
+    function updatePanelHeight(nextHeight: number) {
+        const next = clampPanelHeight(nextHeight, minHeight, maxHeight);
+        setPanelHeight(next);
+        if (typeof window !== "undefined") {
+            window.localStorage.setItem(storageKey, String(next));
+        }
+    }
+
+    function startResize(event: ReactPointerEvent<HTMLButtonElement>) {
+        if (!resizable) return;
+        event.preventDefault();
+        const startY = event.clientY;
+        const startHeight = panelHeight;
+        const originalCursor = document.body.style.cursor;
+        const originalUserSelect = document.body.style.userSelect;
+        document.body.style.cursor = "row-resize";
+        document.body.style.userSelect = "none";
+
+        const onPointerMove = (moveEvent: PointerEvent) => {
+            updatePanelHeight(startHeight + moveEvent.clientY - startY);
+        };
+        const onPointerUp = () => {
+            document.body.style.cursor = originalCursor;
+            document.body.style.userSelect = originalUserSelect;
+            window.removeEventListener("pointermove", onPointerMove);
+            window.removeEventListener("pointerup", onPointerUp);
+        };
+
+        window.addEventListener("pointermove", onPointerMove);
+        window.addEventListener("pointerup", onPointerUp);
+    }
 
     return (
         <div className={cn("overflow-hidden rounded-xl border border-white/10 bg-[#030507] shadow-xl", className)}>
@@ -246,7 +299,13 @@ export function ProgressEventsPanel({
                     </span>
                 </div>
             </div>
-            <div className={cn(maxHeightClassName, "min-w-0 overflow-y-auto p-2.5 font-mono text-[11px] leading-relaxed sm:p-3 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10")}>
+            <div
+                className={cn(
+                    !resizable && maxHeightClassName,
+                    "min-w-0 overflow-y-auto p-2.5 font-mono text-[11px] leading-relaxed sm:p-3 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10",
+                )}
+                style={resizable ? { height: panelHeight } : undefined}
+            >
                 {displayedEvents.length === 0 ? (
                     <div className="flex items-center justify-center py-6 text-[10px] uppercase tracking-widest text-[#2496ED]/60">
                         <Terminal className="mr-2 h-3.5 w-3.5" /> {emptyMessage ?? "Waiting for agent progress"}
@@ -262,6 +321,16 @@ export function ProgressEventsPanel({
                     ))
                 )}
             </div>
+            {resizable && (
+                <button
+                    type="button"
+                    aria-label="Resize evidence stream height"
+                    onPointerDown={startResize}
+                    className="flex h-4 w-full cursor-row-resize items-center justify-center border-t border-white/8 bg-white/[0.018] text-white/20 transition-colors hover:bg-white/[0.045] hover:text-white/45"
+                >
+                    <GripHorizontal className="h-3.5 w-3.5" />
+                </button>
+            )}
         </div>
     );
 }

@@ -760,7 +760,14 @@ function ApplyingStep({
                 </div>
             </div>
 
-            <ProgressEventsPanel progressEvents={progressEvents} />
+            <ProgressEventsPanel
+                progressEvents={progressEvents}
+                resizable
+                storageKey="dokuru_fix_evidence_stream_height"
+                defaultHeight={360}
+                minHeight={220}
+                maxHeight={1100}
+            />
         </div>
     );
 }
@@ -771,7 +778,6 @@ function ResultStep({
     outcome,
     result,
     progressEvents,
-    stepIndex,
     agentId,
     containers,
     auditId,
@@ -782,7 +788,6 @@ function ResultStep({
     outcome: FixOutcome;
     result: AuditResult;
     progressEvents: FixProgress[];
-    stepIndex: number;
     agentId: string;
     containers: DockerContainer[];
     auditId?: string;
@@ -797,93 +802,98 @@ function ResultStep({
     const affectedItems = result.affected.length > 0
         ? result.affected
         : Array.from(new Set(evidenceEvents.map(event => event.container_name).filter(Boolean)));
+    const modeLabel = progressModeLabel(evidenceEvents);
+    const resultTitle = isApplied ? "Remediation complete" : isBlocked ? "Remediation blocked" : "Manual follow-up required";
+    const resultMessage = isApplied
+        ? `Rule ${result.rule.id} finished on the agent. Re-run the audit to verify the score.`
+        : outcome.message;
 
     return (
-        <div className="flex flex-col gap-5">
-            <div className="rounded-xl border border-white/10 bg-white/[0.025] p-4">
+        <div className="flex flex-col gap-4">
+            <div className="rounded-xl border border-white/10 bg-white/[0.025] p-3.5">
                 <div className="flex items-start gap-3">
                     <div className={cn(
-                        "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border",
+                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border",
                         isApplied ? "border-emerald-400/25 bg-emerald-500/12 text-emerald-300" : isBlocked ? "border-rose-400/25 bg-rose-500/12 text-rose-300" : "border-amber-400/25 bg-amber-500/12 text-amber-300"
                     )}>
                         {isApplied ? <CheckCircle2 className="h-5 w-5" /> : isBlocked ? <XCircle className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
                     </div>
                     <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-semibold text-white">{isApplied ? "Remediation complete" : isBlocked ? "Remediation blocked" : "Manual follow-up required"}</p>
+                            <p className="text-sm font-semibold text-white">{resultTitle}</p>
                             <span className={cn(
                                 "rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em]",
                                 isApplied ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-300" : isBlocked ? "border-rose-400/20 bg-rose-500/10 text-rose-300" : "border-amber-400/20 bg-amber-500/10 text-amber-300"
                             )}>{outcome.status}</span>
+                        </div>
+                        <p className="mt-1 text-xs leading-relaxed text-white/48">
+                            {resultMessage}
+                        </p>
+
+                        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                            <span className="inline-flex items-center gap-1.5 rounded-md border border-white/8 bg-black/20 px-2 py-1 font-mono text-[10px] text-white/45">
+                                <Terminal className="h-3 w-3 text-[#2496ED]/70" />
+                                {evidenceEvents.length} events
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 rounded-md border border-[#2496ED]/18 bg-[#2496ED]/8 px-2 py-1 font-mono text-[10px] text-[#7dd3fc]">
+                                <ChevronRight className="h-3 w-3" />
+                                {modeLabel}
+                            </span>
+                            {affectedItems.length > 0 && (
+                                <span className="inline-flex items-center gap-1.5 rounded-md border border-white/8 bg-black/20 px-2 py-1 font-mono text-[10px] text-white/45">
+                                    <Activity className="h-3 w-3 text-[#2496ED]/70" />
+                                    {affectedItems.length} target{affectedItems.length === 1 ? "" : "s"}
+                                </span>
+                            )}
                             {isAutoTriggered && (
-                                <span className="rounded-full border border-[#2496ED]/20 bg-[#2496ED]/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-[#2496ED]">
+                                <span className="inline-flex items-center gap-1.5 rounded-md border border-[#2496ED]/20 bg-[#2496ED]/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#2496ED]">
                                     auto-triggered
                                 </span>
                             )}
+                            {outcome.requires_elevation && (
+                                <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/8 px-2 py-1 font-mono text-[10px] text-amber-400">
+                                    <ShieldAlert className="h-3 w-3" />
+                                    elevation
+                                </span>
+                            )}
+                            {outcome.requires_restart && (
+                                <span className="inline-flex items-center gap-1.5 rounded-md border border-[#2496ED]/25 bg-[#2496ED]/8 px-2 py-1 font-mono text-[10px] text-[#2496ED]">
+                                    <RotateCcw className="h-3 w-3" />
+                                    docker restart
+                                </span>
+                            )}
                         </div>
-                        <p className="mt-1 text-xs leading-relaxed text-white/48">
-                            {isApplied
-                                ? `Rule ${result.rule.id} finished on the agent. Re-run the audit to verify the score.`
-                                : outcome.message}
-                        </p>
                     </div>
                 </div>
 
-                <div className="mt-4 grid grid-cols-3 gap-2">
-                    <div className="rounded-lg border border-white/8 bg-black/20 px-3 py-2">
-                        <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/28">events</p>
-                        <p className="mt-1 text-lg font-bold text-white">{evidenceEvents.length}</p>
+                {affectedItems.length > 0 && (
+                    <div className="mt-3 flex flex-col gap-2 border-t border-white/8 pt-3 sm:flex-row sm:items-start">
+                        <div className="flex shrink-0 items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-white/35 sm:w-24 sm:pt-1">
+                            <Activity className="h-3.5 w-3.5 text-[#2496ED]" />
+                            Targets
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <AffectedItems
+                                items={affectedItems}
+                                containers={containers}
+                                agentId={agentId}
+                                returnTo={{ source: "audit", auditId, ruleId: result.rule.id }}
+                                chipClassName="rounded-md border-[#2496ED]/22 bg-[#2496ED]/8 px-2 py-1 text-[10px]"
+                            />
+                        </div>
                     </div>
-                    <div className="rounded-lg border border-white/8 bg-black/20 px-3 py-2">
-                        <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/28">affected</p>
-                        <p className="mt-1 text-lg font-bold text-white">{affectedItems.length}</p>
-                    </div>
-                    <div className="rounded-lg border border-white/8 bg-black/20 px-3 py-2">
-                        <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/28">mode</p>
-                        <p className="mt-1 truncate text-sm font-semibold text-[#2496ED]">{progressModeLabel(evidenceEvents)}</p>
-                    </div>
-                </div>
+                )}
             </div>
 
-            <FixStepChecklist ruleId={result.rule.id} stepIndex={stepIndex} state={isApplied ? "applied" : isBlocked ? "blocked" : "guided"} />
-
-            {/* Flags */}
-            {(outcome.requires_elevation || outcome.requires_restart) && (
-                <div className="flex flex-wrap gap-2">
-                    {outcome.requires_elevation && (
-                        <span className="inline-flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-1 rounded border bg-amber-500/8 border-amber-500/25 text-amber-400">
-                            <ShieldAlert className="h-3 w-3" />
-                            Requires elevation
-                        </span>
-                    )}
-                    {outcome.requires_restart && (
-                        <span className="inline-flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-1 rounded border bg-blue-500/8 border-blue-500/25 text-[#2496ED]">
-                            <RotateCcw className="h-3 w-3" />
-                            Docker restart required
-                        </span>
-                    )}
-                </div>
-            )}
-
-            {affectedItems.length > 0 && (
-                <div className="rounded-xl border border-white/8 bg-white/[0.02] p-3.5">
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                            <Activity className="h-3.5 w-3.5 text-[#2496ED]" />
-                            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/38">Affected targets</p>
-                        </div>
-                    </div>
-                    <AffectedItems
-                        items={affectedItems}
-                        containers={containers}
-                        agentId={agentId}
-                        returnTo={{ source: "audit", auditId, ruleId: result.rule.id }}
-                        chipClassName="rounded-lg bg-[#2496ED]/8 border-[#2496ED]/25 px-2.5 py-1.5"
-                    />
-                </div>
-            )}
-
-            <ProgressEventsPanel progressEvents={progressEvents} title="evidence stream" />
+            <ProgressEventsPanel
+                progressEvents={progressEvents}
+                title="evidence stream"
+                resizable
+                storageKey="dokuru_fix_evidence_stream_height"
+                defaultHeight={520}
+                minHeight={220}
+                maxHeight={1100}
+            />
 
             {/* Restart command */}
             {outcome.restart_command && (
@@ -1019,7 +1029,6 @@ export function FixWizard({
                             outcome={outcome}
                             result={result}
                             progressEvents={progressEvents}
-                            stepIndex={stepIndex}
                             agentId={agentId}
                             containers={containers}
                             auditId={auditId}
