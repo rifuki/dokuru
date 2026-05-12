@@ -1846,8 +1846,8 @@ function buildAuditDocumentHtml({
       </section>
 
       <section class="section">
-        <h2>Containers In Scope</h2>
-        <p class="lead">Running workloads captured before the CIS checks ran, defining which containers were in scope for this audit.</p>
+        <h2>Running Containers Checked</h2>
+        <p class="lead">Containers that were running when Dokuru started the CIS checks for this audit.</p>
         <table><thead><tr><th>Container</th><th>Image</th><th>State</th><th>Status</th></tr></thead><tbody>${activeContainerRows}</tbody></table>
       </section>
 
@@ -2842,16 +2842,16 @@ function AuditDetailPage() {
                   </div>
                   <div className="min-w-0">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <h3 className="text-base font-bold tracking-tight">Audit scope</h3>
+                      <h3 className="text-base font-bold tracking-tight">Running containers checked</h3>
                       {activeContainerCount > 0 && (
                         <span className="rounded-full border border-border bg-muted/25 px-2 py-0.5 font-mono text-[10px] text-muted-foreground/70">
-                          {activeContainerCount} scoped
+                          {activeContainerCount} running
                         </span>
                       )}
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {activeContainerCount > 0
-                        ? `${activeContainerCount} running container${activeContainerCount === 1 ? "" : "s"} at audit time. Details stay collapsed until needed.`
+                        ? `${activeContainerCount} container${activeContainerCount === 1 ? " was" : "s were"} running when the CIS checks started.`
                         : "No running containers were captured for this audit."}
                     </p>
                   </div>
@@ -2866,7 +2866,7 @@ function AuditDetailPage() {
                     size="sm"
                     onClick={() => setContainerScopeExpanded(open => !open)}
                     className="h-8 px-2"
-                    aria-label={containerScopeExpanded ? "Collapse audit scope" : "Expand audit scope"}
+                    aria-label={containerScopeExpanded ? "Collapse running containers" : "Expand running containers"}
                   >
                     {containerScopeExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                   </Button>
