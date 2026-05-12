@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
     Sheet, SheetClose, SheetDescription, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
@@ -434,6 +434,147 @@ function ruleValueLabel(ruleId: CgroupRuleId) {
     return "PIDs";
 }
 
+const CGROUP_RENDER_BATCH_SIZE = 18;
+
+function CgroupTargetSkeletonList({ rows = 4 }: { rows?: number }) {
+    return (
+        <div className="audit-fix-target-list overflow-hidden rounded-xl border border-white/8 bg-white/[0.02]">
+            <div className="border-b border-white/6 bg-white/[0.025] px-3 py-2">
+                <div className="h-3 w-36 animate-pulse rounded bg-white/8" />
+            </div>
+            <div className="divide-y divide-white/6">
+                {Array.from({ length: rows }, (_, index) => (
+                    <div key={`cgroup-skeleton-${index}`} className="grid gap-3 px-3 py-3 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_140px_minmax(160px,1.2fr)]">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                            <div className="h-3.5 w-3.5 shrink-0 animate-pulse rounded-full bg-white/8" />
+                            <div className="min-w-0 flex-1 space-y-1.5">
+                                <div className="h-3 w-3/4 animate-pulse rounded bg-white/10" />
+                                <div className="h-2.5 w-1/2 animate-pulse rounded bg-white/6" />
+                            </div>
+                        </div>
+                        <div className="hidden min-w-0 items-center gap-2 sm:flex">
+                            <div className="h-3.5 w-3.5 shrink-0 animate-pulse rounded bg-[#2496ED]/20" />
+                            <div className="min-w-0 flex-1 space-y-1.5">
+                                <div className="h-2.5 w-16 animate-pulse rounded bg-[#2496ED]/18" />
+                                <div className="h-2.5 w-28 animate-pulse rounded bg-white/6" />
+                            </div>
+                        </div>
+                        <div className="hidden h-8 animate-pulse rounded-md border border-white/8 bg-white/[0.035] sm:block" />
+                        <div className="grid grid-cols-3 gap-2">
+                            <div className="h-8 animate-pulse rounded-md border border-white/8 bg-white/[0.035]" />
+                            <div className="h-8 animate-pulse rounded-md border border-white/8 bg-white/[0.035]" />
+                            <div className="h-8 animate-pulse rounded-md border border-white/8 bg-white/[0.035]" />
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function LazyCgroupTargetList({
+    cgroupTargets,
+    showMemory,
+    showCpu,
+    showPids,
+    onUpdateTarget,
+}: {
+    cgroupTargets: CgroupTargetConfig[];
+    showMemory: boolean;
+    showCpu: boolean;
+    showPids: boolean;
+    onUpdateTarget: (key: string, patch: Partial<CgroupTargetConfig>) => void;
+}) {
+    const [visibleTargetCount, setVisibleTargetCount] = useState(CGROUP_RENDER_BATCH_SIZE);
+    const visibleTargets = cgroupTargets.slice(0, visibleTargetCount);
+    const grouped = visibleTargets.reduce<Record<string, CgroupTargetConfig[]>>((acc, target) => {
+        const key = target.composeProject ? `Compose project: ${target.composeProject}` : "Standalone containers";
+        (acc[key] ??= []).push(target);
+        return acc;
+    }, {});
+    const renderingMoreTargets = visibleTargetCount < cgroupTargets.length;
+
+    useEffect(() => {
+        if (visibleTargetCount >= cgroupTargets.length) return;
+
+        const frameId = window.requestAnimationFrame(() => {
+            setVisibleTargetCount((current) => Math.min(current + CGROUP_RENDER_BATCH_SIZE, cgroupTargets.length));
+        });
+        return () => window.cancelAnimationFrame(frameId);
+    }, [cgroupTargets.length, visibleTargetCount]);
+
+    return (
+        <div className="space-y-4">
+            {Object.entries(grouped).map(([group, targets]) => (
+                <div key={group} className="audit-fix-target-list overflow-hidden rounded-xl border border-white/8 bg-white/[0.02]">
+                    <div className="border-b border-white/6 bg-white/[0.025] px-3 py-2">
+                        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/35">{group}</p>
+                    </div>
+                    <div className="divide-y divide-white/6">
+                        {targets.map((target) => {
+                            const canCompose = Boolean(target.composeProject && target.composeService);
+                            const hasMemory = target.ruleIds.some((ruleId) => ruleId === "5.11");
+                            const hasCpu = target.ruleIds.some((ruleId) => ruleId === "5.12");
+                            const hasPids = target.ruleIds.some((ruleId) => ruleId === "5.29");
+                            const resources: CgroupResourceField[] = [];
+
+                            if (showMemory) {
+                                resources.push({
+                                    key: "memoryMb",
+                                    label: "Memory",
+                                    unit: "MB",
+                                    value: target.memoryMb,
+                                    min: CGROUP_RESOURCE_MINIMUMS.memoryMb,
+                                    enabled: hasMemory,
+                                    onChange: (value) => onUpdateTarget(target.key, { memoryMb: value }),
+                                });
+                            }
+
+                            if (showCpu) {
+                                resources.push({
+                                    key: "cpuShares",
+                                    label: "CPU",
+                                    unit: "shares",
+                                    value: target.cpuShares,
+                                    min: CGROUP_RESOURCE_MINIMUMS.cpuShares,
+                                    enabled: hasCpu,
+                                    onChange: (value) => onUpdateTarget(target.key, { cpuShares: value }),
+                                });
+                            }
+
+                            if (showPids) {
+                                resources.push({
+                                    key: "pidsLimit",
+                                    label: "Limit",
+                                    unit: "PIDs",
+                                    value: target.pidsLimit,
+                                    min: CGROUP_RESOURCE_MINIMUMS.pidsLimit,
+                                    enabled: hasPids,
+                                    onChange: (value) => onUpdateTarget(target.key, { pidsLimit: value }),
+                                });
+                            }
+
+                            return (
+                                <CgroupTargetEditor
+                                    key={target.key}
+                                    containerName={target.composeService ?? target.containerName}
+                                    canCompose={canCompose}
+                                    sourceLabel={canCompose ? "compose" : "runtime"}
+                                    sourceDetail={canCompose ? target.containerName : target.image || "standalone"}
+                                    strategy={target.strategy}
+                                    onStrategyChange={(strategy) => onUpdateTarget(target.key, { strategy })}
+                                    resources={resources}
+                                />
+                            );
+                        })}
+                    </div>
+                </div>
+            ))}
+            {renderingMoreTargets && <CgroupTargetSkeletonList rows={2} />}
+        </div>
+    );
+}
+
 function ConfigureResourcesStep({
     cgroupTargets,
     cgroupLoading,
@@ -451,11 +592,6 @@ function ConfigureResourcesStep({
     onBack: () => void;
     onApply: () => void;
 }) {
-    const grouped = cgroupTargets.reduce<Record<string, CgroupTargetConfig[]>>((acc, target) => {
-        const key = target.composeProject ? `Compose project: ${target.composeProject}` : "Standalone containers";
-        (acc[key] ??= []).push(target);
-        return acc;
-    }, {});
     const showMemory = selectedCgroupRuleIds.includes("5.11");
     const showCpu = selectedCgroupRuleIds.includes("5.12");
     const showPids = selectedCgroupRuleIds.includes("5.29");
@@ -492,82 +628,32 @@ function ConfigureResourcesStep({
             )}
 
             {cgroupLoading ? (
-                <div className="rounded-xl border border-white/8 bg-white/[0.02] px-4 py-6 text-center text-sm text-white/45">
-                    <Loader2 className="mx-auto mb-2 h-4 w-4 animate-spin text-[#2496ED]" />
-                    Loading cgroup target preview...
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-[#2496ED]/18 bg-[#2496ED]/7 px-3 py-2.5">
+                        <div className="min-w-0">
+                            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#2496ED]/85">
+                                Loading cgroup preview
+                            </p>
+                            <p className="mt-0.5 text-xs text-[#2496ED]/58">
+                                Inspecting current containers and Compose metadata.
+                            </p>
+                        </div>
+                        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#2496ED]" />
+                    </div>
+                    <CgroupTargetSkeletonList rows={5} />
                 </div>
             ) : needsConcreteLimit ? null : cgroupTargets.length === 0 ? (
                 <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/8 px-4 py-3 text-sm text-emerald-300/80">
                     The agent preview did not find cgroup targets that still need these selected fixes. Applying will let the agent verify and no-op if everything already matches.
                 </div>
             ) : (
-                <div className="space-y-4">
-                    {Object.entries(grouped).map(([group, targets]) => (
-                        <div key={group} className="audit-fix-target-list overflow-hidden rounded-xl border border-white/8 bg-white/[0.02]">
-                            <div className="border-b border-white/6 bg-white/[0.025] px-3 py-2">
-                                <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/35">{group}</p>
-                            </div>
-                            <div className="divide-y divide-white/6">
-                                {targets.map((target) => {
-                                    const canCompose = Boolean(target.composeProject && target.composeService);
-                                    const hasMemory = target.ruleIds.some((ruleId) => ruleId === "5.11");
-                                    const hasCpu = target.ruleIds.some((ruleId) => ruleId === "5.12");
-                                    const hasPids = target.ruleIds.some((ruleId) => ruleId === "5.29");
-                                    const resources: CgroupResourceField[] = [];
-
-                                    if (showMemory) {
-                                        resources.push({
-                                            key: "memoryMb",
-                                            label: "Memory",
-                                            unit: "MB",
-                                            value: target.memoryMb,
-                                            min: CGROUP_RESOURCE_MINIMUMS.memoryMb,
-                                            enabled: hasMemory,
-                                            onChange: (value) => onUpdateTarget(target.key, { memoryMb: value }),
-                                        });
-                                    }
-
-                                    if (showCpu) {
-                                        resources.push({
-                                            key: "cpuShares",
-                                            label: "CPU",
-                                            unit: "shares",
-                                            value: target.cpuShares,
-                                            min: CGROUP_RESOURCE_MINIMUMS.cpuShares,
-                                            enabled: hasCpu,
-                                            onChange: (value) => onUpdateTarget(target.key, { cpuShares: value }),
-                                        });
-                                    }
-
-                                    if (showPids) {
-                                        resources.push({
-                                            key: "pidsLimit",
-                                            label: "Limit",
-                                            unit: "PIDs",
-                                            value: target.pidsLimit,
-                                            min: CGROUP_RESOURCE_MINIMUMS.pidsLimit,
-                                            enabled: hasPids,
-                                            onChange: (value) => onUpdateTarget(target.key, { pidsLimit: value }),
-                                        });
-                                    }
-
-                                    return (
-                                        <CgroupTargetEditor
-                                            key={target.key}
-                                            containerName={target.composeService ?? target.containerName}
-                                            canCompose={canCompose}
-                                            sourceLabel={canCompose ? "compose" : "runtime"}
-                                            sourceDetail={canCompose ? target.containerName : target.image || "standalone"}
-                                            strategy={target.strategy}
-                                            onStrategyChange={(strategy) => onUpdateTarget(target.key, { strategy })}
-                                            resources={resources}
-                                        />
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                <LazyCgroupTargetList
+                    cgroupTargets={cgroupTargets}
+                    showMemory={showMemory}
+                    showCpu={showCpu}
+                    showPids={showPids}
+                    onUpdateTarget={onUpdateTarget}
+                />
             )}
 
             <div className="flex items-center gap-3 pt-1">

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import { startTransition, useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { agentApi } from "@/lib/api/agent";
@@ -416,6 +416,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
     const completeFixJob = useAuditStore((state) => state.completeFixJob);
     const cancelRequestedRef = useRef(false);
     const activeRuleRef = useRef<string | null>(null);
+    const cgroupLoadRequestRef = useRef(0);
 
     const commitSession = useCallback((updater: FixAllSessionState | ((current: FixAllSessionState) => FixAllSessionState)) => {
         const next = typeof updater === "function" ? updater(sessionRef.current) : updater;
@@ -437,6 +438,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
                 return { ...current, open: true };
             }
 
+            cgroupLoadRequestRef.current += 1;
             return createFixAllSession(rules);
         });
         cancelRequestedRef.current = false;
@@ -463,6 +465,18 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
         }));
     }, [commitSession]);
 
+    const setRulesSelected = useCallback((ruleIds: string[], selected: boolean) => {
+        const selectedRuleIds = new Set(ruleIds);
+        commitSession((current) => ({
+            ...current,
+            ruleStatuses: current.ruleStatuses.map(status => (
+                status.state === "pending" && selectedRuleIds.has(status.ruleId)
+                ? { ...status, selected }
+                : status
+            )),
+        }));
+    }, [commitSession]);
+
     const updateCgroupTarget = useCallback((key: string, patch: Partial<CgroupTargetConfig>) => {
         commitSession((current) => ({
             ...current,
@@ -473,13 +487,17 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
     }, [commitSession]);
 
     const backToConfirm = useCallback(() => {
-        commitSession((current) => ({ ...current, step: "confirm" }));
+        cgroupLoadRequestRef.current += 1;
+        commitSession((current) => ({ ...current, step: "confirm", cgroupLoading: false }));
     }, [commitSession]);
 
     const closeFixAll = useCallback(() => {
+        cgroupLoadRequestRef.current += 1;
         commitSession((current) => {
             if (current.ruleStatuses.length > 0) {
-                return { ...current, open: false };
+                return current.cgroupLoading
+                    ? { ...current, open: false, step: "confirm", cgroupTargets: [], cgroupLoading: false }
+                    : { ...current, open: false };
             }
 
             cancelRequestedRef.current = false;
@@ -490,7 +508,16 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
 
     const loadCgroupConfig = useCallback(async (ruleIds: CgroupRuleId[]) => {
         if (sessionRef.current.cgroupLoading) return;
-        commitSession((current) => ({ ...current, cgroupLoading: true }));
+        const requestId = cgroupLoadRequestRef.current + 1;
+        cgroupLoadRequestRef.current = requestId;
+        startTransition(() => {
+            commitSession((current) => ({
+                ...current,
+                step: "configure",
+                cgroupTargets: [],
+                cgroupLoading: true,
+            }));
+        });
         try {
             const previews = await Promise.all(ruleIds.map(async (ruleId) => ({
                 ruleId,
@@ -506,19 +533,30 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
                 }
             }
 
-            commitSession((current) => ({
-                ...current,
-                cgroupTargets: Array.from(configs.values()).sort((a, b) => {
-                    const projectCompare = (a.composeProject ?? "").localeCompare(b.composeProject ?? "");
-                    if (projectCompare !== 0) return projectCompare;
-                    return (a.composeService ?? a.containerName).localeCompare(b.composeService ?? b.containerName);
-                }),
-                cgroupLoading: false,
-                step: "configure",
-            }));
+            if (cgroupLoadRequestRef.current !== requestId) return;
+
+            startTransition(() => {
+                commitSession((current) => ({
+                    ...current,
+                    cgroupTargets: Array.from(configs.values()).sort((a, b) => {
+                        const projectCompare = (a.composeProject ?? "").localeCompare(b.composeProject ?? "");
+                        if (projectCompare !== 0) return projectCompare;
+                        return (a.composeService ?? a.containerName).localeCompare(b.composeService ?? b.containerName);
+                    }),
+                    cgroupLoading: false,
+                    step: "configure",
+                }));
+            });
         } catch {
-            toast.error("Failed to load cgroup resource preview");
-            commitSession((current) => ({ ...current, cgroupLoading: false }));
+            if (cgroupLoadRequestRef.current === requestId) {
+                toast.error("Failed to load cgroup resource preview");
+                commitSession((current) => ({
+                    ...current,
+                    step: "confirm",
+                    cgroupTargets: [],
+                    cgroupLoading: false,
+                }));
+            }
         }
     }, [agentAccessMode, agentId, agentUrl, commitSession, token]);
 
@@ -606,7 +644,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
         }
 
         if (activeStep === "confirm" && selectedCgroupRuleIds.length > 0) {
-            await loadCgroupConfig(selectedCgroupRuleIds);
+            void loadCgroupConfig(selectedCgroupRuleIds);
             return;
         }
 
@@ -953,6 +991,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
         cancelApplyAll,
         toggleRule,
         setAllSelected,
+        setRulesSelected,
         updateCgroupTarget,
         backToConfirm,
     };
