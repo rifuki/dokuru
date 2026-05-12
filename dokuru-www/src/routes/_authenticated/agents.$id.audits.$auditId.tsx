@@ -2234,6 +2234,15 @@ function AuditDetailPage() {
     : `Fix All (${autoFixableResults.length})`;
   const showFixAllAction = autoFixableResults.length > 0 || fixAllSessionActive || fixAllResultFailed;
   const fixAllCompletedCount = ruleStatuses.filter(status => status.selected && status.state === "done").length;
+  const fixAllSummaryButtonLabel = fixAllStep === "applying" && ruleStatuses.length > 0
+    ? "View progress"
+    : fixAllResultSuccessful
+    ? "View result"
+    : fixAllResultFailed
+    ? "Retry"
+    : fixControlsLocked
+    ? "Running"
+    : `Fix All (${autoFixableResults.length})`;
   const auditListLayoutSignature = [
     [...appliedRuleIds].sort().join(","),
     autoFixableResults.length,
@@ -2475,28 +2484,11 @@ function AuditDetailPage() {
                     </span>
                   </div>
                 </div>
-                <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:items-end lg:flex-row lg:items-center">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Clock className="h-4 w-4" />
-                    <span className="font-mono font-medium">
-                      {fmtDate(auditData.timestamp).split(",")[1]?.trim() ?? fmtDate(auditData.timestamp)}
-                    </span>
-                  </div>
-                  {showFixAllAction && (
-                    <button
-                      type="button"
-                      onClick={() => openFixAll(autoFixableResults)}
-                      disabled={fixAllButtonDisabled}
-                      className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-[#2496ED] px-3.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-[#1e80cc] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#2496ED] sm:w-auto"
-                    >
-                      {fixAllStep === "applying" || (fixControlsLocked && !fixAllSessionActive) ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Wrench className="h-4 w-4" />
-                      )}
-                      {fixAllButtonLabel}
-                    </button>
-                  )}
+                <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
+                  <Clock className="h-4 w-4" />
+                  <span className="font-mono font-medium">
+                    {fmtDate(auditData.timestamp).split(",")[1]?.trim() ?? fmtDate(auditData.timestamp)}
+                  </span>
                 </div>
               </div>
             </div>
@@ -2717,19 +2709,39 @@ function AuditDetailPage() {
                     </div>
                   </div>
                   <div className="rounded-[10px] border border-[#2496ED]/25 bg-[#2496ED]/5 px-3 py-2">
-                    <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Remediation</p>
-                    <p className="mt-2 text-lg font-black leading-none text-[#2496ED]">
-                      {fixAllStep === "applying" && ruleStatuses.length > 0 ? fixAllCompletedCount : autoFixableResults.length}
-                    </p>
-                    <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
-                      {fixAllStep === "applying" && ruleStatuses.length > 0
-                        ? `of ${fixAllSelectedCount} done`
-                        : fixAllResultSuccessful
-                        ? "Result ready"
-                        : fixAllResultFailed
-                        ? "Retry available"
-                        : "Auto-fixable"}
-                    </p>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">Remediation</p>
+                        <p className="mt-2 text-lg font-black leading-none text-[#2496ED]">
+                          {fixAllStep === "applying" && ruleStatuses.length > 0 ? fixAllCompletedCount : autoFixableResults.length}
+                        </p>
+                        <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
+                          {fixAllStep === "applying" && ruleStatuses.length > 0
+                            ? `of ${fixAllSelectedCount} done`
+                            : fixAllResultSuccessful
+                            ? "Result ready"
+                            : fixAllResultFailed
+                            ? "Retry available"
+                            : "Auto-fixable"}
+                        </p>
+                      </div>
+                      {showFixAllAction && (
+                        <button
+                          type="button"
+                          onClick={() => openFixAll(autoFixableResults)}
+                          disabled={fixAllButtonDisabled}
+                          title={fixAllButtonLabel}
+                          className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md bg-[#2496ED] px-2.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-[#1e80cc] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#2496ED]"
+                        >
+                          {fixAllStep === "applying" || (fixControlsLocked && !fixAllSessionActive) ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Wrench className="h-3.5 w-3.5" />
+                          )}
+                          {fixAllSummaryButtonLabel}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2804,20 +2816,6 @@ function AuditDetailPage() {
           ) : comparisonHistoryLoading ? (
             <BeforeAfterComparisonSkeleton />
           ) : null}
-
-          {shouldShowFixHistory && agent && (
-            <FixHistoryPanel
-              agentId={id}
-              agentUrl={agent.url}
-              agentAccessMode={agent.access_mode}
-              token={token}
-              historyEntries={scopedFixHistoryEntries}
-              loading={fixHistoryQuery.isLoading && scopedFixHistoryEntries.length === 0}
-              refreshing={fixHistoryQuery.isFetching && !fixHistoryQuery.isLoading}
-              error={fixHistoryQuery.isError}
-              onRefresh={() => fixHistoryQuery.refetch()}
-            />
-          )}
 
           {/* ── Search & Filters ────────────────────────────── */}
           <div ref={resultsAnchorRef} className="space-y-2">
@@ -2974,6 +2972,20 @@ function AuditDetailPage() {
               </div>
             )}
           </div>
+
+          {shouldShowFixHistory && agent && (
+            <FixHistoryPanel
+              agentId={id}
+              agentUrl={agent.url}
+              agentAccessMode={agent.access_mode}
+              token={token}
+              historyEntries={scopedFixHistoryEntries}
+              loading={fixHistoryQuery.isLoading && scopedFixHistoryEntries.length === 0}
+              refreshing={fixHistoryQuery.isFetching && !fixHistoryQuery.isLoading}
+              error={fixHistoryQuery.isError}
+              onRefresh={() => fixHistoryQuery.refetch()}
+            />
+          )}
 
           {/* ── Results grouped by pillar or section ───────── */}
           {Object.keys(groupedResults).length === 0 ? (

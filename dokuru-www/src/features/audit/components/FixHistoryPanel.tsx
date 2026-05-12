@@ -2,6 +2,9 @@ import { useCallback, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
     AlertTriangle,
+    ChevronDown,
+    ChevronRight,
+    ChevronUp,
     CheckCircle2,
     History,
     Loader2,
@@ -27,6 +30,7 @@ import { agentDirectApi, type FixHistoryEntry, type FixOutcome, type FixProgress
 import { ProgressEventsPanel } from "@/features/audit/components/ProgressEventsPanel";
 import { appendFixProgressEvents } from "@/lib/fix-progress-events";
 import { LOCAL_AGENT_ID } from "@/lib/local-agent";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type FixStreamMessage =
     | { type: "progress"; data: FixProgress }
@@ -71,6 +75,13 @@ function formatTarget(target: FixTarget): string {
     return parts.length > 0 ? parts.join(" · ") : "previous limits captured";
 }
 
+function rollbackSnapshotCount(entry: FixHistoryEntry): number {
+    return entry.rollback_targets.length
+        + (entry.compose_rollback_targets?.length ?? 0)
+        + (entry.container_rollback_targets?.length ?? 0)
+        + (entry.host_file_rollback_targets?.length ?? 0);
+}
+
 function statusStyles(outcome: FixOutcome) {
     if (outcome.status === "Applied") {
         return {
@@ -99,6 +110,8 @@ export function FixHistoryPanel({
 }: FixHistoryPanelProps) {
     const [rollingBackId, setRollingBackId] = useState<string | null>(null);
     const [confirmEntry, setConfirmEntry] = useState<FixHistoryEntry | null>(null);
+    const [expanded, setExpanded] = useState(false);
+    const [expandedEntryIds, setExpandedEntryIds] = useState<Set<string>>(() => new Set());
     const [rollbackProgress, setRollbackProgress] = useState<Record<string, FixProgress[]>>({});
     const [rollbackOutcomes, setRollbackOutcomes] = useState<Record<string, FixOutcome>>({});
 
@@ -117,6 +130,21 @@ export function FixHistoryPanel({
     const loading = externalLoading ?? (historyQuery.isLoading && history.length === 0);
     const refreshing = externalRefreshing ?? (historyQuery.isFetching && !loading);
     const hasError = externalError ?? historyQuery.isError;
+    const rolledBackCount = history.filter((entry) => (rollbackOutcomes[entry.id] ?? entry.rollback_outcome)?.status === "Applied").length;
+    const restorableCount = history.filter((entry) => entry.rollback_supported && (rollbackOutcomes[entry.id] ?? entry.rollback_outcome)?.status !== "Applied").length;
+    const visibleHistory = history.slice(0, 8);
+
+    const toggleEntry = useCallback((entryId: string) => {
+        setExpandedEntryIds((current) => {
+            const next = new Set(current);
+            if (next.has(entryId)) {
+                next.delete(entryId);
+            } else {
+                next.add(entryId);
+            }
+            return next;
+        });
+    }, []);
 
     const refreshHistory = useCallback(async () => {
         if (onRefresh) {
@@ -202,90 +230,158 @@ export function FixHistoryPanel({
 
     return (
         <>
-            <section className="rounded-2xl border border-border bg-card dark:bg-gradient-to-br dark:from-[#0A0A0B] dark:to-[#111113] overflow-hidden">
-                <div className="flex flex-col gap-3 border-b border-border px-5 py-4 md:flex-row md:items-center md:justify-between">
-                    <div className="flex items-start gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#2496ED]/25 bg-[#2496ED]/10 text-[#2496ED]">
-                            <History className="h-5 w-5" />
-                        </div>
-                        <div>
-                            <h3 className="text-base font-bold tracking-tight">Fix History & Rollback</h3>
-                            <p className="text-sm text-muted-foreground">
-                                Remediations linked to this audit window. Rollback restores captured host, Compose, container, or cgroup snapshots.
-                            </p>
+            <section className="overflow-hidden rounded-2xl border border-border bg-card dark:bg-gradient-to-br dark:from-[#0A0A0B] dark:to-[#111113]">
+                <div className={cn("px-5 py-4", expanded && "border-b border-border")}>
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <button
+                            type="button"
+                            onClick={() => setExpanded(open => !open)}
+                            className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                            aria-expanded={expanded}
+                        >
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#2496ED]/25 bg-[#2496ED]/10 text-[#2496ED]">
+                                <History className="h-5 w-5" />
+                            </div>
+                            <div className="min-w-0">
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                    <h3 className="text-base font-bold tracking-tight">Recovery & Rollback</h3>
+                                    {!loading && history.length > 0 && (
+                                        <span className="rounded-full border border-border bg-muted/25 px-2 py-0.5 font-mono text-[10px] text-muted-foreground/70">
+                                            {history.length} scoped
+                                        </span>
+                                    )}
+                                </div>
+                                {loading ? (
+                                    <Skeleton className="mt-2 h-4 w-full max-w-md" />
+                                ) : (
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                        {history.length > 0
+                                            ? `${restorableCount} restorable, ${rolledBackCount} rolled back. Details stay collapsed until needed.`
+                                            : "Rollback history scoped to this audit window."}
+                                    </p>
+                                )}
+                            </div>
+                        </button>
+
+                        <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                            {loading ? (
+                                <>
+                                    <Skeleton className="h-7 w-24 rounded-lg" />
+                                    <Skeleton className="h-7 w-20 rounded-lg" />
+                                </>
+                            ) : (
+                                <>
+                                    <span className="rounded-lg border border-[#2496ED]/25 bg-[#2496ED]/8 px-2.5 py-1 text-xs font-bold text-[#2496ED]">
+                                        {restorableCount} restorable
+                                    </span>
+                                    {rolledBackCount > 0 && (
+                                        <span className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-400">
+                                            {rolledBackCount} rolled back
+                                        </span>
+                                    )}
+                                </>
+                            )}
+                            <Button variant="outline" size="sm" onClick={() => void refreshHistory()} disabled={refreshing || loading}>
+                                <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+                                Refresh
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => setExpanded(open => !open)} className="h-8 px-2" aria-label={expanded ? "Collapse recovery history" : "Expand recovery history"}>
+                                {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </Button>
                         </div>
                     </div>
-                    <Button variant="outline" size="sm" onClick={() => void refreshHistory()} disabled={refreshing}>
-                        {refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                        {refreshing ? "Refreshing" : "Refresh"}
-                    </Button>
                 </div>
 
-                {hasError ? (
-                    <div className="flex items-center gap-2 px-5 py-6 text-sm text-amber-500">
-                        <AlertTriangle className="h-4 w-4" />
-                        Failed to load fix history from agent. Check connectivity, then refresh.
-                    </div>
-                ) : loading ? (
-                    <div className="flex items-center gap-2 px-5 py-6 text-sm text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin text-[#2496ED]" />
-                        Loading fix history from agent...
-                    </div>
-                ) : history.length === 0 ? (
-                    <div className="px-5 py-6 text-sm text-muted-foreground">
-                        No fixes recorded for this audit window.
-                    </div>
-                ) : (
-                    <div className="divide-y divide-border">
-                        {history.slice(0, 8).map((entry) => {
-                            const status = statusStyles(entry.outcome);
-                            const StatusIcon = status.icon;
-                            const rollingBack = rollingBackId === entry.id;
-                            const rollbackOutcome = rollbackOutcomes[entry.id] ?? entry.rollback_outcome;
-                            const rollbackEvents = rollbackProgress[entry.id] ?? entry.rollback_progress_events ?? [];
-                            const rollbackApplied = rollbackOutcome?.status === "Applied";
-                            const rollbackBlocked = rollbackOutcome?.status === "Blocked";
-                            const canRollback = entry.rollback_supported && !rollbackApplied;
-
-                            return (
-                                <div key={entry.id} className="flex flex-col gap-3 px-5 py-4">
-                                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <span className="rounded border border-border bg-muted/30 px-2 py-1 font-mono text-xs font-black text-muted-foreground">
-                                                {entry.request.rule_id}
-                                            </span>
-                                            <span className={cn("inline-flex items-center gap-1.5 rounded border px-2 py-1 text-xs font-bold", status.className)}>
-                                                <StatusIcon className="h-3 w-3" />
-                                                {entry.outcome.status}
-                                            </span>
-                                            <span className="inline-flex items-center gap-1.5 rounded border border-border bg-muted/30 px-2 py-1 text-xs font-bold text-muted-foreground">
-                                                <History className="h-3 w-3" />
-                                                {formatTime(entry.timestamp)}
-                                            </span>
-                                            {entry.rollback_supported ? (
-                                                <span className="inline-flex items-center rounded border border-border bg-muted/10 px-2 py-1 text-xs font-medium text-muted-foreground/80">
-                                                    snapshot captured
-                                                </span>
-                                            ) : (
-                                                <span className="inline-flex items-center rounded border border-border/50 bg-muted/5 px-2 py-1 text-xs font-medium text-muted-foreground/40">
-                                                    no snapshot
-                                                </span>
-                                            )}
-                                            {rollbackApplied && (
-                                                <span className="inline-flex items-center gap-1.5 rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-xs font-bold text-emerald-400">
-                                                    <CheckCircle2 className="h-3 w-3" />
-                                                    rolled back
-                                                </span>
-                                            )}
-                                            {rollbackBlocked && (
-                                                <span className="inline-flex items-center gap-1.5 rounded border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-xs font-bold text-amber-400">
-                                                    <ShieldAlert className="h-3 w-3" />
-                                                    rollback blocked
-                                                </span>
-                                            )}
+                {expanded && (
+                    hasError ? (
+                        <div className="flex items-center gap-2 px-5 py-6 text-sm text-amber-500">
+                            <AlertTriangle className="h-4 w-4" />
+                            Failed to load fix history from agent. Check connectivity, then refresh.
+                        </div>
+                    ) : loading ? (
+                        <div className="divide-y divide-border">
+                            {Array.from({ length: 3 }, (_, index) => (
+                                <div key={`fix-history-skeleton-${index}`} className="px-5 py-4">
+                                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                        <div className="min-w-0 flex-1 space-y-2">
+                                            <div className="flex flex-wrap gap-2">
+                                                <Skeleton className="h-6 w-12 rounded" />
+                                                <Skeleton className="h-6 w-20 rounded" />
+                                                <Skeleton className="h-6 w-24 rounded" />
+                                            </div>
+                                            <Skeleton className="h-4 w-full max-w-2xl" />
                                         </div>
+                                        <Skeleton className="h-8 w-24 rounded-md" />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : history.length === 0 ? (
+                        <div className="px-5 py-6 text-sm text-muted-foreground">
+                            No fixes recorded for this audit window.
+                        </div>
+                    ) : (
+                        <div className="divide-y divide-border">
+                            {visibleHistory.map((entry) => {
+                                const status = statusStyles(entry.outcome);
+                                const StatusIcon = status.icon;
+                                const rollingBack = rollingBackId === entry.id;
+                                const rollbackOutcome = rollbackOutcomes[entry.id] ?? entry.rollback_outcome;
+                                const rollbackEvents = rollbackProgress[entry.id] ?? entry.rollback_progress_events ?? [];
+                                const rollbackApplied = rollbackOutcome?.status === "Applied";
+                                const rollbackBlocked = rollbackOutcome?.status === "Blocked";
+                                const canRollback = entry.rollback_supported && !rollbackApplied;
+                                const rowExpanded = expandedEntryIds.has(entry.id) || rollingBack || (rollbackProgress[entry.id]?.length ?? 0) > 0;
+                                const snapshotCount = rollbackSnapshotCount(entry);
 
-                                        <div className="flex-shrink-0">
+                                return (
+                                    <div key={entry.id}>
+                                        <div className="grid gap-3 px-5 py-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
+                                            <button
+                                                type="button"
+                                                onClick={() => toggleEntry(entry.id)}
+                                                className="grid min-w-0 grid-cols-[18px_minmax(0,1fr)] gap-3 text-left"
+                                                aria-expanded={rowExpanded}
+                                            >
+                                                <ChevronRight className={cn("mt-1 h-4 w-4 text-muted-foreground/50 transition-transform", rowExpanded && "rotate-90 text-[#2496ED]")} />
+                                                <span className="min-w-0">
+                                                    <span className="flex flex-wrap items-center gap-2">
+                                                        <span className="rounded border border-border bg-muted/30 px-2 py-1 font-mono text-xs font-black text-muted-foreground">
+                                                            {entry.request.rule_id}
+                                                        </span>
+                                                        <span className={cn("inline-flex items-center gap-1.5 rounded border px-2 py-1 text-xs font-bold", status.className)}>
+                                                            <StatusIcon className="h-3 w-3" />
+                                                            {entry.outcome.status}
+                                                        </span>
+                                                        <span className="inline-flex items-center gap-1.5 rounded border border-border bg-muted/30 px-2 py-1 text-xs font-bold text-muted-foreground">
+                                                            <History className="h-3 w-3" />
+                                                            {formatTime(entry.timestamp)}
+                                                        </span>
+                                                        <span className={cn(
+                                                            "inline-flex items-center rounded border px-2 py-1 text-xs font-medium",
+                                                            snapshotCount > 0 ? "border-border bg-muted/10 text-muted-foreground/80" : "border-border/50 bg-muted/5 text-muted-foreground/40",
+                                                        )}>
+                                                            {snapshotCount > 0 ? `${snapshotCount} snapshot${snapshotCount === 1 ? "" : "s"}` : "no snapshot"}
+                                                        </span>
+                                                        {rollbackApplied && (
+                                                            <span className="inline-flex items-center gap-1.5 rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-xs font-bold text-emerald-400">
+                                                                <CheckCircle2 className="h-3 w-3" />
+                                                                rolled back
+                                                            </span>
+                                                        )}
+                                                        {rollbackBlocked && (
+                                                            <span className="inline-flex items-center gap-1.5 rounded border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-xs font-bold text-amber-400">
+                                                                <ShieldAlert className="h-3 w-3" />
+                                                                rollback blocked
+                                                            </span>
+                                                        )}
+                                                    </span>
+                                                    <span className="mt-2 line-clamp-2 block text-sm font-medium leading-snug text-foreground/82">
+                                                        {entry.outcome.message}
+                                                    </span>
+                                                </span>
+                                            </button>
+
                                             {(entry.rollback_supported || rollbackApplied) && (
                                                 <Button
                                                     variant="secondary"
@@ -302,116 +398,119 @@ export function FixHistoryPanel({
                                                 </Button>
                                             )}
                                         </div>
-                                    </div>
 
-                                    <div className="space-y-3">
-                                        <p className="text-sm font-medium leading-snug text-foreground/90">
-                                            {entry.outcome.message}
-                                        </p>
-
-                                        {entry.rollback_targets.length > 0 ? (
-                                            <div className="rounded-lg border border-border bg-muted/30 p-3">
-                                                <p className="mb-2 text-[10px] font-mono uppercase tracking-[0.16em] text-muted-foreground">
-                                                    Rollback targets
-                                                </p>
-                                                <div className="grid gap-1.5">
-                                                    {entry.rollback_targets.slice(0, 4).map((target) => (
-                                                        <div key={target.container_id} className="flex flex-col gap-1 text-xs font-mono text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-                                                            <span className="truncate text-foreground/80">{target.container_id.slice(0, 12)}</span>
-                                                            <span>{formatTarget(target)}</span>
+                                        {rowExpanded && (
+                                            <div className="space-y-3 border-t border-border/60 bg-muted/[0.018] px-5 py-4 md:pl-16">
+                                                {entry.rollback_targets.length > 0 ? (
+                                                    <div className="rounded-lg border border-border bg-muted/30 p-3">
+                                                        <p className="mb-2 text-[10px] font-mono uppercase tracking-[0.16em] text-muted-foreground">
+                                                            Rollback targets
+                                                        </p>
+                                                        <div className="grid gap-1.5">
+                                                            {entry.rollback_targets.slice(0, 4).map((target) => (
+                                                                <div key={target.container_id} className="flex flex-col gap-1 text-xs font-mono text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                                                                    <span className="truncate text-foreground/80">{target.container_id.slice(0, 12)}</span>
+                                                                    <span>{formatTarget(target)}</span>
+                                                                </div>
+                                                            ))}
                                                         </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        ) : null}
+                                                    </div>
+                                                ) : null}
 
-                                        {(entry.compose_rollback_targets?.length ?? 0) > 0 ? (
-                                            <div className="rounded-lg border border-border bg-muted/30 p-3">
-                                                <p className="mb-2 text-[10px] font-mono uppercase tracking-[0.16em] text-muted-foreground">
-                                                    Compose snapshots
-                                                </p>
-                                                <div className="grid gap-1.5">
-                                                    {entry.compose_rollback_targets?.slice(0, 4).map((target) => (
-                                                        <div key={`${target.project}:${target.service}:${target.compose_path}`} className="flex flex-col gap-1 text-xs font-mono text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-                                                            <span className="truncate text-foreground/80">{target.project}:{target.service}</span>
-                                                            <span>{target.backup_path ? "file snapshot captured" : target.delete_on_rollback ? "delete created override" : "snapshot unavailable"}</span>
+                                                {(entry.compose_rollback_targets?.length ?? 0) > 0 ? (
+                                                    <div className="rounded-lg border border-border bg-muted/30 p-3">
+                                                        <p className="mb-2 text-[10px] font-mono uppercase tracking-[0.16em] text-muted-foreground">
+                                                            Compose snapshots
+                                                        </p>
+                                                        <div className="grid gap-1.5">
+                                                            {entry.compose_rollback_targets?.slice(0, 4).map((target) => (
+                                                                <div key={`${target.project}:${target.service}:${target.compose_path}`} className="flex flex-col gap-1 text-xs font-mono text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                                                                    <span className="truncate text-foreground/80">{target.project}:{target.service}</span>
+                                                                    <span>{target.backup_path ? "file snapshot captured" : target.delete_on_rollback ? "delete created override" : "snapshot unavailable"}</span>
+                                                                </div>
+                                                            ))}
                                                         </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        ) : null}
+                                                    </div>
+                                                ) : null}
 
-                                        {(entry.container_rollback_targets?.length ?? 0) > 0 ? (
-                                            <div className="rounded-lg border border-border bg-muted/30 p-3">
-                                                <p className="mb-2 text-[10px] font-mono uppercase tracking-[0.16em] text-muted-foreground">
-                                                    Container snapshots
-                                                </p>
-                                                <div className="grid gap-1.5">
-                                                    {entry.container_rollback_targets?.slice(0, 4).map((target) => (
-                                                        <div key={`${target.container_id}:${target.snapshot_path}`} className="flex flex-col gap-1 text-xs font-mono text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-                                                            <span className="truncate text-foreground/80">{target.container_name || target.container_id.slice(0, 12)}</span>
-                                                            <span>
-                                                                {target.snapshot_note ?? "full inspect snapshot"}
-                                                                {target.original_user ? ` · was ${target.original_user}` : ""}
-                                                                {target.was_running ? " · running" : " · stopped"}
-                                                            </span>
+                                                {(entry.container_rollback_targets?.length ?? 0) > 0 ? (
+                                                    <div className="rounded-lg border border-border bg-muted/30 p-3">
+                                                        <p className="mb-2 text-[10px] font-mono uppercase tracking-[0.16em] text-muted-foreground">
+                                                            Container snapshots
+                                                        </p>
+                                                        <div className="grid gap-1.5">
+                                                            {entry.container_rollback_targets?.slice(0, 4).map((target) => (
+                                                                <div key={`${target.container_id}:${target.snapshot_path}`} className="flex flex-col gap-1 text-xs font-mono text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                                                                    <span className="truncate text-foreground/80">{target.container_name || target.container_id.slice(0, 12)}</span>
+                                                                    <span>
+                                                                        {target.snapshot_note ?? "full inspect snapshot"}
+                                                                        {target.original_user ? ` · was ${target.original_user}` : ""}
+                                                                        {target.was_running ? " · running" : " · stopped"}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
                                                         </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        ) : null}
+                                                    </div>
+                                                ) : null}
 
-                                        {(entry.host_file_rollback_targets?.length ?? 0) > 0 ? (
-                                            <div className="rounded-lg border border-border bg-muted/30 p-3">
-                                                <p className="mb-2 text-[10px] font-mono uppercase tracking-[0.16em] text-muted-foreground">
-                                                    Host/source snapshots
-                                                </p>
-                                                <div className="grid gap-1.5">
-                                                    {entry.host_file_rollback_targets?.slice(0, 4).map((target) => (
-                                                        <div key={`${target.path}:${target.backup_path ?? "created"}`} className="flex flex-col gap-1 text-xs font-mono text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-                                                            <span className="truncate text-foreground/80">{target.path}</span>
-                                                            <span>{target.existed ? "file snapshot captured" : "delete created file"}</span>
+                                                {(entry.host_file_rollback_targets?.length ?? 0) > 0 ? (
+                                                    <div className="rounded-lg border border-border bg-muted/30 p-3">
+                                                        <p className="mb-2 text-[10px] font-mono uppercase tracking-[0.16em] text-muted-foreground">
+                                                            Host/source snapshots
+                                                        </p>
+                                                        <div className="grid gap-1.5">
+                                                            {entry.host_file_rollback_targets?.slice(0, 4).map((target) => (
+                                                                <div key={`${target.path}:${target.backup_path ?? "created"}`} className="flex flex-col gap-1 text-xs font-mono text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                                                                    <span className="truncate text-foreground/80">{target.path}</span>
+                                                                    <span>{target.existed ? "file snapshot captured" : "delete created file"}</span>
+                                                                </div>
+                                                            ))}
                                                         </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        ) : null}
+                                                    </div>
+                                                ) : null}
 
-                                        {!entry.rollback_supported && entry.rollback_note && (
-                                            <p className="text-xs text-muted-foreground/70">
-                                                {entry.rollback_note}
-                                            </p>
-                                        )}
+                                                {!entry.rollback_supported && entry.rollback_note && (
+                                                    <p className="text-xs text-muted-foreground/70">
+                                                        {entry.rollback_note}
+                                                    </p>
+                                                )}
 
-                                        {(rollingBack || rollbackEvents.length > 0) && (
-                                            <ProgressEventsPanel
-                                                progressEvents={rollbackEvents}
-                                                title={`rollback ${entry.request.rule_id} evidence stream`}
-                                                emptyMessage="Waiting for rollback evidence"
-                                                className="shadow-none"
-                                                resizable
-                                                storageKey={`dokuru_rollback_evidence_${entry.id}`}
-                                                defaultHeight={360}
-                                                minHeight={180}
-                                                maxHeight={900}
-                                            />
-                                        )}
+                                                {(rollingBack || rollbackEvents.length > 0) && (
+                                                    <ProgressEventsPanel
+                                                        progressEvents={rollbackEvents}
+                                                        title={`rollback ${entry.request.rule_id} evidence stream`}
+                                                        emptyMessage="Waiting for rollback evidence"
+                                                        className="shadow-none"
+                                                        resizable
+                                                        storageKey={`dokuru_rollback_evidence_${entry.id}`}
+                                                        defaultHeight={300}
+                                                        minHeight={180}
+                                                        maxHeight={900}
+                                                    />
+                                                )}
 
-                                        {rollbackOutcome && (
-                                            <div className={cn(
-                                                "rounded-lg border px-3 py-2 text-xs leading-relaxed",
-                                                rollbackOutcome.status === "Applied"
-                                                    ? "border-emerald-500/20 bg-emerald-500/8 text-emerald-200/80"
-                                                    : "border-amber-500/20 bg-amber-500/8 text-amber-100/80",
-                                            )}>
-                                                {rollbackOutcome.message}
+                                                {rollbackOutcome && (
+                                                    <div className={cn(
+                                                        "rounded-lg border px-3 py-2 text-xs leading-relaxed",
+                                                        rollbackOutcome.status === "Applied"
+                                                            ? "border-emerald-500/20 bg-emerald-500/8 text-emerald-200/80"
+                                                            : "border-amber-500/20 bg-amber-500/8 text-amber-100/80",
+                                                    )}>
+                                                        {rollbackOutcome.message}
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>
+                                );
+                            })}
+                            {history.length > visibleHistory.length && (
+                                <div className="px-5 py-3 text-xs text-muted-foreground">
+                                    Showing latest {visibleHistory.length} of {history.length} scoped remediations.
                                 </div>
-                            );
-                        })}
-                    </div>
+                            )}
+                        </div>
+                    )
                 )}
             </section>
 
