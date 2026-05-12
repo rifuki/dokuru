@@ -2,6 +2,7 @@ use crate::api::infrastructure::web::response::{ApiError, ApiResult, ApiSuccess}
 use crate::api::state::AppState;
 use crate::audit::{
     AuditReport, AuditSummary, CheckResult, CheckStatus, RuleDefinition, RuleRegistry,
+    container_snapshots,
 };
 use axum::{
     extract::{
@@ -94,6 +95,7 @@ pub struct AuditReportResponse {
     hostname: String,
     docker_version: String,
     total_containers: usize,
+    active_containers: serde_json::Value,
     report: AuditViewReport,
 }
 
@@ -177,6 +179,8 @@ impl From<StoredAuditReport> for AuditReportResponse {
             hostname: stored.report.hostname,
             docker_version: stored.report.docker_version,
             total_containers: stored.report.total_containers,
+            active_containers: serde_json::to_value(stored.report.active_containers)
+                .unwrap_or_else(|_| serde_json::json!([])),
             report: AuditViewReport {
                 summary: AuditReportSummary {
                     total: stored.report.summary.total,
@@ -432,6 +436,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                 hostname: preflight.hostname,
                 docker_version: preflight.docker_version,
                 total_containers: preflight.containers.len(),
+                active_containers: container_snapshots(&preflight.containers),
                 results: stream_results.results,
                 summary: AuditSummary {
                     total: scored_total,

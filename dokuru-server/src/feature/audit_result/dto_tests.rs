@@ -10,6 +10,7 @@ mod tests {
             hostname: "test-host".to_string(),
             docker_version: "24.0.0".to_string(),
             total_containers: 5,
+            active_containers: json!([]),
             results: json!([
                 {
                     "rule_id": "1.1.1",
@@ -68,6 +69,7 @@ mod tests {
             hostname: "test-host".to_string(),
             docker_version: "24.0.0".to_string(),
             total_containers: 3,
+            active_containers: json!([]),
             results: json!([]),
             summary: AuditSummaryDto {
                 total: 5,
@@ -118,6 +120,7 @@ mod tests {
             hostname: "empty-host".to_string(),
             docker_version: "24.0.0".to_string(),
             total_containers: 0,
+            active_containers: json!([]),
             results: json!([]),
             summary: AuditSummaryDto {
                 total: 10,
@@ -159,6 +162,7 @@ mod tests {
             hostname: "complex-host".to_string(),
             docker_version: "24.0.0".to_string(),
             total_containers: 3,
+            active_containers: json!([]),
             results: results.clone(),
             summary: AuditSummaryDto {
                 total: 3,
@@ -202,6 +206,7 @@ mod tests {
                 hostname: "test".to_string(),
                 docker_version: "24.0.0".to_string(),
                 total_containers: 1,
+                active_containers: json!([]),
                 results: json!([]),
                 summary: AuditSummaryDto {
                     total: 1,

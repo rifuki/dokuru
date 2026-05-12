@@ -10,7 +10,7 @@ mod rule_registry;
 mod types;
 
 // Public API
-pub use rule_registry::{RuleDefinition, RuleRegistry};
+pub use rule_registry::{RuleDefinition, RuleRegistry, container_snapshots};
 pub use types::*;
 
 #[cfg(test)]

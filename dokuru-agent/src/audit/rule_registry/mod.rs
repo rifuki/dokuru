@@ -1,9 +1,9 @@
 // Registry for all CIS Docker Benchmark rules
 use super::types::{
-    AuditReport, AuditSummary, CheckResult, CheckStatus, FixOutcome, FixRequest, FixStatus,
-    RemediationKind, RuleCategory, Severity,
+    AuditContainerSnapshot, AuditReport, AuditSummary, CheckResult, CheckStatus, FixOutcome,
+    FixRequest, FixStatus, RemediationKind, RuleCategory, Severity,
 };
-use bollard::Docker;
+use bollard::{Docker, models::ContainerSummary};
 use chrono::Utc;
 use eyre::Result;
 use std::collections::HashMap;
@@ -22,10 +22,8 @@ const AUDIT_COMMAND_TIMEOUT: Duration = Duration::from_secs(15);
 
 // ── Rule Definition ──────────────────────────────────────────────────────────
 
-pub type CheckFn = fn(
-    &Docker,
-    &[bollard::models::ContainerSummary],
-) -> Pin<Box<dyn Future<Output = Result<CheckResult>> + Send>>;
+pub type CheckFn =
+    fn(&Docker, &[ContainerSummary]) -> Pin<Box<dyn Future<Output = Result<CheckResult>> + Send>>;
 pub type FixFn = fn(&Docker) -> Pin<Box<dyn Future<Output = Result<FixOutcome>> + Send>>;
 
 /// Self-contained rule definition with metadata + logic
@@ -219,6 +217,7 @@ impl RuleRegistry {
             hostname: info.name.unwrap_or_else(|| "unknown".to_string()),
             docker_version: version.version.unwrap_or_else(|| "unknown".to_string()),
             total_containers: containers.len(),
+            active_containers: container_snapshots(&containers),
             results,
             summary: AuditSummary {
                 total: passed + failed,
@@ -357,6 +356,19 @@ impl RuleRegistry {
 
         self.fix_rule(&request.rule_id, docker).await
     }
+}
+
+pub fn container_snapshots(containers: &[ContainerSummary]) -> Vec<AuditContainerSnapshot> {
+    containers
+        .iter()
+        .map(|container| AuditContainerSnapshot {
+            id: container.id.clone().unwrap_or_default(),
+            names: container.names.clone().unwrap_or_default(),
+            image: container.image.clone().unwrap_or_default(),
+            state: container.state.clone().unwrap_or_default(),
+            status: container.status.clone().unwrap_or_default(),
+        })
+        .collect()
 }
 
 fn score_percentage(passed: usize, total: usize) -> u8 {

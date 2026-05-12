@@ -27,7 +27,7 @@ use crate::{
     api::relay_docker,
     audit::{
         AuditReport, AuditSummary, CheckResult, CheckStatus, FixOutcome, FixProgress, FixRequest,
-        RollbackRequest, RuleDefinition, RuleRegistry, fix_helpers,
+        RollbackRequest, RuleDefinition, RuleRegistry, container_snapshots, fix_helpers,
     },
     docker::{
         containers::{ContainerAction, stream_container_action},
@@ -522,6 +522,7 @@ async fn audit_progress_stream(
                 hostname: preflight.hostname,
                 docker_version: preflight.docker_version,
                 total_containers: preflight.containers.len(),
+                active_containers: container_snapshots(&preflight.containers),
                 results: stream_results.results,
                 summary: AuditSummary {
                     total: scored_total,

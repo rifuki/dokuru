@@ -9,8 +9,14 @@ pub struct SaveAuditDto {
     pub hostname: String,
     pub docker_version: String,
     pub total_containers: usize,
+    #[serde(default = "empty_array")]
+    pub active_containers: serde_json::Value,
     pub results: serde_json::Value,
     pub summary: AuditSummaryDto,
+}
+
+const fn empty_array() -> serde_json::Value {
+    serde_json::Value::Array(Vec::new())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,6 +65,7 @@ pub struct AuditResultResponse {
     pub hostname: String,
     pub docker_version: String,
     pub total_containers: i32,
+    pub active_containers: serde_json::Value,
     pub results: serde_json::Value,
     pub summary: AuditSummaryResponse,
     pub ran_at: DateTime<Utc>,
@@ -81,6 +88,7 @@ pub struct AuditReportResponse {
     pub hostname: String,
     pub docker_version: String,
     pub total_containers: i32,
+    pub active_containers: serde_json::Value,
     pub report: AuditViewReport,
 }
 

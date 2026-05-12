@@ -110,8 +110,19 @@ pub struct AuditReport {
     pub hostname: String,
     pub docker_version: String,
     pub total_containers: usize,
+    #[serde(default)]
+    pub active_containers: Vec<AuditContainerSnapshot>,
     pub results: Vec<CheckResult>,
     pub summary: AuditSummary,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AuditContainerSnapshot {
+    pub id: String,
+    pub names: Vec<String>,
+    pub image: String,
+    pub state: String,
+    pub status: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

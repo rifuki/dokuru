@@ -9,6 +9,7 @@ import {
   type AuditRemediationEffort,
   type AuditRemediationPlan,
   type AuditResponse,
+  type AuditContainerSnapshot,
   type AuditResult,
   type FixHistoryEntry,
   type FixOutcome,
@@ -21,7 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import {
   Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
-  Terminal, Wrench, AlertTriangle,
+  Terminal, Wrench, AlertTriangle, Container,
   ArrowLeft, Clock, BookOpen,
   Search, X, Layers, ArrowLeftRight, Link, FileText, Download, Printer, FileJson, RefreshCw,
 } from "lucide-react";
@@ -253,6 +254,35 @@ function groupSummariesFromResults(results: AuditResult[], keyForResult: (result
       percent: total > 0 ? Math.round((group.passed / total) * 100) : 0,
     };
   });
+}
+
+function normalizeContainerName(name: string) {
+  return name.replace(/^\/+/, "") || name;
+}
+
+function containerSnapshotName(container: AuditContainerSnapshot) {
+  return container.names.map(normalizeContainerName).find(Boolean) || container.id.slice(0, 12) || "unknown";
+}
+
+function containerSnapshotId(container: AuditContainerSnapshot) {
+  return container.id ? container.id.slice(0, 12) : "unknown";
+}
+
+function dockerContainerToAuditSnapshot(container: DockerContainer): AuditContainerSnapshot {
+  return {
+    id: container.id,
+    names: container.names,
+    image: container.image,
+    state: container.state,
+    status: container.status,
+  };
+}
+
+function activeContainerSnapshotsForAudit(audit: AuditResponse, containers: DockerContainer[]) {
+  if (audit.active_containers?.length) return audit.active_containers;
+  return containers
+    .filter(container => container.state.toLowerCase() === "running")
+    .map(dockerContainerToAuditSnapshot);
 }
 
 function severityRank(severity: string) {
@@ -1602,6 +1632,7 @@ function buildAuditDocumentHtml({
   audit,
   agent,
   results,
+  activeContainers,
   sectionSummaries,
   pillarSummaries,
   remediationPlan,
@@ -1612,6 +1643,7 @@ function buildAuditDocumentHtml({
   audit: AuditResponse;
   agent: Agent | null;
   results: AuditResult[];
+  activeContainers: AuditContainerSnapshot[];
   sectionSummaries: AuditGroupSummary[];
   pillarSummaries: AuditGroupSummary[];
   remediationPlan: AuditRemediationPlan;
@@ -1671,6 +1703,15 @@ function buildAuditDocumentHtml({
       <td>${escapeHtml(action.remediation_kind)}</td>
     </tr>
   `).join("") : `<tr><td colspan="5" class="empty">No failed checks in this audit.</td></tr>`;
+
+  const activeContainerRows = activeContainers.length > 0 ? activeContainers.map(container => `
+    <tr>
+      <td><strong>${escapeHtml(containerSnapshotName(container))}</strong><br><span>${escapeHtml(containerSnapshotId(container))}</span></td>
+      <td>${escapeHtml(container.image || "unknown")}</td>
+      <td>${escapeHtml(container.state || "running")}</td>
+      <td>${escapeHtml(container.status || "-")}</td>
+    </tr>
+  `).join("") : `<tr><td colspan="4" class="empty">No active container snapshot was captured for this audit.</td></tr>`;
 
   const appliedRows = appliedEntries.length > 0 ? appliedEntries.map(entry => `
     <tr>
@@ -1800,6 +1841,12 @@ function buildAuditDocumentHtml({
       </section>
 
       <section class="section">
+        <h2>Containers In Scope</h2>
+        <p class="lead">Running workloads captured before the CIS checks ran, defining which containers were in scope for this audit.</p>
+        <table><thead><tr><th>Container</th><th>Image</th><th>State</th><th>Status</th></tr></thead><tbody>${activeContainerRows}</tbody></table>
+      </section>
+
+      <section class="section">
         <h2>Security Pillars</h2>
         <p class="lead">Control coverage grouped by Dokuru security area.</p>
         <table><thead><tr><th>Pillar</th><th>Pass</th><th>Fail</th><th>Skipped</th><th>Coverage</th><th></th></tr></thead><tbody>${groupRows(pillarSummaries, pillarProjections)}</tbody></table>
@@ -1859,6 +1906,7 @@ function AuditDetailPage() {
   const [viewMode, setViewMode] = useState<ViewMode>(initialAuditUiState.viewMode);
   const [openRuleIds, setOpenRuleIds] = useState<Set<string>>(() => new Set(initialAuditUiState.openRuleIds));
   const [activeRuleTabs, setActiveRuleTabs] = useState<Record<string, RuleCardTab>>(initialAuditUiState.activeRuleTabs);
+  const [containerScopeExpanded, setContainerScopeExpanded] = useState(false);
   const [documentExporting, setDocumentExporting] = useState<"html" | "pdf" | null>(null);
   const fixJobs = useAuditStore((state) => state.fixJobs);
   const auditStreamStatus = auditStream?.status ?? "idle";
@@ -2149,6 +2197,8 @@ function AuditDetailPage() {
   const ruleCountSummary = displayErrorTotal > 0
     ? `${checkRuleTotal} total checks · ${evaluatedRuleTotal} scored · ${displayErrorTotal} skipped`
     : `${checkRuleTotal} total checks`;
+  const activeContainerSnapshots = auditData ? activeContainerSnapshotsForAudit(auditData, containers) : [];
+  const activeContainerCount = activeContainerSnapshots.length || auditData?.total_containers || 0;
   const appliedHistoryByRule = latestAppliedFixesAfterAudit(fixHistoryEntries, auditData);
   const scopedFixHistoryEntries = scopedFixHistoryForAudit(fixHistoryEntries, auditData, auditHistory);
   const appliedRuleIds = new Set<string>(appliedHistoryByRule.keys());
@@ -2341,6 +2391,7 @@ function AuditDetailPage() {
       audit: auditData,
       agent,
       results: baseResults,
+      activeContainers: activeContainerSnapshots,
       sectionSummaries,
       pillarSummaries,
       remediationPlan,
@@ -2670,7 +2721,7 @@ function AuditDetailPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 space-y-3.5">
+                <div className="mt-4 flex flex-1 flex-col justify-between gap-3.5">
                   {viewMode === "pillar" ? (
                     pillarSummaries.map(pillarSummary => {
                       const pillar = pillarSummary.key as SecurityPillar;
@@ -2778,6 +2829,95 @@ function AuditDetailPage() {
           ) : comparisonHistoryLoading ? (
             <BeforeAfterComparisonSkeleton />
           ) : null}
+
+          <section className="overflow-hidden rounded-2xl border border-border bg-card dark:bg-gradient-to-br dark:from-[#0A0A0B] dark:to-[#111113]">
+            <div className={cn("px-5 py-4", containerScopeExpanded && "border-b border-border")}>
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <button
+                  type="button"
+                  onClick={() => setContainerScopeExpanded(open => !open)}
+                  className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                  aria-expanded={containerScopeExpanded}
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#2496ED]/25 bg-[#2496ED]/10 text-[#2496ED]">
+                    <Container className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <h3 className="text-base font-bold tracking-tight">Audit scope</h3>
+                      {activeContainerCount > 0 && (
+                        <span className="rounded-full border border-border bg-muted/25 px-2 py-0.5 font-mono text-[10px] text-muted-foreground/70">
+                          {activeContainerCount} scoped
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {activeContainerCount > 0
+                        ? `${activeContainerCount} running container${activeContainerCount === 1 ? "" : "s"} at audit time. Details stay collapsed until needed.`
+                        : "No running containers were captured for this audit."}
+                    </p>
+                  </div>
+                </button>
+
+                <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                  <span className="rounded-lg border border-[#2496ED]/25 bg-[#2496ED]/8 px-2.5 py-1 text-xs font-bold text-[#2496ED]">
+                    {activeContainerCount} container{activeContainerCount === 1 ? "" : "s"}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setContainerScopeExpanded(open => !open)}
+                    className="h-8 px-2"
+                    aria-label={containerScopeExpanded ? "Collapse audit scope" : "Expand audit scope"}
+                  >
+                    {containerScopeExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {containerScopeExpanded && (
+              activeContainerSnapshots.length > 0 ? (
+                <div className="divide-y divide-border">
+                  {activeContainerSnapshots.map(container => {
+                    const containerName = containerSnapshotName(container);
+                    const containerId = container.id || containerName;
+                    return (
+                      <button
+                        type="button"
+                        key={container.id || containerName}
+                        className="grid w-full grid-cols-[20px_minmax(0,1fr)] gap-3 px-5 py-3 text-left transition-colors hover:bg-muted/20 sm:grid-cols-[20px_minmax(0,1fr)_auto] sm:items-center"
+                        onClick={() => {
+                          void navigate({
+                            to: "/agents/$id/containers/$containerId",
+                            params: { id, containerId },
+                            search: {
+                              from: "audit",
+                              auditId,
+                              containerName,
+                            },
+                          });
+                        }}
+                      >
+                        <Container className="mt-1 h-4 w-4 shrink-0 text-[#2496ED] sm:mt-0" />
+                        <span className="min-w-0">
+                          <span className="block truncate font-mono text-sm font-semibold text-foreground">{containerName}</span>
+                          <span className="mt-1 block truncate text-xs text-muted-foreground">{container.image || "unknown image"}</span>
+                        </span>
+                        <span className="rounded border border-border bg-muted/30 px-2 py-1 font-mono text-[11px] text-muted-foreground sm:justify-self-end">
+                          {containerSnapshotId(container)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="px-5 py-6 text-sm text-muted-foreground">
+                  Container names unavailable for this older audit.
+                </div>
+              )
+            )}
+          </section>
 
           {/* ── Search & Filters ────────────────────────────── */}
           <div ref={resultsAnchorRef} className="space-y-2">

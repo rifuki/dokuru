@@ -235,12 +235,21 @@ export interface AuditViewReport {
   sorted_results: AuditResult[];
 }
 
+export interface AuditContainerSnapshot {
+  id: string;
+  names: string[];
+  image: string;
+  state: string;
+  status: string;
+}
+
 export interface AuditResponse {
   id?: string;
   timestamp: string;
   hostname: string;
   docker_version: string;
   total_containers: number;
+  active_containers?: AuditContainerSnapshot[];
   results: AuditResult[];
   summary: AuditSummary;
 }
@@ -258,6 +267,7 @@ export interface AuditReportResponse {
   hostname: string;
   docker_version: string;
   total_containers: number;
+  active_containers?: AuditContainerSnapshot[];
   report: AuditViewReport;
 }
 

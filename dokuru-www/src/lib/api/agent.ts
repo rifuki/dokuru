@@ -71,10 +71,10 @@ export const agentApi = {
   saveAudit: async (id: string, auditData: AuditResponse): Promise<AuditResponse> => {
     if (IS_LOCAL_AGENT_MODE && id === LOCAL_AGENT_ID) {
       const response = await axios.post(`${localAgentRootUrl()}/audit/history`, auditData, { headers: localAgentHeaders() });
-      return response.data.data;
+      return { ...response.data.data, active_containers: response.data.data.active_containers ?? auditData.active_containers };
     }
     const response = await apiClient.post(`/agents/${id}/audit`, auditData);
-    return response.data.data;
+    return { ...response.data.data, active_containers: auditData.active_containers };
   },
 
   runAudit: async (id: string): Promise<AuditResponse> => {

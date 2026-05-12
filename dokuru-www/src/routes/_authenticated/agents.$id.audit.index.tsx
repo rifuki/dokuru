@@ -894,11 +894,24 @@ function AuditLogLine({ line, expanded, onToggle }: { line: AuditProgressLine; e
     );
 }
 
+function cleanDockerContainerName(name: string) {
+    return name.replace(/^\/+/, "") || name;
+}
+
+function dockerContainerName(container: DockerContainer) {
+    return container.names.map(cleanDockerContainerName).find(Boolean) || container.id.slice(0, 12) || "unknown";
+}
+
+function runningDockerContainers(containers: DockerContainer[]) {
+    return containers.filter(container => container.state.toLowerCase() === "running");
+}
+
 function AuditRunTerminal({
     agentId,
     total,
     current,
     lines,
+    activeContainers,
     error,
     status,
     savedAuditId,
@@ -911,6 +924,7 @@ function AuditRunTerminal({
     total: number;
     current: number;
     lines: AuditProgressLine[];
+    activeContainers: DockerContainer[];
     error: string | null;
     status: AuditStreamStatus;
     savedAuditId?: string;
@@ -924,6 +938,8 @@ function AuditRunTerminal({
     const isCancelled = status === "cancelled";
     const pct = total > 0 ? Math.round(((isComplete ? total : current) / total) * 100) : 0;
     const latest = lines.at(-1);
+    const activeContainerPreview = activeContainers.slice(0, 4);
+    const activeContainerOverflow = Math.max(0, activeContainers.length - activeContainerPreview.length);
     const [autoScroll, setAutoScroll] = useState(() => readAuditTerminalUiState(agentId).autoScroll);
     const [expandedLineKey, setExpandedLineKey] = useState<string | null>(null);
     const logRef = useRef<HTMLDivElement>(null);
@@ -1044,6 +1060,34 @@ function AuditRunTerminal({
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 py-4 sm:px-5">
+                <div className="rounded-[10px] border border-border bg-muted/15 px-3 py-2.5">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex min-w-0 items-center gap-2">
+                            <Container className="h-4 w-4 shrink-0 text-primary" />
+                            <div className="min-w-0">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Active containers</p>
+                                <p className="mt-0.5 text-xs text-muted-foreground/70">
+                                    {activeContainers.length} running container{activeContainers.length === 1 ? "" : "s"} included in this audit scope
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex min-w-0 flex-wrap gap-1.5">
+                            {activeContainerPreview.length > 0 ? activeContainerPreview.map(container => (
+                                <span key={container.id} className="max-w-[150px] truncate rounded-[7px] border border-border bg-background/40 px-2 py-1 font-mono text-[10px] text-foreground/80">
+                                    {dockerContainerName(container)}
+                                </span>
+                            )) : (
+                                <span className="text-xs text-muted-foreground/60">No running containers detected.</span>
+                            )}
+                            {activeContainerOverflow > 0 && (
+                                <span className="rounded-[7px] border border-border bg-background/30 px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                                    +{activeContainerOverflow} more
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
                 <div className="space-y-1.5">
                     <div className="flex items-center justify-between gap-3">
                         <p className="font-mono text-xs text-muted-foreground truncate">
@@ -1536,6 +1580,7 @@ function AuditPage() {
                                 total={auditTotal}
                                 current={auditCurrent}
                                 lines={auditProgressLines}
+                                activeContainers={runningDockerContainers(containers)}
                                 error={auditStreamError}
                                 status={auditStreamStatus}
                                 savedAuditId={savedAuditId}

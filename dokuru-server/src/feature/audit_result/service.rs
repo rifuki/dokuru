@@ -43,6 +43,7 @@ impl AuditResultService {
             hostname: dto.hostname,
             docker_version: dto.docker_version,
             total_containers: usize_to_i32_or_zero(dto.total_containers),
+            active_containers: dto.active_containers,
             results: dto.results,
             total_rules: summary.total,
             passed: summary.passed,
@@ -147,6 +148,7 @@ impl AuditResultService {
             hostname: record.hostname,
             docker_version: record.docker_version,
             total_containers: record.total_containers,
+            active_containers: record.active_containers,
             results: record.results,
             summary: AuditSummaryResponse {
                 total: summary.total,
@@ -171,6 +173,7 @@ impl AuditResultService {
             hostname: record.hostname,
             docker_version: record.docker_version,
             total_containers: record.total_containers,
+            active_containers: record.active_containers,
             report,
         })
     }

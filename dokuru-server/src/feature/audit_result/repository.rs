@@ -58,8 +58,8 @@ impl AuditResultRepository for AuditResultRepositoryImpl {
             r"
             INSERT INTO audit_results
                 (id, agent_id, user_id, hostname, docker_version, total_containers,
-                 results, total_rules, passed, failed, score, ran_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                 active_containers, results, total_rules, passed, failed, score, ran_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             RETURNING *
             ",
         )
@@ -69,6 +69,7 @@ impl AuditResultRepository for AuditResultRepositoryImpl {
         .bind(&record.hostname)
         .bind(&record.docker_version)
         .bind(record.total_containers)
+        .bind(&record.active_containers)
         .bind(&record.results)
         .bind(record.total_rules)
         .bind(record.passed)

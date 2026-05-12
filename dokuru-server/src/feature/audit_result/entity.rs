@@ -10,6 +10,7 @@ pub struct AuditResultRecord {
     pub hostname: String,
     pub docker_version: String,
     pub total_containers: i32,
+    pub active_containers: serde_json::Value,
     pub results: serde_json::Value,
     pub total_rules: i32,
     pub passed: i32,
