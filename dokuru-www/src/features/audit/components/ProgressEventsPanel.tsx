@@ -1,6 +1,6 @@
-import { useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
-    ArrowRight, Check, ChevronRight, Copy, GripHorizontal, ShieldAlert, Terminal,
+    ArrowDownToLine, ArrowRight, Check, ChevronRight, Copy, GripHorizontal, ShieldAlert, Terminal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FixProgress } from "@/lib/api/agent-direct";
@@ -196,6 +196,11 @@ function clampPanelHeight(value: number, min: number, max: number) {
     return Math.min(max, Math.max(min, Math.round(value)));
 }
 
+function panelFocusHeight(minHeight: number, maxHeight: number) {
+    if (typeof window === "undefined") return clampPanelHeight(640, minHeight, maxHeight);
+    return clampPanelHeight(window.innerHeight - 220, minHeight, maxHeight);
+}
+
 export function ProgressEventsPanel({
     progressEvents,
     title = "live evidence stream",
@@ -208,6 +213,7 @@ export function ProgressEventsPanel({
     defaultHeight = 360,
     minHeight = 220,
     maxHeight = 960,
+    autoScrollDefault = true,
 }: {
     progressEvents: FixProgress[];
     title?: string;
@@ -220,6 +226,7 @@ export function ProgressEventsPanel({
     defaultHeight?: number;
     minHeight?: number;
     maxHeight?: number;
+    autoScrollDefault?: boolean;
 }) {
     const [filterError, setFilterError] = useState(false);
     const [panelHeight, setPanelHeight] = useState(() => {
@@ -229,12 +236,43 @@ export function ProgressEventsPanel({
             ? clampPanelHeight(saved, minHeight, maxHeight)
             : clampPanelHeight(defaultHeight, minHeight, maxHeight);
     });
-
-    if (progressEvents.length === 0 && !emptyMessage) return null;
+    const [autoScroll, setAutoScroll] = useState(autoScrollDefault);
+    const scrollRef = useRef<HTMLDivElement | null>(null);
+    const panelRef = useRef<HTMLDivElement | null>(null);
+    const programmaticScrollRef = useRef(false);
 
     const normalizedEvents = coalesceFixProgressEvents(progressEvents);
     const hasErrors = normalizedEvents.some(e => e.status === "error");
     const displayedEvents = filterError ? normalizedEvents.filter(e => e.status === "error") : normalizedEvents;
+    const lastEvent = displayedEvents.at(-1);
+    const eventSignature = [
+        displayedEvents.length,
+        lastEvent?.rule_id,
+        lastEvent?.container_name,
+        lastEvent?.action,
+        lastEvent?.status,
+        lastEvent?.detail?.length,
+        lastEvent?.stdout?.length,
+        lastEvent?.stderr?.length,
+    ].join("|");
+
+    function scrollToBottom(behavior: ScrollBehavior = "auto") {
+        const node = scrollRef.current;
+        if (!node) return;
+        programmaticScrollRef.current = true;
+        node.scrollTo({ top: node.scrollHeight, behavior });
+        window.setTimeout(() => {
+            programmaticScrollRef.current = false;
+        }, 120);
+    }
+
+    useEffect(() => {
+        if (!autoScroll) return;
+        const frame = window.requestAnimationFrame(() => scrollToBottom());
+        return () => window.cancelAnimationFrame(frame);
+    }, [autoScroll, eventSignature]);
+
+    if (progressEvents.length === 0 && !emptyMessage) return null;
 
     function updatePanelHeight(nextHeight: number) {
         const next = clampPanelHeight(nextHeight, minHeight, maxHeight);
@@ -242,6 +280,30 @@ export function ProgressEventsPanel({
         if (typeof window !== "undefined") {
             window.localStorage.setItem(storageKey, String(next));
         }
+    }
+
+    function focusPanelHeight() {
+        updatePanelHeight(panelFocusHeight(minHeight, maxHeight));
+        panelRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+
+    function handleScroll() {
+        if (programmaticScrollRef.current) return;
+        const node = scrollRef.current;
+        if (!node) return;
+        const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+        if (distanceFromBottom > 56 && autoScroll) {
+            setAutoScroll(false);
+        } else if (distanceFromBottom <= 8 && !autoScroll) {
+            setAutoScroll(true);
+        }
+    }
+
+    function toggleAutoScroll() {
+        setAutoScroll((enabled) => {
+            if (!enabled) window.requestAnimationFrame(() => scrollToBottom("smooth"));
+            return !enabled;
+        });
     }
 
     function startResize(event: ReactPointerEvent<HTMLButtonElement>) {
@@ -269,7 +331,7 @@ export function ProgressEventsPanel({
     }
 
     return (
-        <div className={cn("overflow-hidden rounded-xl border border-white/10 bg-[#030507] shadow-xl", className)}>
+        <div ref={panelRef} className={cn("overflow-hidden rounded-xl border border-white/10 bg-[#030507] shadow-xl", className)}>
             <div className="flex min-w-0 items-center gap-2 border-b border-white/8 bg-white/[0.025] px-3 py-2.5">
                 <div className="flex shrink-0 items-center gap-1.5">
                     <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f56]" />
@@ -278,7 +340,54 @@ export function ProgressEventsPanel({
                 </div>
                 <Terminal className="ml-1 h-3.5 w-3.5 shrink-0 text-[#2496ED]" />
                 <span className="min-w-0 truncate font-mono text-[10px] uppercase tracking-[0.16em] text-white/42">{title}</span>
-                <div className="ml-auto flex shrink-0 items-center gap-2">
+                <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                    {resizable && (
+                        <>
+                            <button
+                                type="button"
+                                title="Drag to resize evidence height"
+                                onPointerDown={startResize}
+                                className="hidden h-6 cursor-row-resize items-center rounded border border-white/8 bg-white/[0.025] px-1.5 text-white/28 transition-colors hover:bg-white/[0.07] hover:text-white/65 sm:inline-flex"
+                            >
+                                <GripHorizontal className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => updatePanelHeight(panelHeight - 160)}
+                                className="hidden h-6 rounded border border-white/8 bg-white/[0.025] px-2 font-mono text-[10px] text-white/38 transition-colors hover:bg-white/[0.07] hover:text-white/70 sm:inline-flex sm:items-center"
+                            >
+                                -
+                            </button>
+                            <button
+                                type="button"
+                                onClick={focusPanelHeight}
+                                className="hidden h-6 rounded border border-[#2496ED]/18 bg-[#2496ED]/8 px-2 font-mono text-[9px] uppercase tracking-[0.08em] text-[#2496ED]/80 transition-colors hover:bg-[#2496ED]/14 hover:text-[#58b8ff] sm:inline-flex sm:items-center"
+                            >
+                                Focus
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => updatePanelHeight(panelHeight + 160)}
+                                className="hidden h-6 rounded border border-white/8 bg-white/[0.025] px-2 font-mono text-[10px] text-white/38 transition-colors hover:bg-white/[0.07] hover:text-white/70 sm:inline-flex sm:items-center"
+                            >
+                                +
+                            </button>
+                        </>
+                    )}
+                    <button
+                        type="button"
+                        onClick={toggleAutoScroll}
+                        className={cn(
+                            "inline-flex h-6 items-center gap-1 rounded border px-2 font-mono text-[9px] uppercase tracking-[0.08em] transition-colors",
+                            autoScroll
+                                ? "border-[#2496ED]/28 bg-[#2496ED]/10 text-[#58b8ff]"
+                                : "border-amber-400/25 bg-amber-400/8 text-amber-300 hover:bg-amber-400/12",
+                        )}
+                        title={autoScroll ? "Auto-scroll is on" : "Auto-scroll is off; click to jump to bottom"}
+                    >
+                        {autoScroll ? <Check className="h-2.5 w-2.5" /> : <ArrowDownToLine className="h-2.5 w-2.5" />}
+                        {autoScroll ? "Auto" : "Bottom"}
+                    </button>
                     {hasErrors && (
                         <button
                             type="button"
@@ -305,6 +414,8 @@ export function ProgressEventsPanel({
                     "min-w-0 overflow-y-auto p-2.5 font-mono text-[11px] leading-relaxed sm:p-3 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10",
                 )}
                 style={resizable ? { height: panelHeight } : undefined}
+                ref={scrollRef}
+                onScroll={handleScroll}
             >
                 {displayedEvents.length === 0 ? (
                     <div className="flex items-center justify-center py-6 text-[10px] uppercase tracking-widest text-[#2496ED]/60">
@@ -326,9 +437,10 @@ export function ProgressEventsPanel({
                     type="button"
                     aria-label="Resize evidence stream height"
                     onPointerDown={startResize}
-                    className="flex h-4 w-full cursor-row-resize items-center justify-center border-t border-white/8 bg-white/[0.018] text-white/20 transition-colors hover:bg-white/[0.045] hover:text-white/45"
+                    className="flex h-8 w-full cursor-row-resize items-center justify-center gap-2 border-t border-white/8 bg-white/[0.028] font-mono text-[9px] uppercase tracking-[0.12em] text-white/30 transition-colors hover:bg-white/[0.065] hover:text-white/60"
                 >
                     <GripHorizontal className="h-3.5 w-3.5" />
+                    Drag height
                 </button>
             )}
         </div>

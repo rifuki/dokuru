@@ -389,7 +389,11 @@ export function FixHistoryPanel({
                                                 title={`rollback ${entry.request.rule_id} evidence stream`}
                                                 emptyMessage="Waiting for rollback evidence"
                                                 className="shadow-none"
-                                                maxHeightClassName="max-h-[260px]"
+                                                resizable
+                                                storageKey={`dokuru_rollback_evidence_${entry.id}`}
+                                                defaultHeight={360}
+                                                minHeight={180}
+                                                maxHeight={900}
                                             />
                                         )}
 

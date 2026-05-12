@@ -283,7 +283,11 @@ function RuleEvidenceRow({
                         title={`rule ${rs.ruleId} evidence stream`}
                         emptyMessage={rs.state === "pending" ? "Waiting for this rule to start" : "No streamed evidence captured"}
                         className="shadow-none"
-                        maxHeightClassName="max-h-[240px]"
+                        resizable
+                        storageKey={`dokuru_fix_all_evidence_${rs.ruleId}`}
+                        defaultHeight={isActive ? 320 : 260}
+                        minHeight={180}
+                        maxHeight={900}
                     />
                 </div>
             )}
