@@ -38,6 +38,11 @@ interface FixHistoryPanelProps {
     agentUrl: string;
     agentAccessMode?: string;
     token?: string;
+    historyEntries?: FixHistoryEntry[];
+    loading?: boolean;
+    refreshing?: boolean;
+    error?: boolean;
+    onRefresh?: () => void | Promise<unknown>;
     onRollbackApplied?: () => void;
 }
 
@@ -85,6 +90,11 @@ export function FixHistoryPanel({
     agentUrl,
     agentAccessMode,
     token,
+    historyEntries,
+    loading: externalLoading,
+    refreshing: externalRefreshing,
+    error: externalError,
+    onRefresh,
     onRollbackApplied,
 }: FixHistoryPanelProps) {
     const [rollingBackId, setRollingBackId] = useState<string | null>(null);
@@ -92,9 +102,10 @@ export function FixHistoryPanel({
     const [rollbackProgress, setRollbackProgress] = useState<Record<string, FixProgress[]>>({});
     const [rollbackOutcomes, setRollbackOutcomes] = useState<Record<string, FixOutcome>>({});
 
+    const hasExternalHistory = historyEntries !== undefined;
     const historyQuery = useQuery({
         queryKey: ["fix-history", agentAccessMode, agentId, agentUrl, token],
-        enabled: agentAccessMode === "relay" || (!!agentUrl && (!!token || agentId === LOCAL_AGENT_ID)),
+        enabled: !hasExternalHistory && (agentAccessMode === "relay" || (!!agentUrl && (!!token || agentId === LOCAL_AGENT_ID))),
         queryFn: async () => {
             return agentAccessMode === "relay"
                 ? await agentApi.listFixHistory(agentId)
@@ -102,9 +113,18 @@ export function FixHistoryPanel({
         },
     });
 
-    const history = historyQuery.data ?? [];
-    const loading = historyQuery.isLoading && history.length === 0;
-    const refreshing = historyQuery.isFetching && !loading;
+    const history = historyEntries ?? historyQuery.data ?? [];
+    const loading = externalLoading ?? (historyQuery.isLoading && history.length === 0);
+    const refreshing = externalRefreshing ?? (historyQuery.isFetching && !loading);
+    const hasError = externalError ?? historyQuery.isError;
+
+    const refreshHistory = useCallback(async () => {
+        if (onRefresh) {
+            await onRefresh();
+            return;
+        }
+        await historyQuery.refetch();
+    }, [historyQuery, onRefresh]);
 
     const rollback = useCallback(async (entry: FixHistoryEntry) => {
         setRollingBackId(entry.id);
@@ -171,14 +191,14 @@ export function FixHistoryPanel({
             } else {
                 toast.error(outcome.message);
             }
-            await historyQuery.refetch();
+            await refreshHistory();
         } catch {
             toast.error("Failed to rollback fix");
         } finally {
             setRollingBackId(null);
             setConfirmEntry(null);
         }
-    }, [agentAccessMode, agentId, agentUrl, token, historyQuery, onRollbackApplied]);
+    }, [agentAccessMode, agentId, agentUrl, token, onRollbackApplied, refreshHistory]);
 
     return (
         <>
@@ -191,17 +211,17 @@ export function FixHistoryPanel({
                         <div>
                             <h3 className="text-base font-bold tracking-tight">Fix History & Rollback</h3>
                             <p className="text-sm text-muted-foreground">
-                                Agent-side remediation log. Rollback restores captured host, Compose, container, or cgroup snapshots.
+                                Remediations linked to this audit window. Rollback restores captured host, Compose, container, or cgroup snapshots.
                             </p>
                         </div>
                     </div>
-                    <Button variant="outline" size="sm" onClick={() => void historyQuery.refetch()} disabled={historyQuery.isFetching}>
-                        {historyQuery.isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                    <Button variant="outline" size="sm" onClick={() => void refreshHistory()} disabled={refreshing}>
+                        {refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                         {refreshing ? "Refreshing" : "Refresh"}
                     </Button>
                 </div>
 
-                {historyQuery.isError ? (
+                {hasError ? (
                     <div className="flex items-center gap-2 px-5 py-6 text-sm text-amber-500">
                         <AlertTriangle className="h-4 w-4" />
                         Failed to load fix history from agent. Check connectivity, then refresh.
@@ -213,7 +233,7 @@ export function FixHistoryPanel({
                     </div>
                 ) : history.length === 0 ? (
                     <div className="px-5 py-6 text-sm text-muted-foreground">
-                        No fixes recorded yet. Apply a fix from this audit, then refresh this panel.
+                        No fixes recorded for this audit window.
                     </div>
                 ) : (
                     <div className="divide-y divide-border">

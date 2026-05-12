@@ -1299,6 +1299,50 @@ function isTimestampAfter(value?: string, reference?: string) {
   return Number.isFinite(valueTime) && Number.isFinite(referenceTime) && valueTime > referenceTime;
 }
 
+function timestampMs(value?: string) {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function fixHistoryEntriesBetween(history: FixHistoryEntry[], afterMs: number, beforeMs?: number | null) {
+  return history
+    .filter((entry) => {
+      const entryMs = timestampMs(entry.timestamp);
+      if (entryMs === null || entryMs <= afterMs) return false;
+      return beforeMs === undefined || beforeMs === null || entryMs <= beforeMs;
+    })
+    .sort((a, b) => (timestampMs(b.timestamp) ?? 0) - (timestampMs(a.timestamp) ?? 0));
+}
+
+function latestFixHistoryEntriesByRule(entries: FixHistoryEntry[]) {
+  const seenRuleIds = new Set<string>();
+  return entries.filter((entry) => {
+    const ruleId = entry.request.rule_id;
+    if (seenRuleIds.has(ruleId)) return false;
+    seenRuleIds.add(ruleId);
+    return true;
+  });
+}
+
+function scopedFixHistoryForAudit(history: FixHistoryEntry[], audit?: AuditResponse | null, auditHistory: AuditResponse[] = []) {
+  const currentMs = timestampMs(audit?.timestamp);
+  if (currentMs === null) return [];
+
+  const neighborTimes = auditHistory
+    .map((entry) => timestampMs(entry.timestamp))
+    .filter((value): value is number => value !== null && value !== currentMs)
+    .sort((a, b) => a - b);
+  const nextAuditMs = neighborTimes.find((value) => value > currentMs) ?? null;
+  const currentWindow = fixHistoryEntriesBetween(history, currentMs, nextAuditMs);
+  if (currentWindow.length > 0) return latestFixHistoryEntriesByRule(currentWindow);
+
+  const previousAuditMs = neighborTimes.filter((value) => value < currentMs).at(-1) ?? null;
+  return previousAuditMs === null
+    ? currentWindow
+    : latestFixHistoryEntriesByRule(fixHistoryEntriesBetween(history, previousAuditMs, currentMs));
+}
+
 function isAfterAudit(entry: FixHistoryEntry, audit?: AuditResponse | null) {
   return isTimestampAfter(entry.timestamp, audit?.timestamp);
 }
@@ -2059,6 +2103,7 @@ function AuditDetailPage() {
     ? `${checkRuleTotal} total checks · ${evaluatedRuleTotal} scored · ${displayErrorTotal} skipped`
     : `${checkRuleTotal} total checks`;
   const appliedHistoryByRule = latestAppliedFixesAfterAudit(fixHistoryEntries, auditData);
+  const scopedFixHistoryEntries = scopedFixHistoryForAudit(fixHistoryEntries, auditData, auditHistory);
   const appliedRuleIds = new Set<string>(appliedHistoryByRule.keys());
   const autoTriggeredRuleIds = new Set<string>();
   for (const result of baseResults) {
@@ -2078,7 +2123,7 @@ function AuditDetailPage() {
   const hasProjectedFixes = (projectedFixScore?.fixedCount ?? 0) > 0;
   const autoTriggeredProjectionCount = projectedFixScore?.fixedRuleIds.filter(ruleId => autoTriggeredRuleIds.has(ruleId)).length ?? 0;
   const fixedResultPreviews = fixedFailedResults(baseResults, forecastRuleIds);
-  const shouldShowFixHistory = !!agent && fixHistoryEntries.length > 0;
+  const shouldShowFixHistory = !!agent && (scopedFixHistoryEntries.length > 0 || fixHistoryQuery.isLoading || fixHistoryQuery.isFetching);
   const pillarProjections = groupProjectionFromFixes(baseResults, forecastRuleIds, result => getRulePillar(result.rule.id), autoTriggeredRuleIds);
   const sectionProjections = groupProjectionFromFixes(baseResults, forecastRuleIds, result => result.rule.section, autoTriggeredRuleIds);
   const sectionSummaries = groupSummariesFromResults(baseResults, result => result.rule.section, key => key);
@@ -2144,6 +2189,7 @@ function AuditDetailPage() {
     [...appliedRuleIds].sort().join(","),
     autoFixableResults.length,
     fixHistoryEntries.length,
+    scopedFixHistoryEntries.length,
     fixHistoryQuery.isFetching ? "fetching" : "idle",
   ].join(":");
   useStableAuditListAnchor(resultsAnchorRef, auditListLayoutSignature, wizardOpen || fixAllOpen);
@@ -2708,6 +2754,11 @@ function AuditDetailPage() {
               agentUrl={agent.url}
               agentAccessMode={agent.access_mode}
               token={token}
+              historyEntries={scopedFixHistoryEntries}
+              loading={fixHistoryQuery.isLoading && scopedFixHistoryEntries.length === 0}
+              refreshing={fixHistoryQuery.isFetching && !fixHistoryQuery.isLoading}
+              error={fixHistoryQuery.isError}
+              onRefresh={() => fixHistoryQuery.refetch()}
             />
           )}
 
