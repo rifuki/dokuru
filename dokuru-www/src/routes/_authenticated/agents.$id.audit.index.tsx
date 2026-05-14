@@ -4,7 +4,7 @@ import { useAgentStore } from "@/stores/use-agent-store";
 import { AUDIT_CANCELLED_MESSAGE, useAuditStore, type AuditProgressLine, type AuditStreamStatus } from "@/stores/use-audit-store";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { agentApi } from "@/lib/api/agent";
-import { agentDirectApi, type AuditResponse, type AuditResult, type FixOutcome } from "@/lib/api/agent-direct";
+import { agentDirectApi, type AuditContainerSnapshot, type AuditResponse, type AuditResult, type FixOutcome } from "@/lib/api/agent-direct";
 import type { Agent } from "@/types/agent";
 import { dockerApi, dockerCredential, type Container as DockerContainer } from "@/services/docker-api";
 import { Button } from "@/components/ui/button";
@@ -898,12 +898,129 @@ function cleanDockerContainerName(name: string) {
     return name.replace(/^\/+/, "") || name;
 }
 
-function dockerContainerName(container: DockerContainer) {
+type CheckedContainerSnapshot = Pick<AuditContainerSnapshot, "id" | "names" | "image" | "state" | "status">;
+
+function checkedContainerSnapshotName(container: CheckedContainerSnapshot) {
     return container.names.map(cleanDockerContainerName).find(Boolean) || container.id.slice(0, 12) || "unknown";
 }
 
-function runningDockerContainers(containers: DockerContainer[]) {
+function checkedContainerSnapshotShortId(container: CheckedContainerSnapshot) {
+    return container.id ? container.id.slice(0, 12) : "unknown id";
+}
+
+function runningDockerContainers(containers: DockerContainer[]): CheckedContainerSnapshot[] {
     return containers.filter(container => container.state.toLowerCase() === "running");
+}
+
+function RunningContainersCheckedPanel({
+    agentId,
+    containers,
+    fallbackTotal,
+    isSavedSnapshot,
+}: {
+    agentId: string;
+    containers: CheckedContainerSnapshot[];
+    fallbackTotal?: number;
+    isSavedSnapshot: boolean;
+}) {
+    const [expanded, setExpanded] = useState(false);
+    const checkedCount = containers.length > 0 ? containers.length : fallbackTotal ?? 0;
+    const countLabel = `${checkedCount} container${checkedCount === 1 ? "" : "s"}`;
+    const snapshotLabel = isSavedSnapshot ? "audit start" : "live preview";
+    const previewContainers = containers.slice(0, 3);
+    const overflowCount = Math.max(0, containers.length - previewContainers.length);
+
+    if (checkedCount === 0) return null;
+
+    return (
+        <div className="shrink-0 overflow-hidden rounded-lg border border-border/70 bg-background/35">
+            <div className={cn("flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center", expanded && "border-b border-border/60")}>
+                <button
+                    type="button"
+                    onClick={() => setExpanded(open => !open)}
+                    className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                    aria-expanded={expanded}
+                    aria-label={expanded ? "Collapse checked containers" : "Expand checked containers"}
+                >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-primary/25 bg-primary/10 text-primary">
+                        <Container className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0">
+                        <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Checked containers</span>
+                        <span className="mt-0.5 block truncate text-xs text-muted-foreground/75">
+                            <span className="font-mono font-semibold text-foreground/90">{checkedCount}</span> at {snapshotLabel}
+                        </span>
+                    </span>
+                </button>
+
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 sm:justify-end">
+                    {previewContainers.length > 0 ? previewContainers.map(container => (
+                        <Link
+                            key={container.id}
+                            to="/agents/$id/containers/$containerId"
+                            params={{ id: agentId, containerId: container.id }}
+                            className="max-w-[155px] truncate rounded-md border border-border bg-muted/15 px-2 py-1 font-mono text-[10px] text-foreground/80 transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+                            title={`${checkedContainerSnapshotName(container)} · ${container.image}`}
+                        >
+                            {checkedContainerSnapshotName(container)}
+                        </Link>
+                    )) : (
+                        <span className="rounded-md border border-border bg-muted/15 px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                            {countLabel}
+                        </span>
+                    )}
+                    {overflowCount > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => setExpanded(open => !open)}
+                            className="rounded-md border border-border bg-muted/10 px-2 py-1 font-mono text-[10px] text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                            aria-expanded={expanded}
+                        >
+                            +{overflowCount}
+                        </button>
+                    )}
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setExpanded(open => !open)}
+                        className="h-7 w-7 shrink-0 px-0 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                        aria-label={expanded ? "Collapse checked containers" : "Expand checked containers"}
+                    >
+                        {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                    </Button>
+                </div>
+            </div>
+
+            {expanded && containers.length > 0 && (
+                <div className="max-h-40 overflow-y-auto p-2">
+                    <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
+                        {containers.map(container => (
+                            <Link
+                                key={container.id}
+                                to="/agents/$id/containers/$containerId"
+                                params={{ id: agentId, containerId: container.id }}
+                                className="group min-w-0 rounded-md border border-border/75 bg-muted/10 px-2.5 py-2 transition-colors hover:border-primary/40 hover:bg-primary/10"
+                            >
+                                <div className="flex min-w-0 items-center justify-between gap-2">
+                                    <span className="truncate font-mono text-xs font-semibold text-foreground group-hover:text-primary">
+                                        {checkedContainerSnapshotName(container)}
+                                    </span>
+                                    <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                                </div>
+                                <p className="mt-1 truncate text-[11px] text-muted-foreground" title={container.image || "unknown image"}>
+                                    {container.image || "unknown image"}
+                                </p>
+                                <p className="mt-1 truncate font-mono text-[10px] text-muted-foreground/70">
+                                    {checkedContainerSnapshotShortId(container)} · {container.status || container.state || "unknown"}
+                                </p>
+                            </Link>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
 }
 
 function AuditRunTerminal({
@@ -911,7 +1028,9 @@ function AuditRunTerminal({
     total,
     current,
     lines,
-    activeContainers,
+    checkedContainers,
+    checkedContainerFallbackTotal,
+    checkedContainersAreSavedSnapshot,
     error,
     status,
     savedAuditId,
@@ -924,7 +1043,9 @@ function AuditRunTerminal({
     total: number;
     current: number;
     lines: AuditProgressLine[];
-    activeContainers: DockerContainer[];
+    checkedContainers: CheckedContainerSnapshot[];
+    checkedContainerFallbackTotal?: number;
+    checkedContainersAreSavedSnapshot: boolean;
     error: string | null;
     status: AuditStreamStatus;
     savedAuditId?: string;
@@ -938,9 +1059,6 @@ function AuditRunTerminal({
     const isCancelled = status === "cancelled";
     const pct = total > 0 ? Math.round(((isComplete ? total : current) / total) * 100) : 0;
     const latest = lines.at(-1);
-    const activeContainerPreview = activeContainers.slice(0, 4);
-    const activeContainerOverflow = Math.max(0, activeContainers.length - activeContainerPreview.length);
-    const [activeContainersExpanded, setActiveContainersExpanded] = useState(false);
     const [autoScroll, setAutoScroll] = useState(() => readAuditTerminalUiState(agentId).autoScroll);
     const [expandedLineKey, setExpandedLineKey] = useState<string | null>(null);
     const logRef = useRef<HTMLDivElement>(null);
@@ -983,21 +1101,36 @@ function AuditRunTerminal({
         writeAuditTerminalUiState(agentId, { autoScroll: autoScrollRef.current, logScrollTop: log.scrollTop });
     };
 
+    const handleTerminalClose = () => {
+        if (canCancel) onCancel();
+        onClear();
+    };
+
     return (
         <div className="flex h-full w-full animate-in flex-col overflow-hidden bg-card text-left fade-in zoom-in-95 duration-500">
             <div className="flex flex-col gap-3 border-b border-border bg-muted/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                 <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex shrink-0 items-center gap-1.5" aria-hidden="true">
-                        <button
-                            type="button"
-                            onClick={onClear}
-                            className="h-2.5 w-2.5 rounded-full bg-[#ff5f56] hover:brightness-75 transition-all"
-                            title="Close Terminal"
-                            aria-label="Close Terminal"
-                        />
-                        <span className="h-2.5 w-2.5 rounded-full bg-[#ffbd2e]" />
-                        <span className="h-2.5 w-2.5 rounded-full bg-[#27c93f]" />
-                    </div>
+                    <TooltipProvider delayDuration={250}>
+                        <div className="group/traffic flex shrink-0 items-center gap-1.5">
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        type="button"
+                                        onClick={handleTerminalClose}
+                                        className="flex h-3 w-3 items-center justify-center rounded-full bg-[#ff5f56] transition-all hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                                        aria-label={canCancel ? "Cancel audit and close terminal" : "Close terminal"}
+                                    >
+                                        <X className="h-2 w-2 text-red-950/70 opacity-0 transition-opacity group-hover/traffic:opacity-100" strokeWidth={4} />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">
+                                    {canCancel ? "Cancel audit and close" : "Close terminal"}
+                                </TooltipContent>
+                            </Tooltip>
+                            <span className="h-3 w-3 rounded-full bg-[#ffbd2e]" />
+                            <span className="h-3 w-3 rounded-full bg-[#27c93f]" />
+                        </div>
+                    </TooltipProvider>
                     <Terminal className="h-4 w-4 shrink-0 text-primary" />
                     <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
                         <h3 className="shrink-0 text-sm font-semibold text-foreground">Live security audit</h3>
@@ -1008,29 +1141,6 @@ function AuditRunTerminal({
                     </div>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-3">
-                    {isComplete && savedAuditId && (
-                        <Button size="sm" variant="outline" className="audit-result-cta h-8 px-3" onClick={onOpenResult}>
-                            <span className="relative z-10">Open Result</span>
-                        </Button>
-                    )}
-                    {canCancel && (
-                        <Button size="sm" variant="outline" className="h-8 px-3 text-muted-foreground hover:text-rose-400" onClick={onCancel}>
-                            <XCircle className="h-4 w-4" />
-                            Cancel Audit
-                        </Button>
-                    )}
-                    {status !== "running" && status !== "saving" && (
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button size="sm" variant="ghost" className="h-8 px-2 text-muted-foreground hover:bg-destructive dark:hover:bg-destructive hover:text-white dark:hover:text-white transition-colors" onClick={onClear} aria-label="Close terminal">
-                                        <X className="h-4 w-4" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Close terminal</TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                    )}
                     <div className="flex items-center gap-2">
                         <span className="text-xs font-medium text-muted-foreground">Auto Scroll</span>
                         <button
@@ -1054,93 +1164,37 @@ function AuditRunTerminal({
                             />
                         </button>
                     </div>
-                    <span className="font-mono text-[11px] text-muted-foreground">
-                        {isComplete ? total : current}/{total || "?"} · {pct}%
-                    </span>
+
+                    {(canCancel || (isComplete && savedAuditId)) && (
+                        <>
+                            <span className="h-5 w-px bg-border/70" aria-hidden="true" />
+                            {canCancel && (
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8 border-rose-400/25 bg-background/60 px-3 text-xs text-rose-300 hover:bg-rose-500 hover:text-white"
+                                    onClick={onCancel}
+                                >
+                                    <XCircle className="h-3.5 w-3.5" />
+                                    Cancel Audit
+                                </Button>
+                            )}
+                            {isComplete && savedAuditId && (
+                                <Button size="sm" variant="outline" className="audit-result-cta h-8 bg-background/60 px-3 text-xs" onClick={onOpenResult}>
+                                    Open Result
+                                </Button>
+                            )}
+                        </>
+                    )}
                 </div>
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 py-4 sm:px-5">
-                <div className="rounded-[10px] border border-border bg-muted/15 px-3 py-2.5">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <button
-                            type="button"
-                            onClick={() => setActiveContainersExpanded((value) => !value)}
-                            className="flex min-w-0 items-center gap-2 rounded-md text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                            aria-expanded={activeContainersExpanded}
-                            aria-label={`${activeContainersExpanded ? "Collapse" : "Expand"} active containers list`}
-                        >
-                            <Container className="h-4 w-4 shrink-0 text-primary" />
-                            <div className="min-w-0">
-                                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Active containers</p>
-                                <p className="mt-0.5 text-xs text-muted-foreground/70">
-                                    {activeContainers.length} running container{activeContainers.length === 1 ? "" : "s"} included in this audit scope
-                                </p>
-                            </div>
-                            {activeContainersExpanded ? (
-                                <ChevronUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                            ) : (
-                                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                            )}
-                        </button>
-                        <div className="flex min-w-0 flex-wrap gap-1.5">
-                            {activeContainerPreview.length > 0 ? activeContainerPreview.map(container => (
-                                <Link
-                                    key={container.id}
-                                    to="/agents/$id/containers/$containerId"
-                                    params={{ id: agentId, containerId: container.id }}
-                                    className="max-w-[150px] truncate rounded-[7px] border border-border bg-background/40 px-2 py-1 font-mono text-[10px] text-foreground/80 transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
-                                    title={`${dockerContainerName(container)} · ${container.image}`}
-                                >
-                                    {dockerContainerName(container)}
-                                </Link>
-                            )) : (
-                                <span className="text-xs text-muted-foreground/60">No running containers detected.</span>
-                            )}
-                            {activeContainerOverflow > 0 && (
-                                <button
-                                    type="button"
-                                    onClick={() => setActiveContainersExpanded((value) => !value)}
-                                    className="rounded-[7px] border border-border bg-background/30 px-2 py-1 font-mono text-[10px] text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                                    aria-expanded={activeContainersExpanded}
-                                >
-                                    {activeContainersExpanded ? "show less" : `+${activeContainerOverflow} more`}
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                    {activeContainersExpanded && activeContainers.length > 0 && (
-                        <div className="mt-3 grid gap-1.5 border-t border-border/60 pt-3 sm:grid-cols-2 xl:grid-cols-3">
-                            {activeContainers.map(container => (
-                                <Link
-                                    key={container.id}
-                                    to="/agents/$id/containers/$containerId"
-                                    params={{ id: agentId, containerId: container.id }}
-                                    className="group min-w-0 rounded-lg border border-border/80 bg-background/35 px-3 py-2 transition-colors hover:border-primary/40 hover:bg-primary/10"
-                                >
-                                    <div className="flex min-w-0 items-center justify-between gap-2">
-                                        <span className="truncate font-mono text-xs text-foreground group-hover:text-primary">
-                                            {dockerContainerName(container)}
-                                        </span>
-                                        <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                                    </div>
-                                    <p className="mt-1 truncate text-[11px] text-muted-foreground" title={container.image}>
-                                        {container.image}
-                                    </p>
-                                    <p className="mt-1 font-mono text-[10px] text-muted-foreground/70">
-                                        {container.id.slice(0, 12)} · {container.status || container.state}
-                                    </p>
-                                </Link>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                <div className="relative overflow-hidden rounded-xl border border-border/70 bg-muted/20 p-1" aria-live="polite">
-                    <div className="absolute inset-y-1 left-1 right-1 overflow-hidden rounded-lg bg-background/35">
+                <div className="relative overflow-hidden rounded-lg border border-border/70 bg-muted/20 p-1" aria-live="polite">
+                    <div className="absolute inset-y-1 left-1 right-1 overflow-hidden rounded-md bg-background/35">
                         <div
                             className={cn(
-                                "h-full rounded-lg transition-all duration-500",
+                                "h-full rounded-md transition-all duration-500",
                                 error
                                     ? "bg-rose-500/25"
                                     : isCancelled
@@ -1183,7 +1237,7 @@ function AuditRunTerminal({
                     </div>
                 </div>
 
-                <div ref={logRef} onScroll={handleLogScroll} className="audit-terminal-log min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-zinc-50 p-4 font-mono text-[11px] leading-relaxed text-zinc-800 shadow-inner dark:bg-zinc-950 dark:text-zinc-200">
+                <div ref={logRef} onScroll={handleLogScroll} className="audit-terminal-log min-h-0 flex-1 overflow-y-auto rounded-lg border border-border bg-zinc-50 p-4 font-mono text-[11px] leading-relaxed text-zinc-800 shadow-inner dark:bg-zinc-950 dark:text-zinc-200">
                     {lines.length === 0 && !error && !isCancelled && (
                         <p className="text-muted-foreground/50">$ connecting to dokuru-agent audit websocket...</p>
                     )}
@@ -1203,6 +1257,13 @@ function AuditRunTerminal({
                     })}
                     {error && <p className="text-rose-400">! {error}</p>}
                 </div>
+
+                <RunningContainersCheckedPanel
+                    agentId={agentId}
+                    containers={checkedContainers}
+                    fallbackTotal={checkedContainerFallbackTotal}
+                    isSavedSnapshot={checkedContainersAreSavedSnapshot}
+                />
 
             </div>
         </div>
@@ -1233,7 +1294,11 @@ function AuditPage() {
     const auditProgressLines = auditStream?.lines ?? [];
     const auditStreamError = auditStream?.error ?? null;
     const savedAuditId = auditStream?.savedAudit?.id;
-    const latestAudit = auditHistory[0] ?? auditStream?.savedAudit ?? null;
+    const latestAudit = auditStream?.savedAudit ?? auditHistory[0] ?? null;
+    const savedAuditContainers = auditStream?.savedAudit?.active_containers ?? [];
+    const terminalCheckedContainers = savedAuditContainers.length > 0 ? savedAuditContainers : runningDockerContainers(containers);
+    const terminalCheckedFallbackTotal = auditStream?.savedAudit?.total_containers ?? terminalCheckedContainers.length;
+    const terminalCheckedContainersAreSavedSnapshot = !!auditStream?.savedAudit;
     const hasAnyAudit = !!latestAudit || !!savedAuditId;
     const showAuditTerminal = auditStreamStatus !== "idle" && (
         isRunning || auditStreamStatus === "complete" || auditStreamStatus === "error" || auditStreamStatus === "cancelled" || auditProgressLines.length > 0
@@ -1630,7 +1695,7 @@ function AuditPage() {
                 <>
                     {/* ── Run New Audit Card ────────────────────────────── */}
                     <div className={cn(
-                        "relative overflow-hidden rounded-xl border transition-all duration-500 ease-out",
+                        "relative overflow-hidden rounded-lg border transition-all duration-500 ease-out",
                         showAuditTerminal
                             ? "h-[500px] border-border bg-card sm:h-[520px] md:h-[540px]"
                             : "h-[340px] border-border/70 bg-card/90 px-4 py-4 sm:h-[350px] md:h-[360px]",
@@ -1642,7 +1707,9 @@ function AuditPage() {
                                 total={auditTotal}
                                 current={auditCurrent}
                                 lines={auditProgressLines}
-                                activeContainers={runningDockerContainers(containers)}
+                                checkedContainers={terminalCheckedContainers}
+                                checkedContainerFallbackTotal={terminalCheckedFallbackTotal}
+                                checkedContainersAreSavedSnapshot={terminalCheckedContainersAreSavedSnapshot}
                                 error={auditStreamError}
                                 status={auditStreamStatus}
                                 savedAuditId={savedAuditId}
@@ -1741,6 +1808,7 @@ function AuditPage() {
                                 No saved audits yet. Run an audit once and Dokuru will keep the latest result here.
                             </div>
                         )}
+
                     </>
                 </>
             )}
