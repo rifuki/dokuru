@@ -23,7 +23,7 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } fr
 import {
   Loader2, ShieldCheck, ShieldX, Shield, ChevronDown, ChevronUp,
   Terminal, Wrench, AlertTriangle, Container,
-  ArrowLeft, Clock, BookOpen,
+  ArrowLeft, Clock, BookOpen, Cpu,
   Search, X, Layers, ArrowLeftRight, Link, FileText, Download, Printer, FileJson, RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -2647,35 +2647,24 @@ function AuditDetailPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 rounded-[10px] border border-border bg-muted/20 px-4 py-3">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="mt-auto grid grid-cols-1 gap-2 pt-3 sm:grid-cols-2">
+                  <div className="flex min-h-[44px] items-center gap-2 rounded-[9px] border border-border bg-muted/10 px-3 py-2">
+                    <Cpu className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     <div className="min-w-0">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Remediation</p>
-                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground/75">
-                        <span><span className="font-mono font-bold text-[#2496ED]">{autoFixableResults.length}</span> auto-fixable</span>
-                        <span className="text-muted-foreground/35">/</span>
-                        <span><span className="font-mono font-bold text-rose-400">{severityFailures.high}</span> critical</span>
-                        <span className="text-muted-foreground/35">/</span>
-                        <span><span className="font-mono font-bold text-amber-400">{severityFailures.medium}</span> medium</span>
-                      </div>
+                      <p className="text-[8px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Docker</p>
+                      <p className="mt-0.5 truncate font-mono text-sm font-semibold leading-none text-foreground/90">
+                        {auditData.docker_version || "unknown"}
+                      </p>
                     </div>
-                    {showFixAllAction && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => openFixAll(autoFixableResults)}
-                        disabled={fixAllButtonDisabled}
-                        title={fixAllButtonLabel}
-                        className="h-8 shrink-0 rounded-[8px] bg-[#2496ED] px-4 text-sm font-semibold text-white shadow-none hover:bg-[#1e80cc] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#2496ED]"
-                      >
-                        {fixAllStep === "applying" || (fixControlsLocked && !fixAllSessionActive) ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Wrench className="h-3.5 w-3.5" />
-                        )}
-                        {fixAllSummaryButtonLabel}
-                      </Button>
-                    )}
+                  </div>
+                  <div className="flex min-h-[44px] items-center gap-2 rounded-[9px] border border-border bg-muted/10 px-3 py-2">
+                    <Container className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0">
+                      <p className="text-[8px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Containers</p>
+                      <p className="mt-0.5 truncate font-mono text-sm font-semibold leading-none text-foreground/90">
+                        {activeContainerCount}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2755,6 +2744,42 @@ function AuditDetailPage() {
                     ))
                   )}
                 </div>
+              </div>
+            </div>
+
+            <div className="border-t border-border bg-muted/10 px-5 py-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Remediation</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground/80">
+                    {autoFixableResults.length > 0 ? (
+                      <span><span className="font-mono font-bold text-[#2496ED]">{autoFixableResults.length}</span> rules can be auto-fixed</span>
+                    ) : (
+                      <span>No auto-fixable rules pending</span>
+                    )}
+                    <span className="text-muted-foreground/35">/</span>
+                    <span><span className="font-mono font-bold text-rose-400">{severityFailures.high}</span> critical</span>
+                    <span className="text-muted-foreground/35">/</span>
+                    <span><span className="font-mono font-bold text-amber-400">{severityFailures.medium}</span> medium</span>
+                  </div>
+                </div>
+                {showFixAllAction && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => openFixAll(autoFixableResults)}
+                    disabled={fixAllButtonDisabled}
+                    title={fixAllButtonLabel}
+                    className="h-10 w-full shrink-0 rounded-[10px] bg-[#2496ED] px-5 text-sm font-semibold text-white shadow-none hover:bg-[#1e80cc] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#2496ED] sm:w-auto"
+                  >
+                    {fixAllStep === "applying" || (fixControlsLocked && !fixAllSessionActive) ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Wrench className="h-4 w-4" />
+                    )}
+                    {fixAllSummaryButtonLabel}
+                  </Button>
+                )}
               </div>
             </div>
           </div>
