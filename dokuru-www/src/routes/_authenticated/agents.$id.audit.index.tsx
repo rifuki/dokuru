@@ -940,6 +940,7 @@ function AuditRunTerminal({
     const latest = lines.at(-1);
     const activeContainerPreview = activeContainers.slice(0, 4);
     const activeContainerOverflow = Math.max(0, activeContainers.length - activeContainerPreview.length);
+    const [activeContainersExpanded, setActiveContainersExpanded] = useState(false);
     const [autoScroll, setAutoScroll] = useState(() => readAuditTerminalUiState(agentId).autoScroll);
     const [expandedLineKey, setExpandedLineKey] = useState<string | null>(null);
     const logRef = useRef<HTMLDivElement>(null);
@@ -1062,7 +1063,13 @@ function AuditRunTerminal({
             <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 py-4 sm:px-5">
                 <div className="rounded-[10px] border border-border bg-muted/15 px-3 py-2.5">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex min-w-0 items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setActiveContainersExpanded((value) => !value)}
+                            className="flex min-w-0 items-center gap-2 rounded-md text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                            aria-expanded={activeContainersExpanded}
+                            aria-label={`${activeContainersExpanded ? "Collapse" : "Expand"} active containers list`}
+                        >
                             <Container className="h-4 w-4 shrink-0 text-primary" />
                             <div className="min-w-0">
                                 <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Active containers</p>
@@ -1070,54 +1077,109 @@ function AuditRunTerminal({
                                     {activeContainers.length} running container{activeContainers.length === 1 ? "" : "s"} included in this audit scope
                                 </p>
                             </div>
-                        </div>
+                            {activeContainersExpanded ? (
+                                <ChevronUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            ) : (
+                                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            )}
+                        </button>
                         <div className="flex min-w-0 flex-wrap gap-1.5">
                             {activeContainerPreview.length > 0 ? activeContainerPreview.map(container => (
-                                <span key={container.id} className="max-w-[150px] truncate rounded-[7px] border border-border bg-background/40 px-2 py-1 font-mono text-[10px] text-foreground/80">
+                                <Link
+                                    key={container.id}
+                                    to="/agents/$id/containers/$containerId"
+                                    params={{ id: agentId, containerId: container.id }}
+                                    className="max-w-[150px] truncate rounded-[7px] border border-border bg-background/40 px-2 py-1 font-mono text-[10px] text-foreground/80 transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+                                    title={`${dockerContainerName(container)} · ${container.image}`}
+                                >
                                     {dockerContainerName(container)}
-                                </span>
+                                </Link>
                             )) : (
                                 <span className="text-xs text-muted-foreground/60">No running containers detected.</span>
                             )}
                             {activeContainerOverflow > 0 && (
-                                <span className="rounded-[7px] border border-border bg-background/30 px-2 py-1 font-mono text-[10px] text-muted-foreground">
-                                    +{activeContainerOverflow} more
-                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveContainersExpanded((value) => !value)}
+                                    className="rounded-[7px] border border-border bg-background/30 px-2 py-1 font-mono text-[10px] text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                                    aria-expanded={activeContainersExpanded}
+                                >
+                                    {activeContainersExpanded ? "show less" : `+${activeContainerOverflow} more`}
+                                </button>
                             )}
                         </div>
                     </div>
+                    {activeContainersExpanded && activeContainers.length > 0 && (
+                        <div className="mt-3 grid gap-1.5 border-t border-border/60 pt-3 sm:grid-cols-2 xl:grid-cols-3">
+                            {activeContainers.map(container => (
+                                <Link
+                                    key={container.id}
+                                    to="/agents/$id/containers/$containerId"
+                                    params={{ id: agentId, containerId: container.id }}
+                                    className="group min-w-0 rounded-lg border border-border/80 bg-background/35 px-3 py-2 transition-colors hover:border-primary/40 hover:bg-primary/10"
+                                >
+                                    <div className="flex min-w-0 items-center justify-between gap-2">
+                                        <span className="truncate font-mono text-xs text-foreground group-hover:text-primary">
+                                            {dockerContainerName(container)}
+                                        </span>
+                                        <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                                    </div>
+                                    <p className="mt-1 truncate text-[11px] text-muted-foreground" title={container.image}>
+                                        {container.image}
+                                    </p>
+                                    <p className="mt-1 font-mono text-[10px] text-muted-foreground/70">
+                                        {container.id.slice(0, 12)} · {container.status || container.state}
+                                    </p>
+                                </Link>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
-                <div className="space-y-1.5">
-                    <div className="flex items-center justify-between gap-3">
-                        <p className="font-mono text-xs text-muted-foreground truncate">
-                            {error
-                                ? "audit stream failed"
-                                : isCancelled
-                                ? "audit cancelled"
-                                : isSaving
-                                ? "saving audit result..."
-                                : isComplete
-                                ? "audit complete"
-                                : latest
-                                ? `checking ${latest.ruleId} · ${latest.title}`
-                                : "opening audit stream..."}
-                        </p>
-                        {error ? (
-                            <XCircle className="h-4 w-4 text-rose-400 shrink-0" />
-                        ) : isCancelled ? (
-                            <XCircle className="h-4 w-4 text-muted-foreground shrink-0" />
-                        ) : isComplete ? (
-                            <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                        ) : (
-                            <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
-                        )}
-                    </div>
-                    <div className="h-2 rounded-full bg-muted/50 overflow-hidden">
+                <div className="relative overflow-hidden rounded-xl border border-border/70 bg-muted/20 p-1" aria-live="polite">
+                    <div className="absolute inset-y-1 left-1 right-1 overflow-hidden rounded-lg bg-background/35">
                         <div
-                            className={cn("h-full rounded-full transition-all duration-500", error ? "bg-rose-500" : isCancelled ? "bg-muted-foreground" : "bg-[#2496ED]")}
+                            className={cn(
+                                "h-full rounded-lg transition-all duration-500",
+                                error
+                                    ? "bg-rose-500/25"
+                                    : isCancelled
+                                    ? "bg-muted-foreground/20"
+                                    : isComplete
+                                    ? "bg-emerald-500/20"
+                                    : "bg-[#2496ED]/25",
+                            )}
                             style={{ width: `${pct}%` }}
                         />
+                    </div>
+                    <div className="relative flex min-h-9 items-center justify-between gap-3 px-3">
+                        <div className="flex min-w-0 items-center gap-2">
+                            {error ? (
+                                <XCircle className="h-4 w-4 shrink-0 text-rose-400" />
+                            ) : isCancelled ? (
+                                <XCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
+                            ) : isComplete ? (
+                                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                            ) : (
+                                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
+                            )}
+                            <p className="truncate text-xs font-medium text-foreground/90">
+                                {error
+                                    ? "Audit Stream Failed"
+                                    : isCancelled
+                                    ? "Audit Cancelled"
+                                    : isSaving
+                                    ? "Saving Audit Result…"
+                                    : isComplete
+                                    ? "Audit Complete"
+                                    : latest
+                                    ? `Checking ${latest.ruleId} · ${latest.title}`
+                                    : "Opening Audit Stream…"}
+                            </p>
+                        </div>
+                        <span className="shrink-0 rounded-md border border-border/70 bg-background/60 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+                            {isComplete ? total : current}/{total || "?"} · {pct}%
+                        </span>
                     </div>
                 </div>
 
