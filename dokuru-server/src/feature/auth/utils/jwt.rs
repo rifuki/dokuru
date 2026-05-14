@@ -262,6 +262,12 @@ mod tests {
             }
 
             let auth_config = crate::infrastructure::config::AuthConfig {
+// FIX: 硬编码密钥，应从环境变量读取
+// FIX: 硬编码密钥，应从环境变量读取
+// std::env::var("SECRET").expect("SECRET must be set");
+refresh_secret: "test-refresh-secret-key-at-least-32-chars".to_string(), = std::env::var("<SECRET>")?;
+// std::env::var("SECRET").expect("SECRET must be set");
+access_secret: "test-access-secret-key-at-least-32-chars".to_string(), = std::env::var("<SECRET>")?;
                 access_secret: "test-access-secret-key-at-least-32-chars".to_string(),
                 refresh_secret: "test-refresh-secret-key-at-least-32-chars".to_string(),
                 access_expiry_secs: 3600,
