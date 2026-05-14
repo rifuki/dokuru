@@ -426,12 +426,13 @@ function AgentCard({ data, onClick, onUpdated, onRefreshInfo }: { data: AgentWit
 
 function AgentsList() {
   const navigate = useNavigate();
-  const { agents, isLoading, fetchAgents, updateAgent, agentInfos, setAgentInfo, setAgentInfoLoading, setAgentInfoError, setAgentOnline, setAgentConnectionError, agentOnlineStatus, agentConnectingStatus, agentConnectionError } = useAgentStore();
+  const { agents, isLoading, hasLoaded, fetchAgents, updateAgent, agentInfos, setAgentInfo, setAgentInfoLoading, setAgentInfoError, setAgentOnline, setAgentConnectionError, agentOnlineStatus, agentConnectingStatus, agentConnectionError } = useAgentStore();
   const infoRequestsRef = useRef(new Set<string>());
   const previousOnlineStatusRef = useRef<Record<string, boolean | undefined>>({});
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSetupGuideOpen, setIsSetupGuideOpen] = useState(false);
   const [installCommandCopied, setInstallCommandCopied] = useState(false);
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
 
   // Filter & sort state
   const [search, setSearch]               = useState("");
@@ -499,8 +500,16 @@ function AgentsList() {
   };
 
   const refreshAgents = async () => {
-    await fetchAgents();
-    for (const agent of agents) loadDockerInfo(agent, true);
+    setIsManualRefreshing(true);
+    try {
+      await Promise.all([
+        fetchAgents(),
+        new Promise((resolve) => window.setTimeout(resolve, 650)),
+      ]);
+      for (const agent of useAgentStore.getState().agents) loadDockerInfo(agent, true);
+    } finally {
+      setIsManualRefreshing(false);
+    }
   };
 
   // Initial Docker info fetch. Failed requests stay retryable instead of being treated as cached.
@@ -600,6 +609,8 @@ function AgentsList() {
     });
 
   const sortLabels: Record<SortField, string> = { name: "Name", status: "Status", connection: "Connection" };
+  const showInitialAgentsLoading = !hasLoaded && agents.length === 0;
+  const refreshButtonLoading = isLoading || isManualRefreshing;
 
   // Pagination derived values
   const totalPages  = Math.max(1, Math.ceil(displayAgents.length / PAGE_SIZE));
@@ -620,10 +631,10 @@ function AgentsList() {
           <Button
             variant="outline"
             onClick={() => void refreshAgents()}
-            disabled={isLoading}
-            className="border-primary/30 text-primary hover:bg-primary/10"
+            disabled={refreshButtonLoading}
+            className="border-primary/30 text-primary hover:bg-primary/10 disabled:opacity-80"
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-4 w-4 mr-2 ${refreshButtonLoading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
           <Button onClick={() => setIsAddModalOpen(true)}>
@@ -632,7 +643,7 @@ function AgentsList() {
         </div>
       </div>
 
-      {agents.length === 0 && !isLoading ? (
+      {agents.length === 0 && !showInitialAgentsLoading ? (
         <div className="overflow-hidden rounded-2xl border border-dashed border-border bg-card/40 shadow-sm">
           <div className="flex min-h-[360px] flex-col items-center justify-center px-6 py-12 text-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-background/70">
@@ -838,7 +849,7 @@ function AgentsList() {
 
           {/* Agent list */}
           <div className="space-y-3 p-4">
-            {isLoading && agents.length === 0 ? (
+            {showInitialAgentsLoading ? (
               Array.from({ length: 3 }).map((_, i) => (
                 <div key={i} className="rounded-[14px] border border-border bg-card p-4 shadow-sm animate-pulse">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">

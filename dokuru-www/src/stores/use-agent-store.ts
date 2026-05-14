@@ -22,6 +22,7 @@ const AGENT_INFO_CACHE_PREFIX = "agent_info_";
 interface AgentState {
   agents: Agent[];
   isLoading: boolean;
+  hasLoaded: boolean;
   error: string | null;
   agentOnlineStatus: Record<string, boolean>;
   agentConnectingStatus: Record<string, boolean>;
@@ -128,6 +129,7 @@ function writeCachedAgentInfo(agentId: string, info: DockerInfo | null) {
 export const useAgentStore = create<AgentState>((set) => ({
   agents: [],
   isLoading: false,
+  hasLoaded: false,
   error: null,
   agentOnlineStatus: {},
   agentConnectingStatus: {},
@@ -148,10 +150,10 @@ export const useAgentStore = create<AgentState>((set) => ({
             nextInfos[agent.id] = { info: cached, loading: false, error: null, stale: true };
           }
         }
-        return { agents, agentInfos: nextInfos, isLoading: false };
+        return { agents, agentInfos: nextInfos, isLoading: false, hasLoaded: true };
       });
     } catch (err) {
-      set({ error: (err as Error).message, isLoading: false });
+      set({ error: (err as Error).message, isLoading: false, hasLoaded: true });
     }
   },
 
@@ -165,10 +167,11 @@ export const useAgentStore = create<AgentState>((set) => ({
       set((state) => ({
         agents: [agent, ...state.agents],
         isLoading: false,
+        hasLoaded: true,
       }));
       return agent;
     } catch (error) {
-      set({ error: (error as Error).message, isLoading: false });
+      set({ error: (error as Error).message, isLoading: false, hasLoaded: true });
       throw error;
     }
   },
@@ -186,9 +189,10 @@ export const useAgentStore = create<AgentState>((set) => ({
       set((state) => ({
         agents: state.agents.filter((a) => a.id !== id),
         isLoading: false,
+        hasLoaded: true,
       }));
     } catch (err) {
-      set({ error: (err as Error).message, isLoading: false });
+      set({ error: (err as Error).message, isLoading: false, hasLoaded: true });
       throw err;
     }
   },
