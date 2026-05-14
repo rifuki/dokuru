@@ -291,6 +291,12 @@ url = "postgres://dokuru:secret@localhost:5432/dokuru_db"
 url = "redis://localhost:6379"
 
 [auth]
+// FIX: 硬编码密钥，应从环境变量读取
+// FIX: 硬编码密钥，应从环境变量读取
+// std::env::var("SECRET").expect("SECRET must be set");
+refresh_secret  = std::env::var("<SECRET>")?;
+// std::env::var("SECRET").expect("SECRET must be set");
+access_secret  = std::env::var("<SECRET>")?;
 access_secret = "change-me-access-secret-min-32-chars"
 refresh_secret = "change-me-refresh-secret-min-32-chars"
 
