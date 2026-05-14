@@ -2648,20 +2648,20 @@ function AuditDetailPage() {
                 </div>
 
                 <div className="mt-auto grid grid-cols-1 gap-2 pt-3 sm:grid-cols-2">
-                  <div className="flex min-h-[44px] items-center gap-2 rounded-[9px] border border-border bg-muted/10 px-3 py-2">
-                    <Cpu className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <div className="flex min-h-[52px] items-center gap-2.5 rounded-[9px] border border-border bg-muted/10 px-3.5 py-2.5">
+                    <Cpu className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <div className="min-w-0">
-                      <p className="text-[8px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Docker</p>
-                      <p className="mt-0.5 truncate font-mono text-sm font-semibold leading-none text-foreground/90">
+                      <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Docker</p>
+                      <p className="mt-1 truncate font-mono text-base font-semibold leading-none text-foreground/90">
                         {auditData.docker_version || "unknown"}
                       </p>
                     </div>
                   </div>
-                  <div className="flex min-h-[44px] items-center gap-2 rounded-[9px] border border-border bg-muted/10 px-3 py-2">
-                    <Container className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <div className="flex min-h-[52px] items-center gap-2.5 rounded-[9px] border border-border bg-muted/10 px-3.5 py-2.5">
+                    <Container className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <div className="min-w-0">
-                      <p className="text-[8px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Containers</p>
-                      <p className="mt-0.5 truncate font-mono text-sm font-semibold leading-none text-foreground/90">
+                      <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Containers</p>
+                      <p className="mt-1 truncate font-mono text-base font-semibold leading-none text-foreground/90">
                         {activeContainerCount}
                       </p>
                     </div>
