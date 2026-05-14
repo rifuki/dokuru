@@ -44,7 +44,7 @@ function AuditHistoryPage() {
             queueMicrotask(() => {
                 if (cancelled) return;
                 setAudits(cachedHistory);
-                setCacheOnly(true);
+                setCacheOnly(false);
                 setRefreshing(true);
                 setLoading(false);
             });
@@ -73,6 +73,7 @@ function AuditHistoryPage() {
             .catch(() => {
                 if (cancelled) return;
                 if (cachedHistory.length > 0) {
+                    setCacheOnly(true);
                     toast.warning("Showing cached audit history");
                     return;
                 }
