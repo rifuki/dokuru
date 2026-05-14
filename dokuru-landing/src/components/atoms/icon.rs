@@ -88,7 +88,7 @@ const fn icon_markup(kind: IconKind) -> &'static str {
             r#"<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>"#
         }
         IconKind::Container => {
-            r#"<path d="M22 12.5V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7.5"/><path d="M2 7.5 12 2l10 5.5-10 5.5z"/><path d="M12 13v9"/><path d="m7 10 10-5.5"/>"#
+            r#"<path d="M22 7.7c0-.6-.4-1.2-.8-1.5l-6.3-3.9a1.72 1.72 0 0 0-1.7 0l-10.3 6c-.5.2-.9.8-.9 1.4v6.6c0 .5.4 1.2.8 1.5l6.3 3.9a1.72 1.72 0 0 0 1.7 0l10.3-6c.5-.3.9-1 .9-1.5Z"/><path d="M10 21.9V14L2.1 9.1"/><path d="m10 14 11.9-6.9"/><path d="M14 19.8v-8.1"/><path d="M18 17.5V9.4"/>"#
         }
         IconKind::Code => {
             r#"<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>"#

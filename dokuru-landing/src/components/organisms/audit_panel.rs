@@ -11,7 +11,7 @@ pub(crate) fn audit_panel(
 ) -> impl IntoView {
     let (active_tab, set_active_tab) = signal("pillars");
     view! {
-        <div data-testid="hero-audit-panel" class="relative w-full overflow-hidden rounded-[18px] border border-white/10 bg-[#09090B] shadow-[0_36px_84px_-28px_rgba(0,0,0,0.86)]">
+        <div data-testid="hero-audit-panel" class="relative w-full overflow-hidden rounded-[16px] border border-white/10 bg-[#09090B] shadow-[0_36px_84px_-28px_rgba(0,0,0,0.86)]">
             <div class="pointer-events-none absolute inset-0 overflow-hidden opacity-40">
                 <div class="scan-line absolute inset-x-0 h-24 bg-gradient-to-b from-transparent via-[#2496ED]/10 to-transparent"/>
             </div>
@@ -19,7 +19,9 @@ pub(crate) fn audit_panel(
 
             <div class="relative flex min-w-0 items-center gap-2.5 border-b border-white/10 bg-[#121214]/95 px-3.5 py-3">
                 <div class="flex shrink-0 gap-1.5">
-                    <span class="h-2 w-2 rounded-full bg-zinc-700"/><span class="h-2 w-2 rounded-full bg-zinc-700"/><span class="h-2 w-2 rounded-full bg-zinc-700"/>
+                    <span class="h-2 w-2 rounded-full bg-[#ff5f57] shadow-[0_0_10px_rgba(255,95,87,0.35)]"/>
+                    <span class="h-2 w-2 rounded-full bg-[#ffbd2e] shadow-[0_0_10px_rgba(255,189,46,0.28)]"/>
+                    <span class="h-2 w-2 rounded-full bg-[#28c840] shadow-[0_0_10px_rgba(40,200,64,0.28)]"/>
                 </div>
                 <div class="min-w-0 flex-1 truncate font-heading text-[13px] font-bold text-zinc-100">
                     <span>"Brave Lion"</span>
@@ -31,14 +33,14 @@ pub(crate) fn audit_panel(
                 </span>
             </div>
 
-            <div class="relative grid md:grid-cols-[0.82fr_1.18fr] md:divide-x md:divide-white/10">
+            <div class="relative grid md:grid-cols-2 md:divide-x md:divide-white/10">
                 <div class="p-3.5 sm:p-4">
                     <div class="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-zinc-500">"audit score"</div>
                     <div class="mt-2.5 flex items-end gap-2.5">
                         <div class="font-heading text-[44px] font-black leading-none text-[#2496ED]" data-testid="audit-score-value">"97"</div>
                         <div class="pb-1 font-heading text-lg font-black text-zinc-600">"/100"</div>
                     </div>
-                    <div class="mt-2.5 h-1.5 overflow-hidden rounded-full bg-white/5">
+                    <div class="mt-2.5 h-2 overflow-hidden rounded-full bg-white/5">
                         <div class="h-full w-[97%] rounded-full bg-[#2496ED] shadow-[0_0_24px_rgba(36,150,237,0.28)]"/>
                     </div>
                     <div class="mt-2.5 font-mono text-[10px] leading-relaxed text-zinc-500">"CIS Docker Benchmark · 39 checks"</div>
@@ -47,6 +49,11 @@ pub(crate) fn audit_panel(
                         {score_stat("38", "pass", "text-emerald-400", "border-emerald-500/25 bg-emerald-500/8")}
                         {score_stat("1", "fail", "text-rose-400", "border-rose-500/25 bg-rose-500/8")}
                         {score_stat("39", "total", "text-zinc-200", "border-white/10 bg-white/[0.03]")}
+                    </div>
+
+                    <div class="mt-3 grid grid-cols-2 gap-2">
+                        {audit_meta_stat(IconKind::Cpu, "docker", "29.4.3")}
+                        {audit_meta_stat(IconKind::Container, "containers", "8")}
                     </div>
                 </div>
 
@@ -83,10 +90,19 @@ pub(crate) fn audit_panel(
                 </div>
             </div>
 
-            <div class="relative flex flex-col gap-2.5 border-t border-[#2496ED]/25 bg-[#2496ED]/5 px-3.5 py-3 sm:flex-row sm:items-center sm:justify-between md:px-4">
+            <div class="relative flex flex-col gap-2.5 border-t border-white/10 bg-[#121214]/90 px-3.5 py-3 sm:flex-row sm:items-center sm:justify-between md:px-4">
                 <div>
-                    <div class="text-[13px] font-bold text-[#2496ED]">"8 rules can be auto-fixed"</div>
-                    <div class="mt-1 text-[11px] text-[#2496ED]/70">"Namespace, cgroup limits, and privileged containers - one click."</div>
+                    <div class="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-zinc-500">"remediation"</div>
+                    <div class="mt-1 text-[13px] text-zinc-500">
+                        <span class="font-mono font-bold text-[#2496ED]">"8"</span>
+                        <span>" rules can be auto-fixed"</span>
+                        <span class="mx-2 text-zinc-700">"/"</span>
+                        <span class="font-mono font-bold text-rose-400">"1"</span>
+                        <span>" critical"</span>
+                        <span class="mx-2 text-zinc-700">"/"</span>
+                        <span class="font-mono font-bold text-amber-300">"4"</span>
+                        <span>" medium"</span>
+                    </div>
                 </div>
                 <button
                     on:click=move |_| {
@@ -111,9 +127,21 @@ fn score_stat(
     card_class: &'static str,
 ) -> impl IntoView {
     view! {
-        <div class=format!("rounded-lg border px-2 py-2 text-center {}", card_class)>
+        <div class=format!("flex min-h-[56px] flex-col items-center justify-center rounded-[10px] border px-2 py-2 text-center {}", card_class)>
             <div class=format!("font-heading text-lg font-black leading-none {}", value_class)>{value}</div>
             <div class="mt-1.5 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-zinc-500">{label}</div>
+        </div>
+    }
+}
+
+fn audit_meta_stat(icon_kind: IconKind, label: &'static str, value: &'static str) -> impl IntoView {
+    view! {
+        <div class="grid min-h-[46px] grid-cols-[18px_minmax(0,1fr)] items-center gap-2 rounded-[9px] border border-white/10 bg-white/[0.025] px-3 py-2">
+            <span class="flex h-5 w-5 items-center justify-center text-zinc-500">{icon(icon_kind, 14, "", "2")}</span>
+            <div class="min-w-0 leading-none">
+                <div class="font-mono text-[8px] font-semibold uppercase tracking-[0.2em] text-zinc-500">{label}</div>
+                <div class="mt-1 truncate font-mono text-sm font-semibold leading-none text-zinc-100">{value}</div>
+            </div>
         </div>
     }
 }
