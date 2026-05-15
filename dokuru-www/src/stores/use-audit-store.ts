@@ -193,6 +193,11 @@ interface AuditState {
     // so the scan keeps running when the audit route unmounts.
     auditStreams: Record<string, AuditStreamState>;
 
+    // Last completed audit result for the current SPA session. This keeps the
+    // audit landing result visible after opening the saved result and going back,
+    // but naturally resets on a full page refresh.
+    currentAuditResults: Record<string, AuditResponse>;
+
     // Last completed audit result the user already opened per agentId.
     viewedAuditResults: Record<string, string>;
 
@@ -224,6 +229,7 @@ export const useAuditStore = create<AuditState>((set) => ({
     fixingRules: {},
     fixOutcomes: {},
     auditStreams: {},
+    currentAuditResults: {},
     viewedAuditResults: {},
     fixJobs: {},
 
@@ -414,17 +420,22 @@ export const useAuditStore = create<AuditState>((set) => ({
             ? agentApi.auditStreamUrl(agent.id)
             : agentDirectApi.auditStreamUrl(agent.url, token);
 
-        set((s) => ({
-            runningAudits: { ...s.runningAudits, [agent.id]: true },
-            auditStreams: {
-                ...s.auditStreams,
-                [agent.id]: {
-                    ...createIdleStream(),
-                    status: "running",
-                    startedAt: new Date().toISOString(),
+        set((s) => {
+            const currentAuditResults = { ...s.currentAuditResults };
+            delete currentAuditResults[agent.id];
+            return {
+                runningAudits: { ...s.runningAudits, [agent.id]: true },
+                currentAuditResults,
+                auditStreams: {
+                    ...s.auditStreams,
+                    [agent.id]: {
+                        ...createIdleStream(),
+                        status: "running",
+                        startedAt: new Date().toISOString(),
+                    },
                 },
-            },
-        }));
+            };
+        });
 
         const run = new Promise<AuditResponse>((resolve, reject) => {
             const socket = new WebSocket(url);
@@ -515,6 +526,7 @@ export const useAuditStore = create<AuditState>((set) => ({
                                 ...(s.auditHistories[agent.id] ?? []).filter((item) => item.id !== savedAudit.id),
                             ],
                         },
+                        currentAuditResults: { ...s.currentAuditResults, [agent.id]: savedAudit },
                         auditStreams: {
                             ...s.auditStreams,
                             [agent.id]: {
@@ -566,6 +578,7 @@ export const useAuditStore = create<AuditState>((set) => ({
                                 ...(s.auditHistories[agent.id] ?? []).filter((item) => item.id !== savedAudit.id),
                             ],
                         },
+                        currentAuditResults: { ...s.currentAuditResults, [agent.id]: savedAudit },
                         auditStreams: {
                             ...s.auditStreams,
                             [agent.id]: {
@@ -683,6 +696,11 @@ export const useAuditStore = create<AuditState>((set) => ({
                 const streams = { ...newState.auditStreams };
                 delete streams[agentId];
                 newState.auditStreams = streams;
+            }
+            if (newState.currentAuditResults[agentId]) {
+                const currentAuditResults = { ...newState.currentAuditResults };
+                delete currentAuditResults[agentId];
+                newState.currentAuditResults = currentAuditResults;
             }
             return newState;
         });

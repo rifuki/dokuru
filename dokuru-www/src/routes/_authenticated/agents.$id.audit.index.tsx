@@ -905,6 +905,23 @@ function runningDockerContainers(containers: DockerContainer[]): CheckedContaine
     return containers.filter(container => container.state.toLowerCase() === "running");
 }
 
+function auditResponseToProgressLines(audit: AuditResponse): AuditProgressLine[] {
+    const total = audit.summary.total || audit.results.length;
+    return audit.results.map((result, index) => ({
+        index: index + 1,
+        total,
+        ruleId: result.rule.id,
+        title: result.rule.title,
+        status: result.status,
+        message: result.message,
+        command: result.audit_command,
+        stdout: result.raw_output,
+        stderr: result.command_stderr,
+        exitCode: result.command_exit_code,
+        timestamp: audit.timestamp,
+    }));
+}
+
 function RunningContainersCheckedPanel({
     agentId,
     containers,
@@ -1271,27 +1288,29 @@ function AuditPage() {
     const { agentOnlineStatus } = useAgentStore();
     const { auditHistories, setAuditHistory, startAudit, cancelAudit, clearAuditStream } = useAuditStore();
     const auditStream = useAuditStore((state) => state.auditStreams[id]);
+    const currentAuditResult = useAuditStore((state) => state.currentAuditResults[id]);
     const isOnline = !!agentOnlineStatus[id];
     const [agent, setAgent] = useState<Agent | null>(null);
     const [token, setToken] = useState<string | undefined>();
     const [containers, setContainers] = useState<DockerContainer[]>([]);
     const [auditData] = useState<AuditResponse | null>(null);
-    const auditStreamStatus = auditStream?.status ?? "idle";
+    const auditHistory = auditHistories[id] ?? [];
+    const sessionAudit = auditStream?.savedAudit ?? currentAuditResult ?? null;
+    const auditStreamStatus = auditStream?.status ?? (sessionAudit ? "complete" : "idle");
     const isRunning = auditStreamStatus === "running" || auditStreamStatus === "saving";
     const canCancelAudit = auditStreamStatus === "running";
-    const auditHistory = auditHistories[id] ?? [];
     const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
     const [sectionFilter, setSectionFilter] = useState<string>("all");
-    const auditTotal = auditStream?.total ?? 0;
-    const auditCurrent = auditStream?.current ?? 0;
-    const auditProgressLines = auditStream?.lines ?? [];
+    const auditProgressLines = auditStream?.lines?.length ? auditStream.lines : sessionAudit ? auditResponseToProgressLines(sessionAudit) : [];
+    const auditTotal = auditStream?.total || sessionAudit?.summary.total || auditProgressLines.length;
+    const auditCurrent = isRunning ? auditStream?.current ?? 0 : auditTotal;
     const auditStreamError = auditStream?.error ?? null;
-    const savedAuditId = auditStream?.savedAudit?.id;
-    const latestAudit = auditStream?.savedAudit ?? auditHistory[0] ?? null;
-    const savedAuditContainers = auditStream?.savedAudit?.active_containers ?? [];
+    const savedAuditId = sessionAudit?.id;
+    const latestAudit = auditHistory[0] ?? sessionAudit ?? null;
+    const savedAuditContainers = sessionAudit?.active_containers ?? [];
     const terminalCheckedContainers = savedAuditContainers.length > 0 ? savedAuditContainers : runningDockerContainers(containers);
-    const terminalCheckedFallbackTotal = auditStream?.savedAudit?.total_containers ?? terminalCheckedContainers.length;
-    const terminalCheckedContainersAreSavedSnapshot = !!auditStream?.savedAudit;
+    const terminalCheckedFallbackTotal = sessionAudit?.total_containers ?? terminalCheckedContainers.length;
+    const terminalCheckedContainersAreSavedSnapshot = !!sessionAudit;
     const hasAnyAudit = !!latestAudit || !!savedAuditId;
     const showAuditTerminal = auditStreamStatus !== "idle" && (
         isRunning || auditStreamStatus === "complete" || auditStreamStatus === "error" || auditStreamStatus === "cancelled" || auditProgressLines.length > 0
@@ -1490,14 +1509,19 @@ function AuditPage() {
                     <h2 className="text-2xl font-bold tracking-tight">Security Audit</h2>
                     <p className="text-muted-foreground text-sm mt-0.5">CIS Docker Benchmark v1.8.0</p>
                 </div>
-                {!isRunning && (
-                    <Button onClick={handleRunAudit} disabled={!agent || !isOnline} className="w-full shrink-0 sm:w-auto" title={!isOnline ? "Agent offline" : undefined}>
-                        {hasAnyAudit
-                            ? <><RefreshCw className="h-4 w-4 mr-2" /> Re-run Audit</>
-                            : <><Play className="h-4 w-4 mr-2" /> Run Audit</>
-                        }
-                    </Button>
-                )}
+                <Button
+                    onClick={handleRunAudit}
+                    disabled={!agent || !isOnline || isRunning}
+                    className="w-full shrink-0 sm:w-auto"
+                    title={!isOnline ? "Agent offline" : undefined}
+                >
+                    {isRunning
+                        ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Audit Running</>
+                        : hasAnyAudit
+                        ? <><RefreshCw className="h-4 w-4 mr-2" /> Re-run Audit</>
+                        : <><Play className="h-4 w-4 mr-2" /> Run Audit</>
+                    }
+                </Button>
             </div>
 
             {auditData ? (
