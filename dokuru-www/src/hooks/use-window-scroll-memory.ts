@@ -120,9 +120,12 @@ export function useWindowScrollMemory(key: string, canRestore = true) {
     allowPersistRef.current = !intent.fromSidebar || intent.savedScrollY <= 0;
 
     if (!intent.fromSidebar) {
-      if (window.scrollY !== 0) scrollWindowTo(0);
-      lastObservedScrollYRef.current = 0;
-      writeSavedWindowScrollY(key, 0);
+      if (completedRestoreTokenRef.current !== intent.token) {
+        if (window.scrollY !== 0) scrollWindowTo(0);
+        lastObservedScrollYRef.current = 0;
+        writeSavedWindowScrollY(key, 0);
+        completedRestoreTokenRef.current = intent.token;
+      }
       return;
     }
 
