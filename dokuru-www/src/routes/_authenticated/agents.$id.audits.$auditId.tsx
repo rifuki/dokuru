@@ -2085,6 +2085,8 @@ function AuditDetailPage() {
     cancelApplyAll,
     toggleRule: toggleFixAllRule,
     setAllSelected: setAllFixAllSelected,
+    setRulesSelected: setFixAllRulesSelected,
+    setSafeDefaultsSelected: setFixAllSafeDefaultsSelected,
     updateCgroupTarget: updateFixAllCgroupTarget,
     backToConfirm: backFixAllToConfirm,
   } = useFixAll({
@@ -3258,6 +3260,8 @@ function AuditDetailPage() {
         onClose={closeFixAll}
         onToggleRule={toggleFixAllRule}
         onSetAllSelected={setAllFixAllSelected}
+        onSetRulesSelected={setFixAllRulesSelected}
+        onSetSafeDefaultsSelected={setFixAllSafeDefaultsSelected}
         onUpdateCgroupTarget={updateFixAllCgroupTarget}
         onBackToConfirm={backFixAllToConfirm}
         onRerunAudit={() => {

@@ -4,11 +4,12 @@ import {
 } from "@/components/ui/sheet";
 import {
     AlertTriangle, CheckCircle2, Loader2, XCircle,
-    RefreshCw, Check, ShieldAlert, X, FileCode2, ChevronRight, Terminal,
+    RefreshCw, Check, Minus, ShieldAlert, X, FileCode2, ChevronRight, Terminal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isContainerRecreateRule } from "@/features/audit/hooks/useFix";
 import type { CgroupRuleId, CgroupTargetConfig, FixAllStep, RuleFixStatus } from "@/features/audit/hooks/useFixAll";
+import { PILLAR_META, getRulePillar, type SecurityPillar } from "@/lib/audit-pillars";
 import { ResizableSheetContent } from "@/features/audit/components/ResizableSheetContent";
 import { ProgressEventsPanel } from "@/features/audit/components/ProgressEventsPanel";
 import { CGROUP_RESOURCE_MINIMUMS, CgroupTargetEditor, type CgroupResourceField } from "@/features/audit/components/CgroupTargetControls";
@@ -24,6 +25,8 @@ const STEPS: { key: FixAllStep; label: string }[] = [
     { key: "applying", label: "Applying" },
     { key: "result",   label: "Result"   },
 ];
+
+const SECURITY_PILLAR_ORDER = Object.keys(PILLAR_META) as SecurityPillar[];
 
 function StepIndicator({ current, showConfigure, complete = false }: { current: FixAllStep; showConfigure: boolean; complete?: boolean }) {
     const steps = showConfigure ? STEPS : STEPS.filter((step) => step.key !== "configure");
@@ -295,10 +298,132 @@ function RuleEvidenceRow({
     );
 }
 
+function PillarSelectionControls({
+    ruleStatuses,
+    disabled,
+    onSetAllSelected,
+    onSetRulesSelected,
+    onSetSafeDefaultsSelected,
+}: {
+    ruleStatuses: RuleFixStatus[];
+    disabled: boolean;
+    onSetAllSelected: (selected: boolean) => void;
+    onSetRulesSelected: (ruleIds: string[], selected: boolean) => void;
+    onSetSafeDefaultsSelected: () => void;
+}) {
+    const options = SECURITY_PILLAR_ORDER.map((pillar) => {
+        const statuses = ruleStatuses.filter((status) => getRulePillar(status.ruleId) === pillar);
+        const selected = statuses.filter((status) => status.selected).length;
+        const total = statuses.length;
+
+        return {
+            pillar,
+            meta: PILLAR_META[pillar],
+            ruleIds: statuses.map((status) => status.ruleId),
+            selected,
+            total,
+            allSelected: total > 0 && selected === total,
+            someSelected: selected > 0 && selected < total,
+        };
+    });
+
+    return (
+        <div className="rounded-lg border border-white/8 bg-white/[0.02] p-3.5">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/38">
+                        Selection
+                    </p>
+                    <p className="mt-1 text-xs text-white/40">
+                        Restore safe defaults or choose entire security pillars.
+                    </p>
+                </div>
+                <div className="flex shrink-0 items-center overflow-hidden rounded-md border border-white/8 bg-black/20">
+                    <button
+                        type="button"
+                        onClick={onSetSafeDefaultsSelected}
+                        disabled={disabled}
+                        className="h-7 px-2.5 text-[11px] font-medium text-[#2496ED]/85 transition-colors hover:bg-white/[0.045] hover:text-[#2496ED] disabled:pointer-events-none disabled:opacity-40"
+                    >
+                        Recommended
+                    </button>
+                    <span className="h-4 w-px bg-white/8" />
+                    <button
+                        type="button"
+                        onClick={() => onSetAllSelected(true)}
+                        disabled={disabled}
+                        className="h-7 px-2.5 text-[11px] font-medium text-white/48 transition-colors hover:bg-white/[0.045] hover:text-white/80 disabled:pointer-events-none disabled:opacity-40"
+                    >
+                        All
+                    </button>
+                    <span className="h-4 w-px bg-white/8" />
+                    <button
+                        type="button"
+                        onClick={() => onSetAllSelected(false)}
+                        disabled={disabled}
+                        className="h-7 px-2.5 text-[11px] font-medium text-white/48 transition-colors hover:bg-white/[0.045] hover:text-white/80 disabled:pointer-events-none disabled:opacity-40"
+                    >
+                        None
+                    </button>
+                </div>
+            </div>
+            <div className="grid gap-1.5 sm:grid-cols-2">
+                {options.map((option) => {
+                    const Icon = option.meta.icon;
+                    const nextSelected = !option.allSelected;
+                    const optionDisabled = disabled || option.total === 0;
+                    return (
+                        <button
+                            key={option.pillar}
+                            type="button"
+                            onClick={() => onSetRulesSelected(option.ruleIds, nextSelected)}
+                            disabled={optionDisabled}
+                            aria-pressed={option.allSelected}
+                            title={option.total === 0
+                                ? `No pending fixes in ${option.meta.name}`
+                                : `${nextSelected ? "Select" : "Clear"} ${option.meta.name}`}
+                            className={cn(
+                                "flex min-w-0 items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors",
+                                option.allSelected
+                                    ? "border-[#2496ED]/35 bg-[#2496ED]/10"
+                                    : option.someSelected
+                                    ? "border-[#2496ED]/20 bg-[#2496ED]/5"
+                                    : "border-white/8 bg-white/[0.02] hover:bg-white/[0.045]",
+                                option.total === 0 && "opacity-35",
+                                disabled && "pointer-events-none opacity-45"
+                            )}
+                        >
+                            <span className={cn(
+                                "flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border",
+                                option.allSelected || option.someSelected
+                                    ? "audit-on-primary border-[#2496ED] bg-[#2496ED] text-white"
+                                    : "border-white/20 bg-transparent text-transparent"
+                            )}>
+                                {option.allSelected
+                                    ? <Check size={10} strokeWidth={3} />
+                                    : option.someSelected
+                                    ? <Minus size={10} strokeWidth={3} />
+                                    : null}
+                            </span>
+                            <Icon className={cn("h-3.5 w-3.5 shrink-0", option.meta.color)} />
+                            <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-white/65">
+                                {option.meta.name}
+                            </span>
+                            <span className="shrink-0 font-mono text-[10px] text-white/35">
+                                {option.selected}/{option.total}
+                            </span>
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
 // ── Confirm step ──────────────────────────────────────────────────────────────
 
 function ConfirmStep({
-    ruleStatuses, selectedCount, hasCgroupSelection, cgroupLoading, onConfirm, onCancel, onToggleRule, onSetAllSelected,
+    ruleStatuses, selectedCount, hasCgroupSelection, cgroupLoading, onConfirm, onCancel, onToggleRule, onSetAllSelected, onSetRulesSelected, onSetSafeDefaultsSelected,
 }: {
     ruleStatuses: RuleFixStatus[];
     selectedCount: number;
@@ -308,6 +433,8 @@ function ConfirmStep({
     onCancel: () => void;
     onToggleRule: (ruleId: string) => void;
     onSetAllSelected: (selected: boolean) => void;
+    onSetRulesSelected: (ruleIds: string[], selected: boolean) => void;
+    onSetSafeDefaultsSelected: () => void;
 }) {
     const recreateCount = ruleStatuses.filter(r => r.selected && isContainerRecreateRule(r.ruleId)).length;
     const highRiskCount = ruleStatuses.filter(r => r.highRisk && !r.selected).length;
@@ -362,30 +489,19 @@ function ConfirmStep({
                 </div>
             )}
 
+            <PillarSelectionControls
+                ruleStatuses={ruleStatuses}
+                disabled={cgroupLoading}
+                onSetAllSelected={onSetAllSelected}
+                onSetRulesSelected={onSetRulesSelected}
+                onSetSafeDefaultsSelected={onSetSafeDefaultsSelected}
+            />
+
             <div>
                 <div className="mb-2 flex items-center justify-between gap-3">
                     <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/38">
                         {selectedCount} of {ruleStatuses.length} rules selected
                     </p>
-                    <div className="flex items-center gap-2">
-                        <button
-                            type="button"
-                            onClick={() => onSetAllSelected(true)}
-                            disabled={cgroupLoading}
-                            className="text-xs font-medium text-[#2496ED]/75 hover:text-[#2496ED] disabled:pointer-events-none disabled:opacity-40"
-                        >
-                            Select all
-                        </button>
-                        <span className="text-white/15">/</span>
-                        <button
-                            type="button"
-                            onClick={() => onSetAllSelected(false)}
-                            disabled={cgroupLoading}
-                            className="text-xs font-medium text-white/35 hover:text-white/70 disabled:pointer-events-none disabled:opacity-40"
-                        >
-                            Clear
-                        </button>
-                    </div>
                 </div>
                 <div className="rounded-lg border border-white/8 bg-white/[0.02] overflow-hidden divide-y divide-white/5">
                     {ruleStatuses.map(rs => (
@@ -930,6 +1046,8 @@ interface FixAllWizardProps {
     onRetry: () => void;
     onToggleRule: (ruleId: string) => void;
     onSetAllSelected: (selected: boolean) => void;
+    onSetRulesSelected: (ruleIds: string[], selected: boolean) => void;
+    onSetSafeDefaultsSelected: () => void;
     onUpdateCgroupTarget: (key: string, patch: Partial<CgroupTargetConfig>) => void;
     onBackToConfirm: () => void;
 }
@@ -937,7 +1055,7 @@ interface FixAllWizardProps {
 export function FixAllWizard({
     open, agentId, step, currentIndex, ruleStatuses, selectedCount,
     cgroupTargets, cgroupLoading, selectedCgroupRuleIds,
-    onConfirm, onCancelApply, onClose, onRerunAudit, onRetry, onToggleRule, onSetAllSelected,
+    onConfirm, onCancelApply, onClose, onRerunAudit, onRetry, onToggleRule, onSetAllSelected, onSetRulesSelected, onSetSafeDefaultsSelected,
     onUpdateCgroupTarget, onBackToConfirm,
 }: FixAllWizardProps) {
     const showConfigure = selectedCgroupRuleIds.length > 0 || step === "configure";
@@ -1006,6 +1124,8 @@ export function FixAllWizard({
                             onCancel={onClose}
                             onToggleRule={onToggleRule}
                             onSetAllSelected={onSetAllSelected}
+                            onSetRulesSelected={onSetRulesSelected}
+                            onSetSafeDefaultsSelected={onSetSafeDefaultsSelected}
                         />
                     )}
                     {step === "configure" && (

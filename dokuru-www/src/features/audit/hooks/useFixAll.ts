@@ -477,6 +477,15 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
         }));
     }, [commitSession]);
 
+    const setSafeDefaultsSelected = useCallback(() => {
+        commitSession((current) => ({
+            ...current,
+            ruleStatuses: current.ruleStatuses.map(status => (
+                status.state === "pending" ? { ...status, selected: !status.highRisk } : status
+            )),
+        }));
+    }, [commitSession]);
+
     const updateCgroupTarget = useCallback((key: string, patch: Partial<CgroupTargetConfig>) => {
         commitSession((current) => ({
             ...current,
@@ -992,6 +1001,7 @@ export function useFixAll({ agentId, agentUrl, agentAccessMode, token, auditTime
         toggleRule,
         setAllSelected,
         setRulesSelected,
+        setSafeDefaultsSelected,
         updateCgroupTarget,
         backToConfirm,
     };
