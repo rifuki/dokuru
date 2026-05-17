@@ -591,7 +591,7 @@ function AgentVerificationPanel({
   );
 }
 
-function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAccessMode, token, containers, focusedRuleId, open, activeTab, appliedFixEntry, applyDisabled = false, onOpenChange, onActiveTabChange, onOpenWizard }: {
+function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAccessMode, token, containers, focusedRuleId, open, activeTab, appliedFixEntry, applyDisabled = false, applyDisabledReason, onOpenChange, onActiveTabChange, onOpenWizard }: {
   result: AuditResult;
   agentId: string;
   auditId: string;
@@ -605,6 +605,7 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
   activeTab: RuleCardTab;
   appliedFixEntry?: FixHistoryEntry;
   applyDisabled?: boolean;
+  applyDisabledReason?: string;
   onOpenChange: (open: boolean) => void;
   onActiveTabChange: (tab: RuleCardTab) => void;
   onOpenWizard: (result: AuditResult) => void;
@@ -734,6 +735,7 @@ function RuleCard({ result, agentId, auditId, auditTimestamp, agentUrl, agentAcc
                 isFixed ? "bg-emerald-600 hover:bg-emerald-700" : isFixBlocked ? "bg-amber-600 hover:bg-amber-700" : "bg-[#2496ED] hover:bg-[#1d7ac7]",
               )}
               disabled={shouldDisableApply}
+              title={shouldDisableApply ? applyDisabledReason : undefined}
             >
               {isFixing ? <Loader2 className="h-3 w-3 animate-spin" /> : isFixed ? <ShieldCheck className="h-3 w-3" /> : isFixBlocked ? <AlertTriangle className="h-3 w-3" /> : <Wrench className="h-3 w-3" />}
               {isFixing ? "View Progress" : isFixed || isFixBlocked ? "View Result" : "Apply Fix"}
@@ -2015,6 +2017,14 @@ function AuditDetailPage() {
     staleTime: 60_000,
   });
   const auditHistory = auditHistoryQuery.data ?? storedAuditHistory ?? [];
+  const latestAuditId = sortAuditHistory(auditHistory)[0]?.id;
+  const isHistoricalAuditSnapshot = Boolean(auditData?.id && latestAuditId && auditData.id !== latestAuditId);
+  const historicalAuditFixDisabledReason = "Fix actions are disabled for historical audit snapshots. Re-run audit before applying remediation.";
+  const notifyHistoricalAuditFixDisabled = () => {
+    toast.info("Fix disabled for historical audit", {
+      description: "Re-run audit to remediate the current host state. Rollback remains available from fix history.",
+    });
+  };
 
   const containersQuery = useQuery({
     queryKey: ["containers", id, true],
@@ -2117,7 +2127,8 @@ function AuditDetailPage() {
   const fixAllResultFailed = fixAllStep === "result" && ruleStatuses.length > 0 && !fixAllResultSuccessful;
   const fixAllSessionActive = ruleStatuses.length > 0 && (fixAllStep === "applying" || fixAllResultSuccessful);
   const fixControlsLocked = hasRunningFixJob || wizardStep === "applying" || fixAllStep === "applying";
-  const fixAllButtonDisabled = fixControlsLocked && !fixAllSessionActive;
+  const fixApplyDisabled = fixControlsLocked || isHistoricalAuditSnapshot;
+  const fixAllButtonDisabled = isHistoricalAuditSnapshot || (fixControlsLocked && !fixAllSessionActive);
 
   useEffect(() => {
     markAuditResultViewed(id, auditId);
@@ -2273,7 +2284,9 @@ function AuditDetailPage() {
   };
   const remediationPlan = buildRemediationPlan(baseResults);
   const autoFixableResults = baseResults.filter(result => isAutoFixableResult(result) && !appliedRuleIds.has(result.rule.id));
-  const fixAllButtonLabel = fixAllStep === "applying" && ruleStatuses.length > 0
+  const fixAllButtonLabel = isHistoricalAuditSnapshot
+    ? historicalAuditFixDisabledReason
+    : fixAllStep === "applying" && ruleStatuses.length > 0
     ? "View Fix All Progress"
     : fixAllResultSuccessful
     ? "View Fix All Result"
@@ -2283,7 +2296,9 @@ function AuditDetailPage() {
     ? "Fix running"
     : `Fix All (${autoFixableResults.length})`;
   const showFixAllAction = autoFixableResults.length > 0 || fixAllSessionActive || fixAllResultFailed;
-  const fixAllSummaryButtonLabel = fixAllStep === "applying" && ruleStatuses.length > 0
+  const fixAllSummaryButtonLabel = isHistoricalAuditSnapshot
+    ? "Fix disabled"
+    : fixAllStep === "applying" && ruleStatuses.length > 0
     ? "View progress"
     : fixAllResultSuccessful
     ? "View result"
@@ -2313,9 +2328,6 @@ function AuditDetailPage() {
       (acc[pillarName] ??= []).push(r);
       return acc;
     }, {});
-  const latestAuditId = auditHistory.length > 0
-    ? [...auditHistory].sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))[0]?.id
-    : undefined;
   const auditDetailBackTarget = detailSource ?? (auditData?.id && latestAuditId === auditData.id ? "latest" : "history");
 
   const fmtDate = (ts: string) => {
@@ -2383,6 +2395,58 @@ function AuditDetailPage() {
       if (message === AUDIT_CANCELLED_MESSAGE) return;
       toast.error(message);
     });
+  };
+
+  const handleOpenFixWizard = (result: AuditResult) => {
+    if (isHistoricalAuditSnapshot) {
+      notifyHistoricalAuditFixDisabled();
+      return;
+    }
+    openWizard(result);
+  };
+
+  const handleApplyFix = () => {
+    if (isHistoricalAuditSnapshot) {
+      notifyHistoricalAuditFixDisabled();
+      return;
+    }
+    void applyFix();
+  };
+
+  const handleRetryFix = () => {
+    if (isHistoricalAuditSnapshot) {
+      notifyHistoricalAuditFixDisabled();
+      return;
+    }
+    retryFix();
+  };
+
+  const handleOpenFixAll = (results: AuditResult[]) => {
+    if (isHistoricalAuditSnapshot) {
+      notifyHistoricalAuditFixDisabled();
+      return;
+    }
+    openFixAll(results);
+  };
+
+  const handleApplyAll = () => {
+    if (isHistoricalAuditSnapshot) {
+      notifyHistoricalAuditFixDisabled();
+      return;
+    }
+    void applyAll();
+  };
+
+  const handleRetryFixAll = () => {
+    if (isHistoricalAuditSnapshot) {
+      notifyHistoricalAuditFixDisabled();
+      return;
+    }
+    if (autoFixableResults.length === 0) {
+      closeFixAll();
+      return;
+    }
+    openFixAll(autoFixableResults);
   };
 
   const buildCurrentAuditDocumentHtml = () => {
@@ -2754,7 +2818,9 @@ function AuditDetailPage() {
                 <div className="min-w-0">
                   <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Remediation</p>
                   <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground/80">
-                    {autoFixableResults.length > 0 ? (
+                    {isHistoricalAuditSnapshot && autoFixableResults.length > 0 ? (
+                      <span><span className="font-mono font-bold text-amber-400">{autoFixableResults.length}</span> historical fixes disabled</span>
+                    ) : autoFixableResults.length > 0 ? (
                       <span><span className="font-mono font-bold text-[#2496ED]">{autoFixableResults.length}</span> rules can be auto-fixed</span>
                     ) : (
                       <span>No auto-fixable rules pending</span>
@@ -2769,7 +2835,7 @@ function AuditDetailPage() {
                   <Button
                     type="button"
                     size="sm"
-                    onClick={() => openFixAll(autoFixableResults)}
+                    onClick={() => handleOpenFixAll(autoFixableResults)}
                     disabled={fixAllButtonDisabled}
                     title={fixAllButtonLabel}
                     className="h-10 w-full shrink-0 rounded-[10px] bg-[#2496ED] px-5 text-sm font-semibold text-white shadow-none hover:bg-[#1e80cc] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#2496ED] sm:w-auto"
@@ -3161,10 +3227,11 @@ function AuditDetailPage() {
                                 open={openRuleIds.has(r.rule.id) || focusedRuleId === r.rule.id}
                                 activeTab={activeRuleTabs[r.rule.id] ?? (focusedRuleId === r.rule.id ? "fix" : "overview")}
                                 appliedFixEntry={appliedHistoryByRule.get(r.rule.id)}
-                                applyDisabled={fixControlsLocked}
+                                applyDisabled={fixApplyDisabled}
+                                applyDisabledReason={isHistoricalAuditSnapshot ? historicalAuditFixDisabledReason : undefined}
                                 onOpenChange={(nextOpen) => handleRuleOpenChange(r.rule.id, nextOpen)}
                                 onActiveTabChange={(tab) => handleRuleTabChange(r.rule.id, tab)}
-                                onOpenWizard={openWizard}
+                                onOpenWizard={handleOpenFixWizard}
                               />
                             ))
                           }
@@ -3201,10 +3268,11 @@ function AuditDetailPage() {
                                 open={openRuleIds.has(r.rule.id) || focusedRuleId === r.rule.id}
                                 activeTab={activeRuleTabs[r.rule.id] ?? (focusedRuleId === r.rule.id ? "fix" : "overview")}
                                 appliedFixEntry={appliedHistoryByRule.get(r.rule.id)}
-                                applyDisabled={fixControlsLocked}
+                                applyDisabled={fixApplyDisabled}
+                                applyDisabledReason={isHistoricalAuditSnapshot ? historicalAuditFixDisabledReason : undefined}
                                 onOpenChange={(nextOpen) => handleRuleOpenChange(r.rule.id, nextOpen)}
                                 onActiveTabChange={(tab) => handleRuleTabChange(r.rule.id, tab)}
-                                onOpenWizard={openWizard}
+                                onOpenWizard={handleOpenFixWizard}
                               />
                             ))
                           }
@@ -3235,7 +3303,7 @@ function AuditDetailPage() {
         agentId={id}
         containers={containers}
         auditId={auditId}
-        onConfirm={() => void applyFix()}
+        onConfirm={handleApplyFix}
         onCancelApply={cancelFix}
         onClose={closeWizard}
         onTargetChange={updateTargetConfig}
@@ -3243,7 +3311,7 @@ function AuditDetailPage() {
           closeWizard();
           handleRerunAudit();
         }}
-        onRetry={retryFix}
+        onRetry={handleRetryFix}
       />
       <FixAllWizard
         open={fixAllOpen}
@@ -3255,7 +3323,7 @@ function AuditDetailPage() {
         cgroupTargets={fixAllCgroupTargets}
         cgroupLoading={fixAllCgroupLoading}
         selectedCgroupRuleIds={fixAllSelectedCgroupRuleIds}
-        onConfirm={() => void applyAll()}
+        onConfirm={handleApplyAll}
         onCancelApply={cancelApplyAll}
         onClose={closeFixAll}
         onToggleRule={toggleFixAllRule}
@@ -3268,13 +3336,7 @@ function AuditDetailPage() {
           closeFixAll();
           handleRerunAudit();
         }}
-        onRetry={() => {
-          if (autoFixableResults.length === 0) {
-            closeFixAll();
-            return;
-          }
-          openFixAll(autoFixableResults);
-        }}
+        onRetry={handleRetryFixAll}
       />
     </div>
   );
