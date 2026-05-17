@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
     Sheet, SheetClose, SheetDescription, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
@@ -27,6 +27,13 @@ const STEPS: { key: FixAllStep; label: string }[] = [
 ];
 
 const SECURITY_PILLAR_ORDER = Object.keys(PILLAR_META) as SecurityPillar[];
+const PILLAR_SHORT_LABELS: Record<SecurityPillar, string> = {
+    namespace: "Namespace",
+    cgroup: "Cgroup",
+    runtime: "Runtime",
+    host: "Host",
+    images: "Images",
+};
 
 function StepIndicator({ current, showConfigure, complete = false }: { current: FixAllStep; showConfigure: boolean; complete?: boolean }) {
     const steps = showConfigure ? STEPS : STEPS.filter((step) => step.key !== "configure");
@@ -326,19 +333,20 @@ function PillarSelectionControls({
             someSelected: selected > 0 && selected < total,
         };
     });
+    const selectedTotal = ruleStatuses.filter((status) => status.selected).length;
 
     return (
-        <div className="rounded-lg border border-white/8 bg-white/[0.02] p-3.5">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0">
+        <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 items-baseline gap-2">
                     <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/38">
                         Selection
                     </p>
-                    <p className="mt-1 text-xs text-white/40">
-                        Restore safe defaults or choose entire security pillars.
-                    </p>
+                    <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/26">
+                        {selectedTotal}/{ruleStatuses.length} selected
+                    </span>
                 </div>
-                <div className="flex shrink-0 items-center overflow-hidden rounded-md border border-white/8 bg-black/20">
+                <div className="flex shrink-0 items-center overflow-hidden rounded-md border border-white/8 bg-white/[0.018]">
                     <button
                         type="button"
                         onClick={onSetSafeDefaultsSelected}
@@ -367,7 +375,7 @@ function PillarSelectionControls({
                     </button>
                 </div>
             </div>
-            <div className="grid gap-1.5 sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-1.5">
                 {options.map((option) => {
                     const Icon = option.meta.icon;
                     const nextSelected = !option.allSelected;
@@ -383,7 +391,7 @@ function PillarSelectionControls({
                                 ? `No pending fixes in ${option.meta.name}`
                                 : `${nextSelected ? "Select" : "Clear"} ${option.meta.name}`}
                             className={cn(
-                                "flex min-w-0 items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors",
+                                "grid h-8 min-w-0 grid-cols-[14px_14px_minmax(0,1fr)_auto] items-center gap-2 rounded-md border px-2.5 text-left transition-colors",
                                 option.allSelected
                                     ? "border-[#2496ED]/35 bg-[#2496ED]/10"
                                     : option.someSelected
@@ -406,16 +414,64 @@ function PillarSelectionControls({
                                     : null}
                             </span>
                             <Icon className={cn("h-3.5 w-3.5 shrink-0", option.meta.color)} />
-                            <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-white/65">
-                                {option.meta.name}
+                            <span className="min-w-0 truncate text-xs font-medium text-white/65">
+                                {PILLAR_SHORT_LABELS[option.pillar]}
                             </span>
-                            <span className="shrink-0 font-mono text-[10px] text-white/35">
+                            <span className="shrink-0 font-mono text-[11px] text-white/35">
                                 {option.selected}/{option.total}
                             </span>
                         </button>
                     );
                 })}
             </div>
+        </div>
+    );
+}
+
+function CompactNotice({
+    tone,
+    icon,
+    title,
+    detail,
+}: {
+    tone: "danger" | "warning" | "info";
+    icon: ReactNode;
+    title: string;
+    detail: string;
+}) {
+    return (
+        <div className={cn(
+            "flex items-start gap-2 rounded-md border px-3 py-2",
+            tone === "danger" && "border-rose-500/20 bg-rose-500/[0.045]",
+            tone === "warning" && "border-amber-500/20 bg-amber-500/[0.045]",
+            tone === "info" && "border-[#2496ED]/20 bg-[#2496ED]/7"
+        )}>
+            <span className={cn(
+                "mt-0.5 shrink-0",
+                tone === "danger" && "text-rose-400",
+                tone === "warning" && "text-amber-400",
+                tone === "info" && "text-[#2496ED]"
+            )}>
+                {icon}
+            </span>
+            <p className="min-w-0 text-xs leading-snug">
+                <span className={cn(
+                    "font-semibold",
+                    tone === "danger" && "text-rose-300",
+                    tone === "warning" && "text-amber-300",
+                    tone === "info" && "text-[#2496ED]"
+                )}>
+                    {title}
+                </span>
+                <span className={cn(
+                    "ml-1",
+                    tone === "danger" && "text-rose-200/58",
+                    tone === "warning" && "text-amber-200/58",
+                    tone === "info" && "text-[#2496ED]/58"
+                )}>
+                    {detail}
+                </span>
+            </p>
         </div>
     );
 }
@@ -440,52 +496,33 @@ function ConfirmStep({
     const highRiskCount = ruleStatuses.filter(r => r.highRisk && !r.selected).length;
 
     return (
-        <div className="flex flex-col gap-5">
-            {highRiskCount > 0 && (
-                <div className="rounded-lg border border-rose-500/25 bg-rose-500/[0.06] px-3.5 py-3">
-                    <div className="flex items-start gap-3">
-                        <ShieldAlert className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
-                        <div className="min-w-0 space-y-0.5">
-                            <p className="text-xs font-semibold text-rose-300">
-                                Risky fixes stay unselected
-                            </p>
-                            <p className="text-xs text-rose-200/65 leading-relaxed">
-                                Host storage, user namespace, and recreate fixes can restart Docker or break workloads if prerequisites are wrong.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {recreateCount > 0 && (
-                <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3.5 py-3">
-                    <div className="flex items-start gap-3">
-                        <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
-                        <div className="min-w-0 space-y-0.5">
-                            <p className="text-xs font-semibold text-amber-300">
-                                {recreateCount} rule{recreateCount > 1 ? "s" : ""} require container restart
-                            </p>
-                            <p className="text-xs text-amber-200/65 leading-relaxed">
-                                Selected fixes may stop, recreate, and restart affected containers. Expect short downtime.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {cgroupLoading && (
-                <div className="rounded-lg border border-[#2496ED]/25 bg-[#2496ED]/8 px-3.5 py-3">
-                    <div className="flex items-start gap-3">
-                        <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-[#2496ED]" />
-                        <div className="min-w-0 space-y-0.5">
-                            <p className="text-xs font-semibold text-[#2496ED]">
-                                Loading cgroup resource preview
-                            </p>
-                            <p className="text-xs leading-relaxed text-[#2496ED]/65">
-                                Inspecting current containers before showing editable memory, CPU, and PID values.
-                            </p>
-                        </div>
-                    </div>
+        <div className="flex flex-col gap-4">
+            {(highRiskCount > 0 || recreateCount > 0 || cgroupLoading) && (
+                <div className="space-y-2">
+                    {highRiskCount > 0 && (
+                        <CompactNotice
+                            tone="danger"
+                            icon={<ShieldAlert className="h-3.5 w-3.5" />}
+                            title="Risky fixes stay unselected."
+                            detail="Select them only when restart and host changes are acceptable."
+                        />
+                    )}
+                    {recreateCount > 0 && (
+                        <CompactNotice
+                            tone="warning"
+                            icon={<AlertTriangle className="h-3.5 w-3.5" />}
+                            title={`${recreateCount} restart fix${recreateCount > 1 ? "es" : ""} selected.`}
+                            detail="Affected containers may briefly stop or recreate."
+                        />
+                    )}
+                    {cgroupLoading && (
+                        <CompactNotice
+                            tone="info"
+                            icon={<Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                            title="Loading cgroup preview."
+                            detail="Inspecting containers before showing resource values."
+                        />
+                    )}
                 </div>
             )}
 
@@ -500,8 +537,11 @@ function ConfirmStep({
             <div>
                 <div className="mb-2 flex items-center justify-between gap-3">
                     <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/38">
-                        {selectedCount} of {ruleStatuses.length} rules selected
+                        Rule review
                     </p>
+                    <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/28">
+                        {selectedCount} of {ruleStatuses.length} selected
+                    </span>
                 </div>
                 <div className="rounded-lg border border-white/8 bg-white/[0.02] overflow-hidden divide-y divide-white/5">
                     {ruleStatuses.map(rs => (

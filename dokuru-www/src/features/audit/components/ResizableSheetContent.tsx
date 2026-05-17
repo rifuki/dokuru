@@ -31,12 +31,15 @@ export function ResizableSheetContent({
 
     useEffect(() => {
         if (!dragging) return;
-        const previousCursor = document.documentElement.style.cursor;
+        const previousDocumentCursor = document.documentElement.style.cursor;
+        const previousBodyCursor = document.body.style.cursor;
         const previousUserSelect = document.documentElement.style.userSelect;
-        document.documentElement.style.cursor = "e-resize";
+        document.documentElement.style.cursor = "col-resize";
+        document.body.style.cursor = "col-resize";
         document.documentElement.style.userSelect = "none";
         return () => {
-            document.documentElement.style.cursor = previousCursor;
+            document.documentElement.style.cursor = previousDocumentCursor;
+            document.body.style.cursor = previousBodyCursor;
             document.documentElement.style.userSelect = previousUserSelect;
         };
     }, [dragging]);
@@ -75,10 +78,10 @@ export function ResizableSheetContent({
                     event.currentTarget.releasePointerCapture(event.pointerId);
                 }}
                 onPointerCancel={() => setDragging(false)}
-                style={{ cursor: "e-resize" }}
+                style={{ cursor: "col-resize" }}
                 className={cn(
-                    "group absolute inset-y-0 left-0 z-50 hidden w-4 touch-none !cursor-e-resize sm:block",
-                    dragging && "!cursor-e-resize",
+                    "group absolute inset-y-0 left-0 z-50 hidden w-4 touch-none !cursor-col-resize sm:block",
+                    dragging && "!cursor-col-resize",
                 )}
             >
                 <span className="absolute left-0 top-1/2 h-14 w-px -translate-y-1/2 bg-white/18 opacity-0 transition-opacity group-hover:opacity-100" />
