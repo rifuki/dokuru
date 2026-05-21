@@ -582,6 +582,20 @@ fn command_result_evidence(command: &str, result: &FixCommandResult) -> String {
     format_command_evidence(command, &result.stdout, &result.stderr, result.success)
 }
 
+fn command_failure_detail(result: &FixCommandResult) -> String {
+    let stderr = result.stderr.trim();
+    if !stderr.is_empty() {
+        return stderr.to_string();
+    }
+
+    let stdout = result.stdout.trim();
+    if !stdout.is_empty() {
+        return stdout.to_string();
+    }
+
+    "command returned non-zero exit status".to_string()
+}
+
 fn run_cmd_evidence(command: &str, stdout: &str, stderr: &str, success: bool) -> String {
     format_command_evidence(command, stdout, stderr, success)
 }
@@ -3594,7 +3608,7 @@ fn has_external_volume_driver(inspect: &ContainerInspectResponse) -> Option<Stri
 fn userns_preflight_blockers(snapshots: &[ContainerSnapshot]) -> Vec<String> {
     let mut blockers = Vec::new();
 
-    for snapshot in snapshots.iter().filter(|snapshot| snapshot.was_running) {
+    for snapshot in snapshots {
         let Some(inspect) = snapshot.inspect.as_ref() else {
             continue;
         };
@@ -3673,7 +3687,16 @@ fn userns_preflight_blockers(snapshots: &[ContainerSnapshot]) -> Vec<String> {
         if !reasons.is_empty() {
             reasons.sort();
             reasons.dedup();
-            blockers.push(format!("{}: {}", snapshot.name, reasons.join("; ")));
+            let state = if snapshot.was_running {
+                "running"
+            } else {
+                "stopped"
+            };
+            blockers.push(format!(
+                "{} ({state}): {}",
+                snapshot.name,
+                reasons.join("; ")
+            ));
         }
     }
 
@@ -3685,7 +3708,7 @@ fn userns_preflight_blocked_outcome(blockers: &[String]) -> FixOutcome {
         rule_id: USERNS_REMAP_RULE_ID.to_string(),
         status: FixStatus::Blocked,
         message: format!(
-            "userns-remap was not applied because {} running workload(s) use Docker features known to break or bypass daemon userns-remap. Resolve these first: {}",
+            "userns-remap was not applied because {} workload(s) use Docker features known to break or bypass daemon userns-remap. Resolve these first: {}",
             blockers.len(),
             blockers
                 .iter()
@@ -3744,13 +3767,8 @@ fn preflight_userns_known_incompatibilities(
     Some(userns_preflight_blocked_outcome(&blockers))
 }
 
-fn is_safe_userns_bind_path(path: &str) -> bool {
-    let path = Path::new(path);
-    if !path.is_absolute() || path == Path::new("/") {
-        return false;
-    }
-
-    [
+fn path_is_userns_unsafe(path: &Path) -> bool {
+    const BLOCKED_PATHS: &[&str] = &[
         "/bin",
         "/boot",
         "/dev",
@@ -3764,10 +3782,37 @@ fn is_safe_userns_bind_path(path: &str) -> bool {
         "/usr",
         "/var/lib/docker",
         "/var/run",
-    ]
-    .into_iter()
-    .map(Path::new)
-    .all(|blocked| path != blocked && !path.starts_with(blocked))
+    ];
+
+    BLOCKED_PATHS.iter().any(|blocked| {
+        let blocked = Path::new(blocked);
+        path == blocked
+            || path.starts_with(blocked)
+            || std::fs::canonicalize(blocked)
+                .ok()
+                .as_ref()
+                .is_some_and(|canonical| path == canonical || path.starts_with(canonical))
+    })
+}
+
+fn is_safe_userns_bind_path(path: &str) -> bool {
+    let path = Path::new(path);
+    if !path.is_absolute() || path == Path::new("/") {
+        return false;
+    }
+
+    if path_is_userns_unsafe(path) {
+        return false;
+    }
+
+    match std::fs::canonicalize(path) {
+        Ok(canonical) => {
+            canonical.is_absolute()
+                && canonical != Path::new("/")
+                && !path_is_userns_unsafe(&canonical)
+        }
+        Err(_) => true,
+    }
 }
 
 #[expect(
@@ -4817,7 +4862,7 @@ async fn snapshot_userns_recovery_state(
     }
 }
 
-async fn create_dockremap_user(progress: Option<&ProgressSender>) {
+async fn create_dockremap_user(progress: Option<&ProgressSender>) -> Option<FixOutcome> {
     let command_text = "useradd -r -s /bin/false dockremap || id -u dockremap";
     send_progress(
         progress,
@@ -4848,9 +4893,22 @@ async fn create_dockremap_user(progress: Option<&ProgressSender>) {
         command_result_evidence("id -u dockremap", &id_check),
     ]);
     send_progress(progress, event);
+
+    if ready {
+        None
+    } else {
+        Some(blocked(
+            USERNS_REMAP_RULE_ID,
+            &format!(
+                "dockremap user could not be created or found: useradd: {}; id: {}",
+                command_failure_detail(&useradd),
+                command_failure_detail(&id_check)
+            ),
+        ))
+    }
 }
 
-async fn create_subid_files(progress: Option<&ProgressSender>) {
+async fn create_subid_files(progress: Option<&ProgressSender>) -> Option<FixOutcome> {
     let command_text = "touch /etc/subuid /etc/subgid";
     send_progress(
         progress,
@@ -4876,9 +4934,21 @@ async fn create_subid_files(progress: Option<&ProgressSender>) {
     );
     event.stdout = Some(command_result_evidence(command_text, &result));
     send_progress(progress, event);
+
+    if result.success {
+        None
+    } else {
+        Some(blocked(
+            USERNS_REMAP_RULE_ID,
+            &format!(
+                "Failed to create /etc/subuid and /etc/subgid: {}",
+                command_failure_detail(&result)
+            ),
+        ))
+    }
 }
 
-async fn map_dockremap_ranges(progress: Option<&ProgressSender>) {
+async fn map_dockremap_ranges(progress: Option<&ProgressSender>) -> Option<FixOutcome> {
     let uid_command = "usermod --add-subuids 100000-165535 dockremap";
     let gid_command = "usermod --add-subgids 100000-165535 dockremap";
     let command_text = format!("{uid_command} && {gid_command}");
@@ -4914,6 +4984,19 @@ async fn map_dockremap_ranges(progress: Option<&ProgressSender>) {
         command_result_evidence(gid_command, &gid_result),
     ]);
     send_progress(progress, event);
+
+    if mapped {
+        None
+    } else {
+        Some(blocked(
+            USERNS_REMAP_RULE_ID,
+            &format!(
+                "dockremap UID/GID ranges were not found after usermod: subuid: {}; subgid: {}",
+                command_failure_detail(&uid_result),
+                command_failure_detail(&gid_result)
+            ),
+        ))
+    }
 }
 
 fn write_userns_daemon_json(progress: Option<&ProgressSender>) -> Option<FixOutcome> {
@@ -5275,11 +5358,17 @@ pub async fn apply_userns_remap_fix_with_progress(
 
     let image_recovery_mode = archive_userns_images(&state.image_names, progress).await;
 
-    create_dockremap_user(progress).await;
+    if let Some(outcome) = create_dockremap_user(progress).await {
+        return Ok(outcome);
+    }
 
-    create_subid_files(progress).await;
+    if let Some(outcome) = create_subid_files(progress).await {
+        return Ok(outcome);
+    }
 
-    map_dockremap_ranges(progress).await;
+    if let Some(outcome) = map_dockremap_ranges(progress).await {
+        return Ok(outcome);
+    }
 
     if let Some(outcome) = write_userns_daemon_json(progress) {
         return Ok(outcome);
@@ -11445,7 +11534,7 @@ pub fn merge_daemon_json(key: &str, value: serde_json::Value) -> eyre::Result<()
     let mut obj: serde_json::Map<String, serde_json::Value> =
         if std::path::Path::new(DAEMON_JSON_PATH).exists() {
             let content = std::fs::read_to_string(DAEMON_JSON_PATH)?;
-            serde_json::from_str(&content).unwrap_or_default()
+            parse_daemon_json_object(&content)?
         } else {
             serde_json::Map::new()
         };
@@ -11460,6 +11549,21 @@ pub fn merge_daemon_json(key: &str, value: serde_json::Value) -> eyre::Result<()
     // so daemon hardening fixes do not introduce a new failing rule on rerun.
     ensure_audit_rule(DAEMON_JSON_AUDIT_RULE)?;
     Ok(())
+}
+
+fn parse_daemon_json_object(
+    content: &str,
+) -> eyre::Result<serde_json::Map<String, serde_json::Value>> {
+    let value = serde_json::from_str::<serde_json::Value>(content).map_err(|error| {
+        eyre::eyre!("{DAEMON_JSON_PATH} contains invalid JSON; refusing to overwrite it: {error}")
+    })?;
+
+    match value {
+        serde_json::Value::Object(obj) => Ok(obj),
+        _ => Err(eyre::eyre!(
+            "{DAEMON_JSON_PATH} must contain a JSON object; refusing to overwrite it"
+        )),
+    }
 }
 
 /// Append an audit rule line to /etc/audit/rules.d/docker.rules if not already present.
@@ -11890,6 +11994,23 @@ services:
     }
 
     #[test]
+    fn userns_preflight_blocks_stopped_incompatible_workloads() {
+        let inspect = serde_json::from_value(serde_json::json!({
+            "HostConfig": {
+                "PidMode": "host"
+            }
+        }))
+        .unwrap();
+        let mut snapshot = userns_snapshot_with_inspect("stopped-worker", inspect);
+        snapshot.was_running = false;
+        let blockers = userns_preflight_blockers(&[snapshot]);
+
+        assert_eq!(blockers.len(), 1);
+        assert!(blockers[0].contains("stopped"));
+        assert!(blockers[0].contains("PidMode=host"));
+    }
+
+    #[test]
     fn userns_preflight_blocks_docker_socket_and_external_volume_drivers() {
         let inspect = serde_json::from_value(serde_json::json!({
             "HostConfig": {
@@ -11969,6 +12090,19 @@ services:
     }
 
     #[test]
+    fn userns_safe_bind_path_checks_canonical_symlink_target() {
+        let root = std::env::temp_dir().join(format!("dokuru-userns-test-{}", Uuid::new_v4()));
+        let link = root.join("looks-safe");
+        std::fs::create_dir_all(&root).unwrap();
+        std::os::unix::fs::symlink("/etc", &link).unwrap();
+
+        assert!(!is_safe_userns_bind_path(&link.to_string_lossy()));
+
+        let _ = std::fs::remove_file(&link);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn userns_preflight_blocks_explicit_userns_host_opt_out() {
         let inspect = serde_json::from_value(serde_json::json!({
             "HostConfig": {
@@ -12011,6 +12145,18 @@ services:
         assert_eq!(
             userns_remap_base_from_volume_path("/srv/1.2/volumes/app"),
             None
+        );
+    }
+
+    #[test]
+    fn daemon_json_parser_rejects_invalid_or_non_object_content() {
+        assert!(parse_daemon_json_object("{ invalid json").is_err());
+        assert!(parse_daemon_json_object("[]").is_err());
+
+        let parsed = parse_daemon_json_object(r#"{"log-level":"info"}"#).unwrap();
+        assert_eq!(
+            parsed.get("log-level").and_then(serde_json::Value::as_str),
+            Some("info")
         );
     }
 
