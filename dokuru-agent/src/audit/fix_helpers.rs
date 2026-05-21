@@ -3805,14 +3805,9 @@ fn is_safe_userns_bind_path(path: &str) -> bool {
         return false;
     }
 
-    match std::fs::canonicalize(path) {
-        Ok(canonical) => {
-            canonical.is_absolute()
-                && canonical != Path::new("/")
-                && !path_is_userns_unsafe(&canonical)
-        }
-        Err(_) => true,
-    }
+    std::fs::canonicalize(path).map_or(true, |canonical| {
+        canonical.is_absolute() && canonical != Path::new("/") && !path_is_userns_unsafe(&canonical)
+    })
 }
 
 #[expect(
