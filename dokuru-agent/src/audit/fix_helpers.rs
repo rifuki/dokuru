@@ -10775,14 +10775,7 @@ async fn rollback_host_file_targets(
         if !seen.insert(target.path.clone()) {
             continue;
         }
-        let command = if target.existed {
-            target.backup_path.as_ref().map_or_else(
-                || format!("restore snapshot -> {}", target.path),
-                |backup| format!("cp {} {}", shell_quote(backup), shell_quote(&target.path)),
-            )
-        } else {
-            format!("rm -f {}", shell_quote(&target.path))
-        };
+        let command = host_file_rollback_command(rule_id, target);
         send_progress(
             progress,
             rollback_progress_event(
@@ -10799,7 +10792,7 @@ async fn rollback_host_file_targets(
                 Some(command.clone()),
             ),
         );
-        match restore_host_file_target(target).await {
+        match restore_host_file_target_for_rule(rule_id, target).await {
             Ok(result) => {
                 if target.path == DAEMON_JSON_PATH {
                     restored_daemon_json = true;
@@ -11052,6 +11045,267 @@ fn contains_any(text: &str, needles: &[&str]) -> bool {
 struct HostFileRestoreResult {
     label: String,
     evidence: Vec<String>,
+}
+
+fn daemon_json_keys_for_rule(rule_id: &str) -> &'static [&'static str] {
+    match rule_id {
+        USERNS_REMAP_RULE_ID => &["userns-remap"],
+        DAEMON_NO_NEW_PRIVILEGES_RULE_ID => &["no-new-privileges"],
+        _ => &[],
+    }
+}
+
+fn audit_rule_lines_for_rule(rule_id: &str) -> Vec<String> {
+    let mut lines = Vec::new();
+    if let Some(spec) = audit_rule_fix_spec(rule_id) {
+        lines.push(spec.rule_line);
+    }
+    if supports_userns_remap_fix(rule_id) || supports_daemon_no_new_privileges_fix(rule_id) {
+        lines.push(DAEMON_JSON_AUDIT_RULE.to_string());
+    }
+    lines.sort();
+    lines.dedup();
+    lines
+}
+
+fn host_file_rollback_command(rule_id: &str, target: &HostFileRollbackTarget) -> String {
+    let daemon_keys = daemon_json_keys_for_rule(rule_id);
+    if target.path == DAEMON_JSON_PATH && !daemon_keys.is_empty() {
+        return format!("restore daemon.json key(s): {}", daemon_keys.join(", "));
+    }
+
+    let audit_lines = audit_rule_lines_for_rule(rule_id);
+    if target.path == AUDIT_RULES_PATH && !audit_lines.is_empty() {
+        return format!("restore audit rule line(s): {}", audit_lines.join("; "));
+    }
+
+    if target.existed {
+        target.backup_path.as_ref().map_or_else(
+            || format!("restore snapshot -> {}", target.path),
+            |backup| format!("cp {} {}", shell_quote(backup), shell_quote(&target.path)),
+        )
+    } else {
+        format!("rm -f {}", shell_quote(&target.path))
+    }
+}
+
+fn read_snapshot_content(target: &HostFileRollbackTarget) -> eyre::Result<Option<String>> {
+    if !target.existed {
+        return Ok(None);
+    }
+
+    let backup_path = target
+        .backup_path
+        .as_ref()
+        .map(PathBuf::from)
+        .ok_or_else(|| eyre::eyre!("snapshot existed but backup path is missing"))?;
+    std::fs::read_to_string(&backup_path)
+        .map(Some)
+        .map_err(|error| {
+            eyre::eyre!(
+                "failed to read backup file {}: {error}",
+                backup_path.display()
+            )
+        })
+}
+
+fn rollback_daemon_json_keys_to_snapshot(
+    current_content: Option<&str>,
+    snapshot_content: Option<&str>,
+    keys: &[&str],
+) -> eyre::Result<Option<serde_json::Map<String, serde_json::Value>>> {
+    let mut current =
+        current_content.map_or_else(|| Ok(serde_json::Map::new()), parse_daemon_json_object)?;
+    let snapshot =
+        snapshot_content.map_or_else(|| Ok(serde_json::Map::new()), parse_daemon_json_object)?;
+
+    for key in keys {
+        if let Some(value) = snapshot.get(*key) {
+            current.insert((*key).to_string(), value.clone());
+        } else {
+            current.remove(*key);
+        }
+    }
+
+    if current.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(current))
+    }
+}
+
+fn rollback_audit_rule_lines_to_snapshot(
+    current_content: Option<&str>,
+    snapshot_content: Option<&str>,
+    managed_lines: &[String],
+    keep_lines: &[String],
+) -> Option<String> {
+    let mut lines = current_content
+        .unwrap_or_default()
+        .lines()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+
+    for managed_line in managed_lines {
+        let keep = keep_lines.iter().any(|line| line == managed_line);
+        let existed_in_snapshot = snapshot_content
+            .is_some_and(|snapshot| snapshot.lines().any(|line| line.trim() == managed_line));
+        let should_exist = keep || existed_in_snapshot;
+        let exists_now = lines.iter().any(|line| line.trim() == managed_line);
+
+        if should_exist && !exists_now {
+            lines.push(managed_line.clone());
+        } else if !should_exist {
+            lines.retain(|line| line.trim() != managed_line);
+        }
+    }
+
+    if lines.iter().all(|line| line.trim().is_empty()) {
+        None
+    } else {
+        Some(format!("{}\n", lines.join("\n")))
+    }
+}
+
+async fn read_optional_file(path: &Path) -> eyre::Result<Option<String>> {
+    match tokio::fs::read_to_string(path).await {
+        Ok(content) => Ok(Some(content)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
+async fn restore_daemon_json_keys_target(
+    rule_id: &str,
+    target: &HostFileRollbackTarget,
+) -> eyre::Result<HostFileRestoreResult> {
+    let keys = daemon_json_keys_for_rule(rule_id);
+    if keys.is_empty() {
+        return restore_host_file_target(target).await;
+    }
+
+    let path = PathBuf::from(&target.path);
+    let current_content = read_optional_file(&path).await?;
+    let snapshot_content = read_snapshot_content(target)?;
+    let next = rollback_daemon_json_keys_to_snapshot(
+        current_content.as_deref(),
+        snapshot_content.as_deref(),
+        keys,
+    )?;
+    let mut evidence = Vec::new();
+    let key_list = keys.join(", ");
+
+    if let Some(obj) = next {
+        if let Some(parent) = path.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        let json = serde_json::to_string_pretty(&obj)?;
+        tokio::fs::write(&path, json).await?;
+        evidence.push(format_command_evidence(
+            &format!("restore daemon.json key(s): {key_list}"),
+            &format!("{DAEMON_JSON_PATH}: preserved unrelated keys"),
+            "",
+            true,
+        ));
+        Ok(HostFileRestoreResult {
+            label: format!("{} (daemon.json keys restored: {key_list})", target.path),
+            evidence,
+        })
+    } else {
+        if let Err(error) = tokio::fs::remove_file(&path).await
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            return Err(error.into());
+        }
+        evidence.push(format_command_evidence(
+            &format!("rm -f {}", shell_quote(&target.path)),
+            "daemon.json had no remaining keys after rollback",
+            "",
+            true,
+        ));
+        Ok(HostFileRestoreResult {
+            label: format!(
+                "{} (removed empty daemon.json after key rollback)",
+                target.path
+            ),
+            evidence,
+        })
+    }
+}
+
+async fn restore_audit_rules_target(
+    rule_id: &str,
+    target: &HostFileRollbackTarget,
+) -> eyre::Result<HostFileRestoreResult> {
+    let managed_lines = audit_rule_lines_for_rule(rule_id);
+    if managed_lines.is_empty() {
+        return restore_host_file_target(target).await;
+    }
+
+    let path = PathBuf::from(&target.path);
+    let current_content = read_optional_file(&path).await?;
+    let snapshot_content = read_snapshot_content(target)?;
+    let keep_lines = if (supports_userns_remap_fix(rule_id)
+        || supports_daemon_no_new_privileges_fix(rule_id))
+        && Path::new(DAEMON_JSON_PATH).exists()
+    {
+        vec![DAEMON_JSON_AUDIT_RULE.to_string()]
+    } else {
+        Vec::new()
+    };
+    let next = rollback_audit_rule_lines_to_snapshot(
+        current_content.as_deref(),
+        snapshot_content.as_deref(),
+        &managed_lines,
+        &keep_lines,
+    );
+    let mut evidence = Vec::new();
+
+    if let Some(content) = next {
+        if let Some(parent) = path.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        tokio::fs::write(&path, content).await?;
+        evidence.push(format_command_evidence(
+            &format!("restore audit rule line(s): {}", managed_lines.join("; ")),
+            "preserved unrelated audit rule lines",
+            "",
+            true,
+        ));
+        Ok(HostFileRestoreResult {
+            label: format!("{} (audit rule lines restored)", target.path),
+            evidence,
+        })
+    } else {
+        if let Err(error) = tokio::fs::remove_file(&path).await
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            return Err(error.into());
+        }
+        evidence.push(format_command_evidence(
+            &format!("rm -f {}", shell_quote(&target.path)),
+            "audit rules file had no remaining lines after rollback",
+            "",
+            true,
+        ));
+        Ok(HostFileRestoreResult {
+            label: format!("{} (removed empty audit rules file)", target.path),
+            evidence,
+        })
+    }
+}
+
+async fn restore_host_file_target_for_rule(
+    rule_id: &str,
+    target: &HostFileRollbackTarget,
+) -> eyre::Result<HostFileRestoreResult> {
+    if target.path == DAEMON_JSON_PATH && !daemon_json_keys_for_rule(rule_id).is_empty() {
+        return restore_daemon_json_keys_target(rule_id, target).await;
+    }
+    if target.path == AUDIT_RULES_PATH && !audit_rule_lines_for_rule(rule_id).is_empty() {
+        return restore_audit_rules_target(rule_id, target).await;
+    }
+    restore_host_file_target(target).await
 }
 
 async fn restore_host_file_target(
@@ -12153,6 +12407,67 @@ services:
             parsed.get("log-level").and_then(serde_json::Value::as_str),
             Some("info")
         );
+    }
+
+    #[test]
+    fn daemon_json_key_rollback_preserves_unrelated_current_keys() {
+        let current = r#"{"userns-remap":"default","no-new-privileges":true}"#;
+        let next = rollback_daemon_json_keys_to_snapshot(Some(current), None, &["userns-remap"])
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(next.get("userns-remap"), None);
+        assert_eq!(
+            next.get("no-new-privileges")
+                .and_then(serde_json::Value::as_bool),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn daemon_json_key_rollback_restores_only_managed_snapshot_keys() {
+        let current = r#"{"userns-remap":"default","log-driver":"json-file"}"#;
+        let snapshot = r#"{"userns-remap":"legacy","log-driver":"local"}"#;
+        let next =
+            rollback_daemon_json_keys_to_snapshot(Some(current), Some(snapshot), &["userns-remap"])
+                .unwrap()
+                .unwrap();
+
+        assert_eq!(
+            next.get("userns-remap").and_then(serde_json::Value::as_str),
+            Some("legacy")
+        );
+        assert_eq!(
+            next.get("log-driver").and_then(serde_json::Value::as_str),
+            Some("json-file")
+        );
+    }
+
+    #[test]
+    fn audit_rule_line_rollback_can_keep_daemon_rule_when_daemon_json_remains() {
+        let managed = vec![DAEMON_JSON_AUDIT_RULE.to_string()];
+        let current = format!("{DAEMON_JSON_AUDIT_RULE}\n-w /var/lib/docker -p rwxa -k docker\n");
+        let next = rollback_audit_rule_lines_to_snapshot(
+            Some(&current),
+            None,
+            &managed,
+            &[DAEMON_JSON_AUDIT_RULE.to_string()],
+        )
+        .unwrap();
+
+        assert!(next.contains(DAEMON_JSON_AUDIT_RULE));
+        assert!(next.contains("/var/lib/docker"));
+    }
+
+    #[test]
+    fn audit_rule_line_rollback_removes_only_managed_lines() {
+        let managed = vec![DAEMON_JSON_AUDIT_RULE.to_string()];
+        let current = format!("{DAEMON_JSON_AUDIT_RULE}\n-w /var/lib/docker -p rwxa -k docker\n");
+        let next =
+            rollback_audit_rule_lines_to_snapshot(Some(&current), None, &managed, &[]).unwrap();
+
+        assert!(!next.contains(DAEMON_JSON_AUDIT_RULE));
+        assert!(next.contains("/var/lib/docker"));
     }
 
     #[test]
