@@ -30,7 +30,7 @@ flowchart LR
 Run this on the Docker host:
 
 ```bash
-curl -fsSL https://dokuru.rifuki.dev/install | sudo bash
+curl -fsSL https://dokuru.rifuki.dev/install | bash
 ```
 
 The onboarding wizard will:
@@ -56,7 +56,7 @@ Then open the hosted dashboard, choose **Add Agent**, select the matching connec
 Use this mode when you do not want a server. The agent serves its own embedded dashboard.
 
 ```bash
-curl -fsSL https://dokuru.rifuki.dev/install | sudo bash
+curl -fsSL https://dokuru.rifuki.dev/install | bash
 ```
 
 After onboarding, open the agent URL printed by the installer. By default, the local API and embedded dashboard listen on port `3939`.
@@ -106,7 +106,7 @@ sudo dokuru update
 Use the installer on a Linux Docker host. The installer downloads the latest release binary, verifies checksums, installs `dokuru`, then starts onboarding.
 
 ```bash
-curl -fsSL https://dokuru.rifuki.dev/install | sudo bash
+curl -fsSL https://dokuru.rifuki.dev/install | bash
 ```
 
 During onboarding, choose an access mode:
@@ -201,9 +201,11 @@ The root `docker-compose.yaml` defines the production services:
 | --- | --- |
 | `dokuru-db` | PostgreSQL 16 database. |
 | `dokuru-redis` | Redis 7 for session blacklist. |
+| `dokuru-pgadmin` | Optional pgAdmin UI for production database inspection. |
 | `dokuru-server-migrate` | One-shot SQLx migration image. |
 | `dokuru-server` | Backend API and relay server. |
 | `dokuru-www` | Static dashboard served by nginx. |
+| `dokuru-landing` | Public landing and install handoff site. |
 
 Production Compose expects a `traefik-public` network and server config mounted at `./dokuru-server/config`.
 
@@ -211,5 +213,5 @@ Production Compose expects a `traefik-public` network and server config mounted 
 docker network create traefik-public
 docker compose up -d dokuru-db dokuru-redis
 docker compose --profile migrate run --rm dokuru-server-migrate
-docker compose up -d dokuru-server dokuru-www
+docker compose up -d dokuru-server dokuru-www dokuru-landing
 ```

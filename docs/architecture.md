@@ -3,13 +3,15 @@
 ## System Overview
 
 
-Dokuru's core product path has three runtime components plus one shared library:
+Dokuru's core product path has three runtime components, a public landing site, a deployment helper, and one shared library:
 
 | Component | Path | Role |
 | --- | --- | --- |
 | Agent | `dokuru-agent/` | Rust CLI and daemon installed on Docker hosts. Owns Docker socket access, audits, fix execution, local API, embedded dashboard, host shell, and relay client. |
 | Server | `dokuru-server/` | Rust/Axum control plane. Owns users, JWT sessions, PostgreSQL persistence, Redis token blacklist, stored audit history, notifications, admin APIs, and agent relay. |
 | Web Dashboard | `dokuru-www/` | React/TanStack dashboard. Owns agent onboarding UI, Docker resource pages, audit reports, FixWizard, realtime streams, settings, and admin views. |
+| Landing Site | `dokuru-landing/` | Leptos/Trunk public site for the hosted product and installer handoff. |
+| Deploy CLI | `dokuru-deploy/` | Rust helper for production Compose deployment, migration, health checks, config repair, and release updates. |
 | Shared Core | `dokuru-core/` | Shared audit report DTOs and scoring helpers used by server-side report views. |
 
 The important boundary is simple: `dokuru-server` coordinates and persists, `dokuru-www` presents and streams, and `dokuru-agent` performs privileged host work.
@@ -24,6 +26,7 @@ flowchart TB
 
     subgraph frontend["Frontend"]
         www["dokuru-www<br/>React 19 + TanStack Router"]
+        landing["dokuru-landing<br/>Leptos + Trunk"]
     end
 
     subgraph backend["Control plane"]
@@ -41,6 +44,7 @@ flowchart TB
 
     user -->|HTTPS| tls
     tls --> www
+    tls --> landing
     tls --> server
 
     www -->|REST /api/v1| server
@@ -59,7 +63,7 @@ flowchart TB
     classDef dataStore fill:#052e16,stroke:#22c55e,color:#dcfce7
     classDef hostNode fill:#3b160b,stroke:#fb923c,color:#ffedd5
     class user,tls surface
-    class www app
+    class www,landing app
     class server controlPlane
     class pg,redis dataStore
     class agentA,agentB,dockerA,dockerB hostNode
@@ -77,8 +81,11 @@ dokuru/
 |-- dokuru-agent/                    Host-side Rust agent and CLI
 |-- dokuru-server/                   Axum backend and relay server
 |-- dokuru-www/                      React dashboard and embedded agent UI
+|-- dokuru-landing/                  Public landing and install handoff site
+|-- dokuru-deploy/                   Production Compose deployment helper
 |-- dokuru-core/                     Shared audit report model
-`-- .github/workflows/              CI, GHCR image builds, agent release
+|-- docs/                            Operator and developer documentation
+`-- .github/workflows/              CI, GHCR image builds, releases, deploy hooks
 ```
 
 ### `dokuru-agent`
@@ -100,7 +107,7 @@ Important source areas:
 
 | Area | Path | Notes |
 | --- | --- | --- |
-| CLI entrypoint | `dokuru-agent/src/main.rs` | `onboard`, `configure`, `doctor`, `status`, `token`, `restart`, `update`, `uninstall`, `serve`. |
+| CLI entrypoint | `dokuru-agent/src/main.rs` | `onboard`, `configure`, `doctor`, `status`, `audit`, `version`, `token`, `config`, `restart`, `update`, `uninstall`, `serve`. |
 | Local API | `dokuru-agent/src/api/` | Axum routes, auth middleware, CORS, relay client, embedded assets. |
 | Audit registry | `dokuru-agent/src/audit/rule_registry/` | Section 1 through 5 rule definitions. |
 | Fix engine | `dokuru-agent/src/audit/fix_helpers.rs` | Docker update, Compose patch/override, recreate, auditd, daemon config, rollback/history. |
@@ -161,6 +168,27 @@ Important source areas:
 | Stores | `dokuru-www/src/stores/` | Zustand auth, agents, audits, shell sessions, UI state. |
 | Audit UI | `dokuru-www/src/features/audit/` | Fix hooks, FixWizard, FixAllWizard, report components. |
 | Env validation | `dokuru-www/plugins/env-validator.ts` | Requires `VITE_API_BASE_URL` in cloud mode, optional in agent mode. |
+
+### `dokuru-landing`
+
+`dokuru-landing` is the public site for the hosted product and install handoff. It is a Leptos CSR app built with Trunk and Tailwind, then served as a static image in production Compose.
+
+Main responsibilities:
+
+- Explain the product at the public domain.
+- Present the current installer command.
+- Send operators into the hosted dashboard or setup flow.
+
+### `dokuru-deploy`
+
+`dokuru-deploy` is a Rust CLI for managing the production Compose deployment.
+
+Main responsibilities:
+
+- Initialize and repair deployment configuration.
+- Pull, migrate, start, stop, restart, and inspect Compose services.
+- Run health checks and stream service logs.
+- Update the deployment helper itself from release metadata.
 
 ## Runtime Architecture
 

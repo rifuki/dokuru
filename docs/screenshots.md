@@ -7,6 +7,7 @@ This gallery is the visual walkthrough for Dokuru. The README stays short and li
 - Use dark theme for public README/docs screenshots.
 - Prefer clean states without transient toast notifications.
 - Keep auth, landing, and highly repetitive resource pages out of the README.
+- Keep the README preview varied: empty dashboard, add-agent modal, live audit scan, then saved audit result.
 - Redact real tokens, secrets, and private hostnames before publishing.
 
 ## Flow
@@ -14,8 +15,8 @@ This gallery is the visual walkthrough for Dokuru. The README stays short and li
 <table>
   <tr>
     <td width="50%">
-      <strong>1. First-run agents</strong><br />
-      Initial dashboard after login, before any Docker host has been connected.<br /><br />
+      <strong>1. Dashboard after login</strong><br />
+      Initial agents page before any Docker host has been connected.<br /><br />
       <img src="screenshots/01-agents-empty-state.png" alt="Agents empty state" width="100%" />
     </td>
     <td width="50%">
@@ -38,7 +39,7 @@ This gallery is the visual walkthrough for Dokuru. The README stays short and li
   </tr>
   <tr>
     <td width="50%">
-      <strong>5. Audit running</strong><br />
+      <strong>5. Live audit scan</strong><br />
       Live CIS Docker Benchmark checks with progress, current rule, and checked containers.<br /><br />
       <img src="screenshots/05-audit-running.png" alt="Audit running" width="100%" />
     </td>
@@ -50,7 +51,7 @@ This gallery is the visual walkthrough for Dokuru. The README stays short and li
   </tr>
   <tr>
     <td width="50%">
-      <strong>7. Fix progress</strong><br />
+      <strong>7. Fix progress and evidence</strong><br />
       Controlled remediation workflow with selected rules, progress, evidence, and live output.<br /><br />
       <img src="screenshots/07-fix-progress.png" alt="Fix progress" width="100%" />
     </td>
@@ -72,5 +73,6 @@ These are useful for deeper docs, but should stay out of the README unless a rel
 - Volumes list and volume detail.
 - Events stream.
 - VPS shell, only with sanitized command output.
+- Installer/onboarding CLI, only with generated URLs, one-time tokens, and private hostnames redacted.
 - Audit history.
 - Fix confirmation and configuration panels.

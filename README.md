@@ -19,13 +19,16 @@ The project is designed for real Docker hosts, not only static reporting:
 ## Preview
 
 <p>
-  <img src="docs/screenshots/03-agents-connected.png" alt="Connected agents" width="49%" />
-  <img src="docs/screenshots/04-agent-dashboard.png" alt="Agent dashboard" width="49%" />
+  <img src="docs/screenshots/01-agents-empty-state.png" alt="Dashboard after login with no agents connected" width="100%" />
 </p>
 
 <p>
-  <img src="docs/screenshots/06-audit-result.png" alt="Audit result" width="49%" />
-  <img src="docs/screenshots/07-fix-progress.png" alt="Fix progress" width="49%" />
+  <img src="docs/screenshots/02-add-docker-agent.png" alt="Add Docker Agent modal" width="49%" />
+  <img src="docs/screenshots/05-audit-running.png" alt="Live security audit scan" width="49%" />
+</p>
+
+<p>
+  <img src="docs/screenshots/06-audit-result.png" alt="Saved audit result with score and fixes" width="100%" />
 </p>
 
 See the [screenshot gallery](docs/screenshots.md) for the full visual walkthrough.
@@ -42,7 +45,7 @@ Dokuru can be used in two operating modes:
 Install the agent on a Docker host:
 
 ```bash
-curl -fsSL https://dokuru.rifuki.dev/install | sudo bash
+curl -fsSL https://dokuru.rifuki.dev/install | bash
 ```
 
 The onboarding wizard installs the `dokuru` binary, creates `/etc/dokuru/config.toml`, generates a `dok_...` agent token, starts the systemd service, and prints the agent URL/token needed by the dashboard.
@@ -70,6 +73,8 @@ For the complete setup guide, see [docs/installation.md](docs/installation.md).
 | Agent | `dokuru-agent/` | Rust CLI and daemon installed on Docker hosts. Owns Docker socket access, audits, fix execution, local API, embedded dashboard, host shell, and relay client. |
 | Server | `dokuru-server/` | Rust/Axum control plane. Owns users, JWT sessions, PostgreSQL persistence, Redis token blacklist, stored audit history, notifications, admin APIs, and agent relay. |
 | Web Dashboard | `dokuru-www/` | React/TanStack dashboard. Owns agent onboarding UI, Docker resource pages, audit reports, FixWizard, realtime streams, settings, and admin views. |
+| Landing Site | `dokuru-landing/` | Leptos/Trunk public site for the hosted product and installer handoff. |
+| Deploy CLI | `dokuru-deploy/` | Rust helper for production Compose deployment, migration, health checks, config repair, and release updates. |
 | Shared Core | `dokuru-core/` | Shared audit report DTOs and scoring helpers used by server-side report views. |
 
 ## License

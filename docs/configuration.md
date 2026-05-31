@@ -65,3 +65,5 @@ The onboarding wizard writes a token hash for authentication. The raw token is a
 | `VITE_DOKURU_MODE` | Optional | `cloud` by default. Use `agent` for the embedded local agent UI. |
 | `VITE_API_BASE_URL` | Required in cloud mode | API origin, for example `https://api.example.com` or `http://localhost:9393`. |
 | `VITE_ENABLE_HOST_SHELL` | Optional | Enables host shell UI. Keep `false` unless intentionally needed. |
+
+`VITE_API_BASE_URL` must be the origin only. Do not include `/api/v1`; the dashboard builds versioned API URLs internally.

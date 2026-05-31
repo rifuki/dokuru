@@ -37,11 +37,15 @@ Agent routes are available on the direct agent URL, normally port `3939`. Protec
 | `GET/POST/DELETE` | `/audit/history/*` | Audit history and reports. |
 | `POST` | `/fix` | Run a fix request. |
 | `GET` | `/fix/preview` | Preview targets and strategy. |
+| `POST` | `/fix/verify` | Verify fix targets or post-fix status before/after execution. |
 | `GET` | `/fix/stream` | Live fix progress stream. |
 | `GET` | `/fix/history` | Fix history. |
 | `POST` | `/fix/rollback` | Rollback a recorded fix when supported. |
+| `GET` | `/fix/rollback/stream` | Live rollback progress stream. |
 | `GET` | `/rules` | Registered rules. |
 | `GET` | `/docker/*` | Containers, images, networks, volumes, stacks, events, exec. |
 | `GET` | `/host/shell` | Host shell info. |
 | `GET` | `/host/shell/stream` | PTY-backed host shell WebSocket. |
 | `POST` | `/trivy/image` | Trivy image scan when `trivy` exists on the host. |
+
+The agent also keeps `/audit/fix/*` aliases for the fix endpoints so older dashboard builds and direct API clients can continue to work during upgrades.
