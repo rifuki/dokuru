@@ -23,8 +23,8 @@ The project is designed for real Docker hosts, not only static reporting:
 </p>
 
 <p>
-  <img src="docs/screenshots/02-add-docker-agent.png" alt="Add Docker Agent modal" width="49%" />
   <img src="docs/screenshots/05-audit-running.png" alt="Live security audit scan" width="49%" />
+  <img src="docs/screenshots/11-fix-applying.png" alt="Applying selected fixes with evidence stream" width="49%" />
 </p>
 
 <p>
