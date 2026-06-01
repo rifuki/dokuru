@@ -10,7 +10,9 @@ This gallery is the visual walkthrough for Dokuru. The README stays short and li
 - Keep the README preview varied: empty dashboard, add-agent modal, live audit scan, then saved audit result.
 - Redact real tokens, secrets, and private hostnames before publishing.
 
-## Flow
+## README Preview Flow
+
+These are the screenshots that belong in the main README preview. They cover onboarding, the core agent view, audit execution, saved results, remediation, and one inventory detail page without turning the README into a long product tour.
 
 <table>
   <tr>
@@ -63,16 +65,56 @@ This gallery is the visual walkthrough for Dokuru. The README stays short and li
   </tr>
 </table>
 
-## Optional Extra Captures
+## App Gallery Details
 
-These are useful for deeper docs, but should stay out of the README unless a release specifically focuses on Docker inventory:
+These screenshots stay in the docs gallery. They are useful when someone wants to inspect the deeper app flows, but they should not be added to the README preview unless the README is being redesigned around a full walkthrough.
 
-- Stacks list and stack detail.
+<table>
+  <tr>
+    <td width="50%">
+      <strong>9. Fix confirmation</strong><br />
+      Bulk remediation starts with selected rules, affected pillars, and restart risk called out before any change is applied.<br /><br />
+      <img src="screenshots/09-fix-confirm.png" alt="Fix confirmation panel" width="100%" />
+    </td>
+    <td width="50%">
+      <strong>10. Fix configuration</strong><br />
+      Configure cgroup, memory, CPU share, and PID limits before the selected fixes are applied.<br /><br />
+      <img src="screenshots/10-fix-configure.png" alt="Fix configuration panel" width="100%" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <strong>11. Fix applying and evidence</strong><br />
+      Live remediation progress with applied rules, evidence events, and streamed command output.<br /><br />
+      <img src="screenshots/11-fix-applying.png" alt="Fix applying with evidence" width="100%" />
+    </td>
+    <td width="50%">
+      <strong>12. VPS shell</strong><br />
+      Browser shell connected to the Docker host for direct inspection and operational follow-up.<br /><br />
+      <img src="screenshots/12-vps-shell.png" alt="VPS shell" width="100%" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <strong>13. Container detail expanded</strong><br />
+      Expanded container row with overview tabs, image metadata, port bindings, and network address details.<br /><br />
+      <img src="screenshots/13-container-detail-expanded.png" alt="Expanded container detail" width="100%" />
+    </td>
+    <td width="50%">
+      <strong>14. Stack inventory</strong><br />
+      Compose stack summary with running containers, compose files, and per-container status.<br /><br />
+      <img src="screenshots/14-stacks.png" alt="Stack inventory" width="100%" />
+    </td>
+  </tr>
+</table>
+
+## Future Captures
+
+These are useful later if the gallery needs a longer Docker inventory appendix:
+
 - Images list and image detail.
 - Networks list and network detail.
 - Volumes list and volume detail.
 - Events stream.
-- VPS shell, only with sanitized command output.
 - Installer/onboarding CLI, only with generated URLs, one-time tokens, and private hostnames redacted.
 - Audit history.
-- Fix confirmation and configuration panels.
