@@ -24,11 +24,12 @@ The project is designed for real Docker hosts, not only static reporting:
 
 <p>
   <img src="docs/screenshots/05-audit-running.png" alt="Live security audit scan" width="49%" />
-  <img src="docs/screenshots/11-fix-applying.png" alt="Applying selected fixes with evidence stream" width="49%" />
+  <img src="docs/screenshots/06-audit-result.png" alt="Baseline audit result with score and available fixes" width="49%" />
 </p>
 
 <p>
-  <img src="docs/screenshots/06-audit-result.png" alt="Saved audit result with score and fixes" width="100%" />
+  <img src="docs/screenshots/11-fix-applying.png" alt="Applying selected fixes with evidence stream" width="49%" />
+  <img src="docs/screenshots/07-audit-fix-forecast.png" alt="Audit and fix forecast result after remediation" width="49%" />
 </p>
 
 See the [screenshot gallery](docs/screenshots.md) for the full visual walkthrough.
