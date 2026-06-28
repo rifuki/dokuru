@@ -48,8 +48,9 @@ export const PILLAR_META = {
 
 // Map rule IDs to security pillars
 export function getRulePillar(ruleId: string): SecurityPillar {
-  // Namespace rules
-  if (["2.8", "2.10", "5.9", "5.10", "5.16", "5.17", "5.21", "5.31"].includes(ruleId)) {
+  // Namespace rules — incl. 4.1 (non-root user): user-identity isolation that
+  // complements user namespace remapping (2.10), even though CIS files it under Images.
+  if (["2.8", "2.10", "4.1", "5.9", "5.10", "5.16", "5.17", "5.21", "5.31"].includes(ruleId)) {
     return "namespace";
   }
   
