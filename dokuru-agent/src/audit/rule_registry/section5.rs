@@ -734,8 +734,13 @@ impl Section5 {
                     for c in &containers {
                         let id = c.id.as_deref().unwrap_or("");
                         if let Ok(inspect) = docker.inspect_container(id, None).await {
-                            // CIS 5.12: CpuShares of 0 (unset) or 1024 (Docker default)
-                            // means no effective CPU priority is in place.
+                            // CIS 5.12: Docker reports CpuShares=0 when --cpu-shares is
+                            // unset, which is the only state that leaves no CPU priority
+                            // in place. An explicit value (including 1024, the weight the
+                            // CIS guide itself documents as "normal priority") is a
+                            // deliberate, valid setting and must pass — consistent with the
+                            // combined cgroup check (cpu_shares > 0) and with the values
+                            // applied by suggest_resource_limits during remediation.
                             let cpu_shares = inspect
                                 .host_config
                                 .as_ref()
@@ -743,7 +748,7 @@ impl Section5 {
                                 .unwrap_or(0);
                             let name = Self::container_name(c.names.as_ref(), id);
                             raw_lines.push(format!("{name}: CpuShares={cpu_shares}"));
-                            if cpu_shares == 0 || cpu_shares == 1024 {
+                            if cpu_shares == 0 {
                                 failing.push(name);
                             }
                         }
