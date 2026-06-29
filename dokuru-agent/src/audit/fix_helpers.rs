@@ -3605,45 +3605,75 @@ fn has_external_volume_driver(inspect: &ContainerInspectResponse) -> Option<Stri
     })
 }
 
-fn userns_preflight_blockers(snapshots: &[ContainerSnapshot]) -> Vec<String> {
-    let mut blockers = Vec::new();
+/// Classified userns-remap preflight result.
+///
+/// `hard` entries abort the remediation: the workload would break under daemon
+/// userns-remap (or the restart itself would fail) and cannot be left as-is.
+/// `excludable` entries are workloads that deliberately opt out of user
+/// namespaces (`UsernsMode=host`) — e.g. a reverse proxy or socket proxy that
+/// needs host identity. Daemon userns-remap neither breaks nor isolates them,
+/// so they are left untouched and recovery proceeds for everything else, with a
+/// warning that they stay unisolated. This lets Dokuru harden a stack that runs
+/// such infrastructure instead of refusing the whole operation.
+struct UsernsPreflight {
+    hard: Vec<String>,
+    excludable: Vec<String>,
+}
+
+fn classify_userns_preflight(snapshots: &[ContainerSnapshot]) -> UsernsPreflight {
+    let mut hard = Vec::new();
+    let mut excludable = Vec::new();
 
     for snapshot in snapshots {
         let Some(inspect) = snapshot.inspect.as_ref() else {
             continue;
         };
 
+        let state = if snapshot.was_running {
+            "running"
+        } else {
+            "stopped"
+        };
+
+        // A workload that explicitly opts out of user namespaces keeps its host
+        // user namespace and full socket/device access, so daemon userns-remap
+        // neither breaks it nor isolates it. Leave it as-is and proceed for the
+        // rest; surface a warning instead of aborting. Recovery preserves the
+        // container's host_config, so the opt-out is retained automatically.
+        let opts_out_userns = inspect
+            .host_config
+            .as_ref()
+            .and_then(|host_config| host_config.userns_mode.as_deref())
+            == Some("host");
+        if opts_out_userns {
+            excludable.push(format!(
+                "{} ({state}): UsernsMode=host opt-out — left as-is, not isolated by userns-remap",
+                snapshot.name
+            ));
+            continue;
+        }
+
         let mut reasons = Vec::new();
         if let Some(host_config) = inspect.host_config.as_ref() {
-            let userns_mode = host_config.userns_mode.as_deref().unwrap_or_default();
-            if userns_mode == "host" {
+            if host_config.network_mode.as_deref() == Some("host") {
                 reasons.push(
-                    "UsernsMode=host opt-out (fix rule 5.31 first; userns-remap will not isolate this workload)"
+                    "NetworkMode=host is incompatible with daemon userns-remap (fix rule 5.10 first)"
                         .to_string(),
                 );
             }
 
-            if userns_mode != "host" {
-                if host_config.network_mode.as_deref() == Some("host") {
-                    reasons.push(
-                        "NetworkMode=host is incompatible with daemon userns-remap (fix rule 5.10 first)"
-                            .to_string(),
-                    );
-                }
+            if host_config.pid_mode.as_deref() == Some("host") {
+                reasons.push(
+                    "PidMode=host is incompatible with daemon userns-remap (fix rule 5.16 first)"
+                        .to_string(),
+                );
+            }
 
-                if host_config.pid_mode.as_deref() == Some("host") {
-                    reasons.push(
-                        "PidMode=host is incompatible with daemon userns-remap (fix rule 5.16 first)"
-                            .to_string(),
-                    );
-                }
-
-                if host_config.privileged == Some(true) {
-                    reasons.push(
-                        "Privileged=true is incompatible with userns-remap unless userns=host, which would bypass isolation (fix rule 5.5 first)"
-                            .to_string(),
-                    );
-                }
+            if host_config.privileged == Some(true) {
+                reasons.push(
+                    "Privileged=true is incompatible with userns-remap unless userns=host, which would bypass isolation (fix rule 5.5 first)"
+                        .to_string(),
+                );
             }
         }
 
@@ -3687,12 +3717,7 @@ fn userns_preflight_blockers(snapshots: &[ContainerSnapshot]) -> Vec<String> {
         if !reasons.is_empty() {
             reasons.sort();
             reasons.dedup();
-            let state = if snapshot.was_running {
-                "running"
-            } else {
-                "stopped"
-            };
-            blockers.push(format!(
+            hard.push(format!(
                 "{} ({state}): {}",
                 snapshot.name,
                 reasons.join("; ")
@@ -3700,7 +3725,12 @@ fn userns_preflight_blockers(snapshots: &[ContainerSnapshot]) -> Vec<String> {
         }
     }
 
-    blockers
+    UsernsPreflight { hard, excludable }
+}
+
+#[cfg(test)]
+fn userns_preflight_blockers(snapshots: &[ContainerSnapshot]) -> Vec<String> {
+    classify_userns_preflight(snapshots).hard
 }
 
 fn userns_preflight_blocked_outcome(blockers: &[String]) -> FixOutcome {
@@ -3727,17 +3757,49 @@ fn preflight_userns_known_incompatibilities(
     state: &UsernsSnapshotState,
     progress: Option<&ProgressSender>,
 ) -> Option<FixOutcome> {
-    let blockers = userns_preflight_blockers(&state.snapshots);
-    if blockers.is_empty() {
+    let preflight = classify_userns_preflight(&state.snapshots);
+
+    // Opt-out workloads (traefik, socket proxies, …) don't abort the remediation:
+    // warn that they stay unisolated and continue hardening everything else.
+    if !preflight.excludable.is_empty() {
+        let detail = format!(
+            "Opt-out workload(s) left unisolated; userns-remap proceeds for the rest: {}",
+            preflight
+                .excludable
+                .iter()
+                .take(6)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("; ")
+        );
+        send_progress(
+            progress,
+            userns_progress_event(
+                1,
+                "preflight_userns_incompatibilities",
+                "warn",
+                Some(detail),
+                None,
+            ),
+        );
+    }
+
+    if preflight.hard.is_empty() {
+        let done_detail = if preflight.excludable.is_empty() {
+            "No known runtime incompatibilities blocking userns-remap recovery".to_string()
+        } else {
+            format!(
+                "Proceeding with userns-remap; {} opt-out workload(s) left as-is and not isolated",
+                preflight.excludable.len()
+            )
+        };
         send_progress(
             progress,
             userns_progress_event(
                 1,
                 "preflight_userns_incompatibilities",
                 "done",
-                Some(
-                    "No known runtime incompatibilities blocking userns-remap recovery".to_string(),
-                ),
+                Some(done_detail),
                 None,
             ),
         );
@@ -3746,7 +3808,8 @@ fn preflight_userns_known_incompatibilities(
 
     let detail = format!(
         "Blocked before Docker restart: {}",
-        blockers
+        preflight
+            .hard
             .iter()
             .take(6)
             .cloned()
@@ -3764,7 +3827,7 @@ fn preflight_userns_known_incompatibilities(
         ),
     );
 
-    Some(userns_preflight_blocked_outcome(&blockers))
+    Some(userns_preflight_blocked_outcome(&preflight.hard))
 }
 
 fn path_is_userns_unsafe(path: &Path) -> bool {
@@ -12352,7 +12415,7 @@ services:
     }
 
     #[test]
-    fn userns_preflight_blocks_explicit_userns_host_opt_out() {
+    fn userns_preflight_excludes_host_userns_opt_out_instead_of_blocking() {
         let inspect = serde_json::from_value(serde_json::json!({
             "HostConfig": {
                 "UsernsMode": "host",
@@ -12361,11 +12424,48 @@ services:
         }))
         .unwrap();
         let snapshots = vec![userns_snapshot_with_inspect("host-userns", inspect)];
-        let blockers = userns_preflight_blockers(&snapshots);
+        let preflight = classify_userns_preflight(&snapshots);
 
-        assert_eq!(blockers.len(), 1);
-        assert!(blockers[0].contains("UsernsMode=host"));
-        assert!(!blockers[0].contains("NetworkMode=host is incompatible"));
+        // Opt-out workloads no longer abort the remediation: they are excluded
+        // (left as-is), and the host-namespace reason is not double-reported.
+        assert!(preflight.hard.is_empty());
+        assert_eq!(preflight.excludable.len(), 1);
+        assert!(preflight.excludable[0].contains("UsernsMode=host opt-out"));
+        assert!(!preflight.excludable[0].contains("NetworkMode=host is incompatible"));
+    }
+
+    #[test]
+    fn userns_preflight_proceeds_when_only_opt_out_and_compatible_workloads_present() {
+        // A reverse/socket proxy that opts out of user namespaces AND binds the
+        // docker socket: because it is host-userns it keeps socket access, so it
+        // is excludable (left as-is) rather than a hard blocker.
+        let proxy = serde_json::from_value(serde_json::json!({
+            "HostConfig": {
+                "UsernsMode": "host"
+            },
+            "Mounts": [
+                {
+                    "Type": "bind",
+                    "Source": "/var/run/docker.sock",
+                    "Destination": "/var/run/docker.sock",
+                    "RW": true
+                }
+            ]
+        }))
+        .unwrap();
+        let app = serde_json::from_value(serde_json::json!({
+            "HostConfig": { "NetworkMode": "bridge" }
+        }))
+        .unwrap();
+        let snapshots = vec![
+            userns_snapshot_with_inspect("edge-proxy", proxy),
+            userns_snapshot_with_inspect("app", app),
+        ];
+        let preflight = classify_userns_preflight(&snapshots);
+
+        assert!(preflight.hard.is_empty());
+        assert_eq!(preflight.excludable.len(), 1);
+        assert!(preflight.excludable[0].contains("edge-proxy"));
     }
 
     #[test]
