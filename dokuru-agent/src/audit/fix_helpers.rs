@@ -2169,8 +2169,64 @@ fn configured_container_uid_gid(inspect: &ContainerInspectResponse) -> Option<(u
         .and_then(parse_user_spec_uid_gid)
 }
 
-fn container_runtime_uid_gid(inspect: &ContainerInspectResponse) -> (u32, u32) {
-    configured_container_uid_gid(inspect).unwrap_or((0, 0))
+fn configured_container_user_name(inspect: &ContainerInspectResponse) -> Option<&str> {
+    let user = inspect
+        .config
+        .as_ref()
+        .and_then(|config| config.user.as_deref())?
+        .split(':')
+        .next()?
+        .trim();
+
+    (!user.is_empty() && !user_spec_is_root(user) && parse_user_id(user).is_none()).then_some(user)
+}
+
+/// UID/GID a container declares it runs as, or None when nothing declares it.
+///
+/// `Config.User` alone is not enough: a Dockerfile may name the user
+/// (`USER node`), which never parses as a number, so this falls back to the
+/// container's own passwd database. Returning None instead of guessing root
+/// matters because the caller turns this into a chown target - see
+/// [`volume_owner_from_disk`].
+async fn declared_container_uid_gid(
+    docker: &Docker,
+    container_id: &str,
+    inspect: &ContainerInspectResponse,
+) -> Option<(u32, u32)> {
+    if let Some(pair) = configured_container_uid_gid(inspect) {
+        return Some(pair);
+    }
+
+    let name = configured_container_user_name(inspect)?;
+    let passwd = exec_container_stdout(
+        docker,
+        container_id,
+        vec!["cat".to_string(), "/etc/passwd".to_string()],
+    )
+    .await?;
+
+    passwd_uid_gid_by_name(&passwd, name)
+}
+
+fn passwd_uid_gid_by_name(passwd: &str, name: &str) -> Option<(u32, u32)> {
+    parse_passwd_users(passwd)
+        .into_iter()
+        .find(|user| user.name == name)
+        .map(|user| (user.uid, user.gid))
+}
+
+/// Owner of a mount's data as it exists on the host right now.
+///
+/// This is the only signal that survives an entrypoint which starts as root and
+/// drops privileges itself (postgres su-execs to uid 70 on alpine), because such
+/// an image declares no user at all. Reading it back beats guessing: the files
+/// already on disk were written by whoever will keep writing them.
+fn volume_owner_from_disk(source: Option<&str>) -> Option<(u32, u32)> {
+    let source = source.filter(|source| !source.is_empty())?;
+    let metadata = std::fs::metadata(source).ok()?;
+    let (uid, gid) = container_uid_gid_from_host_owner(source, &metadata);
+
+    (uid != 0 && uid != 65_534).then_some((uid, gid))
 }
 
 fn inspect_image_name(inspect: &ContainerInspectResponse) -> String {
@@ -3349,7 +3405,7 @@ async fn snapshot_all_containers(docker: &Docker) -> Vec<ContainerSnapshot> {
         let mut bind_mount_paths = Vec::new();
         let mut named_volume_names = Vec::new();
         let mut named_volume_mounts = Vec::new();
-        let runtime_owner = container_runtime_uid_gid(&inspect);
+        let declared_owner = declared_container_uid_gid(docker, id, &inspect).await;
         if let Some(mounts) = &inspect.mounts {
             for mount in mounts {
                 match mount.typ {
@@ -3363,10 +3419,16 @@ async fn snapshot_all_containers(docker: &Docker) -> Vec<ContainerSnapshot> {
                     Some(MountPointTypeEnum::VOLUME) => {
                         if let Some(name) = mount.name.as_ref().filter(|name| !name.is_empty()) {
                             named_volume_names.push(name.clone());
+                            // Per mount, not per container: two volumes on one
+                            // container can legitimately be owned by different
+                            // users when the entrypoint drops privileges.
+                            let owner = declared_owner
+                                .or_else(|| volume_owner_from_disk(mount.source.as_deref()))
+                                .unwrap_or((0, 0));
                             named_volume_mounts.push(VolumeMountSnapshot {
                                 name: name.clone(),
-                                target_uid: runtime_owner.0,
-                                target_gid: runtime_owner.1,
+                                target_uid: owner.0,
+                                target_gid: owner.1,
                             });
                         }
                     }
@@ -12568,6 +12630,66 @@ services:
 
         assert!(!next.contains(DAEMON_JSON_AUDIT_RULE));
         assert!(next.contains("/var/lib/docker"));
+    }
+
+    fn inspect_with_user(user: &str) -> ContainerInspectResponse {
+        serde_json::from_value(serde_json::json!({
+            "Config": { "Image": "example:latest", "User": user }
+        }))
+        .expect("valid inspect fixture")
+    }
+
+    #[test]
+    fn configured_container_user_name_only_matches_unresolved_names() {
+        assert_eq!(
+            configured_container_user_name(&inspect_with_user("node")),
+            Some("node")
+        );
+        assert_eq!(
+            configured_container_user_name(&inspect_with_user("node:node")),
+            Some("node")
+        );
+
+        // Numeric and root specs are already answered by configured_container_uid_gid.
+        assert_eq!(
+            configured_container_user_name(&inspect_with_user("1000:1000")),
+            None
+        );
+        assert_eq!(
+            configured_container_user_name(&inspect_with_user("root")),
+            None
+        );
+        assert_eq!(
+            configured_container_user_name(&inspect_with_user("0")),
+            None
+        );
+        // postgres declares nothing and drops privileges in its entrypoint.
+        assert_eq!(configured_container_user_name(&inspect_with_user("")), None);
+    }
+
+    #[test]
+    fn passwd_uid_gid_by_name_resolves_named_dockerfile_user() {
+        let passwd = "root:x:0:0:root:/root:/bin/sh\n\
+                      postgres:x:70:70::/var/lib/postgresql:/bin/sh\n\
+                      node:x:1000:1000::/home/node:/bin/sh\n";
+
+        assert_eq!(passwd_uid_gid_by_name(passwd, "node"), Some((1000, 1000)));
+        assert_eq!(passwd_uid_gid_by_name(passwd, "postgres"), Some((70, 70)));
+        assert_eq!(passwd_uid_gid_by_name(passwd, "nobody"), None);
+    }
+
+    #[test]
+    fn volume_owner_from_disk_ignores_root_and_missing_paths() {
+        // Root ownership carries no information: it is both the real owner of a
+        // root container's data and the value we would have guessed anyway.
+        assert_eq!(volume_owner_from_disk(Some("/usr")), None);
+
+        assert_eq!(volume_owner_from_disk(None), None);
+        assert_eq!(volume_owner_from_disk(Some("")), None);
+        assert_eq!(
+            volume_owner_from_disk(Some("/definitely/not/a/real/volume/path")),
+            None
+        );
     }
 
     #[test]
